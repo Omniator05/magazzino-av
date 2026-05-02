@@ -2,50 +2,6 @@
 
 PWA (Progressive Web App) per la gestione del magazzino attrezzatura audio/luci eventi.
 
-## 🚀 Setup Rapido
-
-### 1. Installa le dipendenze
-```bash
-npm install
-```
-
-### 2. Configura Firebase
-
-1. Vai su [Firebase Console](https://console.firebase.google.com)
-2. **Crea un nuovo progetto** (es. "magazzino-av")
-3. **Aggiungi un'app Web** → copia le credenziali
-4. Incolla le credenziali in `src/firebase.js`
-
-Nel Firebase Console abilita anche:
-- **Firestore Database** → "Avvia in modalità test" (poi configura le regole)
-- **Authentication** → Email/Password → Abilita
-
-### 3. Regole Firestore (incolla nella console Firebase)
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
-```
-
-### 4. Avvia in sviluppo
-```bash
-npm run dev
-```
-Apri `http://localhost:5173` nel browser.
-
-### 5. Build per produzione (per hostare online)
-```bash
-npm run build
-```
-Puoi deployare su **Firebase Hosting**, **Vercel**, o **Netlify** gratuitamente.
-
----
-
 ## 📱 Funzionalità
 
 ### 🏠 Dashboard

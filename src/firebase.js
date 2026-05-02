@@ -1,11 +1,3 @@
-// ============================================================
-//  CONFIGURA QUI LE TUE CREDENZIALI FIREBASE
-//  1. Vai su https://console.firebase.google.com
-//  2. Crea un progetto > Aggiungi app Web
-//  3. Copia le credenziali e incollale qui sotto
-//  4. Abilita Firestore Database e Authentication (Email/Password)
-// ============================================================
-
 import { initializeApp } from 'firebase/app'
 import { getFirestore } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'

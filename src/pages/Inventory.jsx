@@ -1,14 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import {
-  collection, addDoc, updateDoc, deleteDoc,
-  doc, onSnapshot, query, orderBy, serverTimestamp
-} from 'firebase/firestore'
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
 const CATEGORIES = ['Console audio','Mixer','Amplificatore','Casse','Subwoofer','Microfono','Cavo audio','Cavo DMX','Proiettore','LED bar','Par LED','Moving head','Dimmer','Controller luci','Cavo elettrico','Multipresa','Flight case','Stativi','Altro']
-const ICONS = { 'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦' }
+const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
 
 export default function Inventory() {
   const { user } = useAuth()
@@ -20,14 +17,11 @@ export default function Inventory() {
   const [qrUrl, setQrUrl] = useState(null)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', notes:'' })
 
+  // Items in shared global collection so workers can read them
   useEffect(() => {
-    if (!user) return
-    const q = query(collection(db, 'users', user.uid, 'items'), orderBy('name'))
+    const q = query(collection(db, 'items'), orderBy('name'))
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [user])
-
-  const colRef = () => collection(db, 'users', user.uid, 'items')
-  const docRef = id => doc(db, 'users', user.uid, 'items', id)
+  }, [])
 
   const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', notes:'' }); setShowModal(true) }
   const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', notes:item.notes||'' }); setShowModal(true) }
@@ -36,23 +30,27 @@ export default function Inventory() {
     if (!form.name.trim()) return
     const qty = parseInt(form.qty) || 1
     if (selected) {
-      await updateDoc(docRef(selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, notes:form.notes })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, notes:form.notes })
     } else {
-      const ref = await addDoc(colRef(), { name:form.name, category:form.category, totalQty:qty, availableQty:qty, brand:form.brand, model:form.model, notes:form.notes, createdAt:serverTimestamp() })
-      // Update with code after creation
-      const code = generateItemCode(ref.id)
-      await updateDoc(ref, { code })
+      const ref = await addDoc(collection(db, 'items'), {
+        name:form.name, category:form.category, totalQty:qty, availableQty:qty,
+        brand:form.brand, model:form.model, notes:form.notes,
+        createdAt:serverTimestamp(), createdBy: user.uid
+      })
+      await updateDoc(ref, { code: generateItemCode(ref.id) })
     }
     setShowModal(false)
   }
 
   const deleteItem = async id => {
-    if (confirm('Eliminare questo articolo?')) await deleteDoc(docRef(id))
-    setShowDetail(null)
+    if (confirm('Eliminare questo articolo dal magazzino?')) {
+      await deleteDoc(doc(db, 'items', id))
+      setShowDetail(null)
+    }
   }
 
   const openDetail = async item => {
-    setShowDetail(item)
+    setShowDetail(item); setQrUrl(null)
     const code = item.code || generateItemCode(item.id)
     const url = await generateQRDataURL(code)
     setQrUrl(url)
@@ -60,25 +58,29 @@ export default function Inventory() {
   }
 
   const printCode = () => {
+    const code = showDetail.code || generateItemCode(showDetail.id)
     const w = window.open('', '_blank')
     w.document.write(`<html><body style="text-align:center;padding:20px;font-family:sans-serif">
       <h2>${showDetail.name}</h2>
-      <p>${showDetail.brand || ''} ${showDetail.model || ''}</p>
-      <img src="${qrUrl}" style="width:200px"/>
-      <p style="font-family:monospace;font-size:18px;font-weight:bold">${showDetail.code || generateItemCode(showDetail.id)}</p>
-      <svg id="bc"></svg>
+      <p style="color:#666">${showDetail.brand || ''} ${showDetail.model || ''}</p>
+      <img src="${qrUrl}" style="width:200px;margin:10px 0"/>
+      <p style="font-family:monospace;font-size:18px;font-weight:bold;margin:10px 0">${code}</p>
+      <script>window.onload=()=>window.print()</script>
     </body></html>`)
     w.document.close()
-    w.focus(); w.print()
   }
 
-  const filtered = items.filter(i => i.name?.toLowerCase().includes(search.toLowerCase()) || i.category?.toLowerCase().includes(search.toLowerCase()) || i.brand?.toLowerCase().includes(search.toLowerCase()))
+  const filtered = items.filter(i =>
+    i.name?.toLowerCase().includes(search.toLowerCase()) ||
+    i.category?.toLowerCase().includes(search.toLowerCase()) ||
+    i.brand?.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="page">
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div><h1>Magazzino</h1><p>{items.length} articoli totali</p></div>
+          <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
           <button onClick={openAdd} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
         </div>
       </div>
@@ -90,7 +92,7 @@ export default function Inventory() {
 
       <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
         {filtered.length === 0
-          ? <div className="empty-state"><svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.88.18-1.36C18 2.52 15.5 0 12.36 0 10.63 0 9.11.92 8.2 2.27L12 6H4.5L3 4H1v2h1l3 6.92V18c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8l1-2V6h-2z"/></svg><h3>Nessun articolo trovato</h3><p>Aggiungi il primo articolo al magazzino</p></div>
+          ? <div className="empty-state"><p style={{ fontSize:40 }}>📦</p><h3>Nessun articolo</h3><p>Aggiungi il primo articolo al magazzino</p></div>
           : filtered.map(item => (
             <div key={item.id} className="item-row" onClick={() => openDetail(item)}>
               <div className="item-icon">{ICONS[item.category] || '📦'}</div>
@@ -109,7 +111,7 @@ export default function Inventory() {
         }
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Modal aggiunta/modifica */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal" style={{ position:'relative' }}>
@@ -132,7 +134,7 @@ export default function Inventory() {
                 <button onClick={() => setForm({...form,qty:form.qty+1})}>+</button>
               </div>
             </div>
-            <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder="Note aggiuntive..." rows={2} /></div>
+            <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>🗑 Elimina</button>}
               <button onClick={saveItem} className="btn btn-primary" style={{ flex:2 }}>💾 Salva</button>
@@ -141,7 +143,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* Detail + QR Modal */}
+      {/* Modal dettaglio + QR */}
       {showDetail && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowDetail(null)}>
           <div className="modal" style={{ position:'relative' }}>
@@ -151,28 +153,23 @@ export default function Inventory() {
               <h2 style={{ margin:0 }}>{showDetail.name}</h2>
               {(showDetail.brand || showDetail.model) && <p style={{ color:'var(--text2)', marginTop:4 }}>{showDetail.brand} {showDetail.model}</p>}
             </div>
-
-            {/* Stato */}
             <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                 <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
                 <span style={{ fontWeight:800, fontSize:18 }}>{showDetail.availableQty}/{showDetail.totalQty}</span>
               </div>
               <div style={{ background:'var(--card2)', borderRadius:4, height:6 }}>
-                <div style={{ background: showDetail.availableQty === showDetail.totalQty ? 'var(--green)' : showDetail.availableQty === 0 ? 'var(--accent)' : 'var(--accent2)', height:'100%', borderRadius:4, width:`${(showDetail.availableQty / showDetail.totalQty) * 100}%`, transition:'width 0.3s' }} />
+                <div style={{ background: showDetail.availableQty === showDetail.totalQty ? 'var(--green)' : showDetail.availableQty === 0 ? 'var(--accent)' : 'var(--accent2)', height:'100%', borderRadius:4, width:`${((showDetail.availableQty||0) / (showDetail.totalQty||1)) * 100}%` }} />
               </div>
             </div>
-
-            {/* QR Code */}
             <div className="code-preview" style={{ marginBottom:14 }}>
-              {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0' }} />}
+              {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>Generazione...</p></div>}
               <p style={{ color:'#333', fontFamily:'monospace', fontWeight:700, fontSize:16 }}>{showDetail.code || generateItemCode(showDetail.id)}</p>
               <svg id="barcode-svg"></svg>
             </div>
-
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              <button onClick={printCode} className="btn btn-secondary" style={{ flex:1 }}>🖨 Stampa codice</button>
-              <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary" style={{ flex:1 }}>✏️ Modifica</button>
+              <button onClick={printCode} className="btn btn-secondary">🖨 Stampa</button>
+              <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
             </div>
             {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
           </div>
