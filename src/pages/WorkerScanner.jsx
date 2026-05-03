@@ -12,12 +12,45 @@ export default function WorkerScanner() {
   const navigate = useNavigate()
   const [event, setEvent] = useState(null)
   const [scanning, setScanning] = useState(false)
-  const [lastScan, setLastScan] = useState(null) // { item, action: 'loaded'|'returned'|'not_found'|'not_in_list' }
+  const [lastScan, setLastScan] = useState(null)
   const [manualCode, setManualCode] = useState('')
   const [mode, setMode] = useState('load') // 'load' | 'return'
   const [error, setError] = useState(null)
+  const [processing, setProcessing] = useState(false) // blocca scansioni doppie
   const html5QrRef = useRef(null)
+  const lastCodeRef = useRef('') // evita di riprocessare lo stesso codice di fila
+  const lastCodeTimeRef = useRef(0)
   const eventRef = doc(db, 'events', id)
+
+  // Suoni tramite Web Audio API (nessun file esterno necessario)
+  const playSound = (type) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      if (type === 'success') {
+        osc.frequency.setValueAtTime(880, ctx.currentTime)
+        osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1)
+        gain.gain.setValueAtTime(0.3, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.25)
+      } else {
+        osc.frequency.setValueAtTime(300, ctx.currentTime)
+        osc.frequency.setValueAtTime(200, ctx.currentTime + 0.15)
+        gain.gain.setValueAtTime(0.3, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.3)
+      }
+    } catch(e) {}
+  }
+
+  const vibrate = (pattern) => {
+    if (navigator.vibrate) navigator.vibrate(pattern)
+  }
 
   useEffect(() => {
     return onSnapshot(eventRef, snap => {
@@ -27,6 +60,16 @@ export default function WorkerScanner() {
 
   const processCode = async (code) => {
     const normalized = code.trim().toUpperCase()
+
+    // Ignora lo stesso codice scansionato entro 3 secondi (evita doppi)
+    const now = Date.now()
+    if (normalized === lastCodeRef.current && now - lastCodeTimeRef.current < 3000) return
+    lastCodeRef.current = normalized
+    lastCodeTimeRef.current = now
+
+    if (processing) return
+    setProcessing(true)
+
     const eventSnap = await getDoc(eventRef)
     if (!eventSnap.exists()) return
 
@@ -40,7 +83,10 @@ export default function WorkerScanner() {
     const itemSnap = await getDocs(q)
 
     if (itemSnap.empty) {
+      vibrate([100, 50, 100])
+      playSound('error')
       setLastScan({ action: 'not_found', code: normalized })
+      setProcessing(false)
       return
     }
 
@@ -48,33 +94,42 @@ export default function WorkerScanner() {
     const eventItem = eventItems.find(i => i.id === foundItem.id)
 
     if (!eventItem) {
+      vibrate([100, 50, 100])
+      playSound('error')
       setLastScan({ action: 'not_in_list', item: foundItem })
+      setProcessing(false)
       return
     }
 
     if (mode === 'load') {
       if (eventItem.loaded) {
+        vibrate([50])
         setLastScan({ action: 'already_loaded', item: eventItem })
+        setProcessing(false)
         return
       }
-      // Segna come caricato
       const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, loaded: true } : i)
       await updateDoc(eventRef, { items: updated })
-      // Aggiorna disponibilità
       const invSnap = await getDoc(doc(db, 'items', foundItem.id))
       if (invSnap.exists()) {
         const inv = invSnap.data()
         await updateDoc(doc(db, 'items', foundItem.id), { availableQty: Math.max(0, (inv.availableQty || 0) - (eventItem.qty || 1)) })
       }
+      vibrate([60, 40, 120])
+      playSound('success')
       setLastScan({ action: 'loaded', item: eventItem })
     } else {
-      // mode === 'return'
       if (!eventItem.loaded) {
+        vibrate([100, 50, 100])
+        playSound('error')
         setLastScan({ action: 'not_loaded', item: eventItem })
+        setProcessing(false)
         return
       }
       if (eventItem.returned) {
+        vibrate([50])
         setLastScan({ action: 'already_returned', item: eventItem })
+        setProcessing(false)
         return
       }
       const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, returned: true } : i)
@@ -84,34 +139,47 @@ export default function WorkerScanner() {
         const inv = invSnap.data()
         await updateDoc(doc(db, 'items', foundItem.id), { availableQty: Math.min(inv.totalQty, (inv.availableQty || 0) + (eventItem.qty || 1)) })
       }
+      vibrate([60, 40, 120])
+      playSound('success')
       setLastScan({ action: 'returned', item: eventItem })
     }
+    setProcessing(false)
   }
 
   const startScanner = async () => {
     setError(null); setLastScan(null); setScanning(true)
     try {
       const { Html5Qrcode } = await import('html5-qrcode')
+      // Pulisci eventuale istanza precedente
+      if (html5QrRef.current) {
+        try { await html5QrRef.current.stop() } catch(e) {}
+        try { html5QrRef.current.clear() } catch(e) {}
+      }
       html5QrRef.current = new Html5Qrcode('qr-worker')
       await html5QrRef.current.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        { fps: 15, qrbox: { width: 260, height: 260 } },
         async decodedText => {
-          await html5QrRef.current.stop()
-          setScanning(false)
+          // NON stoppiamo la camera — elaboriamo e restiamo in ascolto
           await processCode(decodedText)
+          // Dopo 2.5s resettiamo lastScan per tenere la UI pulita
+          setTimeout(() => setLastScan(prev => prev), 2500)
         },
-        () => {}
+        () => {} // errori di parsing QR ignorati (fotogrammi senza codice)
       )
     } catch(e) {
       setScanning(false)
-      setError('Camera non accessibile. Verifica i permessi.')
+      setError('Camera non accessibile. Verifica i permessi del browser.')
     }
   }
 
   const stopScanner = async () => {
-    if (html5QrRef.current) { try { await html5QrRef.current.stop() } catch(e) {} }
+    if (html5QrRef.current) {
+      try { await html5QrRef.current.stop() } catch(e) {}
+      try { html5QrRef.current.clear() } catch(e) {}
+    }
     setScanning(false)
+    setLastScan(null)
   }
 
   useEffect(() => () => { if (html5QrRef.current) { try { html5QrRef.current.stop() } catch(e) {} } }, [])
@@ -171,54 +239,64 @@ export default function WorkerScanner() {
           ))}
         </div>
 
-        {/* Scanner area */}
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden', marginBottom:14 }}>
-          {!scanning ? (
-            <div style={{ padding:'24px 20px', textAlign:'center' }}>
-              <div style={{ fontSize:52, marginBottom:10 }}>📷</div>
-              <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
-                {mode === 'load' ? 'Scansiona per segnare l\'articolo come caricato sul furgone' : 'Scansiona per segnare l\'articolo come rientrato in magazzino'}
-              </p>
-              <button onClick={startScanner} className="btn btn-primary" style={{ minWidth:200 }}>
-                Avvia fotocamera
-              </button>
-            </div>
-          ) : (
+        {/* Scanner area — la camera rimane sempre accesa */}
+        <div style={{ background:'var(--card)', border:`2px solid ${scanning ? (mode === 'load' ? 'var(--accent2)' : 'var(--green)') : 'var(--border)'}`, borderRadius:'var(--radius)', overflow:'hidden', marginBottom:14, transition:'border-color 0.3s' }}>
+          {/* Il div qr-worker esiste sempre nel DOM quando scanning=true */}
+          {scanning && (
             <div style={{ position:'relative' }}>
               <div id="qr-worker" style={{ width:'100%' }} />
+              {/* Banner risultato sovrapposto alla camera */}
+              {lastScan && (() => {
+                const r = scanResult[lastScan.action]
+                return (
+                  <div style={{ position:'absolute', bottom:0, left:0, right:0, background: r.bg.replace('0.1','0.92').replace('0.15','0.92'), backdropFilter:'blur(8px)', padding:'12px 16px', borderTop:`2px solid ${r.border}`, animation:'slideUp 0.2s ease' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <span style={{ fontSize:24 }}>{r.icon}</span>
+                      <div>
+                        <p style={{ fontWeight:800, fontSize:15, color:r.color }}>{r.title}</p>
+                        <p style={{ color:'var(--text)', fontSize:12, marginTop:1 }}>{r.msg(lastScan.item)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               <button onClick={stopScanner}
-                style={{ position:'absolute', top:12, right:12, background:'rgba(0,0,0,0.7)', color:'white', borderRadius:20, padding:'8px 16px', fontSize:13, fontWeight:600 }}>
-                ✕ Stop
+                style={{ position:'absolute', top:10, right:10, background:'rgba(0,0,0,0.6)', color:'white', borderRadius:20, padding:'6px 14px', fontSize:12, fontWeight:600 }}>
+                ■ Stop
               </button>
-              <div style={{ padding:'10px 16px', background: mode === 'load' ? 'rgba(245,166,35,0.1)' : 'rgba(105,240,174,0.1)', borderTop:'1px solid var(--border)' }}>
-                <p style={{ color: mode === 'load' ? 'var(--accent2)' : 'var(--green)', fontSize:13, textAlign:'center', fontWeight:700 }}>
-                  {mode === 'load' ? '🚛 Modalità carico attiva...' : '🏠 Modalità scarico attiva...'}
-                </p>
-              </div>
+            </div>
+          )}
+
+          {!scanning && (
+            <div style={{ padding:'28px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:52, marginBottom:10 }}>📷</div>
+              <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
+                {mode === 'load' ? 'Avvia la camera e scansiona gli articoli da caricare — rimane accesa automaticamente' : 'Avvia la camera e scansiona gli articoli che rientrano in magazzino'}
+              </p>
+              <button onClick={startScanner} className="btn btn-primary" style={{ minWidth:200, fontSize:16, padding:'14px 24px' }}>
+                📷 Avvia fotocamera
+              </button>
             </div>
           )}
         </div>
 
-        {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:'var(--radius)', padding:'14px 16px', color:'var(--red)', marginBottom:14, fontSize:14 }}>{error}</div>}
-
-        {/* Risultato scansione */}
-        {lastScan && (() => {
+        {/* Risultato fuori dalla camera (quando non si scansiona) */}
+        {!scanning && lastScan && (() => {
           const r = scanResult[lastScan.action]
           return (
-            <div style={{ background:r.bg, border:`1px solid ${r.border}`, borderRadius:'var(--radius)', padding:'16px', marginBottom:14 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+            <div style={{ background:r.bg, border:`1px solid ${r.border}`, borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:14 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <span style={{ fontSize:28 }}>{r.icon}</span>
                 <div>
-                  <p style={{ fontWeight:800, fontSize:17, color:r.color }}>{r.title}</p>
-                  <p style={{ color:'var(--text)', fontSize:14, marginTop:2 }}>{r.msg(lastScan.item)}</p>
+                  <p style={{ fontWeight:800, fontSize:16, color:r.color }}>{r.title}</p>
+                  <p style={{ color:'var(--text)', fontSize:13, marginTop:2 }}>{r.msg(lastScan.item)}</p>
                 </div>
               </div>
-              <button onClick={() => { setLastScan(null); startScanner() }} className="btn btn-secondary" style={{ marginTop:8, width:'100%' }}>
-                📷 Scansiona prossimo
-              </button>
             </div>
           )
         })()}
+
+        {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:'var(--radius)', padding:'14px 16px', color:'var(--red)', marginBottom:14, fontSize:14 }}>{error}</div>}
 
         {/* Inserimento manuale */}
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>

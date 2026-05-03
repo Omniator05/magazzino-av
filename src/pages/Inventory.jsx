@@ -4,8 +4,8 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Console audio','Mixer','Amplificatore','Casse','Subwoofer','Microfono','Cavo audio','Cavo DMX','Proiettore','LED bar','Par LED','Moving head','Dimmer','Controller luci','Cavo elettrico','Multipresa','Flight case','Stativi','Altro']
-const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
+const CATEGORIES = ['Console','Amplificatore','Casse','Subwoofer','Microfono','Cavo audio','Cavo DMX','Proiettore','Ledwall','Faro','Cavo elettrico','Multipresa','Flight case','Stativi','Altro']
+const ICONS = {'Console':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','Ledwall':'🌈','Faro':'🔦','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
 
 export default function Inventory() {
   const { user } = useAuth()

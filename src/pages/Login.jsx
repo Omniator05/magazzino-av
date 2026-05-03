@@ -28,14 +28,37 @@ export default function Login() {
   }
 
   return (
-    <div style={{ minHeight:'100dvh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px', background:'var(--bg)' }}>
-      <div style={{ textAlign:'center', marginBottom:40 }}>
-        <div style={{ width:72, height:72, background:'linear-gradient(135deg,#e94560,#c0392b)', borderRadius:20, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:32 }}>🎛️</div>
-        <h1 style={{ fontSize:28, fontWeight:800 }}>Magazzino AV</h1>
-        <p style={{ color:'var(--text2)', marginTop:6, fontSize:14 }}>Gestione attrezzatura audio/luci</p>
+    <div style={{ minHeight:'100dvh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px', background:'var(--bg)', position:'relative', overflow:'hidden' }}>
+
+      {/* Sfondo decorativo */}
+      <div style={{ position:'absolute', inset:0, zIndex:0, overflow:'hidden', pointerEvents:'none' }}>
+        <div style={{ position:'absolute', top:'-20%', left:'-10%', width:'60vw', height:'60vw', borderRadius:'50%', background:'radial-gradient(circle, rgba(233,69,96,0.12) 0%, transparent 70%)' }} />
+        <div style={{ position:'absolute', bottom:'-15%', right:'-10%', width:'50vw', height:'50vw', borderRadius:'50%', background:'radial-gradient(circle, rgba(79,195,247,0.08) 0%, transparent 70%)' }} />
       </div>
 
-      <form onSubmit={handleSubmit} style={{ width:'100%', maxWidth:380 }}>
+      {/* Logo area */}
+      <div style={{ textAlign:'center', marginBottom:44, zIndex:1 }}>
+        {/* Logo SVG "THE SERVICE" */}
+        <div style={{ marginBottom:20 }}>
+          <svg viewBox="0 0 220 80" width="220" height="80" xmlns="http://www.w3.org/2000/svg">
+            {/* Icona a sinistra: forma a T stilizzata con onda audio */}
+            <rect x="8" y="14" width="44" height="6" rx="3" fill="#e94560"/>
+            <rect x="26" y="14" width="8" height="38" rx="3" fill="#e94560"/>
+            {/* Onda stilizzata */}
+            <circle cx="44" cy="42" r="3" fill="#e94560" opacity="0.5"/>
+            <circle cx="52" cy="42" r="3" fill="#e94560" opacity="0.3"/>
+            {/* Testo THE */}
+            <text x="62" y="34" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" fontWeight="800" fontSize="18" fill="#e8e8f0" letterSpacing="3">THE</text>
+            {/* Testo SERVICE */}
+            <text x="62" y="56" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" fontWeight="800" fontSize="22" fill="#e94560" letterSpacing="2">SERVICE</text>
+            {/* Linea decorativa */}
+            <line x1="62" y1="62" x2="215" y2="62" stroke="#e94560" strokeWidth="1.5" strokeOpacity="0.4"/>
+          </svg>
+        </div>
+        <p style={{ color:'var(--text2)', fontSize:13, letterSpacing:'1.5px', textTransform:'uppercase', fontWeight:500 }}>Gestione Magazzino</p>
+      </div>
+
+      <form onSubmit={handleSubmit} style={{ width:'100%', maxWidth:380, zIndex:1 }}>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'28px 24px' }}>
           <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20 }}>Accedi</h2>
 

@@ -14,6 +14,7 @@ export default function EventDetail() {
   const [allItems, setAllItems] = useState([])
   const [showAddItem, setShowAddItem] = useState(false)
   const [search, setSearch] = useState('')
+  const [cart, setCart] = useState([]) // articoli selezionati nel modal, non ancora salvati
 
   const eventRef = doc(db, 'events', id)
 
@@ -90,6 +91,38 @@ export default function EventDetail() {
     } catch(e) { console.error(e) }
   }
 
+  // Aggiunge al carrello temporaneo (non chiude il modal)
+  const addToCart = (item, qty) => {
+    setCart(prev => {
+      if (prev.some(c => c.id === item.id)) {
+        // Aggiorna qty se già nel carrello
+        return prev.map(c => c.id === item.id ? { ...c, qty } : c)
+      }
+      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, qty }]
+    })
+  }
+
+  const removeFromCart = (itemId) => {
+    setCart(prev => prev.filter(c => c.id !== itemId))
+  }
+
+  // Conferma e salva tutto il carrello sulla lista evento
+  const confirmCart = async () => {
+    if (cart.length === 0) return
+    const newItems = cart.filter(c => !eventItems.some(e => e.id === c.id))
+    const updated = [...eventItems, ...newItems.map(c => ({ id:c.id, name:c.name, category:c.category, qty:c.qty, loaded:false, returned:false }))]
+    await updateEventItems(updated)
+    setCart([])
+    setSearch('')
+    setShowAddItem(false)
+  }
+
+  const openAddModal = () => {
+    setCart([])
+    setSearch('')
+    setShowAddItem(true)
+  }
+
   const addToEvent = async (item, qty) => {
     if (eventItems.some(i => i.id === item.id)) return
     const updated = [...eventItems, { id: item.id, name: item.name, category: item.category, qty, loaded: false, returned: false }]
@@ -115,7 +148,7 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
-  const notInEvent = allItems.filter(i => !eventItems.some(e => e.id === i.id))
+  const notInEvent = allItems.filter(i => !eventItems.some(e => e.id === i.id) && !cart.some(c => c.id === i.id))
   const filtered = notInEvent.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
     i.category?.toLowerCase().includes(search.toLowerCase()) ||
@@ -188,25 +221,89 @@ export default function EventDetail() {
       </div>
 
       <div style={{ padding:'16px' }}>
-        <button onClick={() => setShowAddItem(true)} className="btn btn-secondary btn-full">
+        <button onClick={openAddModal} className="btn btn-secondary btn-full">
           + Aggiungi articolo alla lista
         </button>
       </div>
 
       {showAddItem && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddItem(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'85dvh' }}>
-            <button className="close-btn" onClick={() => setShowAddItem(false)}>✕</button>
-            <h2>Aggiungi alla lista</h2>
-            <div style={{ position:'relative', marginBottom:12 }}>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca articolo..." style={{ paddingLeft:36 }} />
-              <svg style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+
+            {/* Header fisso */}
+            <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                <h2 style={{ margin:0, fontSize:18 }}>Aggiungi alla lista</h2>
+                <button className="close-btn" style={{ position:'static' }} onClick={() => setShowAddItem(false)}>✕</button>
+              </div>
+              {/* Barra di ricerca */}
+              <div style={{ position:'relative' }}>
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Cerca per nome, categoria, marca..."
+                  autoFocus
+                  style={{ paddingLeft:36 }}
+                />
+                <svg style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16">
+                  <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                {search && (
+                  <button onClick={() => setSearch('')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'var(--card2)', borderRadius:'50%', width:20, height:20, fontSize:12, color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                )}
+              </div>
             </div>
-            <div style={{ maxHeight:'55dvh', overflowY:'auto' }}>
-              {filtered.length === 0
-                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'20px' }}>Nessun articolo trovato</p>
-                : filtered.map(item => <AddItemRow key={item.id} item={item} onAdd={addToEvent} icon={ICONS[item.category] || '📦'} />)
+
+            {/* Carrello selezionati (se ci sono) */}
+            {cart.length > 0 && (
+              <div style={{ background:'rgba(105,240,174,0.06)', borderBottom:'1px solid rgba(105,240,174,0.2)', padding:'10px 16px', flexShrink:0 }}>
+                <p style={{ color:'var(--green)', fontWeight:700, fontSize:12, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
+                  ✅ Selezionati — {cart.length} articol{cart.length === 1 ? 'o' : 'i'}
+                </p>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {cart.map(c => (
+                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:6, background:'var(--card2)', borderRadius:20, padding:'4px 10px 4px 12px', fontSize:13 }}>
+                      <span style={{ fontWeight:600 }}>{c.name}</span>
+                      <span style={{ color:'var(--text2)', fontSize:12 }}>×{c.qty}</span>
+                      <button onClick={() => removeFromCart(c.id)} style={{ background:'rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:'50%', width:18, height:18, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Lista articoli scorrevole */}
+            <div style={{ overflowY:'auto', flex:1 }}>
+              {filtered.length === 0 && search
+                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>Nessun risultato per "{search}"</p>
+                : filtered.length === 0
+                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>Tutti gli articoli sono già in lista</p>
+                : filtered.map(item => (
+                  <AddItemRow
+                    key={item.id}
+                    item={item}
+                    onAdd={addToCart}
+                    icon={ICONS[item.category] || '📦'}
+                    inCart={cart.some(c => c.id === item.id)}
+                    cartQty={cart.find(c => c.id === item.id)?.qty}
+                  />
+                ))
               }
+            </div>
+
+            {/* Pulsante conferma fisso in basso */}
+            <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
+              <button
+                onClick={confirmCart}
+                disabled={cart.length === 0}
+                className="btn btn-primary btn-full"
+                style={{ opacity: cart.length === 0 ? 0.4 : 1, fontSize:16, padding:'14px' }}
+              >
+                {cart.length === 0
+                  ? 'Seleziona articoli dalla lista ↑'
+                  : `✅ Aggiungi ${cart.length} articol${cart.length === 1 ? 'o' : 'i'} alla lista`
+                }
+              </button>
             </div>
           </div>
         </div>
@@ -215,23 +312,41 @@ export default function EventDetail() {
   )
 }
 
-function AddItemRow({ item, onAdd, icon }) {
-  const [qty, setQty] = useState(1)
+function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
+  const [qty, setQty] = useState(cartQty || 1)
   const max = item.availableQty ?? item.totalQty ?? 1
+
+  // Sincronizza qty se l'utente cambia nel carrello
+  useEffect(() => { if (cartQty) setQty(cartQty) }, [cartQty])
+
+  const handleAdd = () => {
+    onAdd(item, qty)
+  }
+
   return (
-    <div className="item-row" style={{ padding:'12px 0' }}>
-      <div className="item-icon" style={{ fontSize:18 }}>{icon}</div>
-      <div style={{ flex:1 }}>
+    <div className="item-row" style={{ padding:'12px 16px', background: inCart ? 'rgba(105,240,174,0.05)' : 'transparent', borderLeft: inCart ? '3px solid var(--green)' : '3px solid transparent' }}>
+      <div className="item-icon" style={{ fontSize:18, flexShrink:0 }}>{icon}</div>
+      <div style={{ flex:1, minWidth:0 }}>
         <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:12 }}>{item.brand} {item.model} · {item.availableQty ?? item.totalQty} disp.</p>
+        <p style={{ color:'var(--text2)', fontSize:12 }}>{[item.brand, item.model].filter(Boolean).join(' ')} · {item.availableQty ?? item.totalQty} disp.</p>
       </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
         <div className="qty-ctrl">
-          <button onClick={() => setQty(q => Math.max(1, q-1))}>−</button>
+          <button onClick={() => { const q = Math.max(1, qty-1); setQty(q); if (inCart) onAdd(item, q) }}>−</button>
           <span>{qty}</span>
-          <button onClick={() => setQty(q => Math.min(Math.max(1, max), q+1))}>+</button>
+          <button onClick={() => { const q = Math.min(Math.max(1, max), qty+1); setQty(q); if (inCart) onAdd(item, q) }}>+</button>
         </div>
-        <button onClick={() => onAdd(item, qty)} className="btn btn-primary" style={{ padding:'8px 14px', fontSize:13 }}>+</button>
+        <button
+          onClick={handleAdd}
+          style={{
+            width:34, height:34, borderRadius:'50%', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, flexShrink:0,
+            background: inCart ? 'var(--green)' : 'var(--accent)',
+            color: 'white',
+            transition: 'all 0.15s'
+          }}
+        >
+          {inCart ? '✓' : '+'}
+        </button>
       </div>
     </div>
   )
