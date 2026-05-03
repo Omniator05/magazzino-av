@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
@@ -9,13 +10,14 @@ const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡
 
 export default function Inventory() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', notes:'' })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'' })
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
@@ -23,18 +25,18 @@ export default function Inventory() {
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', notes:'' }); setShowModal(true) }
-  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', notes:item.notes||'' }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'' }); setShowModal(true) }
+  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'' }); setShowModal(true) }
 
   const saveItem = async () => {
     if (!form.name.trim()) return
     const qty = parseInt(form.qty) || 1
     if (selected) {
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, notes:form.notes })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, location:form.location, notes:form.notes })
     } else {
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty,
-        brand:form.brand, model:form.model, notes:form.notes,
+        brand:form.brand, model:form.model, location:form.location, notes:form.notes,
         createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -81,7 +83,9 @@ export default function Inventory() {
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
-          <button onClick={openAdd} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={openAdd} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
+          </div>
         </div>
       </div>
 
@@ -99,6 +103,7 @@ export default function Inventory() {
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontWeight:700, fontSize:15, marginBottom:2 }}>{item.name}</p>
                 <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
+                {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2 }}>📍 {item.location}</p>}
               </div>
               <div style={{ textAlign:'right', flexShrink:0 }}>
                 <span className={`badge ${item.availableQty === item.totalQty ? 'in' : item.availableQty === 0 ? 'out' : 'partial'}`}>
@@ -134,6 +139,7 @@ export default function Inventory() {
                 <button onClick={() => setForm({...form,qty:form.qty+1})}>+</button>
               </div>
             </div>
+            <div className="form-group"><label>Posizione in magazzino 📍</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Scaffale A3, Ripiano 2 sx, Fondo sala..." /></div>
             <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>🗑 Elimina</button>}
@@ -172,6 +178,15 @@ export default function Inventory() {
               <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
             </div>
             {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
+            {showDetail.location && (
+              <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:18 }}>📍</span>
+                <div>
+                  <p style={{ color:'var(--text2)', fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>Posizione magazzino</p>
+                  <p style={{ color:'var(--blue)', fontWeight:700, fontSize:15, marginTop:2 }}>{showDetail.location}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

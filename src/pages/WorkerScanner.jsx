@@ -120,18 +120,18 @@ export default function WorkerScanner() {
       }
       vibrate([60, 40, 120])
       playSound('success')
-      setLastScan({ action: 'loaded', item: eventItem })
+      setLastScan({ action: 'loaded', item: eventItem, location: foundItem.location || '' })
     } else {
       if (!eventItem.loaded) {
         vibrate([100, 50, 100])
         playSound('error')
-        setLastScan({ action: 'not_loaded', item: eventItem })
+        setLastScan({ action: 'not_loaded', item: eventItem, location: foundItem.location || '' })
         setProcessing(false)
         return
       }
       if (eventItem.returned) {
         vibrate([50])
-        setLastScan({ action: 'already_returned', item: eventItem })
+        setLastScan({ action: 'already_returned', item: eventItem, location: foundItem.location || '' })
         setProcessing(false)
         return
       }
@@ -144,7 +144,7 @@ export default function WorkerScanner() {
       }
       vibrate([60, 40, 120])
       playSound('success')
-      setLastScan({ action: 'returned', item: eventItem })
+      setLastScan({ action: 'returned', item: eventItem, location: foundItem.location || '' })
     }
     setProcessing(false)
   }
@@ -255,9 +255,15 @@ export default function WorkerScanner() {
                   <div style={{ position:'absolute', bottom:0, left:0, right:0, background: r.bg.replace('0.1','0.92').replace('0.15','0.92'), backdropFilter:'blur(8px)', padding:'12px 16px', borderTop:`2px solid ${r.border}`, animation:'slideUp 0.2s ease' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                       <span style={{ fontSize:24 }}>{r.icon}</span>
-                      <div>
+                      <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontWeight:800, fontSize:15, color:r.color }}>{r.title}</p>
                         <p style={{ color:'var(--text)', fontSize:12, marginTop:1 }}>{r.msg(lastScan.item)}</p>
+                        {lastScan.location && (
+                          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:6, background:'rgba(79,195,247,0.18)', border:'1px solid rgba(79,195,247,0.4)', borderRadius:6, padding:'3px 10px' }}>
+                            <span style={{ fontSize:12 }}>📍</span>
+                            <span style={{ color:'#7dd3fc', fontSize:13, fontWeight:800 }}>{lastScan.location}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -290,9 +296,15 @@ export default function WorkerScanner() {
             <div style={{ background:r.bg, border:`1px solid ${r.border}`, borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:14 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <span style={{ fontSize:28 }}>{r.icon}</span>
-                <div>
+                <div style={{ flex:1 }}>
                   <p style={{ fontWeight:800, fontSize:16, color:r.color }}>{r.title}</p>
                   <p style={{ color:'var(--text)', fontSize:13, marginTop:2 }}>{r.msg(lastScan.item)}</p>
+                  {lastScan.location && (
+                    <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:8, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.30)', borderRadius:8, padding:'5px 12px' }}>
+                      <span style={{ fontSize:14 }}>📍</span>
+                      <span style={{ color:'var(--blue)', fontSize:14, fontWeight:800 }}>{lastScan.location}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -318,24 +330,49 @@ export default function WorkerScanner() {
           {items.length === 0
             ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
             : items.map(item => (
-              <div key={item.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderBottom:'1px solid var(--border)' }}>
-                <span style={{ fontSize:20 }}>{ICONS[item.category] || '📦'}</span>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
-                  <p style={{ color:'var(--text2)', fontSize:12 }}>qty: {item.qty || 1}</p>
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-end' }}>
-                  <span style={{ fontSize:11, fontWeight:700, color: item.loaded ? 'var(--accent2)' : 'var(--text2)', background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', borderRadius:6, padding:'2px 8px' }}>
-                    {item.loaded ? '🚛' : '○'} Carico
-                  </span>
-                  <span style={{ fontSize:11, fontWeight:700, color: item.returned ? 'var(--green)' : 'var(--text2)', background: item.returned ? 'rgba(105,240,174,0.15)' : 'var(--card2)', borderRadius:6, padding:'2px 8px' }}>
-                    {item.returned ? '✅' : '○'} Rientro
-                  </span>
-                </div>
-              </div>
+              <ChecklistRow key={item.id} item={item} />
             ))
           }
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Riga checklist che legge la location LIVE da Firestore
+// Risolve il problema degli articoli aggiunti prima che il campo esistesse
+function ChecklistRow({ item }) {
+  const [location, setLocation] = useState(item.location || null)
+
+  useEffect(() => {
+    // Carica sempre la location aggiornata da Firestore
+    getDoc(doc(db, 'items', item.id)).then(snap => {
+      if (snap.exists()) setLocation(snap.data().location || null)
+    }).catch(() => {})
+  }, [item.id])
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderBottom:'1px solid var(--border)' }}>
+      <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
+        <p style={{ color:'var(--text2)', fontSize:12, marginTop:1 }}>qty: {item.qty || 1}</p>
+        {location ? (
+          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:6, padding:'3px 8px' }}>
+            <span style={{ fontSize:11 }}>📍</span>
+            <span style={{ color:'var(--blue)', fontSize:12, fontWeight:800 }}>{location}</span>
+          </div>
+        ) : (
+          <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
+        )}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-end' }}>
+        <span style={{ fontSize:11, fontWeight:700, color: item.loaded ? 'var(--accent2)' : 'var(--text2)', background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', borderRadius:6, padding:'2px 8px' }}>
+          {item.loaded ? '🚛' : '○'} Carico
+        </span>
+        <span style={{ fontSize:11, fontWeight:700, color: item.returned ? 'var(--green)' : 'var(--text2)', background: item.returned ? 'rgba(105,240,174,0.15)' : 'var(--card2)', borderRadius:6, padding:'2px 8px' }}>
+          {item.returned ? '✅' : '○'} Rientro
+        </span>
       </div>
     </div>
   )

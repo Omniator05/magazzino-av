@@ -98,7 +98,7 @@ export default function EventDetail() {
         // Aggiorna qty se già nel carrello
         return prev.map(c => c.id === item.id ? { ...c, qty } : c)
       }
-      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, qty }]
+      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', qty }]
     })
   }
 
@@ -110,7 +110,7 @@ export default function EventDetail() {
   const confirmCart = async () => {
     if (cart.length === 0) return
     const newItems = cart.filter(c => !eventItems.some(e => e.id === c.id))
-    const updated = [...eventItems, ...newItems.map(c => ({ id:c.id, name:c.name, category:c.category, qty:c.qty, loaded:false, returned:false }))]
+    const updated = [...eventItems, ...newItems.map(c => ({ id:c.id, name:c.name, category:c.category, location:c.location||'', qty:c.qty, loaded:false, returned:false }))]
     await updateEventItems(updated)
     setCart([])
     setSearch('')
@@ -125,7 +125,7 @@ export default function EventDetail() {
 
   const addToEvent = async (item, qty) => {
     if (eventItems.some(i => i.id === item.id)) return
-    const updated = [...eventItems, { id: item.id, name: item.name, category: item.category, qty, loaded: false, returned: false }]
+    const updated = [...eventItems, { id: item.id, name: item.name, category: item.category, location: item.location || '', qty, loaded: false, returned: false }]
     await updateEventItems(updated)
     setShowAddItem(false)
     setSearch('')
@@ -204,25 +204,7 @@ export default function EventDetail() {
               <p>Aggiungi articoli alla lista di carico</p>
             </div>
           : eventItems.map(item => (
-            <div key={item.id} style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:12 }}>
-              <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
-                <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
-              </div>
-              {/* Stato doppio: caricato + rientrato */}
-              <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
-                <button onClick={() => toggleLoaded(item.id)}
-                  style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-                  {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
-                </button>
-                <button onClick={() => toggleReturned(item.id)} disabled={!item.loaded}
-                  style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
-                  {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
-                </button>
-              </div>
-              <button onClick={() => removeFromEvent(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>✕</button>
-            </div>
+            <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} />
           ))
         }
       </div>
@@ -336,6 +318,12 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
       <div style={{ flex:1, minWidth:0 }}>
         <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
         <p style={{ color:'var(--text2)', fontSize:12 }}>{[item.brand, item.model].filter(Boolean).join(' ')} · {item.availableQty ?? item.totalQty} disp.</p>
+        {item.location && (
+          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'2px 8px' }}>
+            <span style={{ fontSize:11 }}>📍</span>
+            <span style={{ color:'var(--blue)', fontSize:11, fontWeight:700 }}>{item.location}</span>
+          </div>
+        )}
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
         <div className="qty-ctrl">
@@ -355,6 +343,46 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
           {inCart ? '✓' : '+'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// Riga lista evento con location letta live da Firestore
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove }) {
+  const [location, setLocation] = useState(item.location || null)
+
+  useEffect(() => {
+    getDoc(doc(db, 'items', item.id)).then(snap => {
+      if (snap.exists()) setLocation(snap.data().location || null)
+    }).catch(() => {})
+  }, [item.id])
+
+  return (
+    <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:12 }}>
+      <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+        <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
+        {location ? (
+          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
+            <span style={{ fontSize:11 }}>📍</span>
+            <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
+          </div>
+        ) : (
+          <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
+        )}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
+        <button onClick={() => onToggleLoaded(item.id)}
+          style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
+          {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
+        </button>
+        <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
+          style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
+          {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
+        </button>
+      </div>
+      <button onClick={() => onRemove(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>✕</button>
     </div>
   )
 }
