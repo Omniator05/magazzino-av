@@ -38,7 +38,7 @@ export default function Login() {
 
       {/* Logo area */}
       <div style={{ textAlign:'center', marginBottom:44, zIndex:1 }}>
-        {/* Logo SVG "THE SERVICE" */}
+        {<img src="/logo.png" />}
         <div style={{ marginBottom:20 }}>
           <svg viewBox="0 0 220 80" width="220" height="80" xmlns="http://www.w3.org/2000/svg">
             {/* Icona a sinistra: forma a T stilizzata con onda audio */}
