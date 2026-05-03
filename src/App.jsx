@@ -51,6 +51,7 @@ function PrivateRoutes() {
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/events" element={<Events />} />
         <Route path="/events/:id" element={<EventDetail />} />
+        <Route path="/events/:id/scan" element={<WorkerScanner />} />
         <Route path="/scanner" element={<Scanner />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="*" element={<Navigate to="/" replace />} />

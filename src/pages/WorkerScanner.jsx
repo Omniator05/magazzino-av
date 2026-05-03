@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'
@@ -10,6 +10,9 @@ export default function WorkerScanner() {
   const { id } = useParams()
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Se arriviamo da /events/:id/scan (admin) torniamo all'evento, altrimenti alla home worker
+  const backPath = location.pathname.endsWith('/scan') ? `/events/${id}` : '/'
   const [event, setEvent] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
@@ -205,7 +208,7 @@ export default function WorkerScanner() {
     <div className="page">
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-          <button onClick={() => { stopScanner(); navigate('/') }} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
+          <button onClick={() => { stopScanner(); navigate(backPath) }} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
         </div>
         <h1 style={{ fontSize:20, fontWeight:800 }}>{event.name}</h1>
         <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>

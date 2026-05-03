@@ -3,27 +3,27 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError]   = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
 
   const handleSubmit = async e => {
     e.preventDefault()
     setError(''); setLoading(true)
     try {
-      await login(email, password)
+      await login(username.trim(), password)
       navigate('/')
     } catch (err) {
       const msgs = {
-        'auth/user-not-found': 'Utente non trovato',
-        'auth/wrong-password': 'Password errata',
-        'auth/invalid-credential': 'Email o password errati',
-        'auth/too-many-requests': 'Troppi tentativi, riprova più tardi'
+        'auth/user-not-found':      'Nome utente non trovato',
+        'auth/wrong-password':      'Password errata',
+        'auth/invalid-credential':  'Nome utente o password errati',
+        'auth/too-many-requests':   'Troppi tentativi, riprova tra qualche minuto',
       }
-      setError(msgs[err.code] || 'Errore di accesso')
+      setError(msgs[err.code] || 'Accesso non riuscito')
     } finally { setLoading(false) }
   }
 
@@ -36,10 +36,18 @@ export default function Login() {
         <div style={{ position:'absolute', bottom:'-15%', right:'-10%', width:'50vw', height:'50vw', borderRadius:'50%', background:'radial-gradient(circle, rgba(79,195,247,0.08) 0%, transparent 70%)' }} />
       </div>
 
-      {/* Logo area */}
+      {/* Logo */}
       <div style={{ textAlign:'center', marginBottom:44, zIndex:1 }}>
-        {<img src="/logo.png" />}
         <div style={{ marginBottom:20 }}>
+          <svg viewBox="0 0 220 80" width="220" height="80" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="14" width="44" height="6" rx="3" fill="#e94560"/>
+            <rect x="26" y="14" width="8" height="38" rx="3" fill="#e94560"/>
+            <circle cx="44" cy="42" r="3" fill="#e94560" opacity="0.5"/>
+            <circle cx="52" cy="42" r="3" fill="#e94560" opacity="0.3"/>
+            <text x="62" y="34" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" fontWeight="800" fontSize="18" fill="#e8e8f0" letterSpacing="3">THE</text>
+            <text x="62" y="56" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" fontWeight="800" fontSize="22" fill="#e94560" letterSpacing="2">SERVICE</text>
+            <line x1="62" y1="62" x2="215" y2="62" stroke="#e94560" strokeWidth="1.5" strokeOpacity="0.4"/>
+          </svg>
         </div>
         <p style={{ color:'var(--text2)', fontSize:13, letterSpacing:'1.5px', textTransform:'uppercase', fontWeight:500 }}>Gestione Magazzino</p>
       </div>
@@ -55,12 +63,28 @@ export default function Login() {
           )}
 
           <div className="form-group">
-            <label>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tua@email.com" required autoComplete="email" />
+            <label>Nome utente o email</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="es. marco.bianchi"
+              required
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="username"
+            />
           </div>
           <div className="form-group" style={{ marginBottom:20 }}>
             <label>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required autoComplete="current-password" />
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
+            />
           </div>
 
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
@@ -68,7 +92,7 @@ export default function Login() {
           </button>
         </div>
         <p style={{ textAlign:'center', color:'var(--text2)', fontSize:13, marginTop:16 }}>
-          Per accedere, contatta l'amministratore.
+          Per accedere contatta l'amministratore.
         </p>
       </form>
     </div>
