@@ -40,20 +40,6 @@ export default function Login() {
       <div style={{ textAlign:'center', marginBottom:44, zIndex:1 }}>
         {<img src="/logo.png" />}
         <div style={{ marginBottom:20 }}>
-          <svg viewBox="0 0 220 80" width="220" height="80" xmlns="http://www.w3.org/2000/svg">
-            {/* Icona a sinistra: forma a T stilizzata con onda audio */}
-            <rect x="8" y="14" width="44" height="6" rx="3" fill="#e94560"/>
-            <rect x="26" y="14" width="8" height="38" rx="3" fill="#e94560"/>
-            {/* Onda stilizzata */}
-            <circle cx="44" cy="42" r="3" fill="#e94560" opacity="0.5"/>
-            <circle cx="52" cy="42" r="3" fill="#e94560" opacity="0.3"/>
-            {/* Testo THE */}
-            <text x="62" y="34" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" fontWeight="800" fontSize="18" fill="#e8e8f0" letterSpacing="3">THE</text>
-            {/* Testo SERVICE */}
-            <text x="62" y="56" fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" fontWeight="800" fontSize="22" fill="#e94560" letterSpacing="2">SERVICE</text>
-            {/* Linea decorativa */}
-            <line x1="62" y1="62" x2="215" y2="62" stroke="#e94560" strokeWidth="1.5" strokeOpacity="0.4"/>
-          </svg>
         </div>
         <p style={{ color:'var(--text2)', fontSize:13, letterSpacing:'1.5px', textTransform:'uppercase', fontWeight:500 }}>Gestione Magazzino</p>
       </div>
