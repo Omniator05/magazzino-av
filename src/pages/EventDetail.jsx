@@ -98,7 +98,7 @@ export default function EventDetail() {
         // Aggiorna qty se già nel carrello
         return prev.map(c => c.id === item.id ? { ...c, qty } : c)
       }
-      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', qty }]
+      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, qty }]
     })
   }
 
@@ -110,7 +110,7 @@ export default function EventDetail() {
   const confirmCart = async () => {
     if (cart.length === 0) return
     const newItems = cart.filter(c => !eventItems.some(e => e.id === c.id))
-    const updated = [...eventItems, ...newItems.map(c => ({ id:c.id, name:c.name, category:c.category, location:c.location||'', qty:c.qty, loaded:false, returned:false }))]
+    const updated = [...eventItems, ...newItems.map(c => ({ id:c.id, name:c.name, category:c.category, location:c.location||'', isKit:c.isKit||false, kitSize:c.kitSize||null, qty:c.qty, loaded:false, returned:false }))]
     await updateEventItems(updated)
     setCart([])
     setSearch('')
@@ -125,7 +125,7 @@ export default function EventDetail() {
 
   const addToEvent = async (item, qty) => {
     if (eventItems.some(i => i.id === item.id)) return
-    const updated = [...eventItems, { id: item.id, name: item.name, category: item.category, location: item.location || '', qty, loaded: false, returned: false }]
+    const updated = [...eventItems, { id: item.id, name: item.name, category: item.category, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, qty, loaded: false, returned: false }]
     await updateEventItems(updated)
     setShowAddItem(false)
     setSearch('')
@@ -146,6 +146,35 @@ export default function EventDetail() {
       } catch(e) {}
     }
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
+  }
+
+  // Modifica la quantità di un articolo già in lista (per kit parziali)
+  // Ricalcola il delta sul magazzino se l'articolo è già stato caricato
+  const changeQty = async (itemId, newQty, oldQty) => {
+    const updated = eventItems.map(i => i.id === itemId ? { ...i, qty: newQty } : i)
+    await updateEventItems(updated)
+
+    const item = eventItems.find(i => i.id === itemId)
+    if (item?.loaded && !item?.returned) {
+      // Era già uscito — aggiusta la differenza in magazzino
+      try {
+        const itemRef = doc(db, 'items', itemId)
+        const snap = await getDoc(itemRef)
+        if (snap.exists()) {
+          const current = snap.data()
+          const delta = oldQty - newQty // se riduco qty, torna disponibile la differenza
+          await updateDoc(itemRef, {
+            availableQty: Math.max(0, Math.min(current.totalQty, (current.availableQty || 0) + delta))
+          })
+        }
+      } catch(e) { console.error(e) }
+    }
+  }
+
+  // Modifica i pezzi effettivi che escono da un kit (es. 3 pannelli su 5 nel baule)
+  const changeKitPieces = async (itemId, newPieces) => {
+    const updated = eventItems.map(i => i.id === itemId ? { ...i, kitPieces: newPieces } : i)
+    await updateEventItems(updated)
   }
 
   const notInEvent = allItems.filter(i => !eventItems.some(e => e.id === i.id) && !cart.some(c => c.id === i.id))
@@ -204,7 +233,7 @@ export default function EventDetail() {
               <p>Aggiungi articoli alla lista di carico</p>
             </div>
           : eventItems.map(item => (
-            <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} />
+            <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onChangeQty={changeQty} onChangeKitPieces={changeKitPieces} />
           ))
         }
       </div>
@@ -316,8 +345,18 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
     <div className="item-row" style={{ padding:'12px 16px', background: inCart ? 'rgba(105,240,174,0.05)' : 'transparent', borderLeft: inCart ? '3px solid var(--green)' : '3px solid transparent' }}>
       <div className="item-icon" style={{ fontSize:18, flexShrink:0 }}>{icon}</div>
       <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:12 }}>{[item.brand, item.model].filter(Boolean).join(' ')} · {item.availableQty ?? item.totalQty} disp.</p>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+          <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
+          {item.isKit && (
+            <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>
+          )}
+        </div>
+        <p style={{ color:'var(--text2)', fontSize:12 }}>
+          {[item.brand, item.model].filter(Boolean).join(' ')}
+          {item.isKit && item.kitSize
+            ? ` · ${item.availableQty ?? item.totalQty} bauli disp. (${(item.availableQty ?? item.totalQty) * item.kitSize} pz)`
+            : ` · ${item.availableQty ?? item.totalQty} disp.`}
+        </p>
         {item.location && (
           <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'2px 8px' }}>
             <span style={{ fontSize:11 }}>📍</span>
@@ -347,42 +386,132 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
   )
 }
 
-// Riga lista evento con location letta live da Firestore
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove }) {
-  const [location, setLocation] = useState(item.location || null)
+// Riga lista evento con location live e quantità modificabile (per kit parziali)
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onChangeQty, onChangeKitPieces }) {
+  const [location, setLocation]       = useState(item.location || null)
+  const [totalQty, setTotalQty]       = useState(null)
+  const [kitInfo, setKitInfo]         = useState(
+    item.isKit ? { isKit:true, kitSize: item.kitSize || 1 } : null
+  )
+  const [showKitCtrl, setShowKitCtrl] = useState(false)
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
-      if (snap.exists()) setLocation(snap.data().location || null)
+      if (snap.exists()) {
+        const data = snap.data()
+        setLocation(data.location || null)
+        setTotalQty(data.totalQty || null)
+        setKitInfo(data.isKit ? { isKit:true, kitSize: data.kitSize || 1 } : null)
+      }
     }).catch(() => {})
   }, [item.id])
 
+  const currentQty   = item.qty || 1
+  const max          = totalQty || currentQty
+  const kitSize      = kitInfo?.kitSize || 1
+  const kitPieces    = item.kitPieces ?? (currentQty * kitSize)
+  const maxKitPieces = currentQty * kitSize
+
+  const handleQtyChange = (delta) => {
+    const newQty = Math.max(1, Math.min(max, currentQty + delta))
+    if (newQty !== currentQty) onChangeQty(item.id, newQty, currentQty)
+  }
+
+  const handleKitPieces = (delta) => {
+    const newPieces = Math.max(1, Math.min(maxKitPieces, kitPieces + delta))
+    if (newPieces !== kitPieces) onChangeKitPieces(item.id, newPieces)
+  }
+
+  const piecesOut = kitInfo?.isKit && item.kitPieces != null && item.kitPieces < maxKitPieces
+
   return (
-    <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:12 }}>
-      <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
-      <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
-        {location ? (
-          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
-            <span style={{ fontSize:11 }}>📍</span>
-            <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
+    <div style={{ borderBottom:'1px solid var(--border)' }}>
+      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
+        <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+            <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+            {kitInfo?.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
           </div>
-        ) : (
-          <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
-        )}
+
+          {/* Bauli */}
+          {!item.loaded ? (
+            <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+              <button onClick={() => handleQtyChange(-1)} disabled={currentQty <= 1}
+                style={{ width:22, height:22, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', opacity: currentQty <= 1 ? 0.3 : 1 }}>−</button>
+              <span style={{ fontWeight:800, fontSize:15, minWidth:20, textAlign:'center', color:'var(--text)' }}>{currentQty}</span>
+              <button onClick={() => handleQtyChange(1)} disabled={currentQty >= max}
+                style={{ width:22, height:22, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', opacity: currentQty >= max ? 0.3 : 1 }}>+</button>
+              <span style={{ color:'var(--text2)', fontSize:12 }}>
+                {kitInfo?.isKit ? `baul${currentQty === 1 ? 'e' : 'i'}` : `di ${max}`}
+              </span>
+              {kitInfo?.isKit && (
+                <span style={{ color:'var(--accent2)', fontSize:12, fontWeight:700 }}>
+                  = {piecesOut ? `${kitPieces}/${maxKitPieces}` : maxKitPieces} pz
+                </span>
+              )}
+            </div>
+          ) : (
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:4 }}>
+              {currentQty} {kitInfo?.isKit ? `baul${currentQty === 1 ? 'e' : 'i'}` : `di ${max}`}
+              {kitInfo?.isKit && <span style={{ color:'var(--accent2)', fontWeight:700 }}> · {kitPieces} pz</span>}
+            </p>
+          )}
+
+          {/* Bottone pezzi kit — solo se kit e non ancora caricato */}
+          {kitInfo?.isKit && !item.loaded && (
+            <button
+              onClick={() => setShowKitCtrl(!showKitCtrl)}
+              style={{ background: showKitCtrl ? 'rgba(245,166,35,0.15)' : 'var(--card2)', border:`1px solid ${showKitCtrl ? 'rgba(245,166,35,0.4)' : 'var(--border)'}`, color: showKitCtrl ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'3px 10px', fontSize:12, fontWeight:700, marginBottom:4 }}
+            >
+              🧩 Pezzi parziali {showKitCtrl ? '▲' : '▼'}
+            </button>
+          )}
+
+          {location ? (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:4, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
+              <span style={{ fontSize:11 }}>📍</span>
+              <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
+            </div>
+          ) : (
+            <p style={{ color:'var(--text3)', fontSize:11, marginTop:2, fontStyle:'italic' }}>Posizione non specificata</p>
+          )}
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
+          <button onClick={() => onToggleLoaded(item.id)}
+            style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
+            {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
+          </button>
+          <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
+            style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
+            {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
+          </button>
+        </div>
+        <button onClick={() => onRemove(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>✕</button>
       </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
-        <button onClick={() => onToggleLoaded(item.id)}
-          style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-          {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
-        </button>
-        <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
-          style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
-          {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
-        </button>
-      </div>
-      <button onClick={() => onRemove(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>✕</button>
+
+      {/* Pannello pezzi kit espandibile */}
+      {showKitCtrl && kitInfo?.isKit && !item.loaded && (
+        <div style={{ margin:'0 16px 12px', background:'rgba(245,166,35,0.06)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:'var(--radius-sm)', padding:'12px 14px' }}>
+          <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8 }}>
+            Quanti pezzi escono da questo baule?
+          </p>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <button onClick={() => handleKitPieces(-1)} disabled={kitPieces <= 1}
+              style={{ width:32, height:32, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', opacity: kitPieces <= 1 ? 0.3 : 1 }}>−</button>
+            <span style={{ fontWeight:800, fontSize:20, minWidth:28, textAlign:'center', color:'var(--accent2)' }}>{kitPieces}</span>
+            <button onClick={() => handleKitPieces(1)} disabled={kitPieces >= maxKitPieces}
+              style={{ width:32, height:32, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', opacity: kitPieces >= maxKitPieces ? 0.3 : 1 }}>+</button>
+            <span style={{ color:'var(--text2)', fontSize:13 }}>di {maxKitPieces} pz</span>
+            {kitPieces < maxKitPieces && (
+              <span style={{ marginLeft:'auto', background:'rgba(105,240,174,0.12)', color:'var(--green)', border:'1px solid rgba(105,240,174,0.3)', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>
+                {maxKitPieces - kitPieces} restano in magazzino
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

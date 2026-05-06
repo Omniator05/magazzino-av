@@ -20,19 +20,36 @@ export default function Scanner() {
     return { found: false, code: normalized }
   }
 
+  const [scanToast, setScanToast] = useState(null)
+
   const startScanner = async () => {
     setError(null); setResult(null); setScanning(true)
     try {
-      const { Html5Qrcode } = await import('html5-qrcode')
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       html5QrCodeRef.current = new Html5Qrcode('qr-reader')
       await html5QrCodeRef.current.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        {
+          fps: 15,
+          qrbox: { width: 280, height: 160 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+          ]
+        },
         async decodedText => {
           await html5QrCodeRef.current.stop()
           setScanning(false)
           const res = await lookupCode(decodedText)
           setResult(res)
+          setScanToast({ ...res, ts: Date.now() })
+          setTimeout(() => setScanToast(null), 3000)
         },
         () => {}
       )
@@ -51,6 +68,38 @@ export default function Scanner() {
 
   return (
     <div className="page">
+
+      {/* Popup centrale post-scansione */}
+      {scanToast && (
+        <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
+          <div style={{
+            background: scanToast.found ? 'rgba(22,40,30,0.97)' : 'rgba(40,16,20,0.97)',
+            border: `2px solid ${scanToast.found ? 'var(--green)' : 'var(--red)'}`,
+            borderRadius:24, padding:'28px 32px', textAlign:'center', minWidth:260, maxWidth:320,
+            boxShadow:'0 12px 48px rgba(0,0,0,0.7)',
+            animation:'fadeInUp 0.2s cubic-bezier(0.32,0.72,0,1) both',
+          }}>
+            <div style={{ fontSize:52, marginBottom:12 }}>{scanToast.found ? '✅' : '❓'}</div>
+            <p style={{ fontWeight:800, fontSize:20, color: scanToast.found ? 'var(--green)' : 'var(--red)', marginBottom:6 }}>
+              {scanToast.found ? 'Trovato!' : 'Non trovato'}
+            </p>
+            {scanToast.found ? (
+              <>
+                <p style={{ color:'var(--text)', fontSize:15 }}>{scanToast.item.name}</p>
+                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{scanToast.item.brand} {scanToast.item.model}</p>
+                {scanToast.item.location && (
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:10, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'5px 14px' }}>
+                    <span>📍</span>
+                    <span style={{ color:'var(--blue)', fontWeight:800, fontSize:14 }}>{scanToast.item.location}</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p style={{ color:'var(--text2)', fontSize:13 }}>Codice: {scanToast.code}</p>
+            )}
+          </div>
+        </div>
+      )}
       <div className="page-header">
         <h1>Scanner QR/Barcode</h1>
         <p>Identifica un articolo dal codice</p>

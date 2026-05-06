@@ -17,7 +17,7 @@ export default function Inventory() {
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'' })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2 })
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
@@ -25,18 +25,19 @@ export default function Inventory() {
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'' }); setShowModal(true) }
-  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'' }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2 }); setShowModal(true) }
+  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', isKit:item.isKit||false, kitSize:item.kitSize||2 }); setShowModal(true) }
 
   const saveItem = async () => {
     if (!form.name.trim()) return
     const qty = parseInt(form.qty) || 1
     if (selected) {
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, location:form.location, notes:form.notes })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, location:form.location, notes:form.notes, isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null })
     } else {
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes,
+        isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null,
         createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -72,6 +73,32 @@ export default function Inventory() {
     w.document.close()
   }
 
+  const exportCSV = () => {
+    if (items.length === 0) return
+    const headers = ['Nome', 'Categoria', 'Marca', 'Modello', 'Quantità totale', 'Disponibili', 'Posizione', 'Kit', 'Pezzi per baule', 'Codice', 'Note']
+    const rows = items.map(i => [
+      i.name || '',
+      i.category || '',
+      i.brand || '',
+      i.model || '',
+      i.totalQty ?? '',
+      i.availableQty ?? '',
+      i.location || '',
+      i.isKit ? 'Sì' : 'No',
+      i.isKit && i.kitSize ? i.kitSize : '',
+      i.code || '',
+      (i.notes || '').replace(/,/g, ';'),
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `magazzino_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const filtered = items.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
     i.category?.toLowerCase().includes(search.toLowerCase()) ||
@@ -84,6 +111,7 @@ export default function Inventory() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
           <div style={{ display:'flex', gap:8 }}>
+            <button onClick={exportCSV} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13 }}>📤 Esporta</button>
             <button onClick={openAdd} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
           </div>
         </div>
@@ -101,8 +129,18 @@ export default function Inventory() {
             <div key={item.id} className="item-row" onClick={() => openDetail(item)}>
               <div className="item-icon">{ICONS[item.category] || '📦'}</div>
               <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:700, fontSize:15, marginBottom:2 }}>{item.name}</p>
-                <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                  <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+                  {item.isKit && (
+                    <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', flexShrink:0 }}>
+                      KIT
+                    </span>
+                  )}
+                </div>
+                <p style={{ color:'var(--text2)', fontSize:13 }}>
+                  {item.brand} {item.model}
+                  {item.isKit && item.kitSize && <span style={{ color:'var(--accent2)' }}> · {item.kitSize} pz/baule</span>}
+                </p>
                 {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2 }}>📍 {item.location}</p>}
               </div>
               <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -140,6 +178,46 @@ export default function Inventory() {
               </div>
             </div>
             <div className="form-group"><label>Posizione in magazzino 📍</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Scaffale A3, Ripiano 2 sx, Fondo sala..." /></div>
+
+            {/* Toggle Kit/Baule */}
+            <div style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'14px', marginBottom:16 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div>
+                  <p style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>📦 Kit / Baule</p>
+                  <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>Contiene più pezzi dello stesso tipo</p>
+                </div>
+                <button
+                  onClick={() => setForm({...form, isKit:!form.isKit})}
+                  style={{
+                    width:48, height:28, borderRadius:14, padding:3,
+                    background: form.isKit ? 'var(--accent2)' : 'var(--card3)',
+                    border: 'none', transition:'background 0.2s',
+                    display:'flex', alignItems:'center',
+                    justifyContent: form.isKit ? 'flex-end' : 'flex-start',
+                  }}
+                >
+                  <div style={{ width:22, height:22, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.3)' }} />
+                </button>
+              </div>
+
+              {form.isKit && (
+                <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid var(--border)' }}>
+                  <label style={{ display:'block', fontSize:12, color:'var(--text2)', marginBottom:8, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                    Pezzi contenuti per baule
+                  </label>
+                  <div className="qty-ctrl">
+                    <button onClick={() => setForm({...form, kitSize:Math.max(2, (parseInt(form.kitSize)||2)-1)})}>−</button>
+                    <span>{form.kitSize}</span>
+                    <button onClick={() => setForm({...form, kitSize:(parseInt(form.kitSize)||2)+1})}>+</button>
+                    <span style={{ color:'var(--text2)', fontSize:13, marginLeft:4 }}>pezzi per baule</span>
+                  </div>
+                  <p style={{ color:'var(--text2)', fontSize:12, marginTop:8, lineHeight:1.5 }}>
+                    {form.name.trim() ? `"${form.name.trim()}"` : '"Nome articolo"'} con qty <strong style={{ color:'var(--text)' }}>{form.qty||1} baul{(form.qty||1) === 1 ? 'e' : 'i'}</strong> e kit da <strong style={{ color:'var(--accent2)' }}>{form.kitSize} pezzi</strong> = {(form.qty||1) * (parseInt(form.kitSize)||2)} pezzi totali in magazzino
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>🗑 Elimina</button>}
@@ -178,6 +256,15 @@ export default function Inventory() {
               <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
             </div>
             {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
+            {showDetail.isKit && showDetail.kitSize && (
+              <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(245,166,35,0.08)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:8 }}>
+                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:4 }}>📦 Kit / Baule</p>
+                <p style={{ color:'var(--text)', fontSize:14 }}>
+                  <strong>{showDetail.kitSize} pezzi</strong> per baule ·{' '}
+                  <strong>{(showDetail.availableQty||0) * showDetail.kitSize}</strong> pezzi disponibili in totale
+                </p>
+              </div>
+            )}
             {showDetail.location && (
               <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:18 }}>📍</span>

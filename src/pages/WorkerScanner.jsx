@@ -20,7 +20,7 @@ export default function WorkerScanner() {
   const [mode, setMode] = useState('load') // 'load' | 'return'
   const [error, setError] = useState(null)
   const [processing, setProcessing] = useState(false) // blocca scansioni doppie
-  const html5QrRef = useRef(null)
+  const [scanToast, setScanToast] = useState(null) // popup centrale post-scansione
   const lastCodeRef = useRef('') // evita di riprocessare lo stesso codice di fila
   const lastCodeTimeRef = useRef(0)
   const eventRef = doc(db, 'events', id)
@@ -88,7 +88,10 @@ export default function WorkerScanner() {
     if (itemSnap.empty) {
       vibrate([100, 50, 100])
       playSound('error')
-      setLastScan({ action: 'not_found', code: normalized })
+      const result = { action: 'not_found', code: normalized }
+      setLastScan(result)
+      setScanToast({ ...result, ts: Date.now() })
+      setTimeout(() => setScanToast(null), 3000)
       setProcessing(false)
       return
     }
@@ -99,7 +102,10 @@ export default function WorkerScanner() {
     if (!eventItem) {
       vibrate([100, 50, 100])
       playSound('error')
-      setLastScan({ action: 'not_in_list', item: foundItem })
+      const result = { action: 'not_in_list', item: foundItem }
+      setLastScan(result)
+      setScanToast({ ...result, ts: Date.now() })
+      setTimeout(() => setScanToast(null), 3000)
       setProcessing(false)
       return
     }
@@ -107,7 +113,10 @@ export default function WorkerScanner() {
     if (mode === 'load') {
       if (eventItem.loaded) {
         vibrate([50])
-        setLastScan({ action: 'already_loaded', item: eventItem })
+        const result = { action: 'already_loaded', item: eventItem }
+        setLastScan(result)
+        setScanToast({ ...result, ts: Date.now() })
+        setTimeout(() => setScanToast(null), 3000)
         setProcessing(false)
         return
       }
@@ -120,18 +129,27 @@ export default function WorkerScanner() {
       }
       vibrate([60, 40, 120])
       playSound('success')
-      setLastScan({ action: 'loaded', item: eventItem, location: foundItem.location || '' })
+      const result = { action: 'loaded', item: eventItem, location: foundItem.location || '' }
+      setLastScan(result)
+      setScanToast({ ...result, ts: Date.now() })
+      setTimeout(() => setScanToast(null), 3000)
     } else {
       if (!eventItem.loaded) {
         vibrate([100, 50, 100])
         playSound('error')
-        setLastScan({ action: 'not_loaded', item: eventItem, location: foundItem.location || '' })
+        const result = { action: 'not_loaded', item: eventItem, location: foundItem.location || '' }
+        setLastScan(result)
+        setScanToast({ ...result, ts: Date.now() })
+        setTimeout(() => setScanToast(null), 3000)
         setProcessing(false)
         return
       }
       if (eventItem.returned) {
         vibrate([50])
-        setLastScan({ action: 'already_returned', item: eventItem, location: foundItem.location || '' })
+        const result = { action: 'already_returned', item: eventItem, location: foundItem.location || '' }
+        setLastScan(result)
+        setScanToast({ ...result, ts: Date.now() })
+        setTimeout(() => setScanToast(null), 3000)
         setProcessing(false)
         return
       }
@@ -144,7 +162,10 @@ export default function WorkerScanner() {
       }
       vibrate([60, 40, 120])
       playSound('success')
-      setLastScan({ action: 'returned', item: eventItem, location: foundItem.location || '' })
+      const result = { action: 'returned', item: eventItem, location: foundItem.location || '' }
+      setLastScan(result)
+      setScanToast({ ...result, ts: Date.now() })
+      setTimeout(() => setScanToast(null), 3000)
     }
     setProcessing(false)
   }
@@ -152,8 +173,7 @@ export default function WorkerScanner() {
   const startScanner = async () => {
     setError(null); setLastScan(null); setScanning(true)
     try {
-      const { Html5Qrcode } = await import('html5-qrcode')
-      // Pulisci eventuale istanza precedente
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (html5QrRef.current) {
         try { await html5QrRef.current.stop() } catch(e) {}
         try { html5QrRef.current.clear() } catch(e) {}
@@ -161,14 +181,25 @@ export default function WorkerScanner() {
       html5QrRef.current = new Html5Qrcode('qr-worker')
       await html5QrRef.current.start(
         { facingMode: 'environment' },
-        { fps: 15, qrbox: { width: 260, height: 260 } },
-        async decodedText => {
-          // NON stoppiamo la camera — elaboriamo e restiamo in ascolto
-          await processCode(decodedText)
-          // Dopo 2.5s resettiamo lastScan per tenere la UI pulita
-          setTimeout(() => setLastScan(prev => prev), 2500)
+        {
+          fps: 15,
+          qrbox: { width: 280, height: 160 }, // rettangolo ottimale per barcode
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+          ]
         },
-        () => {} // errori di parsing QR ignorati (fotogrammi senza codice)
+        async decodedText => {
+          await processCode(decodedText)
+          setTimeout(() => setLastScan(prev => prev), 3000)
+        },
+        () => {}
       )
     } catch(e) {
       setScanning(false)
@@ -206,6 +237,40 @@ export default function WorkerScanner() {
 
   return (
     <div className="page">
+
+      {/* ── Popup centrale post-scansione ── */}
+      {scanToast && (() => {
+        const r = scanResult[scanToast.action]
+        const isOk = ['loaded','returned'].includes(scanToast.action)
+        return (
+          <div style={{
+            position:'fixed', inset:0, zIndex:500,
+            display:'flex', alignItems:'center', justifyContent:'center',
+            pointerEvents:'none'
+          }}>
+            <div style={{
+              background: isOk ? 'rgba(22,40,30,0.97)' : 'rgba(40,16,20,0.97)',
+              border: `2px solid ${isOk ? 'var(--green)' : 'var(--red)'}`,
+              borderRadius:24, padding:'28px 32px',
+              textAlign:'center', minWidth:260, maxWidth:320,
+              boxShadow:'0 12px 48px rgba(0,0,0,0.7)',
+              animation:'fadeInUp 0.2s cubic-bezier(0.32,0.72,0,1) both',
+            }}>
+              <div style={{ fontSize:52, marginBottom:12 }}>{r.icon}</div>
+              <p style={{ fontWeight:800, fontSize:20, color:r.color, marginBottom:6 }}>{r.title}</p>
+              <p style={{ color:'var(--text)', fontSize:15, lineHeight:1.4 }}>
+                {scanToast.item?.name || `Codice: ${scanToast.code}`}
+              </p>
+              {scanToast.location && (
+                <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:10, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'5px 14px' }}>
+                  <span>📍</span>
+                  <span style={{ color:'var(--blue)', fontWeight:800, fontSize:14 }}>{scanToast.location}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
           <button onClick={() => { stopScanner(); navigate(backPath) }} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
