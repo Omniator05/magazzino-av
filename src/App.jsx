@@ -10,6 +10,7 @@ import AdminUsers from './pages/AdminUsers'
 import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import TabBar from './components/TabBar'
+import LoadingBar from './components/LoadingBar'
 
 function PrivateRoutes() {
   const { user, profile, loading } = useAuth()
@@ -65,6 +66,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <LoadingBar />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={<PrivateRoutes />} />
