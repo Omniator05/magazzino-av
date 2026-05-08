@@ -5,8 +5,22 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Console audio','Mixer','Amplificatore','Casse','Subwoofer','Microfono','Cavo audio','Cavo DMX','Proiettore','LED bar','Par LED','Moving head','Dimmer','Controller luci','Cavo elettrico','Multipresa','Flight case','Stativi','Altro']
-const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
+const CATEGORIES = ['Mixer Audio','Console Luci','Faro','Ledwall','Cassa','Sub','Cavo DMX','Cavo XLR','Cavo Corrente','Multipresa','Valigetta','Case','Altro']
+const ICONS = {
+  'Mixer Audio':    '🎚️',
+  'Console Luci':  '🕹️',
+  'Faro':          '🔦',
+  'Ledwall':       '📺',
+  'Cassa':         '🔊',
+  'Sub':           '💥',
+  'Cavo DMX':      '🔵',
+  'Cavo XLR':      '🎙️',
+  'Cavo Corrente': '⚡',
+  'Multipresa':    '🔌',
+  'Valigetta':     '💼',
+  'Case':          '🧳',
+  'Altro':         '📦',
+}
 
 export default function Inventory() {
   const { user } = useAuth()
@@ -17,7 +31,7 @@ export default function Inventory() {
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2 })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2, brokenQty:0 })
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
@@ -25,17 +39,24 @@ export default function Inventory() {
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2 }); setShowModal(true) }
-  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', isKit:item.isKit||false, kitSize:item.kitSize||2 }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2, brokenQty:0 }); setShowModal(true) }
+  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', isKit:item.isKit||false, kitSize:item.kitSize||2, brokenQty:item.brokenQty||0 }); setShowModal(true) }
 
   const saveItem = async () => {
     if (!form.name.trim()) return
     const qty = parseInt(form.qty) || 1
     if (selected) {
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, brand:form.brand, model:form.model, location:form.location, notes:form.notes, isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null })
+      const broken = Math.min(parseInt(form.brokenQty)||0, qty)
+      // Ricalcola availableQty: totalQty - rotti - (quelli fuori, cioè totalQty - availableQty attuale - rotti vecchi)
+      const prevBroken = selected.brokenQty || 0
+      const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
+      const newAvailable = Math.max(0, qty - broken - prevOut)
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null })
     } else {
+      const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
-        name:form.name, category:form.category, totalQty:qty, availableQty:qty,
+        name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken,
+        brokenQty:broken,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes,
         isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null,
         createdAt:serverTimestamp(), createdBy: user.uid
@@ -147,6 +168,13 @@ export default function Inventory() {
                 <span className={`badge ${item.availableQty === item.totalQty ? 'in' : item.availableQty === 0 ? 'out' : 'partial'}`}>
                   {item.availableQty}/{item.totalQty}
                 </span>
+                {item.brokenQty > 0 && (
+                  <div style={{ marginTop:4 }}>
+                    <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>
+                      🔴 {item.brokenQty} rott{item.brokenQty === 1 ? 'o' : 'i'}
+                    </span>
+                  </div>
+                )}
                 <p style={{ color:'var(--text2)', fontSize:11, marginTop:4 }}>{item.category}</p>
               </div>
             </div>
@@ -170,13 +198,32 @@ export default function Inventory() {
               <div className="form-group"><label>Marca</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder="es. EV" /></div>
               <div className="form-group"><label>Modello</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder="es. ZLX-12P" /></div>
             </div>
-            <div className="form-group"><label>Quantità</label>
-              <div className="qty-ctrl">
-                <button onClick={() => setForm({...form,qty:Math.max(1,form.qty-1)})}>−</button>
-                <span>{form.qty}</span>
-                <button onClick={() => setForm({...form,qty:form.qty+1})}>+</button>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <div className="form-group"><label>Quantità totale</label>
+                <div className="qty-ctrl">
+                  <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})}>−</button>
+                  <span>{form.qty}</span>
+                  <button onClick={() => setForm({...form, qty:form.qty+1})}>+</button>
+                </div>
+              </div>
+              <div className="form-group">
+                <label style={{ color: form.brokenQty > 0 ? 'var(--red)' : undefined }}>
+                  🔴 Rotti {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
+                </label>
+                <div className="qty-ctrl">
+                  <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})}
+                    style={{ background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : undefined }}>−</button>
+                  <span style={{ color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }}>{form.brokenQty}</span>
+                  <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty, form.brokenQty+1)})}
+                    style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)' }}>+</button>
+                </div>
               </div>
             </div>
+            {form.brokenQty > 0 && (
+              <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:8, padding:'8px 12px', marginBottom:4, fontSize:13, color:'var(--red)' }}>
+                ⚠️ {form.qty - form.brokenQty} disponibili · {form.brokenQty} fuori uso
+              </div>
+            )}
             <div className="form-group"><label>Posizione in magazzino 📍</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Scaffale A3, Ripiano 2 sx, Fondo sala..." /></div>
 
             {/* Toggle Kit/Baule */}
@@ -242,8 +289,21 @@ export default function Inventory() {
                 <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
                 <span style={{ fontWeight:800, fontSize:18 }}>{showDetail.availableQty}/{showDetail.totalQty}</span>
               </div>
-              <div style={{ background:'var(--card2)', borderRadius:4, height:6 }}>
-                <div style={{ background: showDetail.availableQty === showDetail.totalQty ? 'var(--green)' : showDetail.availableQty === 0 ? 'var(--accent)' : 'var(--accent2)', height:'100%', borderRadius:4, width:`${((showDetail.availableQty||0) / (showDetail.totalQty||1)) * 100}%` }} />
+              {/* Barra segmentata: disponibili / fuori / rotti */}
+              <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
+                <div style={{ background:'var(--green)', width:`${((showDetail.availableQty||0)/(showDetail.totalQty||1))*100}%`, transition:'width 0.3s' }} />
+                {showDetail.brokenQty > 0 && (
+                  <div style={{ background:'var(--red)', width:`${((showDetail.brokenQty||0)/(showDetail.totalQty||1))*100}%` }} />
+                )}
+              </div>
+              <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} disponibili</span>
+                {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
+                  <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} fuori</span>
+                )}
+                {showDetail.brokenQty > 0 && (
+                  <span style={{ fontSize:12, color:'var(--red)' }}>● {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}</span>
+                )}
               </div>
             </div>
             <div className="code-preview" style={{ marginBottom:14 }}>
@@ -255,6 +315,22 @@ export default function Inventory() {
               <button onClick={printCode} className="btn btn-secondary">🖨 Stampa</button>
               <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
             </div>
+            {/* Tasto riparato — appare SOLO se ci sono pezzi rotti */}
+            {(showDetail.brokenQty||0) > 0 && (
+              <button
+                onClick={async () => {
+                  const currentBroken = showDetail.brokenQty || 0
+                  const newBroken = Math.max(0, currentBroken - 1)
+                  const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
+                  const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
+                  await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
+                  setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
+                }}
+                style={{ width:'100%', marginTop:10, background:'rgba(248,113,113,0.15)', border:'1px solid rgba(248,113,113,0.4)', color:'var(--red)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
+              >
+                🔴 {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}
+              </button>
+            )}
             {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
             {showDetail.isKit && showDetail.kitSize && (
               <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(245,166,35,0.08)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:8 }}>
