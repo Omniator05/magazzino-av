@@ -23,6 +23,7 @@ export default function WorkerScanner() {
   const [scanToast, setScanToast] = useState(null) // popup centrale post-scansione
   const lastCodeRef = useRef('') // evita di riprocessare lo stesso codice di fila
   const lastCodeTimeRef = useRef(0)
+  const html5QrRef = useRef(null)
   const eventRef = doc(db, 'events', id)
 
   // Suoni tramite Web Audio API (nessun file esterno necessario)
@@ -172,6 +173,8 @@ export default function WorkerScanner() {
 
   const startScanner = async () => {
     setError(null); setLastScan(null); setScanning(true)
+    // Aspetta che React abbia renderizzato il div nel DOM
+    await new Promise(resolve => setTimeout(resolve, 80))
     try {
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (html5QrRef.current) {
@@ -236,168 +239,178 @@ export default function WorkerScanner() {
   }
 
   return (
-    <div className="page">
+    <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column' }}>
 
       {/* ── Popup centrale post-scansione ── */}
       {scanToast && (() => {
         const r = scanResult[scanToast.action]
         const isOk = ['loaded','returned'].includes(scanToast.action)
         return (
-          <div style={{
-            position:'fixed', inset:0, zIndex:500,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            pointerEvents:'none'
-          }}>
+          <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
             <div style={{
               background: isOk ? 'rgba(22,40,30,0.97)' : 'rgba(40,16,20,0.97)',
               border: `2px solid ${isOk ? 'var(--green)' : 'var(--red)'}`,
-              borderRadius:24, padding:'28px 32px',
-              textAlign:'center', minWidth:260, maxWidth:320,
+              borderRadius:24, padding:'28px 32px', textAlign:'center', minWidth:260, maxWidth:320,
               boxShadow:'0 12px 48px rgba(0,0,0,0.7)',
               animation:'fadeInUp 0.2s cubic-bezier(0.32,0.72,0,1) both',
             }}>
-              <div style={{ fontSize:52, marginBottom:12 }}>{r.icon}</div>
-              <p style={{ fontWeight:800, fontSize:20, color:r.color, marginBottom:6 }}>{r.title}</p>
-              <p style={{ color:'var(--text)', fontSize:15, lineHeight:1.4 }}>
-                {scanToast.item?.name || `Codice: ${scanToast.code}`}
-              </p>
+              <div style={{ fontSize:56, marginBottom:12 }}>{r.icon}</div>
+              <p style={{ fontWeight:800, fontSize:22, color:r.color, marginBottom:8 }}>{r.title}</p>
+              <p style={{ color:'var(--text)', fontSize:16, lineHeight:1.4 }}>{scanToast.item?.name || `Codice: ${scanToast.code}`}</p>
               {scanToast.location && (
-                <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:10, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'5px 14px' }}>
+                <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:12, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'6px 16px' }}>
                   <span>📍</span>
-                  <span style={{ color:'var(--blue)', fontWeight:800, fontSize:14 }}>{scanToast.location}</span>
+                  <span style={{ color:'var(--blue)', fontWeight:800, fontSize:15 }}>{scanToast.location}</span>
                 </div>
               )}
             </div>
           </div>
         )
       })()}
-      <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-          <button onClick={() => { stopScanner(); navigate(backPath) }} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
+
+      {/* ── Header compatto ── */}
+      <div style={{ padding:'52px 16px 12px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <button onClick={() => { stopScanner(); navigate(backPath) }}
+            style={{ background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14, fontWeight:600 }}>
+            ← Indietro
+          </button>
+          {/* Contatori inline */}
+          <div style={{ display:'flex', gap:8 }}>
+            <div style={{ background:'rgba(245,166,35,0.12)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:10, padding:'6px 14px', textAlign:'center' }}>
+              <p style={{ color:'var(--accent2)', fontWeight:800, fontSize:18, lineHeight:1 }}>{loaded}<span style={{ color:'var(--text2)', fontWeight:400, fontSize:13 }}>/{total}</span></p>
+              <p style={{ color:'var(--accent2)', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginTop:2 }}>Caricati</p>
+            </div>
+            <div style={{ background:'rgba(52,211,153,0.10)', border:'1px solid rgba(52,211,153,0.22)', borderRadius:10, padding:'6px 14px', textAlign:'center' }}>
+              <p style={{ color:'var(--green)', fontWeight:800, fontSize:18, lineHeight:1 }}>{returned}<span style={{ color:'var(--text2)', fontWeight:400, fontSize:13 }}>/{total}</span></p>
+              <p style={{ color:'var(--green)', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginTop:2 }}>Rientrati</p>
+            </div>
+          </div>
         </div>
-        <h1 style={{ fontSize:20, fontWeight:800 }}>{event.name}</h1>
-        <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>
-          📅 {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })}
-          {event.location && ` · 📍 ${event.location}`}
-        </p>
+        <h1 style={{ fontSize:18, fontWeight:800, marginTop:10, letterSpacing:'-0.3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</h1>
+        {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
       </div>
 
-      {/* Stato evento */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, padding:'14px 16px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px', textAlign:'center' }}>
-          <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>🚛 Caricato</p>
-          <p style={{ fontWeight:800, fontSize:22, color: total > 0 && loaded === total ? 'var(--green)' : 'var(--accent2)' }}>{loaded}<span style={{ color:'var(--text2)', fontSize:14, fontWeight:400 }}>/{total}</span></p>
-        </div>
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px', textAlign:'center' }}>
-          <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>🏠 Rientrato</p>
-          <p style={{ fontWeight:800, fontSize:22, color: total > 0 && returned === total ? 'var(--green)' : 'var(--text2)' }}>{returned}<span style={{ color:'var(--text2)', fontSize:14, fontWeight:400 }}>/{total}</span></p>
+      {/* ── Toggle modalità — grande e chiarissimo ── */}
+      <div style={{ padding:'14px 16px 0' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+          <button onClick={() => { setMode('load'); setLastScan(null) }}
+            style={{
+              borderRadius:16, padding:'18px 8px', textAlign:'center', fontWeight:800,
+              fontSize:15, border:'2px solid',
+              background: mode === 'load' ? 'rgba(245,166,35,0.15)' : 'var(--card)',
+              borderColor: mode === 'load' ? 'var(--accent2)' : 'var(--border)',
+              color: mode === 'load' ? 'var(--accent2)' : 'var(--text2)',
+              boxShadow: mode === 'load' ? '0 0 20px rgba(245,166,35,0.2)' : 'none',
+              transition:'all 0.2s ease',
+            }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>🚛</div>
+            <div>Sto caricando</div>
+            <div style={{ fontSize:11, fontWeight:500, marginTop:3, opacity:0.7 }}>articoli → furgone</div>
+          </button>
+          <button onClick={() => { setMode('return'); setLastScan(null) }}
+            style={{
+              borderRadius:16, padding:'18px 8px', textAlign:'center', fontWeight:800,
+              fontSize:15, border:'2px solid',
+              background: mode === 'return' ? 'rgba(52,211,153,0.12)' : 'var(--card)',
+              borderColor: mode === 'return' ? 'var(--green)' : 'var(--border)',
+              color: mode === 'return' ? 'var(--green)' : 'var(--text2)',
+              boxShadow: mode === 'return' ? '0 0 20px rgba(52,211,153,0.15)' : 'none',
+              transition:'all 0.2s ease',
+            }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>🏠</div>
+            <div>Sto scaricando</div>
+            <div style={{ fontSize:11, fontWeight:500, marginTop:3, opacity:0.7 }}>furgone → magazzino</div>
+          </button>
         </div>
       </div>
 
-      <div style={{ padding:'16px' }}>
-        {/* Toggle modalità */}
-        <div style={{ display:'flex', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:4, marginBottom:16 }}>
-          {['load','return'].map(m => (
-            <button key={m} onClick={() => { setMode(m); setLastScan(null) }}
-              style={{ flex:1, padding:'10px', borderRadius:8, fontWeight:700, fontSize:14,
-                background: mode === m ? (m === 'load' ? 'var(--accent2)' : 'var(--green)') : 'transparent',
-                color: mode === m ? '#000' : 'var(--text2)' }}>
-              {m === 'load' ? '🚛 Sto caricando' : '🏠 Sto scaricando'}
-            </button>
-          ))}
-        </div>
-
-        {/* Scanner area — la camera rimane sempre accesa */}
-        <div style={{ background:'var(--card)', border:`2px solid ${scanning ? (mode === 'load' ? 'var(--accent2)' : 'var(--green)') : 'var(--border)'}`, borderRadius:'var(--radius)', overflow:'hidden', marginBottom:14, transition:'border-color 0.3s' }}>
-          {/* Il div qr-worker esiste sempre nel DOM quando scanning=true */}
-          {scanning && (
-            <div style={{ position:'relative' }}>
-              <div id="qr-worker" style={{ width:'100%' }} />
-              {/* Banner risultato sovrapposto alla camera */}
-              {lastScan && (() => {
-                const r = scanResult[lastScan.action]
-                return (
-                  <div style={{ position:'absolute', bottom:0, left:0, right:0, background: r.bg.replace('0.1','0.92').replace('0.15','0.92'), backdropFilter:'blur(8px)', padding:'12px 16px', borderTop:`2px solid ${r.border}`, animation:'slideUp 0.2s ease' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                      <span style={{ fontSize:24 }}>{r.icon}</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ fontWeight:800, fontSize:15, color:r.color }}>{r.title}</p>
-                        <p style={{ color:'var(--text)', fontSize:12, marginTop:1 }}>{r.msg(lastScan.item)}</p>
-                        {lastScan.location && (
-                          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:6, background:'rgba(79,195,247,0.18)', border:'1px solid rgba(79,195,247,0.4)', borderRadius:6, padding:'3px 10px' }}>
-                            <span style={{ fontSize:12 }}>📍</span>
-                            <span style={{ color:'#7dd3fc', fontSize:13, fontWeight:800 }}>{lastScan.location}</span>
-                          </div>
-                        )}
-                      </div>
+      {/* ── Camera / Scanner ── */}
+      <div style={{ padding:'12px 16px 0', flex:1 }}>
+        <div style={{
+          borderRadius:20, overflow:'hidden',
+          border:`2px solid ${scanning ? (mode === 'load' ? 'var(--accent2)' : 'var(--green)') : 'var(--border)'}`,
+          transition:'border-color 0.3s',
+          background:'var(--card)',
+        }}>
+          {/* qr-worker SEMPRE nel DOM — Html5Qrcode ne ha bisogno al momento dell'init */}
+          <div style={{ position:'relative', display: scanning ? 'block' : 'none' }}>
+            <div id="qr-worker" style={{ width:'100%' }} />
+            {lastScan && (() => {
+              const r = scanResult[lastScan.action]
+              return (
+                <div style={{ position:'absolute', bottom:0, left:0, right:0, background: r.bg.replace('0.1','0.95').replace('0.15','0.95'), backdropFilter:'blur(10px)', padding:'14px 16px', borderTop:`2px solid ${r.border}`, animation:'slideUp 0.2s ease' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ fontSize:28 }}>{r.icon}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontWeight:800, fontSize:16, color:r.color }}>{r.title}</p>
+                      <p style={{ color:'var(--text)', fontSize:13, marginTop:1 }}>{r.msg(lastScan.item)}</p>
+                      {lastScan.location && (
+                        <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.18)', border:'1px solid rgba(79,195,247,0.4)', borderRadius:6, padding:'3px 10px' }}>
+                          <span style={{ fontSize:12 }}>📍</span>
+                          <span style={{ color:'#7dd3fc', fontSize:13, fontWeight:800 }}>{lastScan.location}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )
-              })()}
-              <button onClick={stopScanner}
-                style={{ position:'absolute', top:10, right:10, background:'rgba(0,0,0,0.6)', color:'white', borderRadius:20, padding:'6px 14px', fontSize:12, fontWeight:600 }}>
-                ■ Stop
-              </button>
-            </div>
-          )}
+                </div>
+              )
+            })()}
+            <button onClick={stopScanner}
+              style={{ position:'absolute', top:10, right:10, background:'rgba(0,0,0,0.65)', color:'white', borderRadius:20, padding:'6px 14px', fontSize:12, fontWeight:700 }}>
+              ■ Stop
+            </button>
+          </div>
 
           {!scanning && (
-            <div style={{ padding:'28px 20px', textAlign:'center' }}>
-              <div style={{ fontSize:52, marginBottom:10 }}>📷</div>
-              <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
-                {mode === 'load' ? 'Avvia la camera e scansiona gli articoli da caricare — rimane accesa automaticamente' : 'Avvia la camera e scansiona gli articoli che rientrano in magazzino'}
-              </p>
-              <button onClick={startScanner} className="btn btn-primary" style={{ minWidth:200, fontSize:16, padding:'14px 24px' }}>
-                📷 Avvia fotocamera
-              </button>
-            </div>
+            <button onClick={startScanner} style={{
+              width:'100%', padding:'36px 20px', textAlign:'center', background:'transparent',
+              display:'flex', flexDirection:'column', alignItems:'center', gap:12,
+            }}>
+              <div style={{
+                width:72, height:72, borderRadius:20,
+                background: mode === 'load' ? 'rgba(245,166,35,0.15)' : 'rgba(52,211,153,0.12)',
+                border:`2px dashed ${mode === 'load' ? 'rgba(245,166,35,0.5)' : 'rgba(52,211,153,0.4)'}`,
+                display:'flex', alignItems:'center', justifyContent:'center', fontSize:32,
+              }}>
+                📷
+              </div>
+              <div>
+                <p style={{ fontWeight:800, fontSize:17, color:'var(--text)' }}>Avvia fotocamera</p>
+                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>
+                  {mode === 'load' ? 'Scansiona per caricare sul furgone' : 'Scansiona per rientrare in magazzino'}
+                </p>
+              </div>
+            </button>
           )}
         </div>
 
-        {/* Risultato fuori dalla camera (quando non si scansiona) */}
-        {!scanning && lastScan && (() => {
-          const r = scanResult[lastScan.action]
-          return (
-            <div style={{ background:r.bg, border:`1px solid ${r.border}`, borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:14 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <span style={{ fontSize:28 }}>{r.icon}</span>
-                <div style={{ flex:1 }}>
-                  <p style={{ fontWeight:800, fontSize:16, color:r.color }}>{r.title}</p>
-                  <p style={{ color:'var(--text)', fontSize:13, marginTop:2 }}>{r.msg(lastScan.item)}</p>
-                  {lastScan.location && (
-                    <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:8, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.30)', borderRadius:8, padding:'5px 12px' }}>
-                      <span style={{ fontSize:14 }}>📍</span>
-                      <span style={{ color:'var(--blue)', fontSize:14, fontWeight:800 }}>{lastScan.location}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
-        })()}
+        {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:12, padding:'12px 16px', color:'var(--red)', marginTop:10, fontSize:14 }}>{error}</div>}
 
-        {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:'var(--radius)', padding:'14px 16px', color:'var(--red)', marginBottom:14, fontSize:14 }}>{error}</div>}
-
-        {/* Inserimento manuale */}
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>
-          <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Inserimento manuale</p>
-          <div style={{ display:'flex', gap:10 }}>
-            <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder="Codice articolo (es. WAV-ABC12345)"
-              onKeyDown={e => { if (e.key === 'Enter') { processCode(manualCode); setManualCode('') } }}
+        {/* Inserimento manuale — compatto e collassabile */}
+        <details style={{ marginTop:12 }}>
+          <summary style={{ color:'var(--text2)', fontSize:13, fontWeight:600, cursor:'pointer', userSelect:'none', padding:'8px 0' }}>
+            ⌨️ Inserisci codice manualmente
+          </summary>
+          <div style={{ display:'flex', gap:8, marginTop:8 }}>
+            <input value={manualCode} onChange={e => setManualCode(e.target.value)}
+              placeholder="Codice articolo..." onKeyDown={e => { if (e.key === 'Enter') { processCode(manualCode); setManualCode('') } }}
               style={{ fontFamily:'monospace', fontSize:13 }} />
             <button onClick={() => { processCode(manualCode); setManualCode('') }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 14px' }}>OK</button>
           </div>
-        </div>
+        </details>
 
-        {/* Lista articoli evento (mini checklist) */}
-        <p style={{ color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Lista carico</p>
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-          {items.length === 0
-            ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
-            : items.map(item => (
-              <ChecklistRow key={item.id} item={item} />
-            ))
-          }
+        {/* Lista carico — compatta */}
+        <div style={{ marginTop:14, marginBottom:16 }}>
+          <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>
+            Lista carico · {items.filter(i=>i.returned).length}/{total} rientrati
+          </p>
+          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+            {items.length === 0
+              ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
+              : items.map(item => <ChecklistRow key={item.id} item={item} />)
+            }
+          </div>
         </div>
       </div>
     </div>
