@@ -61,9 +61,27 @@ export default function Events() {
     return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
-  const today    = new Date().toISOString().split('T')[0]
-  const upcoming = events.filter(e => e.date >= today)
-  const past     = events.filter(e => e.date < today)
+  const today = new Date().toISOString().split('T')[0]
+
+  // Separa eventi ricorrenti (mostra solo il prossimo di ogni serie) da eventi singoli
+  const recurringSeriesMap = {}
+  events.forEach(ev => {
+    if (ev.seriesId) {
+      if (!recurringSeriesMap[ev.seriesId]) recurringSeriesMap[ev.seriesId] = []
+      recurringSeriesMap[ev.seriesId].push(ev)
+    }
+  })
+  // Per ogni serie, prendi solo il prossimo evento non passato (o l'ultimo se tutti passati)
+  const pinnedRecurring = Object.values(recurringSeriesMap).map(series => {
+    const sorted = [...series].sort((a,b) => a.date.localeCompare(b.date))
+    return sorted.find(e => e.date >= today) || sorted[sorted.length - 1]
+  })
+  const pinnedIds = new Set(pinnedRecurring.map(e => e.id))
+
+  // Tutti gli eventi non ricorrenti
+  const singleEvents = events.filter(e => !e.seriesId)
+  const upcomingSingle = singleEvents.filter(e => e.date >= today)
+  const pastSingle     = singleEvents.filter(e => e.date < today)
 
   const openNew = () => {
     setEditing(null)
@@ -79,8 +97,7 @@ export default function Events() {
   }
 
   const futureDates = form.recurrence !== 'never' && form.date && form.endDate
-    ? generateDates(form.date, form.recurrence, form.endDate)
-    : []
+    ? generateDates(form.date, form.recurrence, form.endDate) : []
 
   const saveEvent = async () => {
     if (!form.name.trim() || !form.date) return
@@ -96,11 +113,13 @@ export default function Events() {
           ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : null
         const base = {
           name: form.name.trim(), location: form.location.trim(),
-          notes: form.notes.trim(), items: [],
+          notes: form.notes.trim(),
+          items: [], // lista carico condivisa — verrà sincronizzata tramite seriesId
           createdAt: serverTimestamp(), createdBy: user.uid,
           recurrence: form.recurrence, seriesId,
+          seriesItems: [], // lista carico condivisa tra tutti gli eventi della serie
         }
-        await addDoc(collection(db, 'events'), { ...base, date: form.date })
+        const firstRef = await addDoc(collection(db, 'events'), { ...base, date: form.date })
         for (const date of futureDates) {
           await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
         }
@@ -122,7 +141,7 @@ export default function Events() {
     }
   }
 
-  const EventCard = ({ event }) => {
+  const EventCard = ({ event, compact }) => {
     const items    = event.items || []
     const loaded   = items.filter(i => i.loaded).length
     const returned = items.filter(i => i.returned).length
@@ -133,8 +152,8 @@ export default function Events() {
     if (total > 0) {
       if (returned === total)    { statusColor = 'var(--green)';   statusText = '✅ Tutto rientrato' }
       else if (loaded === total) { statusColor = 'var(--accent2)'; statusText = `In evento · ${returned}/${total} rientrati` }
-      else if (loaded > 0)       { statusColor = 'var(--accent2)'; statusText = `Carico in corso · ${loaded}/${total}` }
-      else                       { statusColor = 'var(--text2)';   statusText = `${total} articoli in lista` }
+      else if (loaded > 0)       { statusColor = 'var(--accent2)'; statusText = `Carico · ${loaded}/${total}` }
+      else                       { statusColor = 'var(--text2)';   statusText = `${total} in lista` }
     }
 
     return (
@@ -179,24 +198,43 @@ export default function Events() {
     <div className="page">
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div><h1>Eventi</h1><p>{upcoming.length} prossimi · {past.length} passati</p></div>
+          <div><h1>Eventi</h1><p>{upcomingSingle.length + pinnedRecurring.length} prossimi · {pastSingle.length} passati</p></div>
           <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Evento</button>
         </div>
       </div>
 
       <div style={{ padding:'16px 0 0' }}>
-        {upcoming.length > 0 && (
+
+        {/* ── Sezione ricorrenti pinnata ── */}
+        {pinnedRecurring.length > 0 && (
+          <>
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 10px' }}>
+              <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>🔁 Ricorrenti</p>
+              <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
+            </div>
+            {pinnedRecurring.map(ev => <EventCard key={ev.id} event={ev} />)}
+            {(upcomingSingle.length > 0 || pastSingle.length > 0) && (
+              <div style={{ margin:'4px 16px 10px', height:1, background:'var(--border)' }} />
+            )}
+          </>
+        )}
+
+        {/* ── Prossimi singoli ── */}
+        {upcomingSingle.length > 0 && (
           <>
             <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Prossimi</p>
-            {upcoming.map(ev => <EventCard key={ev.id} event={ev} />)}
+            {upcomingSingle.map(ev => <EventCard key={ev.id} event={ev} />)}
           </>
         )}
-        {past.length > 0 && (
+
+        {/* ── Passati singoli ── */}
+        {pastSingle.length > 0 && (
           <>
             <p style={{ padding:'16px 16px 10px', color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Passati</p>
-            {past.map(ev => <EventCard key={ev.id} event={ev} />)}
+            {pastSingle.map(ev => <EventCard key={ev.id} event={ev} />)}
           </>
         )}
+
         {events.length === 0 && (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
@@ -211,7 +249,6 @@ export default function Events() {
           <div className="modal" style={{ position:'relative' }}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
             <h2>{editing ? 'Modifica evento' : 'Nuovo evento'}</h2>
-
             <div className="form-group">
               <label>Nome evento *</label>
               <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Matrimonio Rossi" />
@@ -228,7 +265,6 @@ export default function Events() {
               <label>Note</label>
               <textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder="Dettagli evento..." rows={2} />
             </div>
-
             {!editing && (
               <>
                 <div className="form-group">
@@ -237,7 +273,6 @@ export default function Events() {
                     {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
-
                 {form.recurrence !== 'never' && (
                   <div className="form-group">
                     <label>Fine ripetizione</label>
@@ -245,18 +280,17 @@ export default function Events() {
                       onChange={e => setForm({...form, endDate:e.target.value})} />
                   </div>
                 )}
-
                 {futureDates.length > 0 && (
                   <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 14px', marginBottom:16 }}>
                     <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700 }}>🔁 {futureDates.length + 1} eventi totali</p>
                     <p style={{ color:'var(--text2)', fontSize:12, marginTop:3 }}>
-                      Dal {new Date(form.date + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })} al {new Date(futureDates.at(-1) + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}
+                      Dal {new Date(form.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})} al {new Date(futureDates.at(-1)+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})}
                     </p>
+                    <p style={{ color:'var(--text2)', fontSize:12, marginTop:4, fontStyle:'italic' }}>Ogni evento parte con lista di carico vuota — la compilerai di volta in volta.</p>
                   </div>
                 )}
               </>
             )}
-
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? '⏳ Salvataggio...'

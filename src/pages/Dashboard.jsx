@@ -12,7 +12,9 @@ const greeting = () => {
   return 'Buonasera'
 }
 
-export default function Dashboard() {
+import ThemeToggle from '../components/ThemeToggle'
+
+export default function Dashboard({ toggleTheme, theme }) {
   const { profile, logout } = useAuth()
   const navigate = useNavigate()
   const [items, setItems]   = useState([])
@@ -101,12 +103,15 @@ export default function Dashboard() {
             <p style={{ color:'var(--text2)', fontSize:14, fontWeight:500, marginBottom:4 }}>{greeting()},</p>
             <h1 style={{ fontSize:30, fontWeight:800, letterSpacing:'-0.8px', lineHeight:1.1 }}>{name}</h1>
           </div>
-          <button
-            onClick={logout}
-            style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:12, padding:'8px 14px', fontSize:13, fontWeight:600 }}
-          >
-            Esci
-          </button>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <button
+              onClick={logout}
+              style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:12, padding:'8px 14px', fontSize:13, fontWeight:600 }}
+            >
+              Esci
+            </button>
+          </div>
         </div>
       </div>
 

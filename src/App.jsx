@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { useState, useEffect } from 'react'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
@@ -12,7 +13,7 @@ import WorkerScanner from './pages/WorkerScanner'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 
-function PrivateRoutes() {
+function PrivateRoutes({ toggleTheme, theme }) {
   const { user, profile, loading } = useAuth()
 
   if (loading) return (
@@ -48,7 +49,7 @@ function PrivateRoutes() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/events" element={<Events />} />
         <Route path="/events/:id" element={<EventDetail />} />
@@ -57,19 +58,28 @@ function PrivateRoutes() {
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <TabBar />
+      <TabBar toggleTheme={toggleTheme} theme={theme} />
     </>
   )
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
+
   return (
     <AuthProvider>
       <BrowserRouter>
         <LoadingBar />
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/*" element={<PrivateRoutes />} />
+          <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

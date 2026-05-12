@@ -5,14 +5,12 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente', 'Effetti', 'Altro']
+const CATEGORIES = ['Audio','Video','Luci','Rigging','Altro']
 const ICONS = {
   'Audio':   '🔊',
   'Video':   '📺',
   'Luci':    '🔦',
   'Rigging': '⛓️',
-  'Corrente': '⚡',
-  'Effetti': '🎆',
   'Altro':   '📦',
 }
 
@@ -22,7 +20,7 @@ const CATEGORY_MIGRATION = {
   'Cassa':         'Audio',
   'Sub':           'Audio',
   'Cavo XLR':      'Audio',
-  'Cavo Corrente': 'Corrente',
+  'Cavo Corrente': 'Audio',
   'Multipresa':    'Audio',
   'Console Luci':  'Luci',
   'Faro':          'Luci',
@@ -54,10 +52,16 @@ export default function Inventory() {
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showAddMenu, setShowAddMenu] = useState(false) // menu scelta oggetto/kit
+  const [showKitModal, setShowKitModal] = useState(false)
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2, brokenQty:0 })
+  // Kit form: nome + componenti
+  const [kitForm, setKitForm] = useState({ name:'', location:'', notes:'', qty:1 })
+  const [kitComponents, setKitComponents] = useState([]) // [{itemId, name, qty}]
+  const [kitSearch, setKitSearch] = useState('')
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
@@ -170,7 +174,7 @@ export default function Inventory() {
           <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={exportCSV} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13 }}>📤 Esporta</button>
-            <button onClick={openAdd} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
+            <button onClick={() => setShowAddMenu(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
           </div>
         </div>
       </div>
@@ -237,22 +241,28 @@ export default function Inventory() {
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group"><label>Quantità totale</label>
-                <div className="qty-ctrl">
-                  <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})}>−</button>
-                  <span>{form.qty}</span>
-                  <button onClick={() => setForm({...form, qty:form.qty+1})}>+</button>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})}
+                    style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                  <input type="number" min="1" value={form.qty}
+                    onChange={e => setForm({...form, qty:Math.max(1,parseInt(e.target.value)||1)})}
+                    style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
+                  <button onClick={() => setForm({...form, qty:form.qty+1})}
+                    style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                 </div>
               </div>
               <div className="form-group">
                 <label style={{ color: form.brokenQty > 0 ? 'var(--red)' : undefined }}>
                   🔴 Rotti {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
                 </label>
-                <div className="qty-ctrl">
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})}
-                    style={{ background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : undefined }}>−</button>
-                  <span style={{ color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }}>{form.brokenQty}</span>
-                  <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty, form.brokenQty+1)})}
-                    style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)' }}>+</button>
+                    style={{ width:32, height:36, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                  <input type="number" min="0" max={form.qty} value={form.brokenQty}
+                    onChange={e => setForm({...form, brokenQty:Math.min(form.qty,Math.max(0,parseInt(e.target.value)||0))})}
+                    style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1, color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }} />
+                  <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})}
+                    style={{ width:32, height:36, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                 </div>
               </div>
             </div>
@@ -390,6 +400,140 @@ export default function Inventory() {
           </div>
         </div>
       )}
+      {/* ── Menu scelta: Oggetto o Kit ── */}
+      {showAddMenu && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddMenu(false)}>
+          <div className="modal" style={{ position:'relative' }}>
+            <button className="close-btn" onClick={() => setShowAddMenu(false)}>✕</button>
+            <h2>Cosa vuoi aggiungere?</h2>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
+              <button
+                onClick={() => { setShowAddMenu(false); openAdd() }}
+                style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:36 }}>📦</span>
+                <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>Nuovo oggetto</span>
+                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un singolo articolo con quantità e posizione</span>
+              </button>
+              <button
+                onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',notes:'',qty:1}); setKitComponents([]); setKitSearch(''); setShowKitModal(true) }}
+                style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:36 }}>🧰</span>
+                <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>Nuovo kit</span>
+                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un baule che raggruppa più oggetti</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Kit Builder ── */}
+      {showKitModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitModal(false)}>
+          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+            <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <button className="close-btn" style={{ position:'absolute', top:16, right:20 }} onClick={() => setShowKitModal(false)}>✕</button>
+              <h2 style={{ marginBottom:14 }}>🧰 Nuovo kit</h2>
+              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})}
+                placeholder="Nome kit (es. Baule Tornado)" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
+              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})}
+                placeholder="📍 Posizione in magazzino (opzionale)" style={{ fontSize:13, marginBottom:8 }} />
+              {/* Quantità kit */}
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>Quanti kit uguali?</p>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <button onClick={() => setKitForm(f => ({...f, qty: Math.max(1, f.qty-1)}))}
+                    style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                  <input
+                    type="number" min="1" max="999"
+                    value={kitForm.qty}
+                    onChange={e => setKitForm(f => ({...f, qty: Math.max(1, parseInt(e.target.value)||1)}))}
+                    style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }}
+                  />
+                  <button onClick={() => setKitForm(f => ({...f, qty: f.qty+1}))}
+                    style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Componenti già aggiunti */}
+            {kitComponents.length > 0 && (
+              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
+                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>Contenuto kit</p>
+                {kitComponents.map(comp => (
+                  <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                    <span style={{ flex:1, fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
+                    <div className="qty-ctrl" style={{ gap:6 }}>
+                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))}
+                        style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                      <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
+                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.min(c.maxQty,c.qty+1)} : c))}
+                        style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                    </div>
+                    <button onClick={() => setKitComponents(prev => prev.filter(c => c.itemId !== comp.itemId))}
+                      style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Ricerca oggetti da aggiungere */}
+            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, position:'relative' }}>
+              <input value={kitSearch} onChange={e => setKitSearch(e.target.value)}
+                placeholder="Aggiungi oggetto al kit..." style={{ paddingLeft:32, fontSize:13 }} />
+              <svg style={{ position:'absolute', left:26, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            </div>
+
+            <div style={{ overflowY:'auto', flex:1 }}>
+              {items
+                .filter(i => !i.isBundle && !kitComponents.some(c => c.itemId===i.id))
+                .filter(i => !kitSearch || i.name?.toLowerCase().includes(kitSearch.toLowerCase()) || i.brand?.toLowerCase().includes(kitSearch.toLowerCase()))
+                .map(item => (
+                  <div key={item.id} className="item-row" onClick={() => {
+                    setKitComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }])
+                    setKitSearch('')
+                  }}>
+                    <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
+                      <p style={{ color:'var(--text2)', fontSize:12 }}>{item.brand} {item.model} · {item.availableQty??item.totalQty} disp.</p>
+                    </div>
+                    <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
+                  </div>
+                ))
+              }
+            </div>
+
+            {/* Salva kit */}
+            <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
+              <button
+                onClick={async () => {
+                  if (!kitForm.name.trim() || kitComponents.length === 0) return
+                  const kitQty = kitForm.qty || 1
+                  const ref = await addDoc(collection(db, 'items'), {
+                    name: kitForm.name.trim(),
+                    location: kitForm.location.trim(),
+                    notes: kitForm.notes||'',
+                    category: 'Kit',
+                    isBundle: true,
+                    components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
+                    totalQty: kitQty,
+                    availableQty: kitQty,
+                    createdAt: serverTimestamp(),
+                    createdBy: user.uid,
+                  })
+                  await updateDoc(ref, { code: generateItemCode(ref.id) })
+                  setShowKitModal(false)
+                }}
+                className="btn btn-primary btn-full"
+                disabled={!kitForm.name.trim() || kitComponents.length === 0}
+                style={{ opacity: !kitForm.name.trim() || kitComponents.length === 0 ? 0.4 : 1 }}>
+                🧰 Crea {kitForm.qty > 1 ? `${kitForm.qty}x ` : ''}kit con {kitComponents.length} componenti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

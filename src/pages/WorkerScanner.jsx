@@ -408,7 +408,45 @@ export default function WorkerScanner() {
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             {items.length === 0
               ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
-              : items.map(item => <ChecklistRow key={item.id} item={item} />)
+              : items.map(item => (
+                <ChecklistRow key={item.id} item={{
+                  ...item,
+                  _onToggleLoaded: async (itemId) => {
+                    const snap = await getDoc(eventRef)
+                    if (!snap.exists()) return
+                    const evData = snap.data()
+                    const evItems = evData.items || []
+                    const itm = evItems.find(i => i.id === itemId)
+                    if (!itm) return
+                    const updated = evItems.map(i => i.id !== itemId ? i : { ...i, loaded: !i.loaded })
+                    await updateDoc(eventRef, { items: updated })
+                    const newLoaded = !itm.loaded
+                    const invRef = doc(db, 'items', itemId)
+                    const invSnap = await getDoc(invRef)
+                    if (invSnap.exists()) {
+                      const delta = newLoaded ? -(itm.qty||1) : (itm.qty||1)
+                      await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                    }
+                  },
+                  _onToggleReturned: async (itemId) => {
+                    const snap = await getDoc(eventRef)
+                    if (!snap.exists()) return
+                    const evData = snap.data()
+                    const evItems = evData.items || []
+                    const itm = evItems.find(i => i.id === itemId)
+                    if (!itm?.loaded) return
+                    const updated = evItems.map(i => i.id !== itemId ? i : { ...i, returned: !i.returned })
+                    await updateDoc(eventRef, { items: updated })
+                    const newReturned = !itm.returned
+                    const invRef = doc(db, 'items', itemId)
+                    const invSnap = await getDoc(invRef)
+                    if (invSnap.exists()) {
+                      const delta = newReturned ? (itm.qty||1) : -(itm.qty||1)
+                      await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                    }
+                  },
+                }} />
+              ))
             }
           </div>
         </div>
@@ -417,41 +455,78 @@ export default function WorkerScanner() {
   )
 }
 
-// Riga checklist che legge la location LIVE da Firestore
-// Risolve il problema degli articoli aggiunti prima che il campo esistesse
+// Riga checklist con bottoni touch-friendly e note accessibili
 function ChecklistRow({ item }) {
-  const [location, setLocation] = useState(item.location || null)
+  const [location, setLocation]   = useState(item.location || null)
+  const [notes, setNotes]         = useState(item.notes || null)
+  const [showNotes, setShowNotes] = useState(false)
+  const eventRef_ctx = doc(db, 'events', item._eventId || '') // passato come prop
+  const db_ref = db
 
   useEffect(() => {
-    // Carica sempre la location aggiornata da Firestore
     getDoc(doc(db, 'items', item.id)).then(snap => {
-      if (snap.exists()) setLocation(snap.data().location || null)
+      if (snap.exists()) {
+        setLocation(snap.data().location || null)
+        setNotes(snap.data().notes || null)
+      }
     }).catch(() => {})
   }, [item.id])
 
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderBottom:'1px solid var(--border)' }}>
-      <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
-      <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:12, marginTop:1 }}>qty: {item.qty || 1}</p>
-        {location ? (
-          <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:6, padding:'3px 8px' }}>
-            <span style={{ fontSize:11 }}>📍</span>
-            <span style={{ color:'var(--blue)', fontSize:12, fontWeight:800 }}>{location}</span>
+    <>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showNotes ? 'none' : '1px solid var(--border)' }}>
+        <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
+            {notes && (
+              <button onClick={() => setShowNotes(!showNotes)}
+                style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:20, height:20, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {showNotes ? '✕' : 'i'}
+              </button>
+            )}
           </div>
-        ) : (
-          <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
-        )}
+          <p style={{ color:'var(--text2)', fontSize:12, marginTop:1 }}>qty: {item.qty || 1}</p>
+          {location && (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:4, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:6, padding:'2px 7px' }}>
+              <span style={{ fontSize:11 }}>📍</span>
+              <span style={{ color:'var(--blue)', fontSize:11, fontWeight:800 }}>{location}</span>
+            </div>
+          )}
+        </div>
+        {/* Bottoni touch-friendly — grandi abbastanza per il dito */}
+        <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>
+          <button
+            style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+              background: item.loaded ? 'rgba(245,166,35,0.18)' : 'var(--card2)',
+              color: item.loaded ? 'var(--accent2)' : 'var(--text2)',
+              WebkitTapHighlightColor:'transparent',
+            }}
+            onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
+          >
+            {item.loaded ? '🚛 Carico' : '○ Carico'}
+          </button>
+          <button
+            disabled={!item.loaded}
+            style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+              background: item.returned ? 'rgba(52,211,153,0.15)' : item.loaded ? 'var(--card2)' : 'var(--bg3)',
+              color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--text3)',
+              opacity: item.loaded ? 1 : 0.4,
+              WebkitTapHighlightColor:'transparent',
+            }}
+            onClick={() => item._onToggleReturned && item._onToggleReturned(item.id)}
+          >
+            {item.returned ? '✅ Rientro' : '○ Rientro'}
+          </button>
+        </div>
       </div>
-      <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-end' }}>
-        <span style={{ fontSize:11, fontWeight:700, color: item.loaded ? 'var(--accent2)' : 'var(--text2)', background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', borderRadius:6, padding:'2px 8px' }}>
-          {item.loaded ? '🚛' : '○'} Carico
-        </span>
-        <span style={{ fontSize:11, fontWeight:700, color: item.returned ? 'var(--green)' : 'var(--text2)', background: item.returned ? 'rgba(105,240,174,0.15)' : 'var(--card2)', borderRadius:6, padding:'2px 8px' }}>
-          {item.returned ? '✅' : '○'} Rientro
-        </span>
-      </div>
-    </div>
+      {/* Pannello note espandibile */}
+      {showNotes && notes && (
+        <div style={{ padding:'10px 16px 14px', borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>📝</span>
+          <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{notes}</p>
+        </div>
+      )}
+    </>
   )
 }

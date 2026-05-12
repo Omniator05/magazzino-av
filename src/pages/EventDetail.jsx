@@ -49,7 +49,17 @@ export default function EventDetail() {
   const returned = eventItems.filter(i => i.returned).length
   const total = eventItems.length
 
-  const updateEventItems = items => updateDoc(eventRef, { items })
+  const updateEventItems = async (items) => {
+    // Se l'evento è parte di una serie ricorrente, aggiorna tutti gli eventi della serie
+    if (event.seriesId) {
+      const { collection: col, query: q, where, getDocs: gd } = await import('firebase/firestore')
+      const seriesSnap = await gd(q(col(db, 'events'), where('seriesId', '==', event.seriesId)))
+      const updates = seriesSnap.docs.map(d => updateDoc(doc(db, 'events', d.id), { items }))
+      await Promise.all(updates)
+    } else {
+      await updateDoc(eventRef, { items })
+    }
+  }
 
   const toggleLoaded = async itemId => {
     const updated = eventItems.map(i => {
@@ -98,7 +108,7 @@ export default function EventDetail() {
         // Aggiorna qty se già nel carrello
         return prev.map(c => c.id === item.id ? { ...c, qty } : c)
       }
-      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, qty }]
+      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, isBundle: item.isBundle||false, components: item.components||null, qty }]
     })
   }
 
@@ -110,8 +120,32 @@ export default function EventDetail() {
   const confirmCart = async () => {
     if (cart.length === 0) return
     const newItems = cart.filter(c => !eventItems.some(e => e.id === c.id))
-    const updated = [...eventItems, ...newItems.map(c => ({ id:c.id, name:c.name, category:c.category, location:c.location||'', isKit:c.isKit||false, kitSize:c.kitSize||null, qty:c.qty, loaded:false, returned:false }))]
+    const updated = [...eventItems, ...newItems.map(c => ({
+      id:c.id, name:c.name, category:c.category, location:c.location||'',
+      isKit:c.isKit||false, kitSize:c.kitSize||null,
+      isBundle:c.isBundle||false, components:c.components||null,
+      qty:c.qty, loaded:false, returned:false
+    }))]
     await updateEventItems(updated)
+
+    // Per i kit-bundle: scala la giacenza di ogni componente
+    for (const c of newItems) {
+      if (c.isBundle && c.components?.length) {
+        for (const comp of c.components) {
+          try {
+            const compRef = doc(db, 'items', comp.itemId)
+            const snap = await getDoc(compRef)
+            if (snap.exists()) {
+              const data = snap.data()
+              await updateDoc(compRef, {
+                availableQty: Math.max(0, (data.availableQty||0) - (comp.qty * (c.qty||1)))
+              })
+            }
+          } catch(e) { console.error(e) }
+        }
+      }
+    }
+
     setCart([])
     setSearch('')
     setShowAddItem(false)
@@ -204,7 +238,11 @@ export default function EventDetail() {
         </p>
       </div>
 
-      {/* Barra progresso */}
+      {event.seriesId && (
+        <div style={{ padding:'8px 16px', background:'rgba(79,195,247,0.07)', borderBottom:'1px solid rgba(79,195,247,0.15)' }}>
+          <p style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>🔁 Evento ricorrente · la lista di carico è condivisa con tutta la serie</p>
+        </div>
+      )}
       <div style={{ padding:'16px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px' }}>
@@ -347,13 +385,14 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
           <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-          {item.isKit && (
-            <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>
-          )}
+          {item.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
+          {item.isBundle && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>🧰 BUNDLE</span>}
         </div>
         <p style={{ color:'var(--text2)', fontSize:12 }}>
           {[item.brand, item.model].filter(Boolean).join(' ')}
-          {item.isKit && item.kitSize
+          {item.isBundle && item.components
+            ? ` · ${item.components.length} componenti`
+            : item.isKit && item.kitSize
             ? ` · ${item.availableQty ?? item.totalQty} bauli disp. (${(item.availableQty ?? item.totalQty) * item.kitSize} pz)`
             : ` · ${item.availableQty ?? item.totalQty} disp.`}
         </p>
@@ -390,6 +429,8 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onChangeQty, onChangeKitPieces }) {
   const [location, setLocation]       = useState(item.location || null)
   const [totalQty, setTotalQty]       = useState(null)
+  const [itemNotes, setItemNotes]     = useState(null)
+  const [showNotes, setShowNotes]     = useState(false)
   const [kitInfo, setKitInfo]         = useState(
     item.isKit ? { isKit:true, kitSize: item.kitSize || 1 } : null
   )
@@ -401,6 +442,7 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onChan
         const data = snap.data()
         setLocation(data.location || null)
         setTotalQty(data.totalQty || null)
+        setItemNotes(data.notes || null)
         setKitInfo(data.isKit ? { isKit:true, kitSize: data.kitSize || 1 } : null)
       }
     }).catch(() => {})
@@ -425,13 +467,20 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onChan
   const piecesOut = kitInfo?.isKit && item.kitPieces != null && item.kitPieces < maxKitPieces
 
   return (
-    <div style={{ borderBottom:'1px solid var(--border)' }}>
+    <>
+      <div style={{ borderBottom: showNotes ? 'none' : '1px solid var(--border)' }}>
       <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
         <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
             <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
             {kitInfo?.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
+            {itemNotes && (
+              <button onClick={() => setShowNotes(!showNotes)}
+                style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:22, height:22, fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {showNotes ? '✕' : 'i'}
+              </button>
+            )}
           </div>
 
           {/* Bauli */}
@@ -512,6 +561,13 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onChan
           </div>
         </div>
       )}
-    </div>
+      </div>
+      {showNotes && itemNotes && (
+        <div style={{ padding:'10px 16px 14px', borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>📝</span>
+          <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{itemNotes}</p>
+        </div>
+      )}
+    </>
   )
 }
