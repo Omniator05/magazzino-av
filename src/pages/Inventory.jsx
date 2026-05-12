@@ -5,12 +5,14 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Audio','Video','Luci','Rigging','Altro']
+const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente', 'Effetti', 'Altro']
 const ICONS = {
   'Audio':   '🔊',
   'Video':   '📺',
   'Luci':    '🔦',
   'Rigging': '⛓️',
+  'Corrente': '⚡',
+  'Effetti': '🎆',
   'Altro':   '📦',
 }
 
@@ -20,7 +22,7 @@ const CATEGORY_MIGRATION = {
   'Cassa':         'Audio',
   'Sub':           'Audio',
   'Cavo XLR':      'Audio',
-  'Cavo Corrente': 'Audio',
+  'Cavo Corrente': 'Corrente',
   'Multipresa':    'Audio',
   'Console Luci':  'Luci',
   'Faro':          'Luci',
