@@ -5,21 +5,45 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Mixer Audio','Console Luci','Faro','Ledwall','Cassa','Sub','Cavo DMX','Cavo XLR','Cavo Corrente','Multipresa','Valigetta','Case','Altro']
+const CATEGORIES = ['Audio','Video','Luci','Rigging','Altro']
 const ICONS = {
-  'Mixer Audio':    '🎚️',
-  'Console Luci':  '🕹️',
-  'Faro':          '🔦',
-  'Ledwall':       '📺',
-  'Cassa':         '🔊',
-  'Sub':           '💥',
-  'Cavo DMX':      '🔵',
-  'Cavo XLR':      '🎙️',
-  'Cavo Corrente': '⚡',
-  'Multipresa':    '🔌',
-  'Valigetta':     '💼',
-  'Case':          '🧳',
-  'Altro':         '📦',
+  'Audio':   '🔊',
+  'Video':   '📺',
+  'Luci':    '🔦',
+  'Rigging': '⛓️',
+  'Altro':   '📦',
+}
+
+// Mappa vecchie categorie → nuove per migrazione automatica
+const CATEGORY_MIGRATION = {
+  'Mixer Audio':    'Audio',
+  'Cassa':         'Audio',
+  'Sub':           'Audio',
+  'Cavo XLR':      'Audio',
+  'Cavo Corrente': 'Audio',
+  'Multipresa':    'Audio',
+  'Console Luci':  'Luci',
+  'Faro':          'Luci',
+  'LED bar':       'Luci',
+  'Par LED':       'Luci',
+  'Moving head':   'Luci',
+  'Dimmer':        'Luci',
+  'Controller luci':'Luci',
+  'Cavo DMX':      'Luci',
+  'Ledwall':       'Video',
+  'Proiettore':    'Video',
+  'Console audio': 'Audio',
+  'Mixer':         'Audio',
+  'Amplificatore': 'Audio',
+  'Casse':         'Audio',
+  'Subwoofer':     'Audio',
+  'Microfono':     'Audio',
+  'Cavo audio':    'Audio',
+  'Cavo elettrico':'Audio',
+  'Flight case':   'Rigging',
+  'Case':          'Rigging',
+  'Valigetta':     'Rigging',
+  'Stativi':       'Rigging',
 }
 
 export default function Inventory() {
@@ -38,6 +62,17 @@ export default function Inventory() {
     const q = query(collection(db, 'items'), orderBy('name'))
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
+
+  // Migrazione automatica vecchie categorie → nuove (gira una volta sola)
+  useEffect(() => {
+    if (items.length === 0) return
+    const toMigrate = items.filter(i => CATEGORY_MIGRATION[i.category])
+    if (toMigrate.length === 0) return
+    toMigrate.forEach(item => {
+      updateDoc(doc(db, 'items', item.id), { category: CATEGORY_MIGRATION[item.category] })
+        .catch(() => {})
+    })
+  }, [items.length]) // solo quando cambia il numero di articoli
 
   const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2, brokenQty:0 }); setShowModal(true) }
   const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', isKit:item.isKit||false, kitSize:item.kitSize||2, brokenQty:item.brokenQty||0 }); setShowModal(true) }
