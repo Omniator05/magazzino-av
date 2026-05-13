@@ -251,7 +251,7 @@ export default function Events() {
             <h2>{editing ? 'Modifica evento' : 'Nuovo evento'}</h2>
             <div className="form-group">
               <label>Nome evento *</label>
-              <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Matrimonio Rossi" />
+              <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Matrimonio Boccaletti" />
             </div>
             <div className="form-group">
               <label>Data *</label>

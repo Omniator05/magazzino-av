@@ -4,7 +4,23 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
 
-const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
+const ICONS = {
+  'Audio':   '🔊',
+  'Video':   '📺',
+  'Luci':    '🔦',
+  'Rigging': '⛓️',
+  'Effetti': '🎆',
+  'Corrente': '⚡',
+  'Kit':     '🧰',
+  'Altro':   '📦',
+  // vecchie categorie per retrocompatibilità
+  'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
+  'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
+  'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
+  'Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜',
+  'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
+  'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
+}
 
 export default function EventDetail() {
   const { id } = useParams()
@@ -230,7 +246,7 @@ export default function EventDetail() {
           )}
         </div>
 
-        {/* Pannello note espandibile — scorre sotto il titolo, non copre tutto */}
+        {/* Pannello note espandibile - scorre sotto il titolo, non copre tutto */}
         {showEventNotes && event.notes && (
           <div style={{
             marginTop:12, padding:'12px 14px',
@@ -320,7 +336,7 @@ export default function EventDetail() {
             {cart.length > 0 && (
               <div style={{ background:'rgba(105,240,174,0.06)', borderBottom:'1px solid rgba(105,240,174,0.2)', padding:'10px 16px', flexShrink:0 }}>
                 <p style={{ color:'var(--green)', fontWeight:700, fontSize:12, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
-                  ✅ Selezionati — {cart.length} articol{cart.length === 1 ? 'o' : 'i'}
+                  ✅ Selezionati - {cart.length} articol{cart.length === 1 ? 'o' : 'i'}
                 </p>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                   {cart.map(c => (

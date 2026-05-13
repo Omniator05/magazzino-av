@@ -4,7 +4,20 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'
 
-const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
+const ICONS = {
+  'Audio':   '🔊',
+  'Video':   '📺',
+  'Luci':    '🔦',
+  'Rigging': '⛓️',
+  'Kit':     '🧰',
+  'Altro':   '📦',
+  'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
+  'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
+  'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
+  'Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜',
+  'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
+  'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
+}
 
 export default function WorkerScanner() {
   const { id } = useParams()
@@ -241,7 +254,7 @@ export default function WorkerScanner() {
   return (
     <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column' }}>
 
-      {/* ── Popup centrale post-scansione ── */}
+      {/* - Popup centrale post-scansione - */}
       {scanToast && (() => {
         const r = scanResult[scanToast.action]
         const isOk = ['loaded','returned'].includes(scanToast.action)
@@ -268,7 +281,7 @@ export default function WorkerScanner() {
         )
       })()}
 
-      {/* ── Header compatto ── */}
+      {/* - Header compatto - */}
       <div style={{ padding:'52px 16px 12px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <button onClick={() => { stopScanner(); navigate(backPath) }}
@@ -291,7 +304,7 @@ export default function WorkerScanner() {
         {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
       </div>
 
-      {/* ── Toggle modalità — grande e chiarissimo ── */}
+      {/* - Toggle modalità - grande e chiarissimo - */}
       <div style={{ padding:'14px 16px 0' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
           <button onClick={() => { setMode('load'); setLastScan(null) }}
@@ -325,7 +338,7 @@ export default function WorkerScanner() {
         </div>
       </div>
 
-      {/* ── Camera / Scanner ── */}
+      {/* - Camera / Scanner - */}
       <div style={{ padding:'12px 16px 0', flex:1 }}>
         <div style={{
           borderRadius:20, overflow:'hidden',
@@ -333,7 +346,7 @@ export default function WorkerScanner() {
           transition:'border-color 0.3s',
           background:'var(--card)',
         }}>
-          {/* qr-worker SEMPRE nel DOM — Html5Qrcode ne ha bisogno al momento dell'init */}
+          {/* qr-worker SEMPRE nel DOM - Html5Qrcode ne ha bisogno al momento dell'init */}
           <div style={{ position:'relative', display: scanning ? 'block' : 'none' }}>
             <div id="qr-worker" style={{ width:'100%' }} />
             {lastScan && (() => {
@@ -387,7 +400,7 @@ export default function WorkerScanner() {
 
         {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:12, padding:'12px 16px', color:'var(--red)', marginTop:10, fontSize:14 }}>{error}</div>}
 
-        {/* Inserimento manuale — compatto e collassabile */}
+        {/* Inserimento manuale - compatto e collassabile */}
         <details style={{ marginTop:12 }}>
           <summary style={{ color:'var(--text2)', fontSize:13, fontWeight:600, cursor:'pointer', userSelect:'none', padding:'8px 0' }}>
             ⌨️ Inserisci codice manualmente
@@ -400,7 +413,7 @@ export default function WorkerScanner() {
           </div>
         </details>
 
-        {/* Lista carico — compatta */}
+        {/* Lista carico - compatta */}
         <div style={{ marginTop:14, marginBottom:16 }}>
           <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>
             Lista carico · {items.filter(i=>i.returned).length}/{total} rientrati
@@ -460,8 +473,6 @@ function ChecklistRow({ item }) {
   const [location, setLocation]   = useState(item.location || null)
   const [notes, setNotes]         = useState(item.notes || null)
   const [showNotes, setShowNotes] = useState(false)
-  const eventRef_ctx = doc(db, 'events', item._eventId || '') // passato come prop
-  const db_ref = db
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
@@ -494,7 +505,7 @@ function ChecklistRow({ item }) {
             </div>
           )}
         </div>
-        {/* Bottoni touch-friendly — grandi abbastanza per il dito */}
+        {/* Bottoni touch-friendly - grandi abbastanza per il dito */}
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>
           <button
             style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
