@@ -14,7 +14,8 @@ export default function EventDetail() {
   const [allItems, setAllItems] = useState([])
   const [showAddItem, setShowAddItem] = useState(false)
   const [search, setSearch] = useState('')
-  const [cart, setCart] = useState([]) // articoli selezionati nel modal, non ancora salvati
+  const [cart, setCart] = useState([])
+  const [showEventNotes, setShowEventNotes] = useState(false)
 
   const eventRef = doc(db, 'events', id)
 
@@ -182,35 +183,6 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
-  // Modifica la quantità di un articolo già in lista (per kit parziali)
-  // Ricalcola il delta sul magazzino se l'articolo è già stato caricato
-  const changeQty = async (itemId, newQty, oldQty) => {
-    const updated = eventItems.map(i => i.id === itemId ? { ...i, qty: newQty } : i)
-    await updateEventItems(updated)
-
-    const item = eventItems.find(i => i.id === itemId)
-    if (item?.loaded && !item?.returned) {
-      // Era già uscito — aggiusta la differenza in magazzino
-      try {
-        const itemRef = doc(db, 'items', itemId)
-        const snap = await getDoc(itemRef)
-        if (snap.exists()) {
-          const current = snap.data()
-          const delta = oldQty - newQty // se riduco qty, torna disponibile la differenza
-          await updateDoc(itemRef, {
-            availableQty: Math.max(0, Math.min(current.totalQty, (current.availableQty || 0) + delta))
-          })
-        }
-      } catch(e) { console.error(e) }
-    }
-  }
-
-  // Modifica i pezzi effettivi che escono da un kit (es. 3 pannelli su 5 nel baule)
-  const changeKitPieces = async (itemId, newPieces) => {
-    const updated = eventItems.map(i => i.id === itemId ? { ...i, kitPieces: newPieces } : i)
-    await updateEventItems(updated)
-  }
-
   const notInEvent = allItems.filter(i => !eventItems.some(e => e.id === i.id) && !cart.some(c => c.id === i.id))
   const filtered = notInEvent.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -231,11 +203,45 @@ export default function EventDetail() {
             Scansiona
           </button>
         </div>
-        <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
-        <p style={{ color:'var(--text2)', fontSize:14, marginTop:4 }}>
-          📅 {event.date && new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
-          {event.location && ` · 📍 ${event.location}`}
-        </p>
+
+        {/* Nome evento + tasto ℹ️ note */}
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
+            <p style={{ color:'var(--text2)', fontSize:14, marginTop:4 }}>
+              📅 {event.date && new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
+              {event.location && ` · 📍 ${event.location}`}
+            </p>
+          </div>
+          {event.notes && (
+            <button
+              onClick={() => setShowEventNotes(v => !v)}
+              style={{
+                flexShrink:0, width:30, height:30, borderRadius:'50%', marginTop:4,
+                background: showEventNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)',
+                border:'1px solid rgba(79,195,247,0.35)',
+                color: showEventNotes ? 'white' : 'var(--blue)',
+                fontWeight:900, fontSize:14,
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}
+            >
+              {showEventNotes ? '✕' : 'i'}
+            </button>
+          )}
+        </div>
+
+        {/* Pannello note espandibile — scorre sotto il titolo, non copre tutto */}
+        {showEventNotes && event.notes && (
+          <div style={{
+            marginTop:12, padding:'12px 14px',
+            background:'rgba(79,195,247,0.07)',
+            border:'1px solid rgba(79,195,247,0.2)',
+            borderRadius:10,
+            maxHeight:160, overflowY:'auto',
+          }}>
+            <p style={{ color:'var(--text)', fontSize:14, lineHeight:1.7, whiteSpace:'pre-wrap' }}>{event.notes}</p>
+          </div>
+        )}
       </div>
 
       {event.seriesId && (
@@ -271,7 +277,7 @@ export default function EventDetail() {
               <p>Aggiungi articoli alla lista di carico</p>
             </div>
           : eventItems.map(item => (
-            <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onChangeQty={changeQty} onChangeKitPieces={changeKitPieces} />
+            <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} />
           ))
         }
       </div>
@@ -284,7 +290,7 @@ export default function EventDetail() {
 
       {showAddItem && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddItem(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+          <div className="modal" style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }}>
 
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
@@ -425,142 +431,58 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
   )
 }
 
-// Riga lista evento con location live e quantità modificabile (per kit parziali)
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onChangeQty, onChangeKitPieces }) {
-  const [location, setLocation]       = useState(item.location || null)
-  const [totalQty, setTotalQty]       = useState(null)
-  const [itemNotes, setItemNotes]     = useState(null)
-  const [showNotes, setShowNotes]     = useState(false)
-  const [kitInfo, setKitInfo]         = useState(
-    item.isKit ? { isKit:true, kitSize: item.kitSize || 1 } : null
-  )
-  const [showKitCtrl, setShowKitCtrl] = useState(false)
+// Riga lista evento con location live
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove }) {
+  const [location, setLocation]   = useState(item.location || null)
+  const [itemNotes, setItemNotes] = useState(null)
+  const [showNotes, setShowNotes] = useState(false)
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
       if (snap.exists()) {
-        const data = snap.data()
-        setLocation(data.location || null)
-        setTotalQty(data.totalQty || null)
-        setItemNotes(data.notes || null)
-        setKitInfo(data.isKit ? { isKit:true, kitSize: data.kitSize || 1 } : null)
+        setLocation(snap.data().location || null)
+        setItemNotes(snap.data().notes || null)
       }
     }).catch(() => {})
   }, [item.id])
 
-  const currentQty   = item.qty || 1
-  const max          = totalQty || currentQty
-  const kitSize      = kitInfo?.kitSize || 1
-  const kitPieces    = item.kitPieces ?? (currentQty * kitSize)
-  const maxKitPieces = currentQty * kitSize
-
-  const handleQtyChange = (delta) => {
-    const newQty = Math.max(1, Math.min(max, currentQty + delta))
-    if (newQty !== currentQty) onChangeQty(item.id, newQty, currentQty)
-  }
-
-  const handleKitPieces = (delta) => {
-    const newPieces = Math.max(1, Math.min(maxKitPieces, kitPieces + delta))
-    if (newPieces !== kitPieces) onChangeKitPieces(item.id, newPieces)
-  }
-
-  const piecesOut = kitInfo?.isKit && item.kitPieces != null && item.kitPieces < maxKitPieces
-
   return (
     <>
       <div style={{ borderBottom: showNotes ? 'none' : '1px solid var(--border)' }}>
-      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
-        <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-            <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
-            {kitInfo?.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
-            {itemNotes && (
-              <button onClick={() => setShowNotes(!showNotes)}
-                style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:22, height:22, fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                {showNotes ? '✕' : 'i'}
-              </button>
-            )}
-          </div>
-
-          {/* Bauli */}
-          {!item.loaded ? (
+        <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
+          <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-              <button onClick={() => handleQtyChange(-1)} disabled={currentQty <= 1}
-                style={{ width:22, height:22, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', opacity: currentQty <= 1 ? 0.3 : 1 }}>−</button>
-              <span style={{ fontWeight:800, fontSize:15, minWidth:20, textAlign:'center', color:'var(--text)' }}>{currentQty}</span>
-              <button onClick={() => handleQtyChange(1)} disabled={currentQty >= max}
-                style={{ width:22, height:22, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', opacity: currentQty >= max ? 0.3 : 1 }}>+</button>
-              <span style={{ color:'var(--text2)', fontSize:12 }}>
-                {kitInfo?.isKit ? `baul${currentQty === 1 ? 'e' : 'i'}` : `di ${max}`}
-              </span>
-              {kitInfo?.isKit && (
-                <span style={{ color:'var(--accent2)', fontSize:12, fontWeight:700 }}>
-                  = {piecesOut ? `${kitPieces}/${maxKitPieces}` : maxKitPieces} pz
-                </span>
+              <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+              {itemNotes && (
+                <button onClick={() => setShowNotes(v => !v)}
+                  style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:22, height:22, fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  {showNotes ? 'x' : 'i'}
+                </button>
               )}
             </div>
-          ) : (
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:4 }}>
-              {currentQty} {kitInfo?.isKit ? `baul${currentQty === 1 ? 'e' : 'i'}` : `di ${max}`}
-              {kitInfo?.isKit && <span style={{ color:'var(--accent2)', fontWeight:700 }}> · {kitPieces} pz</span>}
-            </p>
-          )}
-
-          {/* Bottone pezzi kit — solo se kit e non ancora caricato */}
-          {kitInfo?.isKit && !item.loaded && (
-            <button
-              onClick={() => setShowKitCtrl(!showKitCtrl)}
-              style={{ background: showKitCtrl ? 'rgba(245,166,35,0.15)' : 'var(--card2)', border:`1px solid ${showKitCtrl ? 'rgba(245,166,35,0.4)' : 'var(--border)'}`, color: showKitCtrl ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'3px 10px', fontSize:12, fontWeight:700, marginBottom:4 }}
-            >
-              🧩 Pezzi parziali {showKitCtrl ? '▲' : '▼'}
-            </button>
-          )}
-
-          {location ? (
-            <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:4, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
-              <span style={{ fontSize:11 }}>📍</span>
-              <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
-            </div>
-          ) : (
-            <p style={{ color:'var(--text3)', fontSize:11, marginTop:2, fontStyle:'italic' }}>Posizione non specificata</p>
-          )}
-        </div>
-
-        <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
-          <button onClick={() => onToggleLoaded(item.id)}
-            style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-            {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
-          </button>
-          <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
-            style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
-            {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
-          </button>
-        </div>
-        <button onClick={() => onRemove(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>✕</button>
-      </div>
-
-      {/* Pannello pezzi kit espandibile */}
-      {showKitCtrl && kitInfo?.isKit && !item.loaded && (
-        <div style={{ margin:'0 16px 12px', background:'rgba(245,166,35,0.06)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:'var(--radius-sm)', padding:'12px 14px' }}>
-          <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8 }}>
-            Quanti pezzi escono da questo baule?
-          </p>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <button onClick={() => handleKitPieces(-1)} disabled={kitPieces <= 1}
-              style={{ width:32, height:32, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', opacity: kitPieces <= 1 ? 0.3 : 1 }}>−</button>
-            <span style={{ fontWeight:800, fontSize:20, minWidth:28, textAlign:'center', color:'var(--accent2)' }}>{kitPieces}</span>
-            <button onClick={() => handleKitPieces(1)} disabled={kitPieces >= maxKitPieces}
-              style={{ width:32, height:32, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', opacity: kitPieces >= maxKitPieces ? 0.3 : 1 }}>+</button>
-            <span style={{ color:'var(--text2)', fontSize:13 }}>di {maxKitPieces} pz</span>
-            {kitPieces < maxKitPieces && (
-              <span style={{ marginLeft:'auto', background:'rgba(105,240,174,0.12)', color:'var(--green)', border:'1px solid rgba(105,240,174,0.3)', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>
-                {maxKitPieces - kitPieces} restano in magazzino
-              </span>
+            <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
+            {location ? (
+              <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
+                <span style={{ fontSize:11 }}>📍</span>
+                <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
+              </div>
+            ) : (
+              <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
             )}
           </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
+            <button onClick={() => onToggleLoaded(item.id)}
+              style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
+              {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
+            </button>
+            <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
+              style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
+              {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
+            </button>
+          </div>
+          <button onClick={() => onRemove(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>x</button>
         </div>
-      )}
       </div>
       {showNotes && itemNotes && (
         <div style={{ padding:'10px 16px 14px', borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>

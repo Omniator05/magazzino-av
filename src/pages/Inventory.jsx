@@ -5,12 +5,13 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Audio','Video','Luci','Rigging','Altro']
+const CATEGORIES = ['Audio','Video','Luci','Rigging', 'Corrente', 'Altro']
 const ICONS = {
   'Audio':   '🔊',
   'Video':   '📺',
   'Luci':    '🔦',
   'Rigging': '⛓️',
+  'Corrente': '⚡',
   'Altro':   '📦',
 }
 
@@ -52,16 +53,11 @@ export default function Inventory() {
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [showAddMenu, setShowAddMenu] = useState(false) // menu scelta oggetto/kit
-  const [showKitModal, setShowKitModal] = useState(false)
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2, brokenQty:0 })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0 })
   // Kit form: nome + componenti
-  const [kitForm, setKitForm] = useState({ name:'', location:'', notes:'', qty:1 })
-  const [kitComponents, setKitComponents] = useState([]) // [{itemId, name, qty}]
-  const [kitSearch, setKitSearch] = useState('')
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
@@ -80,8 +76,8 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', isKit:false, kitSize:2, brokenQty:0 }); setShowModal(true) }
-  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', isKit:item.isKit||false, kitSize:item.kitSize||2, brokenQty:item.brokenQty||0 }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0 }); setShowModal(true) }
+  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0 }); setShowModal(true) }
 
   const saveItem = async () => {
     if (!form.name.trim()) return
@@ -92,14 +88,13 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken,
         brokenQty:broken,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes,
-        isKit:form.isKit, kitSize: form.isKit ? (parseInt(form.kitSize)||2) : null,
         createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -161,11 +156,21 @@ export default function Inventory() {
     URL.revokeObjectURL(url)
   }
 
-  const filtered = items.filter(i =>
-    i.name?.toLowerCase().includes(search.toLowerCase()) ||
-    i.category?.toLowerCase().includes(search.toLowerCase()) ||
-    i.brand?.toLowerCase().includes(search.toLowerCase())
-  )
+  const [activeFilter, setActiveFilter] = useState('all') // 'all' | 'out' | 'broken'
+
+  const filtered = items.filter(i => {
+    const matchSearch = !search ||
+      i.name?.toLowerCase().includes(search.toLowerCase()) ||
+      i.category?.toLowerCase().includes(search.toLowerCase()) ||
+      i.brand?.toLowerCase().includes(search.toLowerCase())
+    if (!matchSearch) return false
+    if (activeFilter === 'out')    return (i.availableQty ?? i.totalQty) < i.totalQty
+    if (activeFilter === 'broken') return (i.brokenQty || 0) > 0
+    return true
+  })
+
+  const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty).length
+  const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
 
   return (
     <div className="page">
@@ -174,7 +179,7 @@ export default function Inventory() {
           <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={exportCSV} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13 }}>📤 Esporta</button>
-            <button onClick={() => setShowAddMenu(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
+            <button onClick={openAdd} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
           </div>
         </div>
       </div>
@@ -182,6 +187,31 @@ export default function Inventory() {
       <div className="search-bar" style={{ position:'relative' }}>
         <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, categoria, marca..." />
+      </div>
+
+      {/* Filtri rapidi */}
+      <div style={{ display:'flex', gap:8, padding:'10px 16px 4px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
+        {[
+          { key:'all',    label:'Tutti', count: items.length },
+          { key:'out',    label:'🚛 Fuori', count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
+          { key:'broken', label:'🔴 Rotti', count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+        ].map(f => (
+          <button key={f.key} onClick={() => setActiveFilter(f.key)}
+            style={{
+              padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
+              background: activeFilter === f.key ? (f.bg || 'var(--accent)') : 'var(--card2)',
+              color: activeFilter === f.key ? (f.color || '#fff') : 'var(--text2)',
+              border: `1px solid ${activeFilter === f.key ? (f.border || 'var(--accent)') : 'var(--border)'}`,
+              display:'flex', alignItems:'center', gap:5,
+            }}>
+            {f.label}
+            {f.count > 0 && (
+              <span style={{ background: activeFilter === f.key ? 'rgba(0,0,0,0.15)' : 'var(--card3)', borderRadius:10, padding:'1px 6px', fontSize:11 }}>
+                {f.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
@@ -193,15 +223,9 @@ export default function Inventory() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
                   <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
-                  {item.isKit && (
-                    <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', flexShrink:0 }}>
-                      KIT
-                    </span>
-                  )}
                 </div>
                 <p style={{ color:'var(--text2)', fontSize:13 }}>
                   {item.brand} {item.model}
-                  {item.isKit && item.kitSize && <span style={{ color:'var(--accent2)' }}> · {item.kitSize} pz/baule</span>}
                 </p>
                 {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2 }}>📍 {item.location}</p>}
               </div>
@@ -273,44 +297,6 @@ export default function Inventory() {
             )}
             <div className="form-group"><label>Posizione in magazzino 📍</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Scaffale A3, Ripiano 2 sx, Fondo sala..." /></div>
 
-            {/* Toggle Kit/Baule */}
-            <div style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'14px', marginBottom:16 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <div>
-                  <p style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>📦 Kit / Baule</p>
-                  <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>Contiene più pezzi dello stesso tipo</p>
-                </div>
-                <button
-                  onClick={() => setForm({...form, isKit:!form.isKit})}
-                  style={{
-                    width:48, height:28, borderRadius:14, padding:3,
-                    background: form.isKit ? 'var(--accent2)' : 'var(--card3)',
-                    border: 'none', transition:'background 0.2s',
-                    display:'flex', alignItems:'center',
-                    justifyContent: form.isKit ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  <div style={{ width:22, height:22, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.3)' }} />
-                </button>
-              </div>
-
-              {form.isKit && (
-                <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid var(--border)' }}>
-                  <label style={{ display:'block', fontSize:12, color:'var(--text2)', marginBottom:8, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>
-                    Pezzi contenuti per baule
-                  </label>
-                  <div className="qty-ctrl">
-                    <button onClick={() => setForm({...form, kitSize:Math.max(2, (parseInt(form.kitSize)||2)-1)})}>−</button>
-                    <span>{form.kitSize}</span>
-                    <button onClick={() => setForm({...form, kitSize:(parseInt(form.kitSize)||2)+1})}>+</button>
-                    <span style={{ color:'var(--text2)', fontSize:13, marginLeft:4 }}>pezzi per baule</span>
-                  </div>
-                  <p style={{ color:'var(--text2)', fontSize:12, marginTop:8, lineHeight:1.5 }}>
-                    {form.name.trim() ? `"${form.name.trim()}"` : '"Nome articolo"'} con qty <strong style={{ color:'var(--text)' }}>{form.qty||1} baul{(form.qty||1) === 1 ? 'e' : 'i'}</strong> e kit da <strong style={{ color:'var(--accent2)' }}>{form.kitSize} pezzi</strong> = {(form.qty||1) * (parseInt(form.kitSize)||2)} pezzi totali in magazzino
-                  </p>
-                </div>
-              )}
-            </div>
 
             <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
@@ -379,15 +365,6 @@ export default function Inventory() {
               </button>
             )}
             {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
-            {showDetail.isKit && showDetail.kitSize && (
-              <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(245,166,35,0.08)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:8 }}>
-                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:4 }}>📦 Kit / Baule</p>
-                <p style={{ color:'var(--text)', fontSize:14 }}>
-                  <strong>{showDetail.kitSize} pezzi</strong> per baule ·{' '}
-                  <strong>{(showDetail.availableQty||0) * showDetail.kitSize}</strong> pezzi disponibili in totale
-                </p>
-              </div>
-            )}
             {showDetail.location && (
               <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:18 }}>📍</span>
@@ -400,140 +377,6 @@ export default function Inventory() {
           </div>
         </div>
       )}
-      {/* ── Menu scelta: Oggetto o Kit ── */}
-      {showAddMenu && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddMenu(false)}>
-          <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowAddMenu(false)}>✕</button>
-            <h2>Cosa vuoi aggiungere?</h2>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
-              <button
-                onClick={() => { setShowAddMenu(false); openAdd() }}
-                style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <span style={{ fontSize:36 }}>📦</span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>Nuovo oggetto</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un singolo articolo con quantità e posizione</span>
-              </button>
-              <button
-                onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',notes:'',qty:1}); setKitComponents([]); setKitSearch(''); setShowKitModal(true) }}
-                style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <span style={{ fontSize:36 }}>🧰</span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>Nuovo kit</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un baule che raggruppa più oggetti</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Kit Builder ── */}
-      {showKitModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitModal(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
-            <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" style={{ position:'absolute', top:16, right:20 }} onClick={() => setShowKitModal(false)}>✕</button>
-              <h2 style={{ marginBottom:14 }}>🧰 Nuovo kit</h2>
-              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})}
-                placeholder="Nome kit (es. Baule Tornado)" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
-              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})}
-                placeholder="📍 Posizione in magazzino (opzionale)" style={{ fontSize:13, marginBottom:8 }} />
-              {/* Quantità kit */}
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>Quanti kit uguali?</p>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setKitForm(f => ({...f, qty: Math.max(1, f.qty-1)}))}
-                    style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                  <input
-                    type="number" min="1" max="999"
-                    value={kitForm.qty}
-                    onChange={e => setKitForm(f => ({...f, qty: Math.max(1, parseInt(e.target.value)||1)}))}
-                    style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }}
-                  />
-                  <button onClick={() => setKitForm(f => ({...f, qty: f.qty+1}))}
-                    style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                </div>
-              </div>
-            </div>
-
-            {/* Componenti già aggiunti */}
-            {kitComponents.length > 0 && (
-              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
-                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>Contenuto kit</p>
-                {kitComponents.map(comp => (
-                  <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                    <span style={{ flex:1, fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
-                    <div className="qty-ctrl" style={{ gap:6 }}>
-                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))}
-                        style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                      <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
-                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.min(c.maxQty,c.qty+1)} : c))}
-                        style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                    </div>
-                    <button onClick={() => setKitComponents(prev => prev.filter(c => c.itemId !== comp.itemId))}
-                      style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Ricerca oggetti da aggiungere */}
-            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, position:'relative' }}>
-              <input value={kitSearch} onChange={e => setKitSearch(e.target.value)}
-                placeholder="Aggiungi oggetto al kit..." style={{ paddingLeft:32, fontSize:13 }} />
-              <svg style={{ position:'absolute', left:26, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-            </div>
-
-            <div style={{ overflowY:'auto', flex:1 }}>
-              {items
-                .filter(i => !i.isBundle && !kitComponents.some(c => c.itemId===i.id))
-                .filter(i => !kitSearch || i.name?.toLowerCase().includes(kitSearch.toLowerCase()) || i.brand?.toLowerCase().includes(kitSearch.toLowerCase()))
-                .map(item => (
-                  <div key={item.id} className="item-row" onClick={() => {
-                    setKitComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }])
-                    setKitSearch('')
-                  }}>
-                    <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12 }}>{item.brand} {item.model} · {item.availableQty??item.totalQty} disp.</p>
-                    </div>
-                    <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
-                  </div>
-                ))
-              }
-            </div>
-
-            {/* Salva kit */}
-            <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
-              <button
-                onClick={async () => {
-                  if (!kitForm.name.trim() || kitComponents.length === 0) return
-                  const kitQty = kitForm.qty || 1
-                  const ref = await addDoc(collection(db, 'items'), {
-                    name: kitForm.name.trim(),
-                    location: kitForm.location.trim(),
-                    notes: kitForm.notes||'',
-                    category: 'Kit',
-                    isBundle: true,
-                    components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
-                    totalQty: kitQty,
-                    availableQty: kitQty,
-                    createdAt: serverTimestamp(),
-                    createdBy: user.uid,
-                  })
-                  await updateDoc(ref, { code: generateItemCode(ref.id) })
-                  setShowKitModal(false)
-                }}
-                className="btn btn-primary btn-full"
-                disabled={!kitForm.name.trim() || kitComponents.length === 0}
-                style={{ opacity: !kitForm.name.trim() || kitComponents.length === 0 ? 0.4 : 1 }}>
-                🧰 Crea {kitForm.qty > 1 ? `${kitForm.qty}x ` : ''}kit con {kitComponents.length} componenti
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }

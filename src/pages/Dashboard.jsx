@@ -34,8 +34,9 @@ export default function Dashboard({ toggleTheme, theme }) {
   const todayEvents = events.filter(e => e.date === today)
   const nextEvent = upcoming[0]
 
-  // Numero articoli fuori — solo per la stat card, senza lista
-  const itemsOut = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty).length
+  const itemsOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty).length
+  const brokenItems = items.filter(i => (i.brokenQty || 0) > 0)
+  const totalBroken = brokenItems.reduce((sum, i) => sum + (i.brokenQty || 0), 0)
 
   const name = profile?.name?.split(' ')[0] || profile?.username || 'Admin'
 
@@ -141,17 +142,17 @@ export default function Dashboard({ toggleTheme, theme }) {
         </div>
       )}
 
-      {/* ── Stat pill: articoli fuori ── */}
-      {itemsOut > 0 && (
+      {/* ── Avviso rotti — appare SOLO se ci sono oggetti rotti ── */}
+      {brokenItems.length > 0 && (
         <div style={{ margin:'0 16px 20px' }}>
-          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.3)', borderRadius:'var(--radius)', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', animation:'pulse 2s ease infinite' }} />
+              <div style={{ width:8, height:8, borderRadius:'50%', background:'var(--red)', animation:'pulse 2s ease infinite' }} />
               <p style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>
-                {itemsOut === 1 ? '1 articolo fuori magazzino' : `${itemsOut} articoli fuori magazzino`}
+                🔴 {totalBroken === 1 ? '1 oggetto rotto' : `${totalBroken} oggetti rotti`} da riparare
               </p>
             </div>
-            <button onClick={() => navigate('/inventory')} style={{ color:'var(--accent)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>
+            <button onClick={() => navigate('/inventory')} style={{ color:'var(--red)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>
               Vedi →
             </button>
           </div>

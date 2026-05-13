@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useState, useEffect } from 'react'
 import Login from './pages/Login'
@@ -15,6 +15,8 @@ import LoadingBar from './components/LoadingBar'
 
 function PrivateRoutes({ toggleTheme, theme }) {
   const { user, profile, loading } = useAuth()
+  const { pathname } = useLocation()
+  const onScannerRoute = pathname.endsWith('/scan')
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16 }}>
@@ -58,7 +60,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <TabBar toggleTheme={toggleTheme} theme={theme} />
+      {!onScannerRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}
     </>
   )
 }
