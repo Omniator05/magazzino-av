@@ -86,8 +86,9 @@ export default function WorkerInventory() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, categoria, marca..." />
       </div>
 
-      {/* Filtri */}
-      <div style={{ display:'flex', gap:8, padding:'10px 16px 4px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
+      {/* Filtri - scrollabili */}
+      <div style={{ overflowX:'auto', background:'var(--bg2)', borderBottom:'1px solid var(--border)', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+        <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
           { key:'all',    label:'Tutti',      count: items.length },
           { key:'out',     label:'🚛 Fuori',        count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
@@ -104,6 +105,7 @@ export default function WorkerInventory() {
             {f.count > 0 && <span style={{ background: filter === f.key ? 'rgba(0,0,0,0.15)' : 'var(--card3)', borderRadius:10, padding:'1px 6px', fontSize:11 }}>{f.count}</span>}
           </button>
         ))}
+        </div>
       </div>
 
       {/* Lista */}

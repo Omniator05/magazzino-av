@@ -12,7 +12,6 @@ const adminTabs = [
 const workerTabs = [
   { path:'/',           label:'Home',      icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> },
   { path:'/inventory',  label:'Magazzino', icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.88.18-1.36C18 2.52 15.5 0 12.36 0c-1.73 0-3.25.92-4.16 2.27L12 6H4.5L3 4H1v2h1l3 6.92V18c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8l1-2V6h-2z"/></svg> },
-  { path:'/events',     label:'Eventi',    icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg> },
 ]
 
 export default function TabBar() {

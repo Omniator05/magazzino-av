@@ -681,3 +681,6 @@ select option { background: var(--bg2); }
 .bb8-slider:checked + .bb8-switch .bb8-star.bb8-star-3 { top: 15px; }
 .bb8-slider:checked + .bb8-switch .bb8-star.bb8-star-4 { top: 45px; }
 .bb8-slider:checked + .bb8-switch .bb8-star.bb8-star-5 { top: 53px; }
+
+/* Nasconde scrollbar orizzontale sui filtri chip */
+.filter-scroll::-webkit-scrollbar { display: none; }

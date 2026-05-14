@@ -204,8 +204,9 @@ export default function Inventory() {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, categoria, marca..." />
       </div>
 
-      {/* Filtri rapidi */}
-      <div style={{ display:'flex', gap:8, padding:'10px 16px 4px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
+      {/* Filtri rapidi - scrollabili orizzontalmente */}
+      <div style={{ overflowX:'auto', background:'var(--bg2)', borderBottom:'1px solid var(--border)', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+        <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
           { key:'all',    label:'Tutti', count: items.length },
           { key:'out',     label:'🚛 Fuori',       count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
@@ -228,6 +229,7 @@ export default function Inventory() {
             )}
           </button>
         ))}
+        </div>
       </div>
 
       <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
