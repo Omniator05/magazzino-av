@@ -3,12 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function WorkerHome() {
   const { profile, logout } = useAuth()
   const [events, setEvents] = useState([])
   const navigate = useNavigate()
   const today = new Date().toISOString().split('T')[0]
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    localStorage.setItem('theme', next)
+    document.documentElement.setAttribute('data-theme', next)
+  }
 
   useEffect(() => {
     const q = query(collection(db, 'events'), orderBy('date'))
@@ -25,7 +34,10 @@ export default function WorkerHome() {
             <p style={{ color:'var(--text2)', fontSize:13 }}>Ciao,</p>
             <h1 style={{ fontSize:24, fontWeight:800 }}>{profile?.name || 'Magazziniere'} 👋</h1>
           </div>
-          <button onClick={logout} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:13 }}>Esci</button>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <button onClick={logout} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:13 }}>Esci</button>
+          </div>
         </div>
       </div>
 

@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Audio','Video','Luci','Rigging', 'Corrente', 'Effetti', 'Kit', 'Altro']
+const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Kit','Altro']
 const ICONS = {
-  'Audio':   '🔊',
-  'Video':   '📺',
-  'Luci':    '🔦',
-  'Rigging': '⛓️',
-  'Corrente': '⚡',
-  'Effetti': '🎉',
-  'Kit':     '🧰',
-  'Altro':   '📦',
+  'Audio':       '🔊',
+  'Video':       '📺',
+  'Luci':        '🔦',
+  'Rigging':     '⛓️',
+  'Corrente':    '⚡',
+  'Effetti':     '🎉',
+  'Consumabili': '🪣',
+  'Kit':         '🧰',
+  'Altro':       '📦',
 }
 
 // Mappa vecchie categorie → nuove per migrazione automatica
@@ -52,6 +53,7 @@ const CATEGORY_MIGRATION = {
 export default function Inventory() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { state: navState } = useLocation()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -63,7 +65,7 @@ export default function Inventory() {
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0 })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
   // Kit form: nome + componenti
 
   // Items in shared global collection so workers can read them
@@ -83,8 +85,8 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0 }); setShowModal(true) }
-  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0 }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 }); setShowModal(true) }
+  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0 }); setShowModal(true) }
 
   const saveItem = async () => {
     if (!form.name.trim()) return
@@ -99,11 +101,11 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0 })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
-        name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken,
+        name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes,
         createdAt:serverTimestamp(), createdBy: user.uid
@@ -167,7 +169,7 @@ export default function Inventory() {
     URL.revokeObjectURL(url)
   }
 
-  const [activeFilter, setActiveFilter] = useState('all') // 'all' | 'out' | 'broken'
+  const [activeFilter, setActiveFilter] = useState(navState?.filter || 'all')
 
   const filtered = items.filter(i => {
     const matchSearch = !search ||
@@ -175,13 +177,15 @@ export default function Inventory() {
       i.category?.toLowerCase().includes(search.toLowerCase()) ||
       i.brand?.toLowerCase().includes(search.toLowerCase())
     if (!matchSearch) return false
-    if (activeFilter === 'out')    return (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)
-    if (activeFilter === 'broken') return (i.brokenQty || 0) > 0
+    if (activeFilter === 'out')     return (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)
+    if (activeFilter === 'broken')  return (i.brokenQty || 0) > 0
+    if (activeFilter === 'reorder') return i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock
     return true
   })
 
   const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)).length
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
+  const countReorder = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock).length
 
   return (
     <div className="page">
@@ -204,8 +208,9 @@ export default function Inventory() {
       <div style={{ display:'flex', gap:8, padding:'10px 16px 4px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         {[
           { key:'all',    label:'Tutti', count: items.length },
-          { key:'out',    label:'🚛 Fuori', count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
-          { key:'broken', label:'🔴 Rotti', count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'out',     label:'🚛 Fuori',       count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
+          { key:'broken',  label:'🔴 Rotti',        count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'reorder', label:'🛒 Da riordinare',count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
           <button key={f.key} onClick={() => setActiveFilter(f.key)}
             style={{
@@ -248,6 +253,13 @@ export default function Inventory() {
                   <div style={{ marginTop:4 }}>
                     <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>
                       🔴 {item.brokenQty} rott{item.brokenQty === 1 ? 'o' : 'i'}
+                    </span>
+                  </div>
+                )}
+                {item.category === 'Consumabili' && item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock && (
+                  <div style={{ marginTop:4 }}>
+                    <span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>
+                      🛒 da riordinare
                     </span>
                   </div>
                 )}
@@ -311,6 +323,25 @@ export default function Inventory() {
 
 
             <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
+
+            {/* Soglia scorta minima — solo per Consumabili */}
+            {form.category === 'Consumabili' && (
+              <div className="form-group">
+                <label>🛒 Soglia scorta minima</label>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
+                    <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})}
+                      style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                    <input type="number" min="0" value={form.minStock||0}
+                      onChange={e => setForm({...form, minStock:Math.max(0,parseInt(e.target.value)||0)})}
+                      style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
+                    <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})}
+                      style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  </div>
+                </div>
+                {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>Avviso quando disponibili scendono sotto {form.minStock} pezzi</p>}
+              </div>
+            )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>🗑 Elimina</button>}
               <button onClick={saveItem} className="btn btn-primary" style={{ flex:2 }}>💾 Salva</button>

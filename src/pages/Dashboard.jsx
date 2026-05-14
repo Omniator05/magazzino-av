@@ -37,6 +37,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   const itemsOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty).length
   const brokenItems = items.filter(i => (i.brokenQty || 0) > 0)
   const totalBroken = brokenItems.reduce((sum, i) => sum + (i.brokenQty || 0), 0)
+  const reorderItems = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock)
 
   const name = profile?.name?.split(' ')[0] || profile?.username || 'Admin'
 
@@ -112,8 +113,9 @@ export default function Dashboard({ toggleTheme, theme }) {
       </div>
 
       {/* ── Evento oggi (se c'è) ── */}
+      {/* Avviso rotti */}
       {brokenItems.length > 0 && (
-        <div style={{ margin:'0 16px 20px' }}>
+        <div style={{ margin:'0 16px 12px' }}>
           <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.3)', borderRadius:'var(--radius)', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <div style={{ width:8, height:8, borderRadius:'50%', background:'var(--red)', animation:'pulse 2s ease infinite' }} />
@@ -121,9 +123,27 @@ export default function Dashboard({ toggleTheme, theme }) {
                 🔴 {totalBroken === 1 ? '1 oggetto rotto' : `${totalBroken} oggetti rotti`} da riparare
               </p>
             </div>
-            <button onClick={() => navigate('/inventory')} style={{ color:'var(--red)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>
-              Vedi →
-            </button>
+            <button onClick={() => navigate('/inventory')} style={{ color:'var(--red)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>Vedi →</button>
+          </div>
+        </div>
+      )}
+
+      {/* Avviso consumabili da riordinare */}
+      {reorderItems.length > 0 && (
+        <div style={{ margin:'0 16px 20px' }}>
+          <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:'var(--radius)', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <div style={{ width:8, height:8, borderRadius:'50%', background:'var(--blue)', animation:'pulse 2s ease infinite' }} />
+              <div>
+                <p style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>
+                  🛒 {reorderItems.length === 1 ? `"${reorderItems[0].name}" da riordinare` : `${reorderItems.length} consumabili da riordinare`}
+                </p>
+                {reorderItems.length > 1 && reorderItems.length <= 3 && (
+                  <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>{reorderItems.map(i => i.name).join(', ')}</p>
+                )}
+              </div>
+            </div>
+            <button onClick={() => navigate('/inventory', { state: { filter: 'reorder' } })} style={{ color:'var(--blue)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>Vedi →</button>
           </div>
         </div>
       )}

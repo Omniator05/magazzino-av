@@ -5,14 +5,16 @@ import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'
 
 const ICONS = {
-  'Audio':   '🔊',
-  'Video':   '📺',
-  'Luci':    '🔦',
-  'Rigging': '⛓️',
+  'Audio':    '🔊',
+  'Video':    '📺',
+  'Luci':     '🔦',
+  'Rigging':  '⛓️',
   'Corrente': '⚡',
-  'Effetti': '🎉',
-  'Kit':     '🧰',
-  'Altro':   '📦',
+  'Effetti':  '🎉',
+  'Consumabili': '🪣',
+  'Kit':      '🧰',
+  'Altro':    '📦',
+  // legacy
   'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
   'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
   'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
@@ -490,7 +492,7 @@ function ChecklistRow({ item }) {
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showNotes ? 'none' : '1px solid var(--border)' }}>
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
             {notes && (
               <button onClick={() => setShowNotes(!showNotes)}
@@ -498,14 +500,17 @@ function ChecklistRow({ item }) {
                 {showNotes ? '✕' : 'i'}
               </button>
             )}
+            {location && (
+              <div style={{ display:'inline-flex', alignItems:'center', gap:4, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:8, padding:'3px 10px' }}>
+                <span style={{ fontSize:13 }}>📍</span>
+                <span style={{ color:'var(--blue)', fontSize:13, fontWeight:800 }}>{location}</span>
+              </div>
+            )}
           </div>
-          <p style={{ color:'var(--text2)', fontSize:12, marginTop:1 }}>qty: {item.qty || 1}</p>
-          {location && (
-            <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:4, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:6, padding:'2px 7px' }}>
-              <span style={{ fontSize:11 }}>📍</span>
-              <span style={{ color:'var(--blue)', fontSize:11, fontWeight:800 }}>{location}</span>
-            </div>
-          )}
+          <div style={{ display:'inline-flex', alignItems:'baseline', gap:4, marginTop:4 }}>
+            <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
+            <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>pz</span>
+          </div>
         </div>
         {/* Bottoni touch-friendly - grandi abbastanza per il dito */}
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>

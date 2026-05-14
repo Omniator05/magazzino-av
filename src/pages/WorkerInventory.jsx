@@ -4,10 +4,22 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Kit','Altro']
 const ICONS = {
-  'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️', 'Corrente':'⚡','Kit':'🧰','Altro':'📦',
+  'Audio':    '🔊',
+  'Video':    '📺',
+  'Luci':     '🔦',
+  'Rigging':  '⛓️',
+  'Corrente': '⚡',
+  'Effetti':  '🎉',
+  'Consumabili': '🪣',
+  'Kit':      '🧰',
+  'Altro':    '📦',
+  // legacy
+  'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
+  'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
+  'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
+  'Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜',
   'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
-  'Cassa':'🔊','Sub':'💥','Cavo DMX':'🔵','Cavo XLR':'🎙️',
-  'Cavo Corrente':'⚡','Multipresa':'🔌','Valigetta':'💼','Case':'🧳',
+  'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
 }
 
 export default function WorkerInventory() {
@@ -23,6 +35,7 @@ export default function WorkerInventory() {
 
   const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)).length
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
+  const countReorder = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock).length
 
   const filtered = items.filter(i => {
     const q = search.toLowerCase()
@@ -31,8 +44,9 @@ export default function WorkerInventory() {
       i.category?.toLowerCase().includes(q) ||
       i.brand?.toLowerCase().includes(q)
     if (!matchSearch) return false
-    if (filter === 'out')    return (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)
-    if (filter === 'broken') return (i.brokenQty || 0) > 0
+    if (filter === 'out')     return (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)
+    if (filter === 'broken')  return (i.brokenQty || 0) > 0
+    if (filter === 'reorder') return i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock
     return true
   })
 
@@ -42,8 +56,21 @@ export default function WorkerInventory() {
     const prevOut = (item.totalQty||0) - (item.availableQty||0) - prevBroken
     const newAvailable = Math.max(0, item.totalQty - newBroken - prevOut)
     await updateDoc(doc(db, 'items', item.id), { brokenQty: newBroken, availableQty: newAvailable })
-    // Aggiorna detail se aperto
     setDetail(d => d?.id === item.id ? { ...d, brokenQty: newBroken, availableQty: newAvailable } : d)
+  }
+
+  // Aggiusta la qty di un consumabile (es. bombole usate)
+  const adjustConsumable = async (item, delta) => {
+    const newAvail = Math.max(0, (item.availableQty ?? item.totalQty) + delta)
+    const newTotal = Math.max(newAvail, item.totalQty) // non scende mai sotto il disponibile
+    // Se aggiungiamo, aumenta anche il totale
+    const updates = delta > 0
+      ? { availableQty: newAvail, totalQty: newAvail > item.totalQty ? newAvail : item.totalQty }
+      : { availableQty: newAvail }
+    await updateDoc(doc(db, 'items', item.id), updates)
+    setDetail(d => d?.id === item.id ? { ...d, ...updates } : d)
+    // Aggiorna anche la lista locale
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, ...updates } : i))
   }
 
   return (
@@ -63,8 +90,9 @@ export default function WorkerInventory() {
       <div style={{ display:'flex', gap:8, padding:'10px 16px 4px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         {[
           { key:'all',    label:'Tutti',      count: items.length },
-          { key:'out',    label:'🚛 Fuori',   count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
-          { key:'broken', label:'🔴 Rotti',   count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'out',     label:'🚛 Fuori',        count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
+          { key:'broken',  label:'🔴 Rotti',         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'reorder', label:'🛒 Da riordinare', count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)}
             style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
@@ -100,6 +128,9 @@ export default function WorkerInventory() {
                   </span>
                   {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>🔴 {item.brokenQty} rott{item.brokenQty===1?'o':'i'}</span></div>}
                   {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>🚛 fuori</span></div>}
+                  {item.category === 'Consumabili' && item.minStock > 0 && avail <= item.minStock && (
+                    <div style={{ marginTop:4 }}><span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>🛒 da riordinare</span></div>
+                  )}
                   <p style={{ color:'var(--text2)', fontSize:11, marginTop:4 }}>{item.category}</p>
                 </div>
               </div>
@@ -143,8 +174,32 @@ export default function WorkerInventory() {
             )}
             {detail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{detail.notes}</p>}
 
-            {/* Azioni magazziniere — solo segnalare rotti */}
+            {/* Azioni */}
             <div style={{ borderTop:'1px solid var(--border)', paddingTop:14 }}>
+
+              {/* Consumabili — aggiusta quantità */}
+              {detail.category === 'Consumabili' && (
+                <div style={{ marginBottom:14 }}>
+                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Quantità in magazzino</p>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, justifyContent:'center' }}>
+                    <button onClick={() => adjustConsumable(detail, -1)} disabled={(detail.availableQty??detail.totalQty) <= 0}
+                      style={{ width:48, height:48, borderRadius:12, background:'rgba(233,69,96,0.12)', border:'1px solid rgba(233,69,96,0.3)', color:'var(--accent)', fontSize:24, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, opacity:(detail.availableQty??detail.totalQty)<=0?0.35:1 }}>−</button>
+                    <div style={{ textAlign:'center', minWidth:60 }}>
+                      <p style={{ fontWeight:900, fontSize:32, color:'var(--text)', lineHeight:1 }}>{detail.availableQty ?? detail.totalQty}</p>
+                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>disponibili</p>
+                    </div>
+                    <button onClick={() => adjustConsumable(detail, 1)}
+                      style={{ width:48, height:48, borderRadius:12, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', fontSize:24, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>
+                  </div>
+                  {detail.minStock > 0 && (detail.availableQty??detail.totalQty) <= detail.minStock && (
+                    <div style={{ marginTop:10, background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:8, padding:'8px 12px', textAlign:'center' }}>
+                      <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700 }}>🛒 Scorta bassa — da riordinare</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Segnala problema */}
               <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>Segnala problema</p>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                 <button
