@@ -201,22 +201,26 @@ export default function WorkerInventory() {
                 </div>
               )}
 
-              {/* Segnala problema */}
-              <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>Segnala problema</p>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                <button
-                  onClick={() => markBroken(detail, 1)}
-                  disabled={(detail.brokenQty||0) >= detail.totalQty}
-                  style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.3)', color:'var(--red)', opacity:(detail.brokenQty||0)>=detail.totalQty?0.4:1 }}>
-                  🔴 Segna rotto
-                </button>
-                <button
-                  onClick={() => markBroken(detail, -1)}
-                  disabled={(detail.brokenQty||0) === 0}
-                  style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', opacity:(detail.brokenQty||0)===0?0.4:1 }}>
-                  ✅ Segna riparato
-                </button>
-              </div>
+              {/* Segnala problema — nascosto per i consumabili */}
+              {detail.category !== 'Consumabili' && (
+                <div>
+                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>Segnala problema</p>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <button
+                      onClick={() => markBroken(detail, 1)}
+                      disabled={(detail.brokenQty||0) >= detail.totalQty}
+                      style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.3)', color:'var(--red)', opacity:(detail.brokenQty||0)>=detail.totalQty?0.4:1 }}>
+                      🔴 Segna rotto
+                    </button>
+                    <button
+                      onClick={() => markBroken(detail, -1)}
+                      disabled={(detail.brokenQty||0) === 0}
+                      style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', opacity:(detail.brokenQty||0)===0?0.4:1 }}>
+                      ✅ Segna riparato
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

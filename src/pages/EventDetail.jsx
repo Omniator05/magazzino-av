@@ -30,6 +30,8 @@ export default function EventDetail() {
   const [event, setEvent] = useState(null)
   const [allItems, setAllItems] = useState([])
   const [showAddItem, setShowAddItem] = useState(false)
+  const [showExtraModal, setShowExtraModal] = useState(false)
+  const [extraForm, setExtraForm] = useState({ name:'', qty:1, notes:'' })
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
   const [showEventNotes, setShowEventNotes] = useState(false)
@@ -87,8 +89,11 @@ export default function EventDetail() {
     })
     await updateEventItems(updated)
 
-    // Aggiorna disponibilità in magazzino
+    // Extra non toccano la giacenza
     const item = eventItems.find(i => i.id === itemId)
+    if (item?.isExtra) return
+
+    // Aggiorna disponibilità in magazzino
     const newState = updated.find(i => i.id === itemId)
     try {
       const itemRef = doc(db, 'items', itemId)
@@ -103,9 +108,12 @@ export default function EventDetail() {
 
   const toggleReturned = async itemId => {
     const item = eventItems.find(i => i.id === itemId)
-    if (!item.loaded) return // deve essere caricato prima
+    if (!item.loaded) return
     const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, returned: !i.returned })
     await updateEventItems(updated)
+
+    // Extra non toccano la giacenza
+    if (item?.isExtra) return
 
     const newState = updated.find(i => i.id === itemId)
     try {
@@ -200,6 +208,23 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
+  const addExtraItem = async () => {
+    if (!extraForm.name.trim()) return
+    const extra = {
+      id: `extra-${Date.now()}`,
+      name: extraForm.name.trim(),
+      qty: extraForm.qty || 1,
+      notes: extraForm.notes.trim(),
+      category: 'Extra',
+      isExtra: true,
+      loaded: false,
+      returned: false,
+    }
+    await updateEventItems([...eventItems, extra])
+    setExtraForm({ name:'', qty:1, notes:'' })
+    setShowExtraModal(false)
+  }
+
   const notInEvent = allItems.filter(i => !eventItems.some(e => e.id === i.id) && !cart.some(c => c.id === i.id))
   const filtered = notInEvent.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -226,7 +251,7 @@ export default function EventDetail() {
           <div style={{ flex:1, minWidth:0 }}>
             <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
             <p style={{ color:'var(--text2)', fontSize:14, marginTop:4 }}>
-              📅 {event.date && new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
+              📅 {event.date && new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}{event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}`}
               {event.location && ` · 📍 ${event.location}`}
             </p>
           </div>
@@ -261,9 +286,9 @@ export default function EventDetail() {
         )}
       </div>
 
-      {event.seriesId && (
-        <div style={{ padding:'8px 16px', background:'rgba(79,195,247,0.07)', borderBottom:'1px solid rgba(79,195,247,0.15)' }}>
-          <p style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>🔁 Evento ricorrente · la lista di carico è condivisa con tutta la serie</p>
+      {event.fromArchive && (
+        <div style={{ padding:'10px 16px', background:'rgba(79,195,247,0.08)', borderBottom:'1px solid rgba(79,195,247,0.2)' }}>
+          <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700 }}>📋 Creato da template — ricordati di aggiornare la data tramite il tasto ✏️ nella pagina eventi.</p>
         </div>
       )}
       <div style={{ padding:'16px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
@@ -299,9 +324,12 @@ export default function EventDetail() {
         }
       </div>
 
-      <div style={{ padding:'16px' }}>
-        <button onClick={openAddModal} className="btn btn-secondary btn-full">
-          + Aggiungi articolo alla lista
+      <div style={{ padding:'16px', display:'flex', gap:10 }}>
+        <button onClick={openAddModal} className="btn btn-secondary" style={{ flex:2 }}>
+          + Aggiungi dalla lista
+        </button>
+        <button onClick={() => setShowExtraModal(true)} className="btn btn-secondary" style={{ flex:1, borderColor:'rgba(245,166,35,0.4)', color:'var(--accent2)' }}>
+          + Extra
         </button>
       </div>
 
@@ -384,6 +412,41 @@ export default function EventDetail() {
                 }
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal aggiunta extra */}
+      {showExtraModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraModal(false)}>
+          <div className="modal" style={{ position:'relative' }}>
+            <button className="close-btn" onClick={() => setShowExtraModal(false)}>x</button>
+            <h2>+ Oggetto extra</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza in magazzino — usalo per noleggi, adattatori dell'ultimo minuto, ecc.</p>
+            <div className="form-group">
+              <label>Nome *</label>
+              <input value={extraForm.name} onChange={e => setExtraForm({...extraForm, name:e.target.value})} placeholder="es. Faro a noleggio, Adattatore HDMI..." autoFocus />
+            </div>
+            <div className="form-group">
+              <label>Quantità</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <button onClick={() => setExtraForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
+                  style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                <input type="number" min="1" value={extraForm.qty}
+                  onChange={e => setExtraForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))}
+                  style={{ textAlign:'center', fontWeight:800, fontSize:16, width:60, padding:'6px 4px' }} />
+                <button onClick={() => setExtraForm(f => ({...f, qty:f.qty+1}))}
+                  style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Note (opzionale)</label>
+              <input value={extraForm.notes} onChange={e => setExtraForm({...extraForm, notes:e.target.value})} placeholder="es. Da restituire entro le 20:00" />
+            </div>
+            <button onClick={addExtraItem} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+              disabled={!extraForm.name.trim()}>
+              ✅ Aggiungi alla lista
+            </button>
           </div>
         </div>
       )}
@@ -471,6 +534,9 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove }) {
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
               <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+              {item.isExtra && (
+                <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>
+              )}
               {itemNotes && (
                 <button onClick={() => setShowNotes(v => !v)}
                   style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:22, height:22, fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>

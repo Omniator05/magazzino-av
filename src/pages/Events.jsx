@@ -53,7 +53,7 @@ export default function Events() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
-  const [form, setForm]           = useState({ name:'', date:'', location:'', notes:'', recurrence:'never', endDate:'' })
+  const [form, setForm]           = useState({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -85,14 +85,14 @@ export default function Events() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ name:'', date:'', location:'', notes:'', recurrence:'never', endDate:'' })
+    setForm({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
     setShowModal(true)
   }
 
   const openEdit = (e, event) => {
     e.stopPropagation()
     setEditing(event)
-    setForm({ name:event.name||'', date:event.date||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'' })
+    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'' })
     setShowModal(true)
   }
 
@@ -106,6 +106,7 @@ export default function Events() {
       if (editing) {
         await updateDoc(doc(db, 'events', editing.id), {
           name: form.name.trim(), date: form.date,
+          dateEnd: form.dateEnd || null,
           location: form.location.trim(), notes: form.notes.trim(),
         })
       } else {
@@ -114,10 +115,11 @@ export default function Events() {
         const base = {
           name: form.name.trim(), location: form.location.trim(),
           notes: form.notes.trim(),
-          items: [], // lista carico condivisa — verrà sincronizzata tramite seriesId
+          dateEnd: form.dateEnd || null,
+          items: [],
           createdAt: serverTimestamp(), createdBy: user.uid,
           recurrence: form.recurrence, seriesId,
-          seriesItems: [], // lista carico condivisa tra tutti gli eventi della serie
+          seriesItems: [],
         }
         const firstRef = await addDoc(collection(db, 'events'), { ...base, date: form.date })
         for (const date of futureDates) {
@@ -126,7 +128,7 @@ export default function Events() {
       }
       setShowModal(false)
       setEditing(null)
-      setForm({ name:'', date:'', location:'', notes:'', recurrence:'never', endDate:'' })
+      setForm({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
     } finally { setSaving(false) }
   }
 
@@ -173,6 +175,7 @@ export default function Events() {
             </div>
             <p style={{ color:'var(--text2)', fontSize:13 }}>
               📅 {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short', year:'numeric' })}
+              {event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })}`}
               {event.location && ` · 📍 ${event.location}`}
             </p>
           </div>
@@ -198,8 +201,13 @@ export default function Events() {
     <div className="page">
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div><h1>Eventi</h1><p>{upcomingSingle.length + pinnedRecurring.length} prossimi · {pastSingle.length} passati</p></div>
-          <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Evento</button>
+          <div><h1>Eventi</h1><p>{upcomingSingle.length + pinnedRecurring.length} prossimi</p></div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => navigate('/archive')} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:14 }}>
+              📁 Archivio
+            </button>
+            <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Evento</button>
+          </div>
         </div>
       </div>
 
@@ -227,14 +235,6 @@ export default function Events() {
           </>
         )}
 
-        {/* ── Passati singoli ── */}
-        {pastSingle.length > 0 && (
-          <>
-            <p style={{ padding:'16px 16px 10px', color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Passati</p>
-            {pastSingle.map(ev => <EventCard key={ev.id} event={ev} />)}
-          </>
-        )}
-
         {events.length === 0 && (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
@@ -251,11 +251,16 @@ export default function Events() {
             <h2>{editing ? 'Modifica evento' : 'Nuovo evento'}</h2>
             <div className="form-group">
               <label>Nome evento *</label>
-              <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Matrimonio Boccaletti" />
+              <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Matrimonio Rossi" />
             </div>
             <div className="form-group">
-              <label>Data *</label>
+              <label>Data inizio *</label>
               <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span></label>
+              <input type="date" value={form.dateEnd} min={form.date}
+                onChange={e => setForm({...form, dateEnd:e.target.value})} />
             </div>
             <div className="form-group">
               <label>Location</label>

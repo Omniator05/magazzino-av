@@ -123,7 +123,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                 🔴 {totalBroken === 1 ? '1 oggetto rotto' : `${totalBroken} oggetti rotti`} da riparare
               </p>
             </div>
-            <button onClick={() => navigate('/inventory')} style={{ color:'var(--red)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>Vedi →</button>
+            <button onClick={() => navigate('/inventory', { state: { filter: 'broken' } })} style={{ color:'var(--red)', fontSize:13, fontWeight:700, background:'transparent', padding:'4px 0' }}>Vedi →</button>
           </div>
         </div>
       )}

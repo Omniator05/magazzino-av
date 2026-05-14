@@ -37,7 +37,9 @@ export default function WorkerScanner() {
   const [mode, setMode] = useState('load') // 'load' | 'return'
   const [error, setError] = useState(null)
   const [processing, setProcessing] = useState(false) // blocca scansioni doppie
-  const [scanToast, setScanToast] = useState(null) // popup centrale post-scansione
+  const [scanToast, setScanToast] = useState(null)
+  const [showExtraWorker, setShowExtraWorker] = useState(false)
+  const [extraWorkerForm, setExtraWorkerForm] = useState({ name:'', qty:1 }) // popup centrale post-scansione
   const lastCodeRef = useRef('') // evita di riprocessare lo stesso codice di fila
   const lastCodeTimeRef = useRef(0)
   const html5QrRef = useRef(null)
@@ -466,8 +468,55 @@ export default function WorkerScanner() {
               ))
             }
           </div>
+          {/* Bottone Extra sempre in fondo alla lista */}
+          <button onClick={() => setShowExtraWorker(true)}
+            style={{ width:'100%', marginTop:10, background:'rgba(245,166,35,0.10)', border:'1px solid rgba(245,166,35,0.35)', color:'var(--accent2)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}>
+            + Aggiungi oggetto extra
+          </button>
         </div>
       </div>
+
+      {/* Modal extra worker */}
+      {showExtraWorker && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraWorker(false)}>
+          <div className="modal" style={{ position:'relative' }}>
+            <button className="close-btn" onClick={() => setShowExtraWorker(false)}>x</button>
+            <h2>+ Oggetto extra</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza — per noleggi o oggetti dell'ultimo minuto.</p>
+            <div className="form-group">
+              <label>Nome *</label>
+              <input value={extraWorkerForm.name} onChange={e => setExtraWorkerForm(f => ({...f, name:e.target.value}))} placeholder="es. Faro a noleggio..." autoFocus />
+            </div>
+            <div className="form-group">
+              <label>Quantità</label>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <button onClick={() => setExtraWorkerForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
+                  style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                <input type="number" min="1" value={extraWorkerForm.qty}
+                  onChange={e => setExtraWorkerForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))}
+                  style={{ textAlign:'center', fontWeight:800, fontSize:16, width:60, padding:'6px 4px' }} />
+                <button onClick={() => setExtraWorkerForm(f => ({...f, qty:f.qty+1}))}
+                  style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                if (!extraWorkerForm.name.trim()) return
+                const eventSnap = await getDoc(eventRef)
+                if (!eventSnap.exists()) return
+                const currentItems = eventSnap.data().items || []
+                const extra = { id:`extra-${Date.now()}`, name:extraWorkerForm.name.trim(), qty:extraWorkerForm.qty, category:'Extra', isExtra:true, loaded:false, returned:false }
+                await updateDoc(eventRef, { items: [...currentItems, extra] })
+                setExtraWorkerForm({ name:'', qty:1 })
+                setShowExtraWorker(false)
+              }}
+              className="btn btn-primary btn-full" style={{ marginTop:8 }}
+              disabled={!extraWorkerForm.name.trim()}>
+              ✅ Aggiungi alla lista
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -494,6 +543,7 @@ function ChecklistRow({ item }) {
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
+            {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {notes && (
               <button onClick={() => setShowNotes(!showNotes)}
                 style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:20, height:20, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>

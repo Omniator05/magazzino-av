@@ -8,6 +8,7 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import Scanner from './pages/Scanner'
 import AdminUsers from './pages/AdminUsers'
+import Archive from './pages/Archive'
 import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import WorkerInventory from './pages/WorkerInventory'
@@ -51,6 +52,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/events" element={<Events />} />
+        <Route path="/archive" element={<Archive />} />
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/events/:id/scan" element={<WorkerScanner />} />
         <Route path="/scanner" element={<Scanner />} />

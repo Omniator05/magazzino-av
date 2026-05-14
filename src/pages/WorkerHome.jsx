@@ -122,7 +122,7 @@ function EventCard({ ev, today, navigate }) {
               {ev.seriesId && <span style={{ background:'rgba(79,195,247,0.12)', color:'var(--blue)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>🔁</span>}
             </div>
             <p style={{ color:'var(--text2)', fontSize:13, marginTop:3 }}>
-              📅 {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })}
+              📅 {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })}{ev.dateEnd && ev.dateEnd !== ev.date && ` → ${new Date(ev.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short' })}`}
               {ev.location && ` · 📍 ${ev.location}`}
             </p>
           </div>
