@@ -10,6 +10,7 @@ import Scanner from './pages/Scanner'
 import AdminUsers from './pages/AdminUsers'
 import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
+import WorkerInventory from './pages/WorkerInventory'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 
@@ -34,15 +35,11 @@ function PrivateRoutes({ toggleTheme, theme }) {
       <>
         <Routes>
           <Route path="/" element={<WorkerHome />} />
+          <Route path="/inventory" element={<WorkerInventory />} />
           <Route path="/events/:id" element={<WorkerScanner />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        <nav className="tab-bar">
-          <button className="active" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, padding:'10px 4px', background:'transparent', color:'var(--accent)', fontSize:10, fontWeight:500 }}>
-            <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
-            I miei eventi
-          </button>
-        </nav>
+        {!onScannerRoute && <TabBar />}
       </>
     )
   }

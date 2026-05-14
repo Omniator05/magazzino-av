@@ -5,14 +5,15 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 
-const CATEGORIES = ['Audio','Video','Luci','Rigging', 'Effetti', 'Corrente', 'Altro']
+const CATEGORIES = ['Audio','Video','Luci','Rigging', 'Corrente', 'Effetti', 'Kit', 'Altro']
 const ICONS = {
   'Audio':   '🔊',
   'Video':   '📺',
   'Luci':    '🔦',
   'Rigging': '⛓️',
-  'Effetti': '🎆',
   'Corrente': '⚡',
+  'Effetti': '🎉',
+  'Kit':     '🧰',
   'Altro':   '📦',
 }
 
@@ -179,7 +180,7 @@ export default function Inventory() {
     return true
   })
 
-  const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty).length
+  const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)).length
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
 
   return (

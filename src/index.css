@@ -101,7 +101,7 @@ select option { background: var(--bg2); }
 /* ── Page layout ──────────────────────────────── */
 .page {
   min-height: 100dvh;
-  padding-bottom: 120px;
+  padding-bottom: 140px;
 }
 
 /* ── Tab bar ──────────────────────────────────── */

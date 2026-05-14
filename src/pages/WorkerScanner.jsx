@@ -9,6 +9,8 @@ const ICONS = {
   'Video':   '📺',
   'Luci':    '🔦',
   'Rigging': '⛓️',
+  'Corrente': '⚡',
+  'Effetti': '🎉',
   'Kit':     '🧰',
   'Altro':   '📦',
   'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
@@ -252,7 +254,7 @@ export default function WorkerScanner() {
   }
 
   return (
-    <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column' }}>
+    <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column', paddingBottom:140 }}>
 
       {/* - Popup centrale post-scansione - */}
       {scanToast && (() => {

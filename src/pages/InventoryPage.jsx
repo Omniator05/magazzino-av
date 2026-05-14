@@ -12,6 +12,9 @@ const CATEGORIES = [
   { id: 'luci', label: 'Luci', icon: Lightbulb },
   { id: 'cavi', label: 'Cavi', icon: Cable },
   { id: 'strutture', label: 'Strutture', icon: Box },
+  { id: 'effetti', label: 'Effetti', icon: Celebration },
+  { id: 'kit', label: 'Kit', icon: Package },
+  { id: 'corrente', label: 'Corrente', icon: Zap },
   { id: 'controllo', label: 'Controllo', icon: Cpu },
 ]
 

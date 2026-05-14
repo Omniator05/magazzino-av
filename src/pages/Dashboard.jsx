@@ -40,11 +40,6 @@ export default function Dashboard({ toggleTheme, theme }) {
 
   const name = profile?.name?.split(' ')[0] || profile?.username || 'Admin'
 
-  const quickActions = [
-    { label:'Magazzino',  icon: <IconBox />,      path:'/inventory',    color:'var(--blue)' },
-    { label:'Scanner',    icon: <IconScan />,      path:'/scanner',      color:'var(--accent)' },
-    { label:'Utenti',     icon: <IconUsers />,     path:'/admin/users',  color:'var(--green)' },
-  ]
 
   return (
     <div className="page" style={{ background:'var(--bg)', position:'relative', overflow:'hidden' }}>
@@ -117,32 +112,6 @@ export default function Dashboard({ toggleTheme, theme }) {
       </div>
 
       {/* ── Evento oggi (se c'è) ── */}
-      {todayEvents.length > 0 && (
-        <div style={{ margin:'0 16px 20px' }}>
-          {todayEvents.map(ev => (
-            <div key={ev.id} style={{ width:'100%', background:'linear-gradient(135deg, rgba(233,69,96,0.25) 0%, rgba(233,69,96,0.08) 100%)', border:'1px solid rgba(233,69,96,0.3)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-              <button onClick={() => navigate(`/events/${ev.id}`)}
-                style={{ width:'100%', padding:'16px 18px', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center', background:'transparent' }}>
-                <div>
-                  <p style={{ color:'var(--accent)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1px', marginBottom:5 }}>🔴 OGGI</p>
-                  <p style={{ color:'var(--text)', fontWeight:700, fontSize:17, letterSpacing:'-0.2px' }}>{ev.name}</p>
-                  {ev.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:3 }}>📍 {ev.location}</p>}
-                </div>
-                <div style={{ color:'var(--text2)', fontSize:22, flexShrink:0 }}>›</div>
-              </button>
-              <div style={{ borderTop:'1px solid rgba(233,69,96,0.2)', padding:'10px 18px' }}>
-                <button onClick={() => navigate(`/events/${ev.id}/scan`)}
-                  style={{ background:'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color:'var(--blue)', borderRadius:10, padding:'8px 16px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
-                  Avvia scansione carico
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Avviso rotti — appare SOLO se ci sono oggetti rotti ── */}
       {brokenItems.length > 0 && (
         <div style={{ margin:'0 16px 20px' }}>
           <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.3)', borderRadius:'var(--radius)', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -160,23 +129,6 @@ export default function Dashboard({ toggleTheme, theme }) {
       )}
 
       {/* ── Quick actions ── */}
-      <div style={{ padding:'0 16px 24px' }}>
-        <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:12 }}>Accesso rapido</p>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
-          {quickActions.map((a, i) => (
-            <button key={a.label} onClick={() => navigate(a.path)}
-              style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'18px 8px 14px', display:'flex', flexDirection:'column', alignItems:'center', gap:10, position:'relative', overflow:'hidden' }}>
-              {/* Glow per icona */}
-              <div style={{ width:44, height:44, borderRadius:14, background:`color-mix(in srgb, ${a.color} 15%, var(--card2))`, display:'flex', alignItems:'center', justifyContent:'center', color:a.color }}>
-                {a.icon}
-              </div>
-              <span style={{ fontSize:12, fontWeight:700, color:'var(--text)', letterSpacing:'-0.1px' }}>{a.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Prossimi eventi ── */}
       {upcoming.length > 0 && (
         <div style={{ padding:'0 16px 8px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
@@ -240,12 +192,3 @@ export default function Dashboard({ toggleTheme, theme }) {
 }
 
 /* ── Icone SVG inline ── */
-function IconBox() {
-  return <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zm-9 9H7v-2h4v2zm6 0h-4v-2h4v2zM3 5h18v2H3z"/></svg>
-}
-function IconScan() {
-  return <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
-}
-function IconUsers() {
-  return <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-}
