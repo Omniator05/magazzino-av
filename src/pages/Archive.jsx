@@ -9,34 +9,40 @@ const PAGE_SIZE = 30
 export default function Archive() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [events, setEvents]         = useState([])
-  const [search, setSearch]         = useState('')
-  const [loading, setLoading]       = useState(true)
+  const [events, setEvents]           = useState([])
+  const [search, setSearch]           = useState('')
+  const [loading, setLoading]         = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [lastDoc, setLastDoc]       = useState(null)
-  const [hasMore, setHasMore]       = useState(true)
-  const [copying, setCopying]       = useState(null)
-  const [copied, setCopied]         = useState(null)
+  const [lastDoc, setLastDoc]         = useState(null)
+  const [hasMore, setHasMore]         = useState(true)
+  const [copying, setCopying]         = useState(null)
+  const [copied, setCopied]           = useState(null)
 
   const today = new Date().toISOString().split('T')[0]
 
   const loadEvents = useCallback(async (after = null) => {
     after ? setLoadingMore(true) : setLoading(true)
     try {
-      let q = query(
-        collection(db, 'events'),
-        orderBy('date', 'desc'),
-        limit(PAGE_SIZE)
-      )
-      if (after) q = query(collection(db, 'events'), orderBy('date', 'desc'), startAfter(after), limit(PAGE_SIZE))
+      let q = query(collection(db, 'events'), orderBy('date', 'desc'), limit(PAGE_SIZE * 3))
+      if (after) q = query(collection(db, 'events'), orderBy('date', 'desc'), startAfter(after), limit(PAGE_SIZE * 3))
 
       const snap = await getDocs(q)
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .filter(e => e.date < today) // solo passati
+      const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
+      // Un evento va in archivio solo se:
+      // 1. La data è passata, E
+      // 2. Lista vuota (nessun articolo) OPPURE tutti gli articoli caricati sono rientrati
+      const archived = allDocs.filter(e => {
+        if (e.date >= today) return false
+        const items = e.items || []
+        if (items.length === 0) return true
+        return !items.some(i => i.loaded && !i.returned)
+      })
+
+      const docs = archived.slice(0, PAGE_SIZE)
       after ? setEvents(prev => [...prev, ...docs]) : setEvents(docs)
       setLastDoc(snap.docs[snap.docs.length - 1] || null)
-      setHasMore(snap.docs.length === PAGE_SIZE)
+      setHasMore(snap.docs.length === PAGE_SIZE * 3)
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -52,32 +58,19 @@ export default function Archive() {
       )
     : events
 
-  const deleteArchiveEvent = async (event) => {
-    if (!window.confirm(`Eliminare "${event.name}" dall'archivio? Questa azione è irreversibile.`)) return
-    await deleteDoc(doc(db, 'events', event.id))
-    setEvents(prev => prev.filter(e => e.id !== event.id))
-  }
-
   const useAsTemplate = async (event) => {
     setCopying(event.id)
     try {
       const templateItems = (event.items || []).map(i => ({
-        ...i,
-        loaded: false,
-        returned: false,
+        ...i, loaded: false, returned: false,
       }))
-      const today = new Date().toISOString().split('T')[0]
+      const todayStr = new Date().toISOString().split('T')[0]
       const ref = await addDoc(collection(db, 'events'), {
-        name: event.name,
-        location: event.location || '',
-        notes: event.notes || '',
-        date: today,
-        items: templateItems,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-        fromArchive: event.id,
-        recurrence: 'never',
-        seriesId: null,
+        name: event.name, location: event.location || '',
+        notes: event.notes || '', date: todayStr,
+        items: templateItems, createdAt: serverTimestamp(),
+        createdBy: user.uid, fromArchive: event.id,
+        recurrence: 'never', seriesId: null,
       })
       setCopied(event.id)
       setTimeout(() => navigate(`/events/${ref.id}`), 600)
@@ -86,6 +79,12 @@ export default function Archive() {
       alert('Errore nella creazione del template. Riprova.')
       setCopying(null)
     }
+  }
+
+  const deleteArchiveEvent = async (event) => {
+    if (!window.confirm(`Eliminare "${event.name}" dall'archivio? Questa azione è irreversibile.`)) return
+    await deleteDoc(doc(db, 'events', event.id))
+    setEvents(prev => prev.filter(e => e.id !== event.id))
   }
 
   return (
@@ -98,10 +97,9 @@ export default function Archive() {
           </button>
           <h1>Archivio eventi</h1>
         </div>
-        <p style={{ color:'var(--text2)', fontSize:14 }}>{events.length} eventi passati · premi "Usa come template" per riutilizzare una lista</p>
+        <p style={{ color:'var(--text2)', fontSize:14 }}>{events.length} eventi · premi "Usa template" per riutilizzare una lista</p>
       </div>
 
-      {/* Ricerca */}
       <div className="search-bar" style={{ position:'relative' }}>
         <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome o location..." />
@@ -117,8 +115,8 @@ export default function Archive() {
         ) : filtered.length === 0 ? (
           <div className="empty-state">
             <p style={{ fontSize:40 }}>📁</p>
-            <h3>{search ? 'Nessun risultato' : 'Nessun evento passato'}</h3>
-            <p>{search ? `Nessun evento trovato per "${search}"` : 'Gli eventi passati appariranno qui'}</p>
+            <h3>{search ? 'Nessun risultato' : 'Nessun evento in archivio'}</h3>
+            <p>{search ? `Nessun evento per "${search}"` : 'Gli eventi appaiono qui dopo che tutti gli articoli sono rientrati'}</p>
           </div>
         ) : (
           <>
@@ -126,7 +124,7 @@ export default function Archive() {
               const items    = event.items || []
               const total    = items.length
               const returned = items.filter(i => i.returned).length
-              const isCopied = copied === event.id
+              const isCopied  = copied === event.id
               const isCopying = copying === event.id
 
               return (
@@ -136,7 +134,8 @@ export default function Archive() {
                       <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontWeight:700, fontSize:16, marginBottom:3 }}>{event.name}</p>
                         <p style={{ color:'var(--text2)', fontSize:13 }}>
-                          📅 {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'long', year:'numeric' })}{event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}`}}
+                          📅 {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'long', year:'numeric' })}
+                          {event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}`}
                           {event.location && ` · 📍 ${event.location}`}
                         </p>
                         {total > 0 && (
@@ -154,7 +153,7 @@ export default function Archive() {
                             border: `1px solid ${isCopied ? 'rgba(52,211,153,0.4)' : 'rgba(79,195,247,0.3)'}`,
                             color: isCopied ? 'var(--green)' : 'var(--blue)',
                             opacity: isCopying ? 0.6 : 1,
-                            minWidth: 110, textAlign:'center',
+                            minWidth:110, textAlign:'center',
                           }}>
                           {isCopied ? '✅ Creato!' : isCopying ? '⏳ Copio...' : '📋 Usa template'}
                         </button>
@@ -166,7 +165,6 @@ export default function Archive() {
                       </div>
                     </div>
 
-                    {/* Anteprima articoli */}
                     {total > 0 && (
                       <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
                         <p style={{ color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:6 }}>Lista carico</p>
@@ -189,12 +187,11 @@ export default function Archive() {
               )
             })}
 
-            {/* Carica altri — solo se non stiamo filtrando */}
             {!search && hasMore && (
               <div style={{ padding:'8px 16px 16px' }}>
                 <button onClick={() => loadEvents(lastDoc)} disabled={loadingMore}
                   className="btn btn-secondary btn-full">
-                  {loadingMore ? '⏳ Caricamento...' : 'Carica altri 30 eventi'}
+                  {loadingMore ? '⏳ Caricamento...' : 'Carica altri eventi'}
                 </button>
               </div>
             )}

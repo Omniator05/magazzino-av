@@ -9,6 +9,7 @@ import EventDetail from './pages/EventDetail'
 import Scanner from './pages/Scanner'
 import AdminUsers from './pages/AdminUsers'
 import Archive from './pages/Archive'
+import Tasks from './pages/Tasks'
 import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import WorkerInventory from './pages/WorkerInventory'
@@ -37,6 +38,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <Routes>
           <Route path="/" element={<WorkerHome />} />
           <Route path="/inventory" element={<WorkerInventory />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="/events/:id" element={<WorkerScanner />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -51,12 +53,13 @@ function PrivateRoutes({ toggleTheme, theme }) {
       <Routes>
         <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
         <Route path="/inventory" element={<Inventory />} />
+        <Route path="/scanner" element={<Scanner />} />
         <Route path="/events" element={<Events />} />
         <Route path="/archive" element={<Archive />} />
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/events/:id/scan" element={<WorkerScanner />} />
-        <Route path="/scanner" element={<Scanner />} />
         <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/tasks" element={<Tasks />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {!onScannerRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}

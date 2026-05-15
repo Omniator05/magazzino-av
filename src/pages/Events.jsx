@@ -47,10 +47,14 @@ const RECURRENCE_OPTIONS = [
   { value:'yearly',  label:'Ogni anno' },
 ]
 
+const EVENT_CAP = 5
+
 export default function Events() {
   const { user } = useAuth()
   const [events, setEvents]       = useState([])
   const [showModal, setShowModal] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [search, setSearch]       = useState('')
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
   const [form, setForm]           = useState({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
@@ -63,7 +67,7 @@ export default function Events() {
 
   const today = new Date().toISOString().split('T')[0]
 
-  // Separa eventi ricorrenti (mostra solo il prossimo di ogni serie) da eventi singoli
+  // Separa ricorrenti (solo il prossimo per serie) da singoli
   const recurringSeriesMap = {}
   events.forEach(ev => {
     if (ev.seriesId) {
@@ -71,17 +75,42 @@ export default function Events() {
       recurringSeriesMap[ev.seriesId].push(ev)
     }
   })
-  // Per ogni serie, prendi solo il prossimo evento non passato (o l'ultimo se tutti passati)
   const pinnedRecurring = Object.values(recurringSeriesMap).map(series => {
     const sorted = [...series].sort((a,b) => a.date.localeCompare(b.date))
-    return sorted.find(e => e.date >= today) || sorted[sorted.length - 1]
+    // Preferisci il prossimo futuro, poi il più recente passato non ancora rientrato
+    return sorted.find(e => e.date >= today)
+      || sorted.filter(e => {
+           const items = e.items || []
+           return items.length > 0 && items.some(i => i.loaded && !i.returned)
+         }).pop()
+      || sorted[sorted.length - 1]
   })
-  const pinnedIds = new Set(pinnedRecurring.map(e => e.id))
 
-  // Tutti gli eventi non ricorrenti
-  const singleEvents = events.filter(e => !e.seriesId)
-  const upcomingSingle = singleEvents.filter(e => e.date >= today)
-  const pastSingle     = singleEvents.filter(e => e.date < today)
+  const singleEvents   = events.filter(e => !e.seriesId)
+
+  // Un evento rimane "attivo" se:
+  // 1. la data è oggi o futura, OPPURE
+  // 2. la data è passata ma non tutti gli articoli sono rientrati
+  const isActive = e => {
+    if (e.date >= today) return true
+    const items = e.items || []
+    if (items.length === 0) return false          // nessun articolo → va in archivio
+    return items.some(i => i.loaded && !i.returned) // qualcosa ancora fuori
+  }
+
+  const upcomingSingle = singleEvents.filter(isActive)
+
+  // Cap: mostra solo i prossimi EVENT_CAP eventi singoli
+  const visibleSingle  = upcomingSingle.slice(0, EVENT_CAP)
+  const hiddenCount    = upcomingSingle.length - visibleSingle.length
+
+  // Ricerca su tutti gli eventi
+  const searchResults = search.trim()
+    ? events.filter(e =>
+        e.name?.toLowerCase().includes(search.toLowerCase()) ||
+        e.location?.toLowerCase().includes(search.toLowerCase())
+      )
+    : []
 
   const openNew = () => {
     setEditing(null)
@@ -114,14 +143,11 @@ export default function Events() {
           ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : null
         const base = {
           name: form.name.trim(), location: form.location.trim(),
-          notes: form.notes.trim(),
-          dateEnd: form.dateEnd || null,
-          items: [],
-          createdAt: serverTimestamp(), createdBy: user.uid,
+          notes: form.notes.trim(), dateEnd: form.dateEnd || null,
+          items: [], createdAt: serverTimestamp(), createdBy: user.uid,
           recurrence: form.recurrence, seriesId,
-          seriesItems: [],
         }
-        const firstRef = await addDoc(collection(db, 'events'), { ...base, date: form.date })
+        await addDoc(collection(db, 'events'), { ...base, date: form.date })
         for (const date of futureDates) {
           await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
         }
@@ -143,7 +169,7 @@ export default function Events() {
     }
   }
 
-  const EventCard = ({ event, compact }) => {
+  const EventCard = ({ event }) => {
     const items    = event.items || []
     const loaded   = items.filter(i => i.loaded).length
     const returned = items.filter(i => i.returned).length
@@ -175,7 +201,7 @@ export default function Events() {
             </div>
             <p style={{ color:'var(--text2)', fontSize:13 }}>
               📅 {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short', year:'numeric' })}
-              {event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })}`}
+              {event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short' })}`}
               {event.location && ` · 📍 ${event.location}`}
             </p>
           </div>
@@ -203,44 +229,75 @@ export default function Events() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>Eventi</h1><p>{upcomingSingle.length + pinnedRecurring.length} prossimi</p></div>
           <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => navigate('/archive')} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:14 }}>
-              📁 Archivio
-            </button>
+            <button onClick={() => navigate('/archive')} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:14 }}>📁 Archivio</button>
             <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Evento</button>
           </div>
         </div>
       </div>
 
+      {/* Barra ricerca */}
+      {showSearch && (
+        <div className="search-bar" style={{ position:'relative' }}>
+          <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca evento per nome o location..." autoFocus />
+        </div>
+      )}
+
       <div style={{ padding:'16px 0 0' }}>
 
-        {/* ── Sezione ricorrenti pinnata ── */}
-        {pinnedRecurring.length > 0 && (
+        {/* Risultati ricerca */}
+        {showSearch && search && (
           <>
-            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 10px' }}>
-              <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>🔁 Ricorrenti</p>
-              <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
-            </div>
-            {pinnedRecurring.map(ev => <EventCard key={ev.id} event={ev} />)}
-            {(upcomingSingle.length > 0 || pastSingle.length > 0) && (
-              <div style={{ margin:'4px 16px 10px', height:1, background:'var(--border)' }} />
+            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Risultati ({searchResults.length})</p>
+            {searchResults.length === 0
+              ? <p style={{ padding:'20px 16px', color:'var(--text2)', textAlign:'center' }}>Nessun evento trovato per "{search}"</p>
+              : searchResults.map(ev => <EventCard key={ev.id} event={ev} />)
+            }
+          </>
+        )}
+
+        {/* Vista normale — nascosta durante la ricerca */}
+        {(!showSearch || !search) && (
+          <>
+            {/* Ricorrenti pinnati */}
+            {pinnedRecurring.length > 0 && (
+              <>
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 10px' }}>
+                  <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>🔁 Ricorrenti</p>
+                  <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
+                </div>
+                {pinnedRecurring.map(ev => <EventCard key={ev.id} event={ev} />)}
+                {visibleSingle.length > 0 && <div style={{ margin:'4px 16px 10px', height:1, background:'var(--border)' }} />}
+              </>
+            )}
+
+            {/* Prossimi singoli — max EVENT_CAP */}
+            {visibleSingle.length > 0 && (
+              <>
+                <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Prossimi</p>
+                {visibleSingle.map(ev => <EventCard key={ev.id} event={ev} />)}
+              </>
+            )}
+
+            {/* "Cerca tutti" se ci sono eventi nascosti */}
+            {hiddenCount > 0 && (
+              <div style={{ padding:'8px 16px 16px' }}>
+                <button onClick={() => setShowSearch(true)}
+                  style={{ width:'100%', padding:'12px', borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', fontWeight:600, fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                  + {hiddenCount} altri eventi — cerca qui
+                </button>
+              </div>
+            )}
+
+            {events.length === 0 && (
+              <div className="empty-state">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+                <h3>Nessun evento</h3>
+                <p>Crea il primo evento per gestire i carichi</p>
+              </div>
             )}
           </>
-        )}
-
-        {/* ── Prossimi singoli ── */}
-        {upcomingSingle.length > 0 && (
-          <>
-            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:13, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Prossimi</p>
-            {upcomingSingle.map(ev => <EventCard key={ev.id} event={ev} />)}
-          </>
-        )}
-
-        {events.length === 0 && (
-          <div className="empty-state">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
-            <h3>Nessun evento</h3>
-            <p>Crea il primo evento per gestire i carichi</p>
-          </div>
         )}
       </div>
 
@@ -291,7 +348,6 @@ export default function Events() {
                     <p style={{ color:'var(--text2)', fontSize:12, marginTop:3 }}>
                       Dal {new Date(form.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})} al {new Date(futureDates.at(-1)+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})}
                     </p>
-                    <p style={{ color:'var(--text2)', fontSize:12, marginTop:4, fontStyle:'italic' }}>Ogni evento parte con lista di carico vuota — la compilerai di volta in volta.</p>
                   </div>
                 )}
               </>
