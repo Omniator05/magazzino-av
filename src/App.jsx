@@ -10,6 +10,7 @@ import Scanner from './pages/Scanner'
 import AdminUsers from './pages/AdminUsers'
 import Archive from './pages/Archive'
 import Tasks from './pages/Tasks'
+import Templates from './pages/Templates'
 import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import WorkerInventory from './pages/WorkerInventory'
@@ -60,6 +61,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <Route path="/events/:id/scan" element={<WorkerScanner />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/tasks" element={<Tasks />} />
+        <Route path="/templates" element={<Templates />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {!onScannerRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}
@@ -68,7 +70,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)

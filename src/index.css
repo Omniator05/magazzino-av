@@ -684,3 +684,112 @@ select option { background: var(--bg2); }
 
 /* Nasconde scrollbar orizzontale sui filtri chip */
 .filter-scroll::-webkit-scrollbar { display: none; }
+
+
+/* ── DELETE BUTTON ─────────────────────────────── */
+.delete-btn {
+  border-radius: 50%;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px; cursor: pointer;
+  transition: background 0.3s, color 0.3s, gap 0.3s;
+  overflow: hidden; position: relative;
+  flex-shrink: 0;
+}
+.delete-btn .delete-bin-top,
+.delete-btn .delete-bin-bottom { width: 12px; transition: transform 0.3s; }
+.delete-btn .delete-bin-top { transform-origin: bottom right; }
+.delete-btn:hover {
+  background: rgba(220,38,38,0.9);
+  color: white; gap: 0;
+}
+.delete-btn:hover .delete-bin-top { transform: rotate(160deg); }
+
+/* Scroll lock utility */
+.scroll-locked { overflow: hidden !important; position: fixed; width: 100%; }
+/* ── EXPORT BUTTON ─────────────────────────────── */
+.export-btn {
+  width: 42px; height: 42px;
+  border: none; border-radius: 50%;
+  background-color: rgb(27,27,27);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer; position: relative;
+  transition-duration: .3s;
+  box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+.export-svg { width: 18px; height: 18px; fill: rgb(214,178,255); }
+.export-icon2 {
+  width: 18px; height: 5px;
+  border-bottom: 2px solid rgb(182,143,255);
+  border-left:   2px solid rgb(182,143,255);
+  border-right:  2px solid rgb(182,143,255);
+}
+.export-tooltip {
+  position: absolute; right: -78px;
+  opacity: 0; background: rgb(12,12,12);
+  color: white; padding: 5px 10px;
+  border-radius: 5px; font-size: 13px;
+  white-space: nowrap;
+  display: flex; align-items: center; justify-content: center;
+  transition-duration: .2s; pointer-events: none; letter-spacing: 0.5px;
+}
+.export-tooltip::before {
+  position: absolute; content: "";
+  width: 10px; height: 10px;
+  background-color: rgb(12,12,12);
+  transform: rotate(45deg); left: -5%;
+}
+.export-btn:hover { background-color: rgb(150,94,255); transition-duration: .3s; }
+.export-btn:hover .export-tooltip { opacity: 1; }
+.export-btn:hover .export-icon2 {
+  border-bottom: 2px solid #eee;
+  border-left:   2px solid #eee;
+  border-right:  2px solid #eee;
+}
+.export-btn:hover .export-svg {
+  fill: white;
+  animation: export-slide-in .6s cubic-bezier(.25,.46,.45,.94) both;
+}
+@keyframes export-slide-in {
+  0%   { transform: translateY(-10px); opacity: 0; }
+  100% { transform: translateY(0);     opacity: 1; }
+}
+
+/* ── EDIT BUTTON ───────────────────────────────── */
+.edit-btn {
+  border-radius: 50%;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.25s, color 0.25s, transform 0.2s;
+  flex-shrink: 0;
+}
+.edit-btn .edit-svg {
+  width: 14px; height: 14px;
+  fill: currentColor;
+  transition: transform 0.3s cubic-bezier(.34,1.56,.64,1);
+}
+.edit-btn:hover {
+  background: rgb(255, 255, 255);
+  color: rgb(24, 118, 7);
+  border-color: rgba(41, 138, 43, 0.54);
+  transform: scale(1.08);
+}
+.edit-btn:hover .edit-svg {
+  transform: rotate(-15deg) scale(1.15);
+}
+.edit-btn:active { transform: scale(0.95); }
+
+/* Sezioni collassabili — nessun hover */
+.section-toggle:hover { transform: none !important; box-shadow: none !important; background: transparent !important; }
+
+/* Nessun hover sui bottoni delle sezioni collassabili */
+.btn-section { -webkit-tap-highlight-color: transparent; }
+.btn-section:hover { background: transparent !important; transform: none !important; box-shadow: none !important; opacity: 1 !important; }

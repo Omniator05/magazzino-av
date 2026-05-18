@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
+import DeleteButton from '../components/DeleteButton'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 
 const PRIORITY_COLORS = {
@@ -16,6 +18,7 @@ export default function Tasks() {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]         = useState({ title:'', notes:'', priority:'media', assignee:'all' })
   const isAdmin = profile?.role === 'admin'
+  useModalScrollLock(showModal)
 
   useEffect(() => {
     const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'))
@@ -52,7 +55,7 @@ export default function Tasks() {
 
   const myTasks = isAdmin
     ? tasks
-    : tasks.filter(t => t.assignee === 'all' || t.assignee === user.uid)
+    : tasks.filter(t => t.assignee === 'all' || t.assignee === user.uid || t.createdBy === user.uid)
 
   const openTasks = myTasks.filter(t => !t.done)
   const doneTasks = myTasks.filter(t => t.done)
@@ -63,10 +66,12 @@ export default function Tasks() {
       title: form.title.trim(),
       notes: form.notes.trim(),
       priority: form.priority,
-      assignee: form.assignee,
+      // Worker può solo assegnare a se stesso
+      assignee: isAdmin ? form.assignee : user.uid,
       done: false,
       createdAt: serverTimestamp(),
       createdBy: user.uid,
+      createdByName: profile?.name || profile?.username || 'Magazziniere',
     })
     setForm({ title:'', notes:'', priority:'media', assignee:'all' })
     setShowModal(false)
@@ -99,11 +104,9 @@ export default function Tasks() {
             <h1>Task</h1>
             <p>{openTasks.length} da fare{doneTasks.length > 0 ? ` · ${doneTasks.length} completate` : ''}</p>
           </div>
-          {isAdmin && (
-            <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
-              + Task
-            </button>
-          )}
+          <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
+            + Task
+          </button>
         </div>
       </div>
 
@@ -156,7 +159,12 @@ export default function Tasks() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal" style={{ position:'relative' }}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
-            <h2>Nuova task</h2>
+            <h2>{isAdmin ? 'Nuova task' : '+ Aggiungi task'}</h2>
+            {!isAdmin && (
+              <p style={{ color:'var(--text2)', fontSize:13, marginBottom:14, lineHeight:1.5 }}>
+                La task sarà assegnata a te e visibile anche all'admin.
+              </p>
+            )}
 
             <div className="form-group">
               <label>Descrizione *</label>
@@ -185,19 +193,22 @@ export default function Tasks() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Assegna a</label>
-              <select value={form.assignee} onChange={e => setForm({...form, assignee:e.target.value})}>
-                <option value="all">Tutti i magazzinieri</option>
-                {users.filter(u => u.role === 'worker').map(u => (
-                  <option key={u.id} value={u.id}>{u.name || u.username}</option>
-                ))}
-              </select>
-            </div>
+            {/* Solo admin può scegliere a chi assegnare */}
+            {isAdmin && (
+              <div className="form-group">
+                <label>Assegna a</label>
+                <select value={form.assignee} onChange={e => setForm({...form, assignee:e.target.value})}>
+                  <option value="all">Tutti i magazzinieri</option>
+                  {users.filter(u => u.role === 'worker').map(u => (
+                    <option key={u.id} value={u.id}>{u.name || u.username}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <button onClick={createTask} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!form.title.trim()}>
-              ✅ Crea task
+              ✅ {isAdmin ? 'Crea task' : 'Aggiungi task'}
             </button>
           </div>
         </div>
@@ -233,13 +244,15 @@ function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
             <span style={{ color:'var(--text2)', fontSize:12 }}>
               👤 {assigneeName}
             </span>
+            {task.createdByName && isAdmin && task.assignee === task.createdBy && (
+              <span style={{ background:'rgba(79,195,247,0.1)', color:'var(--blue)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:6, padding:'1px 7px', fontSize:11, fontWeight:600 }}>
+                📝 da {task.createdByName}
+              </span>
+            )}
           </div>
         </div>
         {isAdmin && (
-          <button onClick={onDelete}
-            style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 4px', flexShrink:0, opacity:0.6 }}>
-            🗑
-          </button>
+          <DeleteButton onClick={onDelete} size={32} />
         )}
       </div>
     </div>

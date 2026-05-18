@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Kit','Altro']
 const ICONS = {

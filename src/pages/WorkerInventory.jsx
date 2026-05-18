@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Kit','Altro']
 const ICONS = {

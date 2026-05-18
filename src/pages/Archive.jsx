@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
+import DateBadge from '../components/DateBadge'
+import DeleteButton from '../components/DeleteButton'
 
 const PAGE_SIZE = 30
 
@@ -64,19 +67,13 @@ export default function Archive() {
       const templateItems = (event.items || []).map(i => ({
         ...i, loaded: false, returned: false,
       }))
-      const todayStr = new Date().toISOString().split('T')[0]
-      const ref = await addDoc(collection(db, 'events'), {
-        name: event.name, location: event.location || '',
-        notes: event.notes || '', date: todayStr,
-        items: templateItems, createdAt: serverTimestamp(),
-        createdBy: user.uid, fromArchive: event.id,
-        recurrence: 'never', seriesId: null,
-      })
-      setCopied(event.id)
-      setTimeout(() => navigate(`/events/${ref.id}`), 600)
+      // Naviga alla pagina eventi con gli articoli pre-caricati
+      navigate('/events', { state: {
+        templateItems,
+        templateName: event.name,
+      }})
     } catch(e) {
       console.error('Template error:', e)
-      alert('Errore nella creazione del template. Riprova.')
       setCopying(null)
     }
   }
@@ -134,9 +131,7 @@ export default function Archive() {
                       <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontWeight:700, fontSize:16, marginBottom:3 }}>{event.name}</p>
                         <p style={{ color:'var(--text2)', fontSize:13 }}>
-                          📅 {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'long', year:'numeric' })}
-                          {event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}`}
-                          {event.location && ` · 📍 ${event.location}`}
+                          <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
                         </p>
                         {total > 0 && (
                           <p style={{ color:'var(--text2)', fontSize:12, marginTop:4 }}>
@@ -157,11 +152,7 @@ export default function Archive() {
                           }}>
                           {isCopied ? '✅ Creato!' : isCopying ? '⏳ Copio...' : '📋 Usa template'}
                         </button>
-                        <button
-                          onClick={() => deleteArchiveEvent(event)}
-                          style={{ padding:'8px 10px', borderRadius:10, fontSize:16, background:'rgba(248,113,113,0.10)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)' }}>
-                          🗑
-                        </button>
+                        <DeleteButton onClick={() => deleteArchiveEvent(event)} size={38} />
                       </div>
                     </div>
 

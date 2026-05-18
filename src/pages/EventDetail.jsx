@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const ICONS = {
   'Audio':    '🔊',
