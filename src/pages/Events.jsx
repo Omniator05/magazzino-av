@@ -57,7 +57,12 @@ export default function Events() {
   const [events, setEvents]       = useState([])
   const [showModal, setShowModal] = useState(false)
   const [showSearch, setShowSearch]     = useState(false)
-  const [openSections, setOpenSections] = useState({ recurring: true, unload: true, upcoming: true })
+  const [openSections, setOpenSections] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('events_sections')
+      return saved ? JSON.parse(saved) : { recurring: true, unload: true, upcoming: true }
+    } catch { return { recurring: true, unload: true, upcoming: true } }
+  })
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
   const [templates, setTemplates] = useState([])
   const [search, setSearch]       = useState('')
@@ -135,7 +140,11 @@ export default function Events() {
   const visibleSingle = upcomingSingle.slice(0, visibleCount)
   const hiddenCount   = upcomingSingle.length - visibleSingle.length
 
-  const toggle = section => setOpenSections(s => ({ ...s, [section]: !s[section] }))
+  const toggle = section => setOpenSections(s => {
+    const next = { ...s, [section]: !s[section] }
+    try { sessionStorage.setItem('events_sections', JSON.stringify(next)) } catch {}
+    return next
+  })
 
   // Ricerca su tutti gli eventi
   const searchResults = search.trim()

@@ -288,60 +288,124 @@ export default function WorkerScanner() {
       })()}
 
       {/* - Header compatto - */}
+      <style>{`
+        .plane-switch {
+          --dot: #fff;
+          --street: #6B6D76;
+          --street-line: #A8AAB4;
+          --street-line-mid: #C0C2C8;
+          --sky-1: #60A7FA;
+          --sky-2: #2F8EFC;
+          --light-1: rgba(255, 233, 0, 1);
+          --light-2: rgba(255, 233, 0, .3);
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .plane-switch input { display: none; }
+        .plane-switch input + div {
+          -webkit-mask-image: -webkit-radial-gradient(white, black);
+          position: relative;
+          overflow: hidden;
+          width: 76px;
+          height: 38px;
+          padding: 2px;
+          border-radius: 20px;
+          background: linear-gradient(90deg, var(--street) 0%, var(--street) 25%, var(--sky-1) 75%, var(--sky-2) 100%) left var(--p, 0%) top 0;
+          background-position-x: var(--p, 0%);
+          background-size: 400% auto;
+          transition: background-position 0.6s;
+        }
+        .plane-switch input + div:before, .plane-switch input + div:after {
+          content: "";
+          display: block;
+          position: absolute;
+          transform: translateX(var(--s, 0));
+          transition: transform 0.3s;
+        }
+        .plane-switch input + div:before {
+          width: 64px; right: 3px; top: 6px; height: 2px;
+          background: var(--street-line);
+          box-shadow: 0 24px 0 0 var(--street-line);
+        }
+        .plane-switch input + div:after {
+          width: 3px; height: 3px; border-radius: 50%;
+          left: 36px; top: 2px;
+          animation: lights2 2s linear infinite;
+          box-shadow: inset 0 0 0 3px var(--light-1), 0 32px 0 var(--light-1), 12px 0 0 var(--light-2), 12px 32px 0 var(--light-2), 24px 0 0 var(--light-2), 24px 32px 0 var(--light-2);
+        }
+        .plane-switch input + div span { display: block; position: absolute; }
+        .plane-switch input + div span.street-middle {
+          top: 18px; left: 32px; width: 5px; height: 2px;
+          transform: translateX(var(--s, 0));
+          background: var(--street-line-mid);
+          box-shadow: 8px 0 0 var(--street-line-mid), 16px 0 0 var(--street-line-mid), 24px 0 0 var(--street-line-mid), 32px 0 0 var(--street-line-mid), 40px 0 0 var(--street-line-mid);
+          transition: transform 0.3s;
+        }
+        .plane-switch input + div span.cloud {
+          width: 18px; height: 6px; border-radius: 3px; background: #fff;
+          position: absolute; top: var(--ct, 12px); left: 100%;
+          opacity: var(--co, 0); transition: opacity 0.3s;
+          animation: clouds2 2s linear infinite var(--cd, 0s);
+        }
+        .plane-switch input + div span.cloud:before, .plane-switch input + div span.cloud:after {
+          content: ""; position: absolute; transform: translateX(var(--cx, 0));
+          border-radius: 50%; width: var(--cs, 8px); height: var(--cs, 8px);
+          background: #fff; bottom: 1px; left: 2px;
+        }
+        .plane-switch input + div span.cloud:after { --cs: 9px; --cx: 6px; }
+        .plane-switch input + div span.cloud.two { --ct: 30px; --cd: 1s; opacity: var(--co-2, 0); }
+        .plane-switch input + div div {
+          display: table; position: relative; z-index: 1;
+          padding: 7px; border-radius: 50%; background: var(--dot);
+          transform: translateX(var(--x, 0));
+          transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.35, 1.2);
+        }
+        .plane-switch input + div div svg {
+          width: 18px; height: 18px; display: block;
+          color: var(--c, var(--street)); transition: color 0.6s;
+        }
+        .plane-switch input:checked + div {
+          --p: 100%; --x: 38px; --s: -75px; --c: var(--sky-2); --co: .8; --co-2: .6;
+        }
+        @keyframes lights2 {
+          20%, 30% { box-shadow: inset 0 0 0 3px var(--light-2), 0 32px 0 var(--light-2), 12px 0 0 var(--light-1), 12px 32px 0 var(--light-1), 24px 0 0 var(--light-2), 24px 32px 0 var(--light-2); }
+          55%, 65% { box-shadow: inset 0 0 0 3px var(--light-2), 0 32px 0 var(--light-2), 12px 0 0 var(--light-2), 12px 32px 0 var(--light-2), 24px 0 0 var(--light-1), 24px 32px 0 var(--light-1); }
+          90%, 100% { box-shadow: inset 0 0 0 3px var(--light-1), 0 32px 0 var(--light-1), 12px 0 0 var(--light-2), 12px 32px 0 var(--light-2), 24px 0 0 var(--light-2), 24px 32px 0 var(--light-2); }
+        }
+        @keyframes clouds2 {
+          97% { transform: translateX(-110px); visibility: visible; }
+          98%, 100% { visibility: hidden; }
+          99% { transform: translateX(-110px); }
+          100% { transform: translateX(0); }
+        }
+      `}</style>
       <div style={{ padding:'52px 16px 12px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <button onClick={() => { stopScanner(); navigate(backPath) }}
             style={{ background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14, fontWeight:600 }}>
             ← Indietro
           </button>
-          {/* Contatori inline */}
-          <div style={{ display:'flex', gap:8 }}>
-            <div style={{ background:'rgba(245,166,35,0.12)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:10, padding:'6px 14px', textAlign:'center' }}>
-              <p style={{ color:'var(--accent2)', fontWeight:800, fontSize:18, lineHeight:1 }}>{loaded}<span style={{ color:'var(--text2)', fontWeight:400, fontSize:13 }}>/{total}</span></p>
-              <p style={{ color:'var(--accent2)', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginTop:2 }}>Caricati</p>
+          {/* Toggle carico/rientro */}
+          <label className="plane-switch" title={mode === 'load' ? 'Modalità: Carico' : 'Modalità: Rientro'}>
+            <input
+              type="checkbox"
+              checked={mode === 'return'}
+              onChange={e => { setMode(e.target.checked ? 'return' : 'load'); setLastScan(null) }}
+            />
+            <div>
+              <span className="street-middle" />
+              <span className="cloud" />
+              <span className="cloud two" />
+              <div>
+                <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M1 4a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v2h2.382a1 1 0 0 1 .894.553l2 4A1 1 0 0 1 21 11v4a1 1 0 0 1-1 1h-1.17A3 3 0 0 1 13 16H9a3 3 0 0 1-5.83 0H3a1 1 0 0 1-1-1V4zm2 10.17A3 3 0 0 1 8.83 15H13a3 3 0 0 1 2.83-2H15V5H3v9.17zM17 9h-2v4h4v-2.382L17 9zm-10 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm7 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+                </svg>
+              </div>
             </div>
-            <div style={{ background:'rgba(52,211,153,0.10)', border:'1px solid rgba(52,211,153,0.22)', borderRadius:10, padding:'6px 14px', textAlign:'center' }}>
-              <p style={{ color:'var(--green)', fontWeight:800, fontSize:18, lineHeight:1 }}>{returned}<span style={{ color:'var(--text2)', fontWeight:400, fontSize:13 }}>/{total}</span></p>
-              <p style={{ color:'var(--green)', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginTop:2 }}>Rientrati</p>
-            </div>
-          </div>
+          </label>
         </div>
         <h1 style={{ fontSize:18, fontWeight:800, marginTop:10, letterSpacing:'-0.3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</h1>
         {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
-      </div>
-
-      {/* - Toggle modalità - grande e chiarissimo - */}
-      <div style={{ padding:'14px 16px 0' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-          <button onClick={() => { setMode('load'); setLastScan(null) }}
-            style={{
-              borderRadius:16, padding:'18px 8px', textAlign:'center', fontWeight:800,
-              fontSize:15, border:'2px solid',
-              background: mode === 'load' ? 'rgba(245,166,35,0.15)' : 'var(--card)',
-              borderColor: mode === 'load' ? 'var(--accent2)' : 'var(--border)',
-              color: mode === 'load' ? 'var(--accent2)' : 'var(--text2)',
-              boxShadow: mode === 'load' ? '0 0 20px rgba(245,166,35,0.2)' : 'none',
-              transition:'all 0.2s ease',
-            }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>🚛</div>
-            <div>Sto caricando</div>
-            <div style={{ fontSize:11, fontWeight:500, marginTop:3, opacity:0.7 }}>articoli → furgone</div>
-          </button>
-          <button onClick={() => { setMode('return'); setLastScan(null) }}
-            style={{
-              borderRadius:16, padding:'18px 8px', textAlign:'center', fontWeight:800,
-              fontSize:15, border:'2px solid',
-              background: mode === 'return' ? 'rgba(52,211,153,0.12)' : 'var(--card)',
-              borderColor: mode === 'return' ? 'var(--green)' : 'var(--border)',
-              color: mode === 'return' ? 'var(--green)' : 'var(--text2)',
-              boxShadow: mode === 'return' ? '0 0 20px rgba(52,211,153,0.15)' : 'none',
-              transition:'all 0.2s ease',
-            }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>🏠</div>
-            <div>Sto scaricando</div>
-            <div style={{ fontSize:11, fontWeight:500, marginTop:3, opacity:0.7 }}>furgone → magazzino</div>
-          </button>
-        </div>
       </div>
 
       {/* - Camera / Scanner - */}
@@ -526,6 +590,8 @@ function ChecklistRow({ item }) {
   const [location, setLocation]   = useState(item.location || null)
   const [notes, setNotes]         = useState(item.notes || null)
   const [showNotes, setShowNotes] = useState(false)
+  const [showComponents, setShowComponents] = useState(false)
+  const isKit = item.isBundle || (item.components && item.components.length > 0)
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
@@ -544,6 +610,22 @@ function ChecklistRow({ item }) {
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
+            {isKit && (
+              <button
+                onClick={() => setShowComponents(s => !s)}
+                style={{
+                  width:22, height:22, borderRadius:'50%', flexShrink:0,
+                  background: showComponents ? 'rgba(245,166,35,0.3)' : 'rgba(245,166,35,0.12)',
+                  border:'1.5px solid rgba(245,166,35,0.5)',
+                  color:'var(--accent2)',
+                  fontSize:12, fontWeight:900, fontStyle: showComponents ? 'normal' : 'italic',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  transition:'all 0.25s',
+                  lineHeight:1,
+                }}>
+                {showComponents ? '×' : 'i'}
+              </button>
+            )}
             {notes && (
               <button onClick={() => setShowNotes(!showNotes)}
                 style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:20, height:20, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -595,6 +677,19 @@ function ChecklistRow({ item }) {
           <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{notes}</p>
         </div>
       )}
+      <div className={`kit-components-panel${showComponents ? ' open' : ''}`}
+        style={{ background:'rgba(245,166,35,0.04)', borderBottom: showComponents ? '1px solid var(--border)' : 'none', padding: showComponents ? '10px 16px 12px' : '0 16px' }}>
+        <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>🧰 Contenuto kit</p>
+        {!(item.components?.length)
+          ? <p style={{ fontSize:13, color:'var(--text2)', fontStyle:'italic' }}>Nessun componente registrato</p>
+          : item.components.map((comp, i) => (
+            <div key={i} className="kit-comp-row">
+              <span style={{ fontSize:12, fontWeight:800, color:'var(--accent2)', minWidth:30, background:'rgba(245,166,35,0.12)', borderRadius:6, padding:'1px 6px', textAlign:'center' }}>×{comp.qty}</span>
+              <span style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
+            </div>
+          ))
+        }
+      </div>
     </>
   )
 }

@@ -793,3 +793,76 @@ select option { background: var(--bg2); }
 /* Nessun hover sui bottoni delle sezioni collassabili */
 .btn-section { -webkit-tap-highlight-color: transparent; }
 .btn-section:hover { background: transparent !important; transform: none !important; box-shadow: none !important; opacity: 1 !important; }
+
+/* ── INFO BUTTON (kit components toggle) ───────── */
+.info-btn {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.info-btn input { display: none; }
+.info-btn svg {
+  height: 1.4em;
+  width: 1.4em;
+  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.info-line {
+  fill: none;
+  stroke: var(--accent2);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  transition: stroke-dasharray 600ms cubic-bezier(0.4, 0, 0.2, 1),
+              stroke-dashoffset 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.info-line-top-bottom { stroke-dasharray: 12 63; }
+.info-btn input:checked + svg { transform: rotate(-45deg); }
+.info-btn input:checked + svg .info-line-top-bottom {
+  stroke-dasharray: 20 300;
+  stroke-dashoffset: -32.42;
+}
+
+/* ── KIT COMPONENTS ACCORDION ──────────────────── */
+.kit-components-panel {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s ease;
+  opacity: 0;
+}
+.kit-components-panel.open {
+  max-height: 400px;
+  opacity: 1;
+}
+.kit-comp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  transform: translateY(-6px);
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.kit-components-panel.open .kit-comp-row {
+  transform: translateY(0);
+  opacity: 1;
+}
+/* Apertura: primo entra prima */
+.kit-components-panel.open .kit-comp-row:nth-child(1) { transition-delay: 0.04s; }
+.kit-components-panel.open .kit-comp-row:nth-child(2) { transition-delay: 0.08s; }
+.kit-components-panel.open .kit-comp-row:nth-child(3) { transition-delay: 0.12s; }
+.kit-components-panel.open .kit-comp-row:nth-child(4) { transition-delay: 0.16s; }
+.kit-components-panel.open .kit-comp-row:nth-child(5) { transition-delay: 0.20s; }
+.kit-components-panel.open .kit-comp-row:nth-child(6) { transition-delay: 0.24s; }
+.kit-components-panel.open .kit-comp-row:nth-child(7) { transition-delay: 0.28s; }
+.kit-components-panel.open .kit-comp-row:nth-child(8) { transition-delay: 0.32s; }
+/* Chiusura: ultimo esce prima */
+.kit-components-panel .kit-comp-row:nth-child(1) { transition-delay: 0.32s; }
+.kit-components-panel .kit-comp-row:nth-child(2) { transition-delay: 0.28s; }
+.kit-components-panel .kit-comp-row:nth-child(3) { transition-delay: 0.24s; }
+.kit-components-panel .kit-comp-row:nth-child(4) { transition-delay: 0.20s; }
+.kit-components-panel .kit-comp-row:nth-child(5) { transition-delay: 0.16s; }
+.kit-components-panel .kit-comp-row:nth-child(6) { transition-delay: 0.12s; }
+.kit-components-panel .kit-comp-row:nth-child(7) { transition-delay: 0.08s; }
+.kit-components-panel .kit-comp-row:nth-child(8) { transition-delay: 0.04s; }
+.kit-comp-row:last-child { border-bottom: none; }

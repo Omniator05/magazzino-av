@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import DateBadge from '../components/DateBadge'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -29,6 +30,7 @@ export default function EventDetail() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [event, setEvent] = useState(null)
+  const today = new Date().toISOString().split('T')[0]
   const [allItems, setAllItems] = useState([])
   const [showAddItem, setShowAddItem] = useState(false)
   const [showExtraModal, setShowExtraModal] = useState(false)
@@ -94,8 +96,37 @@ export default function EventDetail() {
     const item = eventItems.find(i => i.id === itemId)
     if (item?.isExtra) return
 
-    // Aggiorna disponibilità in magazzino
     const newState = updated.find(i => i.id === itemId)
+
+    // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
+    if (item?.isBundle || item?.category === 'Kit') {
+      try {
+        const kitRef = doc(db, 'items', itemId)
+        const kitSnap = await getDoc(kitRef)
+        if (kitSnap.exists()) {
+          const kitData = kitSnap.data()
+          const components = kitData.components || []
+          console.log('Componenti freschi da Firestore:', JSON.stringify(components))
+          for (const comp of components) {
+            try {
+              const compRef = doc(db, 'items', comp.itemId)
+              const snap = await getDoc(compRef)
+              if (snap.exists()) {
+                const current = snap.data()
+                const delta = newState.loaded ? -(comp.qty * (item.qty||1)) : (comp.qty * (item.qty||1))
+                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(current.totalQty||999, (current.availableQty||0) + delta)) })
+              }
+            } catch(e) { console.error(e) }
+          }
+          // Aggiorna giacenza kit stesso
+          const delta = newState.loaded ? -(item.qty || 1) : (item.qty || 1)
+          await updateDoc(kitRef, { availableQty: Math.max(0, Math.min(kitData.totalQty||999, (kitData.availableQty||0) + delta)) })
+        }
+      } catch(e) { console.error(e) }
+      return
+    }
+
+    // Articolo singolo: aggiorna disponibilità normale
     try {
       const itemRef = doc(db, 'items', itemId)
       const snap = await getDoc(itemRef)
@@ -117,6 +148,34 @@ export default function EventDetail() {
     if (item?.isExtra) return
 
     const newState = updated.find(i => i.id === itemId)
+
+    // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
+    if (item?.isBundle || item?.category === 'Kit') {
+      try {
+        const kitRef = doc(db, 'items', itemId)
+        const kitSnap = await getDoc(kitRef)
+        if (kitSnap.exists()) {
+          const kitData = kitSnap.data()
+          const components = kitData.components || []
+          for (const comp of components) {
+            try {
+              const compRef = doc(db, 'items', comp.itemId)
+              const snap = await getDoc(compRef)
+              if (snap.exists()) {
+                const current = snap.data()
+                const delta = newState.returned ? (comp.qty * (item.qty||1)) : -(comp.qty * (item.qty||1))
+                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(current.totalQty||999, (current.availableQty||0) + delta)) })
+              }
+            } catch(e) { console.error(e) }
+          }
+          const delta = newState.returned ? (item.qty || 1) : -(item.qty || 1)
+          await updateDoc(kitRef, { availableQty: Math.max(0, Math.min(kitData.totalQty||999, (kitData.availableQty||0) + delta)) })
+        }
+      } catch(e) { console.error(e) }
+      return
+    }
+
+    // Articolo singolo
     try {
       const itemRef = doc(db, 'items', itemId)
       const snap = await getDoc(itemRef)
@@ -154,25 +213,6 @@ export default function EventDetail() {
       qty:c.qty, loaded:false, returned:false
     }))]
     await updateEventItems(updated)
-
-    // Per i kit-bundle: scala la giacenza di ogni componente
-    for (const c of newItems) {
-      if (c.isBundle && c.components?.length) {
-        for (const comp of c.components) {
-          try {
-            const compRef = doc(db, 'items', comp.itemId)
-            const snap = await getDoc(compRef)
-            if (snap.exists()) {
-              const data = snap.data()
-              await updateDoc(compRef, {
-                availableQty: Math.max(0, (data.availableQty||0) - (comp.qty * (c.qty||1)))
-              })
-            }
-          } catch(e) { console.error(e) }
-        }
-      }
-    }
-
     setCart([])
     setSearch('')
     setShowAddItem(false)
@@ -233,11 +273,53 @@ export default function EventDetail() {
     i.brand?.toLowerCase().includes(search.toLowerCase())
   )
 
+  const exportPDF = () => {
+    const items = event.items || []
+    const loaded = items.filter(i => i.loaded && !i.isExtra)
+    const extras = items.filter(i => i.loaded && i.isExtra)
+    const date = event.date ? new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) : ''
+
+    const rows = [...loaded, ...extras].map(i =>
+      `<tr><td style="padding:8px 12px;border-bottom:1px solid #e8e4fb;font-weight:600;">${i.name}</td><td style="padding:8px 12px;border-bottom:1px solid #e8e4fb;text-align:center;font-weight:700;color:#7c3aed;">${i.qty || 1}</td></tr>`
+    ).join('')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista Carico – ${event.name}</title>
+    <style>
+      body { font-family: -apple-system, sans-serif; padding: 40px; color: #1a1033; }
+      h1 { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+      .meta { color: #7c6faa; font-size: 14px; margin-bottom: 32px; }
+      table { width: 100%; border-collapse: collapse; }
+      thead th { background: #7c3aed; color: white; padding: 10px 12px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+      thead th:last-child { text-align: center; width: 80px; }
+      tbody tr:hover { background: #f4f3ff; }
+      .footer { margin-top: 24px; color: #9b8ec4; font-size: 12px; }
+    </style></head><body>
+    <h1>${event.name}</h1>
+    <p class="meta">${date}${event.location ? ' · 📍 ' + event.location : ''}</p>
+    <table>
+      <thead><tr><th>Articolo</th><th>Qtà</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="footer">Lista carico generata il ${new Date().toLocaleDateString('it-IT')} – Magazzino TSG</p>
+    </body></html>`
+
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+    win.print()
+  }
+
   return (
     <div className="page">
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
           <button onClick={() => navigate('/events')} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={exportPDF}
+              style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.2)', color:'var(--accent)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              PDF
+            </button>
           <button
             onClick={() => navigate(`/events/${id}/scan`)}
             style={{ background:'linear-gradient(135deg,rgba(79,195,247,0.2),rgba(79,195,247,0.08))', border:'1px solid rgba(79,195,247,0.35)', color:'var(--blue)', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}
@@ -245,16 +327,16 @@ export default function EventDetail() {
             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
             Inizia a caricare
           </button>
+          </div>
         </div>
 
         {/* Nome evento + tasto ℹ️ note */}
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10 }}>
           <div style={{ flex:1, minWidth:0 }}>
             <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
-            <p style={{ color:'var(--text2)', fontSize:14, marginTop:4 }}>
-              📅 {event.date && new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}{event.dateEnd && event.dateEnd !== event.date && ` → ${new Date(event.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}`}
-              {event.location && ` · 📍 ${event.location}`}
-            </p>
+            <div style={{ marginTop:6 }}>
+              <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
+            </div>
           </div>
           {event.notes && (
             <button

@@ -59,7 +59,11 @@ export default function Inventory() {
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [showAddMenu, setShowAddMenu]   = useState(false)
-  const [showKitModal, setShowKitModal] = useState(false)
+  const [showKitModal, setShowKitModal]         = useState(false)
+  const [showKitEditModal, setShowKitEditModal] = useState(false)
+  const [editingKit, setEditingKit]             = useState(null)
+  const [kitEditComponents, setKitEditComponents] = useState([])
+  const [kitEditSearch, setKitEditSearch]       = useState('')
   const [kitForm, setKitForm]           = useState({ name:'', location:'', qty:1 })
   const [kitComponents, setKitComponents] = useState([])
   const [kitSearch, setKitSearch]       = useState('')
@@ -87,7 +91,18 @@ export default function Inventory() {
   }, [items.length]) // solo quando cambia il numero di articoli
 
   const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 }); setShowModal(true) }
-  const openEdit = item => { setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0 }); setShowModal(true) }
+  const openEdit = item => {
+    if (item.isBundle) {
+      // Kit — apri il builder dedicato
+      setEditingKit(item)
+      setKitForm({ name:item.name, location:item.location||'', qty:item.totalQty||1 })
+      setKitEditComponents((item.components||[]).map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty, maxQty:99 })))
+      setKitEditSearch('')
+      setShowKitEditModal(true)
+    } else {
+      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0 }); setShowModal(true)
+    }
+  }
 
   const saveItem = async () => {
     if (!form.name.trim()) return
@@ -249,8 +264,15 @@ export default function Inventory() {
                 {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2 }}>📍 {item.location}</p>}
               </div>
               <div style={{ textAlign:'right', flexShrink:0 }}>
-                <span className={`badge ${item.availableQty === item.totalQty ? 'in' : item.availableQty === 0 ? 'out' : 'partial'}`}>
-                  {item.availableQty}/{item.totalQty}
+                <span className={`badge ${
+                  item.category === 'Consumabili'
+                    ? (item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock ? 'partial' : 'in')
+                    : (item.availableQty === item.totalQty ? 'in' : item.availableQty === 0 ? 'out' : 'partial')
+                }`}>
+                  {item.category === 'Consumabili'
+                    ? (item.availableQty ?? item.totalQty)
+                    : `${item.availableQty}/${item.totalQty}`
+                  }
                 </span>
                 {item.brokenQty > 0 && (
                   <div style={{ marginTop:4 }}>
@@ -366,7 +388,12 @@ export default function Inventory() {
             <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                 <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
-                <span style={{ fontWeight:800, fontSize:18 }}>{showDetail.availableQty}/{showDetail.totalQty}</span>
+                <span style={{ fontWeight:800, fontSize:18 }}>
+                  {showDetail.category === 'Consumabili'
+                    ? (showDetail.availableQty ?? showDetail.totalQty)
+                    : `${showDetail.availableQty}/${showDetail.totalQty}`
+                  }
+                </span>
               </div>
               {/* Barra segmentata: disponibili / fuori / rotti */}
               <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
@@ -449,6 +476,73 @@ export default function Inventory() {
       )}
 
       {/* Kit Builder */}
+      {/* ── Kit Edit Modal ─────────────────────── */}
+      {showKitEditModal && editingKit && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitEditModal(false)}>
+          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+            <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <button className="close-btn" style={{ position:'absolute', top:16, right:20 }} onClick={() => setShowKitEditModal(false)}>✕</button>
+              <h2 style={{ marginBottom:14 }}>🧰 Modifica kit</h2>
+              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
+              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino" style={{ fontSize:13 }} />
+            </div>
+            {kitEditComponents.length > 0 && (
+              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
+                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>Componenti ({kitEditComponents.length})</p>
+                {kitEditComponents.map(comp => (
+                  <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                    <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{comp.name}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                      <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
+                      <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:c.qty+1} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                    </div>
+                    <button onClick={() => setKitEditComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder="Aggiungi componente..." style={{ fontSize:13 }} />
+            </div>
+            <div style={{ overflowY:'auto', flex:1 }}>
+              {items
+                .filter(i => !i.isBundle && !kitEditComponents.some(c => c.itemId===i.id))
+                .filter(i => !kitEditSearch || i.name?.toLowerCase().includes(kitEditSearch.toLowerCase()))
+                .map(item => (
+                  <div key={item.id} className="item-row" onClick={() => { setKitEditComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitEditSearch('') }}>
+                    <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
+                      <p style={{ color:'var(--text2)', fontSize:12 }}>{item.availableQty??item.totalQty} disp.</p>
+                    </div>
+                    <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
+                  </div>
+                ))
+              }
+            </div>
+            <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
+              <button
+                onClick={async () => {
+                  if (!kitForm.name.trim()) return
+                  await updateDoc(doc(db, 'items', editingKit.id), {
+                    name: kitForm.name.trim(),
+                    location: kitForm.location.trim(),
+                    components: kitEditComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
+                  })
+                  setShowKitEditModal(false)
+                  setShowDetail(null)
+                }}
+                className="btn btn-primary btn-full"
+                disabled={!kitForm.name.trim() || kitEditComponents.length === 0}
+                style={{ opacity: !kitForm.name.trim() || kitEditComponents.length === 0 ? 0.4 : 1 }}>
+                💾 Salva modifiche kit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showKitModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitModal(false)}>
           <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
