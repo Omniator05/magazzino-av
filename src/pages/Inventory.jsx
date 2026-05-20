@@ -267,7 +267,7 @@ export default function Inventory() {
                 <span className={`badge ${
                   item.category === 'Consumabili'
                     ? (item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock ? 'partial' : 'in')
-                    : (item.availableQty === item.totalQty ? 'in' : item.availableQty === 0 ? 'out' : 'partial')
+                    : (item.availableQty === (item.totalQty - (item.brokenQty||0)) ? 'in' : item.availableQty === 0 ? 'out' : 'partial')
                 }`}>
                   {item.category === 'Consumabili'
                     ? (item.availableQty ?? item.totalQty)
@@ -455,7 +455,7 @@ export default function Inventory() {
       {showAddMenu && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddMenu(false)}>
           <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowAddMenu(false)}>x</button>
+            <button className="close-btn" onClick={() => setShowAddMenu(false)}>✕</button>
             <h2>Cosa vuoi aggiungere?</h2>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
               <button onClick={() => { setShowAddMenu(false); openAdd() }}
@@ -481,7 +481,7 @@ export default function Inventory() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitEditModal(false)}>
           <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" style={{ position:'absolute', top:16, right:20 }} onClick={() => setShowKitEditModal(false)}>✕</button>
+              <button className="close-btn" onClick={() => setShowKitEditModal(false)}>✕</button>
               <h2 style={{ marginBottom:14 }}>🧰 Modifica kit</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino" style={{ fontSize:13 }} />
@@ -547,7 +547,7 @@ export default function Inventory() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitModal(false)}>
           <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" style={{ position:'absolute', top:16, right:20 }} onClick={() => setShowKitModal(false)}>x</button>
+              <button className="close-btn" onClick={() => setShowKitModal(false)}>✕</button>
               <h2 style={{ marginBottom:14 }}>🧰 Nuovo kit</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit (es. Baule Tornado)" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino (opzionale)" style={{ fontSize:13, marginBottom:10 }} />

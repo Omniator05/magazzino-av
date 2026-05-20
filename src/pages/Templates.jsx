@@ -139,10 +139,10 @@ export default function Templates() {
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+          <div className="modal" style={{ position:'relative', maxHeight:'calc(100dvh - 96px)', display:'flex', flexDirection:'column', padding:0, overflow:'hidden' }}>
             {/* Header */}
             <div style={{ padding:'20px 20px 14px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" style={{ position:'absolute', top:16, right:20 }} onClick={() => setShowModal(false)}>✕</button>
+              <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
               <h2>{editing ? 'Modifica template' : 'Nuovo template'}</h2>
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})}
                 placeholder="Nome template (es. Evento Fiera Piccolo)" style={{ marginTop:10, fontWeight:600, fontSize:15 }} />
@@ -152,10 +152,11 @@ export default function Templates() {
 
             {/* Componenti selezionati */}
             {components.length > 0 && (
-              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(79,195,247,0.04)' }}>
-                <p style={{ color:'var(--blue)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
+              <div style={{ borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', flexShrink:0 }}>
+                <p style={{ color:'var(--blue)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'10px 16px 6px' }}>
                   Lista ({components.length} articoli)
                 </p>
+                <div style={{ overflowY:'auto', maxHeight:220, padding:'0 16px 10px' }}>
                 {components.map(c => (
                   <div key={c.id} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                     <span style={{ fontSize:16 }}>{ICONS[c.category]||'📦'}</span>
@@ -173,6 +174,7 @@ export default function Templates() {
                       style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 4px' }}>✕</button>
                   </div>
                 ))}
+                </div>
               </div>
             )}
 
@@ -185,7 +187,7 @@ export default function Templates() {
             </div>
 
             {/* Lista articoli */}
-            <div style={{ overflowY:'auto', flex:1 }}>
+            <div style={{ overflowY:'auto', flex:1, minHeight:0 }}>
               {notInTemplate.map(item => (
                 <div key={item.id} className="item-row" onClick={() => addComponent(item)}>
                   <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category]||'📦'}</span>

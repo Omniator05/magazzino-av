@@ -261,7 +261,30 @@ select option { background: var(--bg2); }
   padding: 8px 20px 44px;
   animation: slideUp 0.3s cubic-bezier(0.32,0.72,0,1);
 }
-/* Drag handle decorativa */
+/* Fix doppio tap su mobile - rimuove 300ms delay */
+* { -webkit-tap-highlight-color: transparent; }
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+/* Hover solo su dispositivi che supportano hover vero (no mobile) */
+@media (hover: none) {
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-green:hover,
+  .btn-red:hover,
+  .btn-gold:hover,
+  .delete-btn:hover,
+  .edit-btn:hover,
+  .export-btn:hover {
+    transform: none !important;
+    box-shadow: inherit !important;
+    filter: none !important;
+    background: inherit !important;
+  }
+  .delete-btn:hover .delete-bin-top { transform: none !important; }
+  .export-btn:hover .export-svg { animation: none !important; }
+  .edit-btn:hover .edit-svg { transform: none !important; }
+}
 .modal::before {
   content: '';
   display: block;
@@ -866,3 +889,44 @@ select option { background: var(--bg2); }
 .kit-components-panel .kit-comp-row:nth-child(7) { transition-delay: 0.08s; }
 .kit-components-panel .kit-comp-row:nth-child(8) { transition-delay: 0.04s; }
 .kit-comp-row:last-child { border-bottom: none; }
+
+/* ── CLOSE SLIDE BUTTON ────────────────────────── */
+.close-slide-btn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.15);
+  background: #e62222;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.close-slide-btn, .close-slide-btn span { transition: 200ms; }
+.close-slide-text {
+  transform: translateX(22px);
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.close-slide-icon {
+  position: absolute;
+  border-left: 1px solid #c41b1b;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.close-slide-icon svg { fill: #eee; }
+.close-slide-btn:hover { background: #ff3636; }
+.close-slide-btn:hover .close-slide-text { color: transparent; }
+.close-slide-btn:hover .close-slide-icon {
+  width: 100% !important;
+  border-left: none;
+  right: auto;
+  left: 0;
+}
+.close-slide-btn:focus { outline: none; }
+.close-slide-btn:active .close-slide-icon svg { transform: scale(0.8); }

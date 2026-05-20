@@ -114,7 +114,8 @@ export default function EventDetail() {
               if (snap.exists()) {
                 const current = snap.data()
                 const delta = newState.loaded ? -(comp.qty * (item.qty||1)) : (comp.qty * (item.qty||1))
-                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(current.totalQty||999, (current.availableQty||0) + delta)) })
+                const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty||0) + delta)) })
               }
             } catch(e) { console.error(e) }
           }
@@ -133,7 +134,8 @@ export default function EventDetail() {
       if (snap.exists()) {
         const current = snap.data()
         const delta = newState.loaded ? -(item.qty || 1) : (item.qty || 1)
-        await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(current.totalQty, (current.availableQty || 0) + delta)) })
+        const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+        await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty || 0) + delta)) })
       }
     } catch(e) { console.error(e) }
   }
@@ -164,12 +166,14 @@ export default function EventDetail() {
               if (snap.exists()) {
                 const current = snap.data()
                 const delta = newState.returned ? (comp.qty * (item.qty||1)) : -(comp.qty * (item.qty||1))
-                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(current.totalQty||999, (current.availableQty||0) + delta)) })
+                const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty||0) + delta)) })
               }
             } catch(e) { console.error(e) }
           }
           const delta = newState.returned ? (item.qty || 1) : -(item.qty || 1)
-          await updateDoc(kitRef, { availableQty: Math.max(0, Math.min(kitData.totalQty||999, (kitData.availableQty||0) + delta)) })
+          const kitMaxAvail = (kitData.totalQty||0) - (kitData.brokenQty||0)
+          await updateDoc(kitRef, { availableQty: Math.max(0, Math.min(kitMaxAvail, (kitData.availableQty||0) + delta)) })
         }
       } catch(e) { console.error(e) }
       return
@@ -182,7 +186,8 @@ export default function EventDetail() {
       if (snap.exists()) {
         const current = snap.data()
         const delta = newState.returned ? (item.qty || 1) : -(item.qty || 1)
-        await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(current.totalQty, (current.availableQty || 0) + delta)) })
+        const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+        await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty || 0) + delta)) })
       }
     } catch(e) { console.error(e) }
   }
@@ -242,7 +247,8 @@ export default function EventDetail() {
         const snap = await getDoc(itemRef)
         if (snap.exists()) {
           const current = snap.data()
-          await updateDoc(itemRef, { availableQty: Math.min(current.totalQty, (current.availableQty || 0) + (item.qty || 1)) })
+          const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+          await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty || 0) + (item.qty || 1)) })
         }
       } catch(e) {}
     }
@@ -308,6 +314,32 @@ export default function EventDetail() {
     win.document.close()
     win.print()
   }
+
+  const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Kit:'🧰', Extra:'✨', Altro:'📦' }
+  const CAT_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+  const catGrouped = {}
+  eventItems.forEach(item => {
+    const cat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+    if (!catGrouped[cat]) catGrouped[cat] = []
+    catGrouped[cat].push(item)
+  })
+  const catKeys = CAT_ORDER.filter(c => catGrouped[c])
+  const multiCat = catKeys.length > 1
+  const groupedEventItems = catKeys.map(cat => (
+    <div key={cat}>
+      {multiCat && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px 4px' }}>
+          <span style={{ fontSize:12 }}>{CAT_ICONS[cat]||'📦'}</span>
+          <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
+          <div style={{ flex:1, height:1, background:'var(--border)' }} />
+          <span style={{ fontSize:10, color:'var(--text3)' }}>{catGrouped[cat].length}</span>
+        </div>
+      )}
+      {catGrouped[cat].map(item => (
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} />
+      ))}
+    </div>
+  ))
 
   return (
     <div className="page">
@@ -401,9 +433,7 @@ export default function EventDetail() {
               <h3>Lista vuota</h3>
               <p>Aggiungi articoli alla lista di carico</p>
             </div>
-          : eventItems.map(item => (
-            <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} />
-          ))
+          : <>{groupedEventItems}</>
         }
       </div>
 
@@ -424,7 +454,7 @@ export default function EventDetail() {
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                 <h2 style={{ margin:0, fontSize:18 }}>Aggiungi alla lista</h2>
-                <button className="close-btn" style={{ position:'static' }} onClick={() => setShowAddItem(false)}>✕</button>
+                <button className="close-btn" onClick={() => setShowAddItem(false)}>✕</button>
               </div>
               {/* Barra di ricerca */}
               <div style={{ position:'relative' }}>
@@ -503,7 +533,7 @@ export default function EventDetail() {
       {showExtraModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraModal(false)}>
           <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowExtraModal(false)}>x</button>
+            <button className="close-btn" onClick={() => setShowExtraModal(false)}>✕</button>
             <h2>+ Oggetto extra</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza in magazzino — usalo per noleggi, adattatori dell'ultimo minuto, ecc.</p>
             <div className="form-group">

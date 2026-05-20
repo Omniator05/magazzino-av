@@ -39,7 +39,9 @@ export default function WorkerScanner() {
   const [processing, setProcessing] = useState(false) // blocca scansioni doppie
   const [scanToast, setScanToast] = useState(null)
   const [showExtraWorker, setShowExtraWorker] = useState(false)
-  const [extraWorkerForm, setExtraWorkerForm] = useState({ name:'', qty:1 }) // popup centrale post-scansione
+  const [extraWorkerForm, setExtraWorkerForm] = useState({ name:'', qty:1 })
+  const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
+  const prevLoadedRef = useRef(0)
   const lastCodeRef = useRef('') // evita di riprocessare lo stesso codice di fila
   const lastCodeTimeRef = useRef(0)
   const html5QrRef = useRef(null)
@@ -238,14 +240,29 @@ export default function WorkerScanner() {
     setLastScan(null)
   }
 
-  useEffect(() => () => { if (html5QrRef.current) { try { html5QrRef.current.stop() } catch(e) {} } }, [])
-
-  if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>Caricamento...</p></div>
-
-  const items = event.items || []
+  // Derivazioni items — calcolate sempre (prima del return anticipato)
+  const items = event ? event.items || [] : []
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
   const total    = items.length
+
+  // Popup quando tutto è caricato
+  useEffect(() => {
+    if (
+      mode === 'load' &&
+      total > 0 &&
+      loaded === total &&
+      prevLoadedRef.current < total
+    ) {
+      setShowAllLoadedPopup(true)
+      setMode('return') // passa subito a modalità rientro
+    }
+    prevLoadedRef.current = loaded
+  }, [loaded, total, mode])
+
+  useEffect(() => () => { if (html5QrRef.current) { try { html5QrRef.current.stop() } catch(e) {} } }, [])
+
+  if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>Caricamento...</p></div>
 
   const scanResult = {
     loaded:           { bg:'rgba(245,166,35,0.15)', border:'rgba(245,166,35,0.4)', color:'var(--accent2)', icon:'🚛', title:'Caricato!', msg: i => `${i?.name} segnato come caricato sul furgone` },
@@ -483,7 +500,7 @@ export default function WorkerScanner() {
           </div>
         </details>
 
-        {/* Lista carico - compatta */}
+        {/* Lista carico - compatta con categorie */}
         <div style={{ marginTop:14, marginBottom:16 }}>
           <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>
             Lista carico · {items.filter(i=>i.returned).length}/{total} rientrati
@@ -491,7 +508,28 @@ export default function WorkerScanner() {
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             {items.length === 0
               ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
-              : items.map(item => (
+              : (() => {
+                  const WS_CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Kit:'🧰', Extra:'✨', Altro:'📦' }
+                  const WS_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+                  const wsCatGrouped = {}
+                  items.forEach(item => {
+                    const cat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+                    if (!wsCatGrouped[cat]) wsCatGrouped[cat] = []
+                    wsCatGrouped[cat].push(item)
+                  })
+                  const wsCatKeys = WS_ORDER.filter(c => wsCatGrouped[c])
+                  const wsMultiCat = wsCatKeys.length > 1
+                  return wsCatKeys.map(cat => (
+                    <div key={cat}>
+                      {wsMultiCat && (
+                        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 3px', background:'var(--bg2)' }}>
+                          <span style={{ fontSize:11 }}>{WS_CAT_ICONS[cat]||'📦'}</span>
+                          <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
+                          <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                          <span style={{ fontSize:10, color:'var(--text3)' }}>{wsCatGrouped[cat].length}</span>
+                        </div>
+                      )}
+                      {wsCatGrouped[cat].map(item => (
                 <ChecklistRow key={item.id} item={{
                   ...item,
                   _onToggleLoaded: async (itemId) => {
@@ -529,7 +567,10 @@ export default function WorkerScanner() {
                     }
                   },
                 }} />
-              ))
+              ))}
+                    </div>
+                  ))
+                })()
             }
           </div>
           {/* Bottone Extra sempre in fondo alla lista */}
@@ -540,11 +581,39 @@ export default function WorkerScanner() {
         </div>
       </div>
 
+      {/* Popup tutto caricato */}
+      {showAllLoadedPopup && (
+        <div className="modal-overlay" onClick={() => setShowAllLoadedPopup(false)}>
+          <div className="modal" style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:64, marginBottom:12 }}>🎉</div>
+            <h2 style={{ fontSize:22, marginBottom:8 }}>Ottimo lavoro!</h2>
+            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24 }}>
+              Tutto caricato sul furgone.<br/>Per ora il tuo lavoro è finito — buon evento!
+            </p>
+            <button
+              onClick={() => {
+                setShowAllLoadedPopup(false)
+                navigate('/')
+              }}
+              className="btn btn-primary btn-full"
+              style={{ fontSize:16, padding:'14px' }}>
+              🏠 Torna alla home
+            </button>
+            <button
+              onClick={() => setShowAllLoadedPopup(false)}
+              style={{ marginTop:12, width:'100%', padding:'10px', background:'transparent', color:'var(--text2)', fontSize:14 }}>
+              Rimani qui
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modal extra worker */}
       {showExtraWorker && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraWorker(false)}>
           <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowExtraWorker(false)}>x</button>
+            <button className="close-btn" onClick={() => setShowExtraWorker(false)}>✕</button>
             <h2>+ Oggetto extra</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza — per noleggi o oggetti dell'ultimo minuto.</p>
             <div className="form-group">
