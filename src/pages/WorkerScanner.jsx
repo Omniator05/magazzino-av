@@ -41,7 +41,38 @@ export default function WorkerScanner() {
   const [showExtraWorker, setShowExtraWorker] = useState(false)
   const [extraWorkerForm, setExtraWorkerForm] = useState({ name:'', qty:1 })
   const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
+  const [showAllReturnedPopup, setShowAllReturnedPopup] = useState(false)
+  const [showConfetti, setShowConfetti] = useState(false)
   const prevLoadedRef = useRef(0)
+  const prevReturnedRef = useRef(0)
+
+  const fireConfetti = () => {
+    const duration = 4000
+    const load = () => {
+      const colors = ['#7c3aed','#a78bfa','#34d399','#fbbf24','#f472b6','#60a5fa','#fb923c','#fff','#f87171']
+      const end = Date.now() + duration
+
+      // Prima salva: esplosione dai due lati in basso
+      window.confetti({ particleCount: 80, angle: 60, spread: 80, startVelocity: 55, origin: { x: 0, y: 1 }, colors, zIndex: 9999 })
+      window.confetti({ particleCount: 80, angle: 120, spread: 80, startVelocity: 55, origin: { x: 1, y: 1 }, colors, zIndex: 9999 })
+
+      // Poi pioggia continua dall'alto
+      const frame = () => {
+        window.confetti({ particleCount: 4, startVelocity: 0, angle: 90, spread: 360, origin: { x: Math.random(), y: -0.1 }, colors, gravity: 0.8, scalar: 1.2, drift: Math.random() - 0.5, zIndex: 9999 })
+        window.confetti({ particleCount: 3, startVelocity: 0, angle: 90, spread: 360, origin: { x: Math.random(), y: -0.1 }, colors, gravity: 1.1, scalar: 0.8, zIndex: 9999 })
+        if (Date.now() < end) requestAnimationFrame(frame)
+      }
+      setTimeout(frame, 400)
+    }
+
+    if (window.confetti) { load() }
+    else {
+      const script = document.createElement('script')
+      script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js'
+      script.onload = load
+      document.head.appendChild(script)
+    }
+  }
   const lastCodeRef = useRef('') // evita di riprocessare lo stesso codice di fila
   const lastCodeTimeRef = useRef(0)
   const html5QrRef = useRef(null)
@@ -246,7 +277,7 @@ export default function WorkerScanner() {
   const returned = items.filter(i => i.returned).length
   const total    = items.length
 
-  // Popup quando tutto è caricato
+  // Popup quando tutto è caricato — non ripetere se già mostrato per questo evento
   useEffect(() => {
     if (
       mode === 'load' &&
@@ -254,11 +285,35 @@ export default function WorkerScanner() {
       loaded === total &&
       prevLoadedRef.current < total
     ) {
-      setShowAllLoadedPopup(true)
-      setMode('return') // passa subito a modalità rientro
+      const key = 'loaded_popup_shown_' + id
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, '1')
+        setShowAllLoadedPopup(true)
+        fireConfetti()
+      }
+      setMode('return')
     }
     prevLoadedRef.current = loaded
   }, [loaded, total, mode])
+
+  // Popup quando tutto è rientrato
+  useEffect(() => {
+    const loadedItems = items.filter(i => i.loaded)
+    if (
+      mode === 'return' &&
+      loadedItems.length > 0 &&
+      loadedItems.every(i => i.returned) &&
+      prevReturnedRef.current < loadedItems.length
+    ) {
+      const key = 'returned_popup_shown_' + id
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, '1')
+        setShowAllReturnedPopup(true)
+        fireConfetti()
+      }
+    }
+    prevReturnedRef.current = loadedItems.filter(i => i.returned).length
+  }, [returned, mode, items, id])
 
   useEffect(() => () => { if (html5QrRef.current) { try { html5QrRef.current.stop() } catch(e) {} } }, [])
 
@@ -517,6 +572,14 @@ export default function WorkerScanner() {
                     if (!wsCatGrouped[cat]) wsCatGrouped[cat] = []
                     wsCatGrouped[cat].push(item)
                   })
+                  // Dentro ogni categoria: da fare prima, caricati/rientrati in fondo
+                  Object.keys(wsCatGrouped).forEach(cat => {
+                    wsCatGrouped[cat].sort((a, b) => {
+                      const aDone = mode === 'load' ? (a.loaded ? 1 : 0) : (a.returned ? 1 : 0)
+                      const bDone = mode === 'load' ? (b.loaded ? 1 : 0) : (b.returned ? 1 : 0)
+                      return aDone - bDone
+                    })
+                  })
                   const wsCatKeys = WS_ORDER.filter(c => wsCatGrouped[c])
                   const wsMultiCat = wsCatKeys.length > 1
                   return wsCatKeys.map(cat => (
@@ -591,19 +654,38 @@ export default function WorkerScanner() {
             <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24 }}>
               Tutto caricato sul furgone.<br/>Per ora il tuo lavoro è finito — buon evento!
             </p>
-            <button
-              onClick={() => {
-                setShowAllLoadedPopup(false)
-                navigate('/')
-              }}
-              className="btn btn-primary btn-full"
-              style={{ fontSize:16, padding:'14px' }}>
+            <button onClick={() => { setShowAllLoadedPopup(false); navigate('/') }}
+              className="btn btn-primary btn-full" style={{ fontSize:16, padding:'14px' }}>
               🏠 Torna alla home
             </button>
-            <button
-              onClick={() => setShowAllLoadedPopup(false)}
+            <button onClick={() => setShowAllLoadedPopup(false)}
               style={{ marginTop:12, width:'100%', padding:'10px', background:'transparent', color:'var(--text2)', fontSize:14 }}>
               Rimani qui
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Popup tutto scaricato */}
+      {showAllReturnedPopup && (
+        <div className="modal-overlay" onClick={() => setShowAllReturnedPopup(false)}>
+          <div className="modal" style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:64, marginBottom:12 }}>📦</div>
+            <h2 style={{ fontSize:22, marginBottom:8 }}>Furgone svuotato!</h2>
+            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24 }}>
+              Tutto rientrato in magazzino.<br/>Ottimo lavoro — il furgone è libero!
+            </p>
+            <button onClick={() => {
+                setShowAllReturnedPopup(false)
+                navigate('/')
+              }}
+              className="btn btn-green btn-full" style={{ fontSize:16, padding:'14px' }}>
+              ✅ Fatto, torna alla home
+            </button>
+            <button onClick={() => setShowAllReturnedPopup(false)}
+              style={{ marginTop:12, width:'100%', padding:'10px', background:'transparent', color:'var(--text2)', fontSize:14 }}>
+              Resta qui
             </button>
           </div>
         </div>

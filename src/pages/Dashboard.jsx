@@ -46,11 +46,12 @@ export default function Dashboard({ toggleTheme, theme }) {
     <div className="page" style={{ background:'var(--bg)', paddingBottom:100 }}>
 
       {/* Header */}
-      <div style={{ padding:'52px 20px 20px', borderBottom:'1px solid var(--border)' }}>
+      <div style={{ padding:'52px 20px 24px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
           <div>
-            <p style={{ color:'var(--text2)', fontSize:15 }}>{greeting()}</p>
-            <h1 style={{ fontSize:30, fontWeight:800, letterSpacing:'-0.8px', lineHeight:1.1 }}>{name}</h1>
+            <p style={{ fontSize:25, color:'var(--text2)', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:2 }}>{greeting()}</p>
+            <h1 style={{ fontSize:28, fontWeight:900, color:'var(--text)', lineHeight:1.1, marginBottom:6 }}>{name}</h1>
+            <p style={{ fontSize:12, color:'var(--text2)' }}>{profile?.role === 'admin' ? 'Amministratore' : 'Magazziniere'}</p>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <ThemeToggle theme={theme} onToggle={toggleTheme} />

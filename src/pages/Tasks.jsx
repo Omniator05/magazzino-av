@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import DeleteButton from '../components/DeleteButton'
@@ -16,6 +17,7 @@ export default function Tasks() {
   const [tasks, setTasks]       = useState([])
   const [users, setUsers]       = useState([])
   const [showModal, setShowModal] = useState(false)
+  const taskDrag = useModalDrag(() => setShowModal(false))
   const [form, setForm]         = useState({ title:'', notes:'', priority:'media', assignee:'all' })
   const isAdmin = profile?.role === 'admin'
   useModalScrollLock(showModal)
@@ -157,7 +159,7 @@ export default function Tasks() {
       {/* Modal crea task */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative' }}>
+          <div className="modal" style={{ position:'relative' }} {...taskDrag}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
             <h2>{isAdmin ? 'Nuova task' : '+ Aggiungi task'}</h2>
             {!isAdmin && (

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useModalDrag } from '../hooks/useModalDrag'
 import { useNavigate, useLocation } from 'react-router-dom'
 import DeleteButton from '../components/DeleteButton'
 import DateBadge from '../components/DateBadge'
@@ -56,6 +57,8 @@ export default function Events() {
   const { user } = useAuth()
   const [events, setEvents]       = useState([])
   const [showModal, setShowModal] = useState(false)
+  const eventDrag = useModalDrag(() => setShowModal(false))
+  const templateDrag = useModalDrag(() => setShowTemplateMenu(false))
   const [showSearch, setShowSearch]     = useState(false)
   const [openSections, setOpenSections] = useState(() => {
     try {
@@ -69,7 +72,7 @@ export default function Events() {
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
-  const [form, setForm]           = useState({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
   const navigate = useNavigate()
   const { state: navState } = useLocation()
   const anyModalOpen = showModal || showTemplateMenu
@@ -78,7 +81,7 @@ export default function Events() {
   // Se arrivo dall'archivio con un template, apro subito il form
   useEffect(() => {
     if (navState?.templateItems) {
-      setForm({ name: navState.templateName || '', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+      setForm({ name: navState.templateName || '', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
       setPendingTemplateItems(navState.templateItems)
       setShowModal(true)
       window.history.replaceState({}, '')
@@ -156,7 +159,7 @@ export default function Events() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+    setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
     setPendingTemplateItems(null)
     setShowModal(true)
   }
@@ -184,7 +187,7 @@ export default function Events() {
         })
         setShowModal(false)
         setEditing(null)
-        setForm({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
       } else {
         const seriesId = form.recurrence !== 'never' && futureDates.length > 0
           ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : null
@@ -200,7 +203,7 @@ export default function Events() {
           await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
         }
         setShowModal(false)
-        setForm({ name:'', date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
         setPendingTemplateItems(null)
         // Se creato da template, vai direttamente all'evento
         if (pendingTemplateItems) navigate(`/events/${ref.id}`)
@@ -392,7 +395,7 @@ export default function Events() {
       {/* Modal scelta: template o vuoto */}
       {showTemplateMenu && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowTemplateMenu(false)}>
-          <div className="modal" style={{ position:'relative' }}>
+          <div className="modal" style={{ position:'relative' }} {...templateDrag}>
             <button className="close-btn" onClick={() => setShowTemplateMenu(false)}>✕</button>
             <h2>Nuovo evento</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>Vuoi partire da un template o creare un evento vuoto?</p>
@@ -437,7 +440,7 @@ export default function Events() {
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative' }}>
+          <div className="modal" style={{ position:'relative' }} {...eventDrag}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
             <h2>{editing ? 'Modifica evento' : pendingTemplateItems ? '📋 Nuovo evento da template' : 'Nuovo evento'}</h2>
             {pendingTemplateItems && (
@@ -453,12 +456,25 @@ export default function Events() {
             </div>
             <div className="form-group">
               <label>Data inizio *</label>
-              <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} />
+              <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
+                <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}
+                  id="date-start" style={{ flex:1, paddingRight:40 }} />
+                <button type="button" onClick={() => document.getElementById('date-start').showPicker?.()}
+                  style={{ position:'absolute', right:10, background:'transparent', color:'var(--text2)', padding:0, fontSize:18, lineHeight:1 }}>
+                  📅
+                </button>
+              </div>
             </div>
             <div className="form-group">
               <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span></label>
-              <input type="date" value={form.dateEnd} min={form.date}
-                onChange={e => setForm({...form, dateEnd:e.target.value})} />
+              <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
+                <input type="date" value={form.dateEnd} min={form.date} id="date-end"
+                  onChange={e => setForm({...form, dateEnd:e.target.value})} style={{ flex:1, paddingRight:40 }} />
+                <button type="button" onClick={() => document.getElementById('date-end').showPicker?.()}
+                  style={{ position:'absolute', right:10, background:'transparent', color:'var(--text2)', padding:0, fontSize:18, lineHeight:1 }}>
+                  📅
+                </button>
+              </div>
             </div>
             <div className="form-group">
               <label>Location</label>

@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useModalDrag } from '../hooks/useModalDrag'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Kit','Altro']
 const ICONS = {
@@ -71,6 +72,7 @@ export default function Inventory() {
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
+  const myDrag = useModalDrag(() => setShowModal(false))
   // Kit form: nome + componenti
 
   // Items in shared global collection so workers can read them

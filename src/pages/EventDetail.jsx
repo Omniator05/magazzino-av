@@ -1,3 +1,4 @@
+import { useModalDrag } from '../hooks/useModalDrag'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -34,6 +35,8 @@ export default function EventDetail() {
   const [allItems, setAllItems] = useState([])
   const [showAddItem, setShowAddItem] = useState(false)
   const [showExtraModal, setShowExtraModal] = useState(false)
+  const addItemDrag   = useModalDrag(() => setShowAddItem(false))
+  const extraDrag     = useModalDrag(() => setShowExtraModal(false))
   const [extraForm, setExtraForm] = useState({ name:'', qty:1, notes:'' })
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
@@ -448,7 +451,7 @@ export default function EventDetail() {
 
       {showAddItem && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddItem(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }}>
+          <div className="modal" style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag}>
 
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
@@ -532,7 +535,7 @@ export default function EventDetail() {
       {/* Modal aggiunta extra */}
       {showExtraModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraModal(false)}>
-          <div className="modal" style={{ position:'relative' }}>
+          <div className="modal" style={{ position:'relative' }} {...extraDrag}>
             <button className="close-btn" onClick={() => setShowExtraModal(false)}>✕</button>
             <h2>+ Oggetto extra</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza in magazzino — usalo per noleggi, adattatori dell'ultimo minuto, ecc.</p>

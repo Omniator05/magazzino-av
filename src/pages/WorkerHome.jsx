@@ -64,11 +64,12 @@ export default function WorkerHome() {
   return (
     <div className="page">
       {/* Header */}
-      <div style={{ padding:'52px 20px 20px', background:'var(--gradient-header)', borderBottom:'1px solid var(--border)' }}>
+      <div style={{ padding:'52px 20px 24px', background:'var(--gradient-header)', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
           <div>
-            <p style={{ color:'var(--text2)', fontSize:14 }}>Ciao,</p>
-            <h1 style={{ fontSize:26, fontWeight:800, background:'var(--gradient-primary)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>{name}</h1>
+            <p style={{ fontSize:11, color:'var(--text2)', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:2 }}>Ciao,</p>
+            <h1 style={{ fontSize:28, fontWeight:500, color:'var(--text)', lineHeight:1.1, marginBottom:6 }}>{name || profile?.username || 'Magazziniere'}</h1>
+            <p style={{ fontSize:12, color:'var(--text2)' }}>Magazziniere</p>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
