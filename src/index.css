@@ -109,7 +109,9 @@ select option { background: var(--bg2); }
 }
 
 .page {
-  animation: slowToSmoothFade 0.6s cubic-bezier(0.83, 0, 0.17, 1);
+  min-height: 100dvh;
+  padding-bottom: 140px;
+  animation: slowToSmoothFade 0.7s cubic-bezier(0.83, 0, 0.17, 1);
 }
 
 /* ── Tab bar ──────────────────────────────────── */
