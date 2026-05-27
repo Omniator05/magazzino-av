@@ -99,15 +99,17 @@ select option { background: var(--bg2); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
 /* ── Page layout ──────────────────────────────── */
-@keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes slowToSmoothFade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .page {
-  min-height: 100dvh;
-  padding-bottom: 140px;
-  animation: pageFadeIn 0.5s ease-out both;
+  animation: slowToSmoothFade 0.6s cubic-bezier(0.83, 0, 0.17, 1);
 }
 
 /* ── Tab bar ──────────────────────────────────── */
@@ -267,30 +269,7 @@ select option { background: var(--bg2); }
   padding: 8px 20px 44px;
   animation: slideUp 0.3s cubic-bezier(0.32,0.72,0,1);
 }
-/* Fix doppio tap su mobile - rimuove 300ms delay */
-* { -webkit-tap-highlight-color: transparent; }
-button, a, [role="button"] {
-  touch-action: manipulation;
-}
-/* Hover solo su dispositivi che supportano hover vero (no mobile) */
-@media (hover: none) {
-  .btn-primary:hover,
-  .btn-secondary:hover,
-  .btn-green:hover,
-  .btn-red:hover,
-  .btn-gold:hover,
-  .delete-btn:hover,
-  .edit-btn:hover,
-  .export-btn:hover {
-    transform: none !important;
-    box-shadow: inherit !important;
-    filter: none !important;
-    background: inherit !important;
-  }
-  .delete-btn:hover .delete-bin-top { transform: none !important; }
-  .export-btn:hover .export-svg { animation: none !important; }
-  .edit-btn:hover .edit-svg { transform: none !important; }
-}
+/* Drag handle decorativa */
 .modal::before {
   content: '';
   display: block;
@@ -454,7 +433,7 @@ button, a, [role="button"] {
   100% { background-position:  200% center; }
 }
 
-.animate-in { animation: fadeInUp 0,5s cubic-bezier(0.32,0.72,0,1) both; }
+.animate-in { animation: fadeInUp 0.4s cubic-bezier(0.32,0.72,0,1) both; }
 
 /* Skeleton loader */
 .skeleton {
@@ -895,127 +874,3 @@ button, a, [role="button"] {
 .kit-components-panel .kit-comp-row:nth-child(7) { transition-delay: 0.08s; }
 .kit-components-panel .kit-comp-row:nth-child(8) { transition-delay: 0.04s; }
 .kit-comp-row:last-child { border-bottom: none; }
-
-/* ── CLOSE SLIDE BUTTON ────────────────────────── */
-.close-slide-btn {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  border: none;
-  border-radius: 8px;
-  box-shadow: 1px 1px 3px rgba(0,0,0,0.15);
-  background: #e62222;
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.close-slide-btn, .close-slide-btn span { transition: 200ms; }
-.close-slide-text {
-  transform: translateX(22px);
-  color: white;
-  font-weight: 700;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.close-slide-icon {
-  position: absolute;
-  border-left: 1px solid #c41b1b;
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.close-slide-icon svg { fill: #eee; }
-.close-slide-btn:hover { background: #ff3636; }
-.close-slide-btn:hover .close-slide-text { color: transparent; }
-.close-slide-btn:hover .close-slide-icon {
-  width: 100% !important;
-  border-left: none;
-  right: auto;
-  left: 0;
-}
-.close-slide-btn:focus { outline: none; }
-.close-slide-btn:active .close-slide-icon svg { transform: scale(0.8); }
-
-/* ── USER AVATAR CARD ──────────────────────────── */
-.user-avatar-card {
-  --bg-color: rgba(124,58,237,0.15);
-  --bg-color-light: rgba(124,58,237,0.06);
-  --box-shadow-color: rgba(124,58,237,0.2);
-  width: 90px;
-  height: 100px;
-  background: var(--card);
-  border-top-right-radius: 10px;
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
-  transition: all 0.3s ease-out;
-  flex-shrink: 0;
-}
-.user-avatar-card:hover {
-  transform: translateY(-3px) scale(1.03);
-  box-shadow: 0 16px 30px rgba(0,0,0,0.1), 0 16px 30px var(--box-shadow-color);
-}
-.user-avatar-card:hover .user-avatar-overlay { transform: scale(4); }
-.user-avatar-card:hover .user-avatar-circle {
-  border-color: var(--bg-color-light);
-  background: var(--bg-color);
-}
-.user-avatar-card:hover .user-avatar-circle::after { background: var(--bg-color-light); }
-.user-avatar-overlay {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--bg-color);
-  position: absolute;
-  top: 24px; left: 18px;
-  z-index: 0;
-  transition: transform 0.3s ease-out;
-}
-.user-avatar-circle {
-  width: 56px; height: 56px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 2px solid var(--bg-color);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  z-index: 1;
-  transition: all 0.3s ease-out;
-}
-.user-avatar-circle::after {
-  content: '';
-  width: 48px; height: 48px;
-  display: block;
-  position: absolute;
-  background: var(--bg-color);
-  border-radius: 50%;
-  transition: opacity 0.3s ease-out;
-}
-.user-avatar-circle svg { z-index: 2; position: relative; }
-.user-avatar-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text2);
-  margin-top: 8px;
-  z-index: 1;
-  transition: color 0.3s ease-out;
-  text-align: center;
-}
-.user-avatar-card:hover .user-avatar-name { color: var(--accent); }
-
-/* ── CONFETTI ANIMATION ────────────────────────── */
-@keyframes confetti-fly-left {
-  0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(calc(50vw + 40px + var(--rx, 0px)), calc(-85vh)) rotate(720deg); opacity: 0; }
-}
-@keyframes confetti-fly-right {
-  0%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(calc(-50vw - 40px + var(--rx, 0px)), calc(-85vh)) rotate(-720deg); opacity: 0; }
-}
