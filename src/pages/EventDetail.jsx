@@ -41,6 +41,8 @@ export default function EventDetail() {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
   const [showEventNotes, setShowEventNotes] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const itemEditDrag = useModalDrag(() => setEditItem(null))
 
   const eventRef = doc(db, 'events', id)
 
@@ -258,6 +260,14 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
+  const saveItemEdit = async ({ id, qty, eventNote }) => {
+    const updated = eventItems.map(i =>
+      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '' }
+    )
+    await updateEventItems(updated)
+    setEditItem(null)
+  }
+
   const addExtraItem = async () => {
     if (!extraForm.name.trim()) return
     const extra = {
@@ -339,7 +349,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} />
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} />
       ))}
     </div>
   ))
@@ -365,11 +375,16 @@ export default function EventDetail() {
           </div>
         </div>
 
-        {/* Nome evento + tasto ℹ️ note */}
+        {/* Nome evento + badge installazione + tasto ℹ️ note */}
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10 }}>
           <div style={{ flex:1, minWidth:0 }}>
-            <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
-            <div style={{ marginTop:6 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
+              <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
+              {event.type === 'installation' && (
+                <span style={{ background:'rgba(90,82,201,0.15)', color:'#7c6fcd', border:'1px solid rgba(90,82,201,0.3)', borderRadius:8, padding:'2px 10px', fontSize:11, fontWeight:800, flexShrink:0 }}>🔧 INSTALLAZIONE</span>
+              )}
+            </div>
+            <div style={{ marginTop:2 }}>
               <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
             </div>
           </div>
@@ -426,6 +441,37 @@ export default function EventDetail() {
           </div>
         )}
         {returned === total && total > 0 && <p style={{ color:'var(--green)', fontSize:13, marginTop:8, fontWeight:700 }}>✅ Tutto rientrato! Evento chiuso.</p>}
+
+        {/* Bottone chiudi installazione */}
+        {event.type === 'installation' && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Chiudere l'installazione e ripristinare la giacenza di tutti gli articoli?`)) return
+              for (const item of eventItems) {
+                if (item.loaded && !item.returned && !item.isExtra) {
+                  try {
+                    const itemRef = doc(db, 'items', item.id)
+                    const snap = await getDoc(itemRef)
+                    if (snap.exists()) {
+                      const current = snap.data()
+                      const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+                      await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty||0) + (item.qty||1)) })
+                    }
+                  } catch(e) { console.error(e) }
+                }
+              }
+              await updateDoc(doc(db, 'events', id), { archived: true })
+              navigate('/events')
+            }}
+            style={{ width:'100%', marginTop:12, padding:'13px', borderRadius:12,
+              background:'rgba(90,82,201,0.12)', border:'1px solid rgba(90,82,201,0.3)',
+              color:'#7c6fcd', fontWeight:700, fontSize:14,
+              display:'flex', alignItems:'center', justifyContent:'center', gap:8
+            }}
+          >
+            ✅ Chiudi installazione e ripristina giacenza
+          </button>
+        )}
       </div>
 
       {/* Lista articoli */}
@@ -450,8 +496,8 @@ export default function EventDetail() {
       </div>
 
       {showAddItem && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddItem(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag}>
+        <div className="modal-overlay" onClick={addItemDrag.onOverlayClick}>
+          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag.props}>
 
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
@@ -534,8 +580,8 @@ export default function EventDetail() {
 
       {/* Modal aggiunta extra */}
       {showExtraModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraModal(false)}>
-          <div className="modal" style={{ position:'relative' }} {...extraDrag}>
+        <div className="modal-overlay" onClick={extraDrag.onOverlayClick}>
+          <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
             <button className="close-btn" onClick={() => setShowExtraModal(false)}>✕</button>
             <h2>+ Oggetto extra</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza in magazzino — usalo per noleggi, adattatori dell'ultimo minuto, ecc.</p>
@@ -562,6 +608,52 @@ export default function EventDetail() {
             <button onClick={addExtraItem} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!extraForm.name.trim()}>
               ✅ Aggiungi alla lista
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom sheet modifica oggetto */}
+      {editItem && (
+        <div className="modal-overlay" onClick={itemEditDrag.onOverlayClick}>
+          <div className={`modal${itemEditDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...itemEditDrag.props}>
+            <button className="close-btn" onClick={() => setEditItem(null)}>✕</button>
+            <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4 }}>Modifica oggetto</p>
+            <h2 style={{ fontSize:18, fontWeight:800, marginBottom:20 }}>{editItem.name}</h2>
+
+            <div className="form-group">
+              <label>Quantità</label>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <button
+                  onClick={() => setEditItem(ei => ({ ...ei, qty: Math.max(1, ei.qty - 1) }))}
+                  style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>−</button>
+                <span style={{ flex:1, textAlign:'center', fontWeight:800, fontSize:24, color:'var(--text)' }}>{editItem.qty}</span>
+                <button
+                  onClick={() => setEditItem(ei => ({ ...ei, qty: ei.qty + 1 }))}
+                  style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Nota per questo evento</label>
+              <input
+                value={editItem.eventNote || ''}
+                onChange={e => setEditItem(ei => ({ ...ei, eventNote: e.target.value }))}
+                placeholder="es. Portare cavo di ricambio, controllare connettori..."
+              />
+            </div>
+
+            <button
+              onClick={() => saveItemEdit(editItem)}
+              className="btn btn-primary btn-full"
+              style={{ marginTop:8 }}>
+              Salva
+            </button>
+
+            <button
+              onClick={async () => { setEditItem(null); await removeFromEvent(editItem.id) }}
+              style={{ width:'100%', marginTop:10, padding:'12px', borderRadius:10, background:'rgba(248,113,113,0.10)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', fontWeight:700, fontSize:14 }}>
+              Rimuovi dalla lista
             </button>
           </div>
         </div>
@@ -628,67 +720,59 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove }) {
-  const [location, setLocation]   = useState(item.location || null)
-  const [itemNotes, setItemNotes] = useState(null)
-  const [showNotes, setShowNotes] = useState(false)
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit }) {
+  const [location, setLocation] = useState(item.location || null)
+  const [warehouseNotes, setWarehouseNotes] = useState(null)
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
       if (snap.exists()) {
         setLocation(snap.data().location || null)
-        setItemNotes(snap.data().notes || null)
+        setWarehouseNotes(snap.data().notes || null)
       }
     }).catch(() => {})
   }, [item.id])
 
   return (
-    <>
-      <div style={{ borderBottom: showNotes ? 'none' : '1px solid var(--border)' }}>
-        <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-              <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
-              {item.isExtra && (
-                <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>
-              )}
-              {itemNotes && (
-                <button onClick={() => setShowNotes(v => !v)}
-                  style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:22, height:22, fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  {showNotes ? 'x' : 'i'}
-                </button>
-              )}
-            </div>
-            <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
-            {location ? (
-              <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
-                <span style={{ fontSize:11 }}>📍</span>
-                <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
-              </div>
-            ) : (
-              <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
+    <div style={{ borderBottom:'1px solid var(--border)' }}>
+      <div
+        style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
+        onClick={() => onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '' })}
+      >
+        <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap' }}>
+            <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+            {item.isExtra && (
+              <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>
             )}
           </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
-            <button onClick={() => onToggleLoaded(item.id)}
-              style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-              {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
-            </button>
-            <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
-              style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
-              {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
-            </button>
-          </div>
-          <button onClick={() => onRemove(item.id)} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'4px 6px', flexShrink:0 }}>x</button>
+          <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
+          {item.eventNote ? (
+            <p style={{ color:'var(--accent2)', fontSize:12, marginTop:3, fontStyle:'italic' }}>📝 {item.eventNote}</p>
+          ) : warehouseNotes ? (
+            <p style={{ color:'var(--text3)', fontSize:11, marginTop:3, fontStyle:'italic' }}>💡 {warehouseNotes}</p>
+          ) : null}
+          {location ? (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
+              <span style={{ fontSize:11 }}>📍</span>
+              <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
+            </div>
+          ) : (
+            <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
+          )}
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
+          <button onClick={() => onToggleLoaded(item.id)}
+            style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
+            {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
+          </button>
+          <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
+            style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
+            {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
+          </button>
         </div>
       </div>
-      {showNotes && itemNotes && (
-        <div style={{ padding:'10px 16px 14px', borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>
-          <span style={{ fontSize:16, flexShrink:0 }}>📝</span>
-          <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{itemNotes}</p>
-        </div>
-      )}
-    </>
+    </div>
   )
 }

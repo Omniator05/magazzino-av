@@ -63,7 +63,7 @@ export default function Events() {
   const [openSections, setOpenSections] = useState(() => {
     try {
       const saved = sessionStorage.getItem('events_sections')
-      return saved ? JSON.parse(saved) : { recurring: true, unload: true, upcoming: true }
+      return saved ? JSON.parse(saved) : { recurring: true, unload: true, upcoming: true, installations: true }
     } catch { return { recurring: true, unload: true, upcoming: true } }
   })
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
@@ -72,7 +72,7 @@ export default function Events() {
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
-  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
   const navigate = useNavigate()
   const { state: navState } = useLocation()
   const anyModalOpen = showModal || showTemplateMenu
@@ -81,7 +81,7 @@ export default function Events() {
   // Se arrivo dall'archivio con un template, apro subito il form
   useEffect(() => {
     if (navState?.templateItems) {
-      setForm({ name: navState.templateName || '', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+      setForm({ name: navState.templateName || '', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
       setPendingTemplateItems(navState.templateItems)
       setShowModal(true)
       window.history.replaceState({}, '')
@@ -119,7 +119,8 @@ export default function Events() {
       || sorted[sorted.length - 1]
   })
 
-  const singleEvents   = events.filter(e => !e.seriesId)
+  const singleEvents   = events.filter(e => !e.seriesId && e.type !== 'installation')
+  const installations  = events.filter(e => e.type === 'installation' && !e.archived)
 
   // Un evento rimane "attivo" se:
   // 1. la data è oggi o futura, OPPURE
@@ -159,7 +160,7 @@ export default function Events() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+    setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
     setPendingTemplateItems(null)
     setShowModal(true)
   }
@@ -167,7 +168,7 @@ export default function Events() {
   const openEdit = (e, event) => {
     e.stopPropagation()
     setEditing(event)
-    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'' })
+    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'', type: event.type||'event' })
     setPendingTemplateItems(null)
     setShowModal(true)
   }
@@ -184,10 +185,11 @@ export default function Events() {
           name: form.name.trim(), date: form.date,
           dateEnd: form.dateEnd || null,
           location: form.location.trim(), notes: form.notes.trim(),
+          type: form.type || 'event',
         })
         setShowModal(false)
         setEditing(null)
-        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
       } else {
         const seriesId = form.recurrence !== 'never' && futureDates.length > 0
           ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : null
@@ -197,13 +199,14 @@ export default function Events() {
           items: pendingTemplateItems || [],
           createdAt: serverTimestamp(), createdBy: user.uid,
           recurrence: form.recurrence, seriesId,
+          type: form.type || 'event',
         }
         const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
         for (const date of futureDates) {
           await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
         }
         setShowModal(false)
-        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
+        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
         setPendingTemplateItems(null)
         // Se creato da template, vai direttamente all'evento
         if (pendingTemplateItems) navigate(`/events/${ref.id}`)
@@ -296,6 +299,78 @@ export default function Events() {
     setShowModal(true)
   }
 
+  const closeInstallation = async (installation) => {
+    if (!confirm(`Chiudere l'installazione "${installation.name}" e ripristinare la giacenza di tutti gli articoli?`)) return
+    const items = installation.items || []
+    for (const item of items) {
+      if (item.loaded && !item.returned && !item.isExtra) {
+        try {
+          const itemRef = doc(db, 'items', item.id)
+          const snap = await import('firebase/firestore').then(({ getDoc }) => getDoc(itemRef))
+          if (snap.exists()) {
+            const current = snap.data()
+            const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
+            await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty||0) + (item.qty||1)) })
+          }
+        } catch(e) { console.error(e) }
+      }
+    }
+    await updateDoc(doc(db, 'events', installation.id), { archived: true })
+  }
+
+  const InstallationCard = ({ event: inst }) => {
+    const items     = inst.items || []
+    const loaded    = items.filter(i => i.loaded).length
+    const total     = items.length
+    const isExpired = inst.endDate && inst.endDate < today
+
+    return (
+      <div
+        onClick={() => navigate(`/events/${inst.id}`)}
+        style={{ margin:'0 16px 10px', borderRadius:16, overflow:'hidden', cursor:'pointer',
+          background: isExpired ? 'rgba(216,56,63,0.06)' : 'rgba(90,82,201,0.06)',
+          border: `1px solid ${isExpired ? 'rgba(216,56,63,0.35)' : 'rgba(90,82,201,0.3)'}`,
+        }}
+      >
+        {isExpired && (
+          <div style={{ background:'rgba(216,56,63,0.12)', padding:'5px 16px', borderBottom:'1px solid rgba(216,56,63,0.2)' }}>
+            <p style={{ color:'var(--red)', fontSize:12, fontWeight:700 }}>⚠️ SCADUTA — segna come chiusa</p>
+          </div>
+        )}
+        <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ fontSize:28, flexShrink:0 }}>🔧</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:3 }}>
+              <h3 style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:15 }}>{inst.name}</h3>
+              <span style={{ background:'rgba(90,82,201,0.15)', color:'#7c6fcd', border:'1px solid rgba(90,82,201,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>INSTALL.</span>
+            </div>
+            <DateBadge dateStr={inst.date} dateEndStr={inst.endDate} location={inst.location} today={today} />
+            <p style={{ color: loaded > 0 ? '#7c6fcd' : 'var(--text2)', fontSize:12, fontWeight:600, marginTop:4 }}>
+              {total === 0 ? 'Lista vuota' : loaded === 0 ? `${total} in lista` : `🔧 ${loaded}/${total} installati`}
+            </p>
+          </div>
+          <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+            <EditButton onClick={e => openEdit(e, inst)} size={34} />
+            <DeleteButton onClick={e => deleteEvent(e, inst)} size={34} />
+          </div>
+        </div>
+        <div style={{ padding:'0 16px 14px' }} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => closeInstallation(inst)}
+            style={{ width:'100%', padding:'10px', borderRadius:10,
+              background: isExpired ? 'rgba(216,56,63,0.12)' : 'rgba(90,82,201,0.10)',
+              border: `1px solid ${isExpired ? 'rgba(216,56,63,0.3)' : 'rgba(90,82,201,0.25)'}`,
+              color: isExpired ? 'var(--red)' : '#7c6fcd',
+              fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:8
+            }}
+          >
+            ✅ Chiudi installazione e ripristina giacenza
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -381,6 +456,20 @@ export default function Events() {
               </div>
             )}
 
+            {/* INSTALLAZIONI ATTIVE */}
+            {installations.length > 0 && (
+              <div style={{ marginTop:8 }}>
+                <button onClick={() => toggle('installations')}
+                  className="btn-section" style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px', background:'transparent', outline:'none' }}>
+                  <span style={{ transition:'transform 0.2s', display:'inline-block', transform: openSections.installations ? 'rotate(90deg)' : 'rotate(0deg)', fontSize:20, lineHeight:1, color:'#7c6fcd' }}>›</span>
+                  <span style={{ color:'#7c6fcd', fontWeight:700, fontSize:13, textTransform:'uppercase', letterSpacing:'0.5px' }}>🔧 Installazioni</span>
+                  <span style={{ background:'rgba(90,82,201,0.12)', border:'1px solid rgba(90,82,201,0.25)', borderRadius:10, padding:'1px 8px', fontSize:11, color:'#7c6fcd' }}>{installations.length}</span>
+                  <div style={{ flex:1, height:1, background:'rgba(90,82,201,0.2)' }} />
+                </button>
+                {openSections.installations && installations.map(inst => <InstallationCard key={inst.id} event={inst} />)}
+              </div>
+            )}
+
             {events.length === 0 && (
               <div className="empty-state">
                 <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
@@ -394,8 +483,8 @@ export default function Events() {
 
       {/* Modal scelta: template o vuoto */}
       {showTemplateMenu && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowTemplateMenu(false)}>
-          <div className="modal" style={{ position:'relative' }} {...templateDrag}>
+        <div className="modal-overlay" onClick={templateDrag.onOverlayClick}>
+          <div className={`modal${templateDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...templateDrag}>
             <button className="close-btn" onClick={() => setShowTemplateMenu(false)}>✕</button>
             <h2>Nuovo evento</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>Vuoi partire da un template o creare un evento vuoto?</p>
@@ -439,10 +528,33 @@ export default function Events() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative' }} {...eventDrag}>
+        <div className="modal-overlay" onClick={eventDrag.onOverlayClick}>
+          <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...eventDrag}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
             <h2>{editing ? 'Modifica evento' : pendingTemplateItems ? '📋 Nuovo evento da template' : 'Nuovo evento'}</h2>
+
+            {/* Toggle tipo: Evento / Installazione */}
+            {!editing && !pendingTemplateItems && (
+              <div style={{ display:'flex', gap:8, marginBottom:16, background:'var(--card2)', borderRadius:12, padding:4 }}>
+                <button
+                  onClick={() => setForm(f => ({...f, type:'event'}))}
+                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13,
+                    background: form.type !== 'installation' ? 'var(--card)' : 'transparent',
+                    color: form.type !== 'installation' ? 'var(--text)' : 'var(--text2)',
+                    boxShadow: form.type !== 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                    border: 'none', transition:'all 0.15s'
+                  }}>📅 Evento</button>
+                <button
+                  onClick={() => setForm(f => ({...f, type:'installation', recurrence:'never', endDate:''}))}
+                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13,
+                    background: form.type === 'installation' ? 'rgba(90,82,201,0.15)' : 'transparent',
+                    color: form.type === 'installation' ? '#7c6fcd' : 'var(--text2)',
+                    boxShadow: form.type === 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                    border: form.type === 'installation' ? '1px solid rgba(90,82,201,0.3)' : '1px solid transparent',
+                    transition:'all 0.15s'
+                  }}>🔧 Installazione</button>
+              </div>
+            )}
             {pendingTemplateItems && (
               <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'8px 12px', marginBottom:12 }}>
                 <p style={{ color:'var(--blue)', fontSize:13, fontWeight:600 }}>
@@ -466,7 +578,7 @@ export default function Events() {
               </div>
             </div>
             <div className="form-group">
-              <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span></label>
+              <label>Data fine {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — fine contratto prevista)</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span>}</label>
               <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
                 <input type="date" value={form.dateEnd} min={form.date} id="date-end"
                   onChange={e => setForm({...form, dateEnd:e.target.value})} style={{ flex:1, paddingRight:40 }} />
@@ -484,7 +596,7 @@ export default function Events() {
               <label>Note</label>
               <textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder="Dettagli evento..." rows={2} />
             </div>
-            {!editing && (
+            {!editing && form.type !== 'installation' && (
               <>
                 <div className="form-group">
                   <label>🔁 Ripeti</label>

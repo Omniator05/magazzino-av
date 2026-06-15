@@ -8,6 +8,8 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Kit','Altro']
+// Categorie assegnabili a un kit (esclude 'Kit' stesso)
+const KIT_CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Altro']
 const ICONS = {
   'Audio':       '🔊',
   'Video':       '📺',
@@ -65,14 +67,19 @@ export default function Inventory() {
   const [editingKit, setEditingKit]             = useState(null)
   const [kitEditComponents, setKitEditComponents] = useState([])
   const [kitEditSearch, setKitEditSearch]       = useState('')
-  const [kitForm, setKitForm]           = useState({ name:'', location:'', qty:1 })
+  const [kitForm, setKitForm]           = useState({ name:'', location:'', qty:1, category:'Altro' })
   const [kitComponents, setKitComponents] = useState([])
   const [kitSearch, setKitSearch]       = useState('')
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
-  const myDrag = useModalDrag(() => setShowModal(false))
+  const myDrag      = useModalDrag(() => setShowModal(false))
+  const detailDrag  = useModalDrag(() => setShowDetail(null))
+  const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
+  const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
+  const kitDrag     = useModalDrag(() => setShowKitModal(false))
   // Kit form: nome + componenti
 
   // Items in shared global collection so workers can read them
@@ -97,7 +104,7 @@ export default function Inventory() {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
       setEditingKit(item)
-      setKitForm({ name:item.name, location:item.location||'', qty:item.totalQty||1 })
+      setKitForm({ name:item.name, location:item.location||'', qty:item.totalQty||1, category:item.category||'Altro' })
       setKitEditComponents((item.components||[]).map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty, maxQty:99 })))
       setKitEditSearch('')
       setShowKitEditModal(true)
@@ -161,6 +168,90 @@ export default function Inventory() {
     w.document.close()
   }
 
+  const printAllLabels = async () => {
+    if (items.length === 0) return
+    // Genera tutti i QR in parallelo
+    const itemsWithCodes = items.map(i => ({ ...i, code: i.code || generateItemCode(i.id) }))
+    const qrUrls = await Promise.all(itemsWithCodes.map(i => generateQRDataURL(i.code)))
+
+    // Etichetta termica 54×25mm → resa a 204×94px @96dpi (2px/mm circa)
+    // Layout: QR a sx, nome+codice a dx
+    const labelHTML = itemsWithCodes.map((item, idx) => `
+      <div class="label">
+        <img src="${qrUrls[idx]}" class="qr" />
+        <div class="info">
+          <div class="name">${item.name}</div>
+          <div class="code">${item.code}</div>
+          ${item.location ? `<div class="loc">📍 ${item.location}</div>` : ''}
+        </div>
+      </div>
+    `).join('')
+
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Etichette magazzino</title>
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Courier New', monospace; background:#fff; }
+        .label {
+          width: 54mm;
+          height: 25mm;
+          display: flex;
+          align-items: center;
+          gap: 2mm;
+          padding: 1.5mm 2mm;
+          border: 0.3mm solid #ccc;
+          page-break-inside: avoid;
+          overflow: hidden;
+        }
+        .qr {
+          width: 22mm;
+          height: 22mm;
+          flex-shrink: 0;
+          image-rendering: pixelated;
+        }
+        .info {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+        }
+        .name {
+          font-size: 7pt;
+          font-weight: bold;
+          line-height: 1.2;
+          word-break: break-word;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .code {
+          font-size: 6pt;
+          color: #555;
+          margin-top: 1mm;
+          letter-spacing: 0.5px;
+        }
+        .loc {
+          font-size: 5.5pt;
+          color: #777;
+          margin-top: 0.5mm;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        @media print {
+          body { margin: 0; }
+          .label { border-color: transparent; }
+          @page { margin: 3mm; size: 54mm auto; }
+        }
+      </style>
+    </head><body>
+      ${labelHTML}
+      <script>window.onload = () => window.print()</script>
+    </body></html>`)
+    w.document.close()
+  }
+
   const exportCSV = () => {
     if (items.length === 0) return
     const headers = ['Nome', 'Categoria', 'Marca', 'Modello', 'Quantità totale', 'Disponibili', 'Posizione', 'Kit', 'Pezzi per baule', 'Codice', 'Note']
@@ -210,8 +301,43 @@ export default function Inventory() {
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={exportCSV} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13 }}>📤 Esporta</button>
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            {/* Menu azioni — 3 puntini */}
+            <div style={{ position:'relative' }}>
+              <button
+                onClick={() => setShowActionsMenu(v => !v)}
+                className="btn btn-secondary"
+                style={{ padding:'10px 13px', fontSize:18, lineHeight:1 }}
+              >⋯</button>
+              {showActionsMenu && (
+                <>
+                  {/* overlay trasparente per chiudere */}
+                  <div
+                    onClick={() => setShowActionsMenu(false)}
+                    style={{ position:'fixed', inset:0, zIndex:99 }}
+                  />
+                  <div style={{
+                    position:'absolute', top:'calc(100% + 6px)', right:0, zIndex:100,
+                    background:'var(--card)', border:'1px solid var(--border)',
+                    borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
+                    minWidth:190, overflow:'hidden',
+                  }}>
+                    <button
+                      onClick={() => { setShowActionsMenu(false); exportCSV() }}
+                      style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid var(--border)' }}
+                    >
+                      <span>📤</span> Esporta CSV
+                    </button>
+                    <button
+                      onClick={() => { setShowActionsMenu(false); printAllLabels() }}
+                      style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10 }}
+                    >
+                      <span>🖨</span> Stampa etichette
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <button onClick={() => setShowAddMenu(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
           </div>
         </div>
@@ -259,6 +385,9 @@ export default function Inventory() {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
                   <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+                  {item.isBundle && (
+                    <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>🧰 KIT</span>
+                  )}
                 </div>
                 <p style={{ color:'var(--text2)', fontSize:13 }}>
                   {item.brand} {item.model}
@@ -300,8 +429,8 @@ export default function Inventory() {
       {/* Modal aggiunta/modifica */}
       {/* Modal aggiunta/modifica articolo */}
       {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative' }}>
+        <div className="modal-overlay" onClick={myDrag.onOverlayClick}>
+          <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
             <h2>{selected ? 'Modifica articolo' : 'Nuovo articolo'}</h2>
             <div className="form-group"><label>Nome *</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Cassa EV ZLX-12P" /></div>
@@ -379,8 +508,8 @@ export default function Inventory() {
 
       {/* Modal dettaglio + QR */}
       {showDetail && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowDetail(null)}>
-          <div className="modal" style={{ position:'relative' }}>
+        <div className="modal-overlay" onClick={detailDrag.onOverlayClick}>
+          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
             <button className="close-btn" onClick={() => setShowDetail(null)}>✕</button>
             <div style={{ textAlign:'center', marginBottom:20 }}>
               <div style={{ fontSize:40, marginBottom:8 }}>{ICONS[showDetail.category] || '📦'}</div>
@@ -439,6 +568,19 @@ export default function Inventory() {
                 🔴 {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}
               </button>
             )}
+            {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
+            {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
+              <button
+                onClick={async () => {
+                  const newAvailable = (showDetail.totalQty||0) - (showDetail.brokenQty||0)
+                  await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
+                  setShowDetail(d => ({ ...d, availableQty: newAvailable }))
+                }}
+                style={{ width:'100%', marginTop:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
+              >
+                🔄 Ripristina giacenza ({(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} risultano fuori)
+              </button>
+            )}
             {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
             {showDetail.location && (
               <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
@@ -455,8 +597,8 @@ export default function Inventory() {
 
       {/* Menu scelta: Oggetto o Kit */}
       {showAddMenu && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddMenu(false)}>
-          <div className="modal" style={{ position:'relative' }}>
+        <div className="modal-overlay" onClick={addMenuDrag.onOverlayClick}>
+          <div className={`modal${addMenuDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
             <button className="close-btn" onClick={() => setShowAddMenu(false)}>✕</button>
             <h2>Cosa vuoi aggiungere?</h2>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
@@ -466,7 +608,7 @@ export default function Inventory() {
                 <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>Nuovo oggetto</span>
                 <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un singolo articolo</span>
               </button>
-              <button onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',qty:1}); setKitComponents([]); setKitSearch(''); setShowKitModal(true) }}
+              <button onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',qty:1,category:'Altro'}); setKitComponents([]); setKitSearch(''); setShowKitModal(true) }}
                 style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
                 <span style={{ fontSize:36 }}>🧰</span>
                 <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>Nuovo kit</span>
@@ -480,13 +622,16 @@ export default function Inventory() {
       {/* Kit Builder */}
       {/* ── Kit Edit Modal ─────────────────────── */}
       {showKitEditModal && editingKit && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitEditModal(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+        <div className="modal-overlay" onClick={kitEditDrag.onOverlayClick}>
+          <div className={`modal${kitEditDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={() => setShowKitEditModal(false)}>✕</button>
               <h2 style={{ marginBottom:14 }}>🧰 Modifica kit</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
-              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino" style={{ fontSize:13 }} />
+              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino" style={{ fontSize:13, marginBottom:10 }} />
+              <select value={kitForm.category||'Altro'} onChange={e => setKitForm({...kitForm,category:e.target.value})} style={{ fontSize:13, fontWeight:600 }}>
+                {KIT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
             </div>
             {kitEditComponents.length > 0 && (
               <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
@@ -530,6 +675,7 @@ export default function Inventory() {
                   await updateDoc(doc(db, 'items', editingKit.id), {
                     name: kitForm.name.trim(),
                     location: kitForm.location.trim(),
+                    category: kitForm.category || 'Altro',
                     components: kitEditComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
                   })
                   setShowKitEditModal(false)
@@ -546,13 +692,16 @@ export default function Inventory() {
       )}
 
       {showKitModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowKitModal(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }}>
+        <div className="modal-overlay" onClick={kitDrag.onOverlayClick}>
+          <div className={`modal${kitDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={() => setShowKitModal(false)}>✕</button>
               <h2 style={{ marginBottom:14 }}>🧰 Nuovo kit</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit (es. Baule Tornado)" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino (opzionale)" style={{ fontSize:13, marginBottom:10 }} />
+              <select value={kitForm.category} onChange={e => setKitForm({...kitForm,category:e.target.value})} style={{ marginBottom:10, fontSize:13, fontWeight:600 }}>
+                {KIT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>Quanti kit uguali?</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -600,7 +749,7 @@ export default function Inventory() {
                   const kitQty = kitForm.qty || 1
                   const ref = await addDoc(collection(db, 'items'), {
                     name: kitForm.name.trim(), location: kitForm.location.trim(),
-                    category: 'Kit', isBundle: true,
+                    category: kitForm.category || 'Altro', isBundle: true,
                     components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
                     totalQty: kitQty, availableQty: kitQty,
                     createdAt: serverTimestamp(), createdBy: user.uid,
