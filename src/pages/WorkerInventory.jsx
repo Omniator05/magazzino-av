@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDocs } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Kit','Altro']
@@ -28,6 +28,10 @@ export default function WorkerInventory() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [detail, setDetail] = useState(null)
+  const [showScanner, setShowScanner] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState(null)
+  const html5QrRef = useRef(null)
 
   useEffect(() => {
     const q = query(collection(db, 'items'), orderBy('name'))
@@ -74,11 +78,92 @@ export default function WorkerInventory() {
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, ...updates } : i))
   }
 
+  // ── Scanner: trova un oggetto dal suo codice e apre il dettaglio ──
+  const openScanner = () => { setShowScanner(true); setScanError(null) }
+
+  const closeScanner = async () => {
+    if (html5QrRef.current) {
+      try { await html5QrRef.current.stop() } catch(e) {}
+      try { html5QrRef.current.clear() } catch(e) {}
+    }
+    setShowScanner(false)
+    setScanning(false)
+    setScanError(null)
+  }
+
+  const startInventoryScanner = async () => {
+    setScanError(null); setScanning(true)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    try {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
+      if (html5QrRef.current) {
+        try { await html5QrRef.current.stop() } catch(e) {}
+        try { html5QrRef.current.clear() } catch(e) {}
+      }
+      html5QrRef.current = new Html5Qrcode('qr-inventory')
+      await html5QrRef.current.start(
+        { facingMode: 'environment' },
+        {
+          fps: 15,
+          qrbox: { width: 280, height: 160 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+          ]
+        },
+        async decodedText => {
+          const normalized = decodedText.trim().toUpperCase()
+          const q = query(collection(db, 'items'), where('code', '==', normalized))
+          const snap = await getDocs(q)
+          if (snap.empty) {
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+            setScanError(`Nessun oggetto trovato con codice "${normalized}"`)
+            return
+          }
+          const found = { id: snap.docs[0].id, ...snap.docs[0].data() }
+          if (navigator.vibrate) navigator.vibrate([60, 40, 120])
+          await closeScanner()
+          setDetail(found)
+        },
+        () => {}
+      )
+    } catch(e) {
+      setScanning(false)
+      setScanError('Camera non accessibile. Verifica i permessi del browser.')
+    }
+  }
+
+  useEffect(() => () => { if (html5QrRef.current) { try { html5QrRef.current.stop() } catch(e) {} } }, [])
+
+  // ESC chiude il modal aperto (scanner o dettaglio)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      if (showScanner) closeScanner()
+      else if (detail) setDetail(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showScanner, detail])
+
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Magazzino</h1>
-        <p>{items.length} articoli</p>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div>
+            <h1>Magazzino</h1>
+            <p>{items.length} articoli</p>
+          </div>
+          <button onClick={openScanner} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+            📷 Scansiona
+          </button>
+        </div>
       </div>
 
       {/* Barra ricerca */}
@@ -141,6 +226,46 @@ export default function WorkerInventory() {
           })
         }
       </div>
+
+      {/* Scanner: trova un oggetto trovato/disperso tramite il suo codice */}
+      {showScanner && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeScanner()}>
+          <div className="modal" style={{ position:'relative' }}>
+            <button className="close-btn" onClick={closeScanner}>✕</button>
+            <h2>📷 Scansiona oggetto</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>
+              Hai trovato un oggetto e non sai a cosa appartiene o dove va rimesso? Scansiona il suo QR o codice a barre.
+            </p>
+
+            {/* qr-inventory SEMPRE nel DOM - Html5Qrcode ne ha bisogno al momento dell'init */}
+            <div id="qr-inventory" style={{ width:'100%', borderRadius:12, overflow:'hidden', background: scanning ? '#000' : 'transparent', minHeight: scanning ? 240 : 0 }} />
+
+            {!scanning && (
+              <button onClick={startInventoryScanner} style={{
+                width:'100%', padding:'40px 16px', borderRadius:14,
+                background:'rgba(79,195,247,0.08)', border:'2px dashed rgba(79,195,247,0.3)',
+                display:'flex', flexDirection:'column', alignItems:'center', gap:10,
+              }}>
+                <span style={{ fontSize:36 }}>📷</span>
+                <span style={{ fontWeight:800, fontSize:16, color:'var(--text)' }}>Avvia fotocamera</span>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>Inquadra il QR o il codice a barre</span>
+              </button>
+            )}
+
+            {scanError && (
+              <div style={{ marginTop:14, background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.3)', borderRadius:10, padding:'12px 14px' }}>
+                <p style={{ color:'var(--red)', fontSize:13, fontWeight:600 }}>⚠️ {scanError}</p>
+              </div>
+            )}
+
+            {scanning && (
+              <button onClick={closeScanner} className="btn btn-secondary btn-full" style={{ marginTop:14 }}>
+                Annulla
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Dettaglio articolo */}
       {detail && (

@@ -43,6 +43,10 @@ export default function EventDetail() {
   const [showEventNotes, setShowEventNotes] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const itemEditDrag = useModalDrag(() => setEditItem(null))
+  const [showAssignModal, setShowAssignModal] = useState(false)
+  const [workers, setWorkers] = useState([])
+  const [unavailability, setUnavailability] = useState([])
+  const assignDrag = useModalDrag(() => setShowAssignModal(false))
 
   const eventRef = doc(db, 'events', id)
 
@@ -51,6 +55,19 @@ export default function EventDetail() {
       if (snap.exists()) setEvent({ id: snap.id, ...snap.data() })
     })
   }, [id])
+
+  useEffect(() => {
+    const q = query(collection(db, 'profiles'), orderBy('name'))
+    return onSnapshot(q, snap => {
+      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker'))
+    })
+  }, [])
+
+  useEffect(() => {
+    return onSnapshot(collection(db, 'unavailability'), snap => {
+      setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
+  }, [])
 
   useEffect(() => {
     // Items are under the admin's user collection - we need a shared items collection too
@@ -87,6 +104,19 @@ export default function EventDetail() {
     } else {
       await updateDoc(eventRef, { items })
     }
+  }
+
+  const toggleWorkerAssignment = async (workerId) => {
+    const current = event.assignedWorkers || []
+    const updated = current.includes(workerId)
+      ? current.filter(wid => wid !== workerId)
+      : [...current, workerId]
+    await updateDoc(eventRef, { assignedWorkers: updated })
+  }
+
+  const isWorkerUnavailable = (workerId) => {
+    if (!event?.date) return false
+    return unavailability.some(u => u.workerId === workerId && event.date >= u.startDate && event.date <= u.endDate)
   }
 
   const toggleLoaded = async itemId => {
@@ -387,6 +417,26 @@ export default function EventDetail() {
             <div style={{ marginTop:2 }}>
               <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
             </div>
+            {/* Worker assegnati */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:8 }}>
+              {(event.assignedWorkers || []).map(wid => {
+                const w = workers.find(x => x.id === wid)
+                if (!w) return null
+                const unavail = isWorkerUnavailable(wid)
+                return (
+                  <span key={wid} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
+                    {unavail ? '⚠️' : '👷'} {w.name}
+                    <button onClick={() => toggleWorkerAssignment(wid)} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                  </span>
+                )
+              })}
+              <button
+                onClick={() => setShowAssignModal(true)}
+                style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--card2)', border:'1px dashed var(--border)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--text2)' }}
+              >
+                + Assegna
+              </button>
+            </div>
           </div>
           {event.notes && (
             <button
@@ -608,6 +658,57 @@ export default function EventDetail() {
             <button onClick={addExtraItem} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!extraForm.name.trim()}>
               ✅ Aggiungi alla lista
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal assegnazione worker */}
+      {showAssignModal && (
+        <div className="modal-overlay" onClick={assignDrag.onOverlayClick}>
+          <div className={`modal${assignDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...assignDrag.props}>
+            <button className="close-btn" onClick={() => setShowAssignModal(false)}>✕</button>
+            <h2>👷 Assegna magazzinieri</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Seleziona chi deve occuparsi di questo evento. Puoi assegnarne più di uno.</p>
+            {workers.length === 0 ? (
+              <p style={{ color:'var(--text2)', fontSize:13, fontStyle:'italic', textAlign:'center', padding:'20px 0' }}>Nessun magazziniere registrato.</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'50dvh', overflowY:'auto' }}>
+                {workers.map(w => {
+                  const isAssigned = (event.assignedWorkers || []).includes(w.id)
+                  const unavail = isWorkerUnavailable(w.id)
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={() => toggleWorkerAssignment(w.id)}
+                      style={{
+                        display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12,
+                        background: isAssigned ? 'rgba(79,195,247,0.10)' : 'var(--card2)',
+                        border: `1.5px solid ${isAssigned ? 'rgba(79,195,247,0.4)' : 'var(--border)'}`,
+                        textAlign:'left',
+                      }}
+                    >
+                      <span style={{ fontSize:22 }}>👷</span>
+                      <span style={{ flex:1, minWidth:0 }}>
+                        <span style={{ display:'block', fontWeight:700, fontSize:14, color:'var(--text)' }}>{w.name}</span>
+                        {unavail && <span style={{ display:'block', fontSize:11, color:'var(--red)', fontWeight:700, marginTop:1 }}>⚠️ Non disponibile in questa data</span>}
+                      </span>
+                      <span style={{
+                        width:22, height:22, borderRadius:'50%', flexShrink:0,
+                        background: isAssigned ? 'var(--blue)' : 'transparent',
+                        border: `2px solid ${isAssigned ? 'var(--blue)' : 'var(--border)'}`,
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        color:'white', fontSize:13, fontWeight:900,
+                      }}>
+                        {isAssigned ? '✓' : ''}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <button onClick={() => setShowAssignModal(false)} className="btn btn-primary btn-full" style={{ marginTop:16 }}>
+              Fatto
             </button>
           </div>
         </div>

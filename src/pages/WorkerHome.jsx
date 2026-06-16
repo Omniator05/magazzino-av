@@ -30,17 +30,19 @@ export default function WorkerHome() {
   const name = profile?.name?.split(' ')[0] || profile?.username || ''
 
   // Logica visibilità eventi per worker:
-  // 1. "Da scaricare": data passata, qualcosa ancora caricato e non rientrato
-  // 2. "Oggi": data = oggi
-  // 3. "Prossimi": data futura
+  // 1. "Da scaricare": data di FINE passata, qualcosa ancora caricato e non rientrato
+  // 2. "Oggi": data di inizio = oggi
+  // 3. "Prossimi": data di fine futura o oggi
+  const effectiveEndDate = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
+
   const daScaricare = events.filter(e => {
-    if (e.date >= today) return false
+    if (effectiveEndDate(e) >= today) return false
     const items = e.items || []
     return items.length > 0 && items.some(i => i.loaded && !i.returned)
   })
 
   const isActive = e => {
-    if (e.date >= today) return true
+    if (effectiveEndDate(e) >= today) return true
     const items = e.items || []
     return items.length > 0 && items.some(i => i.loaded && !i.returned)
   }
@@ -55,11 +57,11 @@ export default function WorkerHome() {
   })
   const pinnedRecurring = Object.values(recurringMap).map(series => {
     const sorted = [...series].sort((a,b) => a.date.localeCompare(b.date))
-    return sorted.find(e => e.date >= today) || sorted[sorted.length - 1]
+    return sorted.find(e => effectiveEndDate(e) >= today) || sorted[sorted.length - 1]
   })
 
   const singleEvents = events.filter(e => !e.seriesId)
-  const upcomingSingle = singleEvents.filter(e => e.date >= today)
+  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today)
 
   return (
     <div className="page">

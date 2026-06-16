@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { db, auth } from '../firebase'
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore'
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -27,11 +27,18 @@ export default function AdminUsers() {
   const [detailMsg, setDetailMsg]     = useState({ text:'', type:'' })
   const [loading, setLoading]         = useState(false)
   const [toast, setToast]             = useState('')
+  const [detailUnavail, setDetailUnavail] = useState([])
 
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
     return onSnapshot(q, snap => setUsers(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
   }, [])
+
+  useEffect(() => {
+    if (!showDetail) { setDetailUnavail([]); return }
+    const q = query(collection(db, 'unavailability'), where('workerId', '==', showDetail.id))
+    return onSnapshot(q, snap => setDetailUnavail(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
+  }, [showDetail?.id])
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
@@ -105,6 +112,12 @@ export default function AdminUsers() {
     await updateDoc(doc(db, 'profiles', showDetail.id), { role: newRole })
     setShowDetail(d => ({ ...d, role: newRole }))
     setDetailMsg({ text: `${showDetail.name} è ora ${newRole === 'admin' ? 'Amministratore' : 'Magazziniere'}.`, type:'success' })
+  }
+
+  // ── Rimuovi indisponibilità ────────────────────────────────────
+  const removeUnavailability = async (id) => {
+    if (!confirm('Rimuovere questo periodo di indisponibilità?')) return
+    await deleteDoc(doc(db, 'unavailability', id))
   }
 
   // ── Cambia password ───────────────────────────────────────────
@@ -382,6 +395,27 @@ export default function AdminUsers() {
               <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 14px', marginBottom:16, display:'flex', justifyContent:'space-between' }}>
                 <span style={{ color:'var(--text2)', fontSize:13 }}>Account creato il</span>
                 <span style={{ fontSize:13, fontWeight:600 }}>{new Date(showDetail.createdAt).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+              </div>
+            )}
+
+            {/* Indisponibilità (solo worker) */}
+            {showDetail.role === 'worker' && detailUnavail.length > 0 && (
+              <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>🚫 Indisponibilità segnalate</p>
+                {[...detailUnavail].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(u => (
+                  <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
+                    <div>
+                      <p style={{ fontWeight:700, fontSize:13 }}>
+                        {u.startDate === u.endDate
+                          ? new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
+                          : `${new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate).toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
+                        }
+                      </p>
+                      {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
+                    </div>
+                    <button onClick={() => removeUnavailability(u.id)} style={{ color:'var(--red)', fontSize:12, fontWeight:700, flexShrink:0 }}>Rimuovi</button>
+                  </div>
+                ))}
               </div>
             )}
 

@@ -11,9 +11,11 @@ import AdminUsers from './pages/AdminUsers'
 import Archive from './pages/Archive'
 import Tasks from './pages/Tasks'
 import Templates from './pages/Templates'
+import Calendar from './pages/Calendar'
 import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import WorkerInventory from './pages/WorkerInventory'
+import WorkerCalendar from './pages/WorkerCalendar'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 
@@ -40,6 +42,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/" element={<WorkerHome />} />
           <Route path="/inventory" element={<WorkerInventory />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/calendar" element={<WorkerCalendar />} />
           <Route path="/events/:id" element={<WorkerScanner />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -56,6 +59,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/scanner" element={<Scanner />} />
         <Route path="/events" element={<Events />} />
+        <Route path="/calendar" element={<Calendar />} />
         <Route path="/archive" element={<Archive />} />
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/events/:id/scan" element={<WorkerScanner />} />

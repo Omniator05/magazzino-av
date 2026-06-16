@@ -1,49 +1,70 @@
-import { useCallback, useRef } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 
+/**
+ * useModalDrag
+ *
+ * Uso:
+ *   const drag = useModalDrag(() => setShowModal(false))
+ *
+ *   <div className="modal-overlay" onClick={drag.onOverlayClick}>
+ *     <div className={`modal${drag.jiggling ? ' modal-jiggle' : ''}`} {...drag.props}>
+ *
+ * Chiude automaticamente il modal alla pressione di ESC.
+ */
 export function useModalDrag(onClose) {
-  const startY = useRef(0)
-  const startTime = useRef(0)
+  const startY     = useRef(null)
   const isDragging = useRef(false)
-  const modalEl = useRef(null)
+  const [jiggling, setJiggling] = useState(false)
+
+  // ESC chiude il modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  const triggerJiggle = useCallback(() => {
+    setJiggling(true)
+    setTimeout(() => setJiggling(false), 400)
+  }, [])
+
+  const onOverlayClick = useCallback((e) => {
+    if (e.target === e.currentTarget) triggerJiggle()
+  }, [triggerJiggle])
 
   const onTouchStart = useCallback((e) => {
-    // Solo dalla drag handle (primi 44px del modal)
-    const rect = e.currentTarget.getBoundingClientRect()
-    if (e.touches[0].clientY - rect.top > 44) return
     startY.current = e.touches[0].clientY
-    startTime.current = Date.now()
-    isDragging.current = true
-    e.currentTarget.style.transition = 'none'
-    modalEl.current = e.currentTarget
+    isDragging.current = false
   }, [])
 
   const onTouchMove = useCallback((e) => {
-    if (!isDragging.current) return
-    const delta = Math.max(0, e.touches[0].clientY - startY.current)
-    modalEl.current.style.transform = `translateY(${delta}px)`
-    const overlay = modalEl.current.closest('.modal-overlay')
-    if (overlay) overlay.style.background = `rgba(0,0,0,${Math.max(0.1, 0.65 - (delta / 300))})`
+    if (startY.current === null) return
+    const delta = e.touches[0].clientY - startY.current
+    if (delta > 10) isDragging.current = true
+    if (isDragging.current && e.currentTarget) {
+      e.currentTarget.style.transform = `translateY(${Math.max(0, delta)}px)`
+      e.currentTarget.style.transition = 'none'
+    }
   }, [])
 
   const onTouchEnd = useCallback((e) => {
-    if (!isDragging.current) return
-    isDragging.current = false
+    if (startY.current === null) return
     const delta = e.changedTouches[0].clientY - startY.current
-    const velocity = delta / (Date.now() - startTime.current)
-    const el = modalEl.current
-    const overlay = el?.closest('.modal-overlay')
-
-    if (delta > 100 || velocity > 0.5) {
-      el.style.transition = 'transform 0.25s ease'
-      el.style.transform = 'translateY(100%)'
-      if (overlay) { overlay.style.transition = 'opacity 0.25s'; overlay.style.opacity = '0' }
-      setTimeout(onClose, 240)
-    } else {
-      el.style.transition = 'transform 0.3s cubic-bezier(0.32,0.72,0,1)'
-      el.style.transform = 'translateY(0)'
-      if (overlay) { overlay.style.transition = 'background 0.3s'; overlay.style.background = '' }
-    }
+    const el = e.currentTarget
+    if (el) { el.style.transition = ''; el.style.transform = '' }
+    if (isDragging.current && delta > 100) onClose()
+    startY.current = null
+    isDragging.current = false
   }, [onClose])
 
-  return { onTouchStart, onTouchMove, onTouchEnd }
+  return {
+    // Spread SOLO queste sul <div className="modal"> → {...drag.props}
+    props: { onTouchStart, onTouchMove, onTouchEnd },
+    // Per l'overlay
+    onOverlayClick,
+    // Per la className del modal
+    jiggling,
+  }
 }

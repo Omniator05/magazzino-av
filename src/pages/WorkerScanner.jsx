@@ -739,48 +739,45 @@ export default function WorkerScanner() {
 // Riga checklist con bottoni touch-friendly e note accessibili
 function ChecklistRow({ item }) {
   const [location, setLocation]   = useState(item.location || null)
-  const [notes, setNotes]         = useState(item.notes || null)
-  const [showNotes, setShowNotes] = useState(false)
-  const [showComponents, setShowComponents] = useState(false)
-  const isKit = item.isBundle || (item.components && item.components.length > 0)
+  const [warehouseNotes, setWarehouseNotes] = useState(item.notes || null)
+  const [liveComponents, setLiveComponents] = useState(item.components || null)
+  const [showInfo, setShowInfo]   = useState(false)
+  const isKit = item.isBundle || (liveComponents && liveComponents.length > 0)
+  // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
+  const eventNote = item.eventNote || null
+  const displayNote = eventNote || warehouseNotes
+  const hasInfo = displayNote || isKit
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
       if (snap.exists()) {
-        setLocation(snap.data().location || null)
-        setNotes(snap.data().notes || null)
+        const data = snap.data()
+        setLocation(data.location || null)
+        setWarehouseNotes(data.notes || null)
+        // Auto-repair: se l'evento è stato salvato prima che i componenti fossero registrati
+        // sul kit, recuperali in tempo reale dal magazzino così la lista è sempre aggiornata
+        if (data.isBundle && data.components?.length) setLiveComponents(data.components)
       }
     }).catch(() => {})
   }, [item.id])
 
   return (
     <>
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showNotes ? 'none' : '1px solid var(--border)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showInfo ? 'none' : '1px solid var(--border)' }}>
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
-            {isKit && (
-              <button
-                onClick={() => setShowComponents(s => !s)}
+            {hasInfo && (
+              <button onClick={() => setShowInfo(s => !s)}
                 style={{
-                  width:22, height:22, borderRadius:'50%', flexShrink:0,
-                  background: showComponents ? 'rgba(245,166,35,0.3)' : 'rgba(245,166,35,0.12)',
-                  border:'1.5px solid rgba(245,166,35,0.5)',
-                  color:'var(--accent2)',
-                  fontSize:12, fontWeight:900, fontStyle: showComponents ? 'normal' : 'italic',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  transition:'all 0.25s',
-                  lineHeight:1,
+                  background: showInfo ? ((eventNote||isKit) ? 'var(--accent2)' : 'var(--blue)') : ((eventNote||isKit) ? 'rgba(245,166,35,0.15)' : 'rgba(79,195,247,0.15)'),
+                  border: `1px solid ${(eventNote||isKit) ? 'rgba(245,166,35,0.4)' : 'rgba(79,195,247,0.3)'}`,
+                  color: showInfo ? 'white' : ((eventNote||isKit) ? 'var(--accent2)' : 'var(--blue)'),
+                  borderRadius:'50%', width:20, height:20, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
                 }}>
-                {showComponents ? '×' : 'i'}
-              </button>
-            )}
-            {notes && (
-              <button onClick={() => setShowNotes(!showNotes)}
-                style={{ background: showNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)', border:'1px solid rgba(79,195,247,0.3)', color: showNotes ? 'white' : 'var(--blue)', borderRadius:'50%', width:20, height:20, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                {showNotes ? '✕' : 'i'}
+                {showInfo ? '✕' : 'i'}
               </button>
             )}
             {location && (
@@ -821,26 +818,31 @@ function ChecklistRow({ item }) {
           </button>
         </div>
       </div>
-      {/* Pannello note espandibile */}
-      {showNotes && notes && (
-        <div style={{ padding:'10px 16px 14px', borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>
-          <span style={{ fontSize:16, flexShrink:0 }}>📝</span>
-          <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{notes}</p>
+      {/* Pannello info unificato: nota in alto, componenti kit sotto (se presenti) */}
+      {showInfo && hasInfo && (
+        <div style={{ borderBottom:'1px solid var(--border)' }}>
+          {displayNote && (
+            <div style={{ padding:'10px 16px 10px', background: eventNote ? 'rgba(245,166,35,0.05)' : 'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>
+              <span style={{ fontSize:16, flexShrink:0 }}>{eventNote ? '📝' : '💡'}</span>
+              <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{displayNote}</p>
+            </div>
+          )}
+          {isKit && (
+            <div style={{ background:'rgba(245,166,35,0.04)', padding:'10px 16px 12px' }}>
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>🧰 Contenuto kit</p>
+              {!(liveComponents?.length)
+                ? <p style={{ fontSize:13, color:'var(--text2)', fontStyle:'italic' }}>Nessun componente registrato</p>
+                : liveComponents.map((comp, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 0', borderBottom: i < liveComponents.length-1 ? '1px solid var(--border)' : 'none' }}>
+                    <span style={{ fontSize:12, fontWeight:800, color:'var(--accent2)', minWidth:30, background:'rgba(245,166,35,0.12)', borderRadius:6, padding:'1px 6px', textAlign:'center' }}>×{comp.qty}</span>
+                    <span style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
+                  </div>
+                ))
+              }
+            </div>
+          )}
         </div>
       )}
-      <div className={`kit-components-panel${showComponents ? ' open' : ''}`}
-        style={{ background:'rgba(245,166,35,0.04)', borderBottom: showComponents ? '1px solid var(--border)' : 'none', padding: showComponents ? '10px 16px 12px' : '0 16px' }}>
-        <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>🧰 Contenuto kit</p>
-        {!(item.components?.length)
-          ? <p style={{ fontSize:13, color:'var(--text2)', fontStyle:'italic' }}>Nessun componente registrato</p>
-          : item.components.map((comp, i) => (
-            <div key={i} className="kit-comp-row">
-              <span style={{ fontSize:12, fontWeight:800, color:'var(--accent2)', minWidth:30, background:'rgba(245,166,35,0.12)', borderRadius:6, padding:'1px 6px', textAlign:'center' }}>×{comp.qty}</span>
-              <span style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
-            </div>
-          ))
-        }
-      </div>
     </>
   )
 }
