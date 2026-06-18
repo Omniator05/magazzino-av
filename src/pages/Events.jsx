@@ -53,6 +53,11 @@ const RECURRENCE_OPTIONS = [
 
 const EVENT_CAP = 5
 
+const PHASE_CONFIG = [
+  { key:'montaggio',  label:'Montaggio',  color:'#2563eb', bg:'#dbeafe' },
+  { key:'smontaggio', label:'Smontaggio', color:'#ea580c', bg:'#ffedd5' },
+]
+
 /* ── Inline SVG icons (coerenti con Dashboard.jsx, no emoji) ──────────────── */
 const IconAlertDot = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
@@ -136,7 +141,7 @@ export default function Events() {
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
-  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
+  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
   const navigate = useNavigate()
   const { state: navState } = useLocation()
   const anyModalOpen = showModal || showTemplateMenu
@@ -145,7 +150,7 @@ export default function Events() {
   // Se arrivo dall'archivio con un template, apro subito il form
   useEffect(() => {
     if (navState?.templateItems) {
-      setForm({ name: navState.templateName || '', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
+      setForm({ name: navState.templateName || '', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
       setPendingTemplateItems(navState.templateItems)
       setShowModal(true)
       window.history.replaceState({}, '')
@@ -229,7 +234,7 @@ export default function Events() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
+    setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
     setPendingTemplateItems(null)
     setShowModal(true)
   }
@@ -237,7 +242,7 @@ export default function Events() {
   const openEdit = (e, event) => {
     e.stopPropagation()
     setEditing(event)
-    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'', type: event.type||'event' })
+    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'', type: event.type||'event', phases: event.phases||{} })
     setPendingTemplateItems(null)
     setShowModal(true)
   }
@@ -255,10 +260,11 @@ export default function Events() {
           dateEnd: form.dateEnd || null,
           location: form.location.trim(), notes: form.notes.trim(),
           type: form.type || 'event',
+          phases: form.phases || {},
         })
         setShowModal(false)
         setEditing(null)
-        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
+        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
       } else {
         const seriesId = form.recurrence !== 'never' && futureDates.length > 0
           ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : null
@@ -269,13 +275,14 @@ export default function Events() {
           createdAt: serverTimestamp(), createdBy: user.uid,
           recurrence: form.recurrence, seriesId,
           type: form.type || 'event',
+          phases: form.phases || {},
         }
         const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
         for (const date of futureDates) {
           await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
         }
         setShowModal(false)
-        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event' })
+        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
         setPendingTemplateItems(null)
         // Se creato da template, vai direttamente all'evento
         if (pendingTemplateItems) navigate(`/events/${ref.id}`)
@@ -340,6 +347,15 @@ export default function Events() {
               )}
             </div>
             <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
+            {event.phases && PHASE_CONFIG.some(p => event.phases[p.key]) && (
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
+                {PHASE_CONFIG.filter(p => event.phases[p.key]).map(p => (
+                  <span key={p.key} style={{ background:p.bg, color:p.color, borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, letterSpacing:'0.02em' }}>
+                    {p.label} · {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ display:'flex', gap:4, flexShrink:0 }}>
             <EditButton onClick={e => openEdit(e, event)} size={34} />
@@ -451,7 +467,7 @@ export default function Events() {
   }
 
   return (
-    <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:24 }}>
+    <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
       <div style={{ padding:'56px 22px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
         <div>
           <p style={{ fontSize:13, fontWeight:600, color:'var(--dash-muted)', letterSpacing:'0.06em', textTransform:'uppercase', marginBottom:4 }}>Gestione</p>
@@ -659,26 +675,29 @@ export default function Events() {
             </div>
             <div className="form-group">
               <label>Data inizio *</label>
-              <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
-                <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})}
-                  id="date-start" style={{ flex:1, paddingRight:40 }} />
-                <button type="button" onClick={() => document.getElementById('date-start').showPicker?.()}
-                  style={{ position:'absolute', right:10, background:'transparent', color:'var(--text2)', padding:0, display:'flex' }}>
-                  <IconCalendarSm />
-                </button>
-              </div>
+              <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} />
             </div>
             <div className="form-group">
               <label>Data fine {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — fine contratto prevista)</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span>}</label>
-              <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
-                <input type="date" value={form.dateEnd} min={form.date} id="date-end"
-                  onChange={e => setForm({...form, dateEnd:e.target.value})} style={{ flex:1, paddingRight:40 }} />
-                <button type="button" onClick={() => document.getElementById('date-end').showPicker?.()}
-                  style={{ position:'absolute', right:10, background:'transparent', color:'var(--text2)', padding:0, display:'flex' }}>
-                  <IconCalendarSm />
-                </button>
-              </div>
+              <input type="date" value={form.dateEnd} min={form.date} onChange={e => setForm({...form, dateEnd:e.target.value})} />
             </div>
+            {form.type !== 'installation' && (
+              <div className="form-group">
+                <label style={{ marginBottom:8, display:'block' }}>Fasi evento <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+                {PHASE_CONFIG.map(p => (
+                  <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
+                    <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
+                    <input type="date" value={form.phases?.[p.key]||''}
+                      onChange={e => setForm(f => ({...f, phases:{...(f.phases||{}), [p.key]:e.target.value}}))}
+                      style={{ flex:1, fontSize:13, padding:'8px 10px' }} />
+                    {form.phases?.[p.key] && (
+                      <button type="button" onClick={() => setForm(f => { const ph={...(f.phases||{})}; delete ph[p.key]; return {...f,phases:ph} })}
+                        style={{ background:'transparent', color:'var(--text3)', fontSize:16, padding:'0 4px', flexShrink:0 }}>✕</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="form-group">
               <label>Location</label>
               <input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Villa Belvedere, Verona" />

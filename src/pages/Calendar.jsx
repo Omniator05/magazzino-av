@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
+import EditButton from '../components/EditButton'
+import { useModalDrag } from '../hooks/useModalDrag'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useAuth } from '../context/AuthContext'
 
 const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -38,6 +42,7 @@ function toDateStr(d) {
 
 export default function Calendar() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const today = new Date()
   const todayStr = toDateStr(today)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
@@ -45,6 +50,65 @@ export default function Calendar() {
   const [unavailability, setUnavailability] = useState([])
   const [workers, setWorkers] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [editingEvent, setEditingEvent] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const editDrag = useModalDrag(() => setEditingEvent(null))
+
+  // Gestione assenze admin
+  const [showAbsenceModal, setShowAbsenceModal] = useState(false)
+  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'' })
+  const [savingAbsence, setSavingAbsence] = useState(false)
+  const absenceDrag = useModalDrag(() => setShowAbsenceModal(false))
+  const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
+
+  useModalScrollLock(!!editingEvent || showAbsenceModal)
+
+  const addAbsence = async () => {
+    if (!absenceForm.startDate) return
+    setSavingAbsence(true)
+    try {
+      await addDoc(collection(db, 'unavailability'), {
+        workerId: user.uid,
+        startDate: absenceForm.startDate,
+        endDate: absenceForm.endDate || absenceForm.startDate,
+        reason: absenceForm.reason.trim(),
+        createdAt: serverTimestamp(),
+      })
+      setAbsenceForm({ startDate:'', endDate:'', reason:'' })
+      setShowAbsenceModal(false)
+    } finally { setSavingAbsence(false) }
+  }
+
+  const removeAbsence = async (id) => {
+    if (!confirm('Rimuovere questa assenza?')) return
+    await deleteDoc(doc(db, 'unavailability', id))
+  }
+
+  const PHASE_FORM_CONFIG = [
+    { key:'montaggio',  label:'Montaggio',  color:'#2563eb', bg:'#dbeafe' },
+    { key:'smontaggio', label:'Smontaggio', color:'#ea580c', bg:'#ffedd5' },
+  ]
+
+  const openEdit = (e, ev) => {
+    e.stopPropagation()
+    setEditingEvent(ev)
+    setEditForm({ name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'', location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{} })
+  }
+
+  const saveEdit = async () => {
+    if (!editForm.name.trim() || !editForm.date) return
+    setSaving(true)
+    try {
+      await updateDoc(doc(db, 'events', editingEvent.id), {
+        name: editForm.name.trim(), date: editForm.date,
+        dateEnd: editForm.dateEnd || null,
+        location: editForm.location.trim(), notes: editForm.notes.trim(),
+        phases: editForm.phases || {},
+      })
+      setEditingEvent(null)
+    } finally { setSaving(false) }
+  }
 
   useEffect(() => {
     const q = query(collection(db, 'events'), orderBy('date'))
@@ -62,18 +126,40 @@ export default function Calendar() {
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
     return onSnapshot(q, snap => {
-      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker'))
+      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
     })
   }, [])
 
   const cells = getMonthGrid(cursor.year, cursor.month)
 
-  // Raggruppa eventi per data (solo il giorno di inizio, come da scelta)
+  // Raggruppa eventi per data — tutti i giorni tra inizio e fine
   const eventsByDate = {}
   events.forEach(e => {
     if (!e.date) return
-    if (!eventsByDate[e.date]) eventsByDate[e.date] = []
-    eventsByDate[e.date].push(e)
+    const start = new Date(e.date + 'T12:00:00')
+    const end = e.dateEnd && e.dateEnd >= e.date ? new Date(e.dateEnd + 'T12:00:00') : start
+    const cur = new Date(start)
+    while (cur <= end) {
+      const dStr = toDateStr(cur)
+      if (!eventsByDate[dStr]) eventsByDate[dStr] = []
+      eventsByDate[dStr].push(e)
+      cur.setDate(cur.getDate() + 1)
+    }
+  })
+
+  // Indice fasi: data → array di { event, key, color, label }
+  const PHASE_META = {
+    montaggio:  { color:'#2563eb', label:'Montaggio' },
+    smontaggio: { color:'#ea580c', label:'Smontaggio' },
+  }
+  const phasesByDate = {}
+  events.forEach(e => {
+    if (!e.phases) return
+    Object.entries(e.phases).forEach(([key, date]) => {
+      if (!date || !PHASE_META[key]) return
+      if (!phasesByDate[date]) phasesByDate[date] = []
+      phasesByDate[date].push({ event: e, key, ...PHASE_META[key] })
+    })
   })
 
   const goPrevMonth = () => setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 })
@@ -85,6 +171,9 @@ export default function Calendar() {
     .map(u => ({ ...u, workerName: workers.find(w => w.id === u.workerId)?.name || 'Sconosciuto' }))
 
   const selectedEvents = eventsByDate[selectedDate] || []
+  const selectedPhases = phasesByDate[selectedDate] || []
+  // Aggiungi anche gli eventi con fasi nel giorno selezionato (non già presenti come evento del giorno)
+  const selectedPhaseEvents = selectedPhases.filter(p => !selectedEvents.some(e => e.id === p.event.id))
   const selectedAbsences = selectedDate ? absencesOnDate(selectedDate) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
@@ -96,7 +185,13 @@ export default function Calendar() {
             <h1>Calendario</h1>
             <p>{events.length} eventi totali</p>
           </div>
-          <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => { setAbsenceForm({ startDate: selectedDate || todayStr, endDate:'', reason:'' }); setShowAbsenceModal(true) }}
+              style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
+              🚫 Assenza
+            </button>
+            <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
+          </div>
         </div>
 
         {/* Navigazione mese */}
@@ -150,13 +245,20 @@ export default function Calendar() {
                 }}>
                   {cell.day}
                 </span>
-                {/* Puntini: max 4 visibili (eventi), poi puntino grigio se ci sono assenze */}
-                {(dayEvents.length > 0 || dayAbsences.length > 0) && (
+                {/* Puntini: eventi + fasi + assenze */}
+                {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || dayAbsences.length > 0) && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
-                    {dayEvents.slice(0, 4).map(ev => (
+                    {dayEvents.slice(0, 3).map(ev => (
                       <span key={ev.id} style={{
                         width:7, height:7, borderRadius:'50%', flexShrink:0,
                         background: ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)',
+                        opacity: isPast ? 0.55 : 1,
+                      }} />
+                    ))}
+                    {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
+                      <span key={`ph${i}`} style={{
+                        width:7, height:7, borderRadius:'50%', flexShrink:0,
+                        background: p.color,
                         opacity: isPast ? 0.55 : 1,
                       }} />
                     ))}
@@ -175,7 +277,7 @@ export default function Calendar() {
         </div>
 
         {/* Legenda */}
-        <div style={{ display:'flex', gap:16, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:12, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Eventi</span>
@@ -183,6 +285,14 @@ export default function Calendar() {
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#7c6fcd', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Installazioni</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:'#2563eb', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Montaggio</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:'#ea580c', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--text3)', display:'inline-block' }} />
@@ -198,32 +308,44 @@ export default function Calendar() {
             {selectedDateObj.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
             {selectedDate === todayStr && ' · Oggi'}
           </p>
-          {selectedEvents.length === 0 ? (
+          {selectedEvents.length === 0 && selectedPhaseEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>Nessun evento in questo giorno.</p>
           ) : (
-            selectedEvents.map(ev => (
-              <div
-                key={ev.id}
-                onClick={() => navigate(`/events/${ev.id}`)}
-                style={{
-                  display:'flex', alignItems:'center', gap:12, cursor:'pointer',
-                  background:'var(--card)', border:'1px solid var(--border)', borderRadius:14,
-                  padding:'13px 14px', marginBottom:8,
-                }}
-              >
-                <span style={{
-                  width:10, height:10, borderRadius:'50%', flexShrink:0,
-                  background: ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)',
-                }} />
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                    {ev.type === 'installation' ? '🔧 ' : ''}{ev.name}
-                  </p>
-                  {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>📍 {ev.location}</p>}
-                </div>
-                <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
-              </div>
-            ))
+            <>
+              {[...selectedEvents.map(ev => ({ ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), dotColor: ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' })),
+                ...selectedPhaseEvents.map(p => ({ ev: p.event, phaseOnDay: p, dotColor: p.color, borderColor: p.color + '44' }))
+              ].map(({ ev, phaseOnDay, dotColor, borderColor }) => {
+                const assignedNames = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean)
+                return (
+                  <div key={ev.id + (phaseOnDay?.key||'')} style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8 }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
+                      <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />
+                      <div onClick={() => navigate(`/events/${ev.id}`)} style={{ flex:1, minWidth:0, cursor:'pointer' }}>
+                        <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {ev.type === 'installation' ? '🔧 ' : ''}{ev.name}
+                        </p>
+                        {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>📍 {ev.location}</p>}
+                        {phaseOnDay && (
+                          <span style={{ display:'inline-block', marginTop:5, background: phaseOnDay.color + '18', color: phaseOnDay.color, border:`1px solid ${phaseOnDay.color}44`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
+                            {phaseOnDay.label}
+                          </span>
+                        )}
+                        {assignedNames.length > 0 && (
+                          <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:7 }}>
+                            {assignedNames.map(name => (
+                              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:4, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'2px 9px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>
+                                👷 {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <EditButton onClick={e => openEdit(e, ev)} size={32} />
+                    </div>
+                  </div>
+                )
+              })}
+            </>
           )}
 
           {/* Assenze worker in questo giorno */}
@@ -239,6 +361,29 @@ export default function Calendar() {
                       {a.reason || 'Nessun motivo specificato'}
                     </p>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Le mie assenze */}
+          {myAbsences.length > 0 && (
+            <div style={{ marginTop:14 }}>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📋 Le mie assenze</p>
+              {myAbsences.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
+                <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
+                  <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
+                      {a.startDate === a.endDate
+                        ? new Date(a.startDate+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})
+                        : `${new Date(a.startDate+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})} → ${new Date(a.endDate+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})}`}
+                    </p>
+                    {a.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{a.reason}</p>}
+                  </div>
+                  <button onClick={() => removeAbsence(a.id)}
+                    style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700 }}>
+                    Rimuovi
+                  </button>
                 </div>
               ))}
             </div>
@@ -261,6 +406,82 @@ export default function Calendar() {
       >
         +
       </button>
+
+      {/* Modal segnala assenza */}
+      {showAbsenceModal && (
+        <div className="modal-overlay" onClick={absenceDrag.onOverlayClick}>
+          <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...absenceDrag}>
+            <button className="close-btn" onClick={() => setShowAbsenceModal(false)}>✕</button>
+            <h2>🚫 Segnala assenza</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Indica i giorni in cui non sei disponibile. Apparirà nel calendario e negli avvisi di assegnazione evento.</p>
+            <div className="form-group">
+              <label>Primo giorno *</label>
+              <input type="date" value={absenceForm.startDate} onChange={e => setAbsenceForm(f => ({...f, startDate:e.target.value, endDate: f.endDate < e.target.value ? e.target.value : f.endDate}))} />
+            </div>
+            <div className="form-group">
+              <label>Ultimo giorno <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(lascia vuoto se un solo giorno)</span></label>
+              <input type="date" value={absenceForm.endDate} min={absenceForm.startDate} onChange={e => setAbsenceForm(f => ({...f, endDate:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>Motivo <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              <input value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({...f, reason:e.target.value}))} placeholder="es. Ferie, impegno personale..." />
+            </div>
+            <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+              disabled={savingAbsence || !absenceForm.startDate}>
+              {savingAbsence ? 'Salvataggio...' : '✅ Conferma assenza'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal modifica evento */}
+      {editingEvent && (
+        <div className="modal-overlay" onClick={editDrag.onOverlayClick}>
+          <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...editDrag}>
+            <button className="close-btn" onClick={() => setEditingEvent(null)}>✕</button>
+            <h2>Modifica evento</h2>
+            <div className="form-group">
+              <label>Nome evento *</label>
+              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder="es. Matrimonio Rossi" />
+            </div>
+            <div className="form-group">
+              <label>Data inizio *</label>
+              <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              <input type="date" value={editForm.dateEnd||''} min={editForm.date} onChange={e => setEditForm(f => ({...f, dateEnd:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>Fasi <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              {PHASE_FORM_CONFIG.map(p => (
+                <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
+                  <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
+                  <input type="date" value={editForm.phases?.[p.key]||''}
+                    onChange={e => setEditForm(f => ({...f, phases:{...(f.phases||{}), [p.key]:e.target.value}}))}
+                    style={{ flex:1, fontSize:13, padding:'8px 10px' }} />
+                  {editForm.phases?.[p.key] && (
+                    <button type="button" className="btn-no-anim" onClick={() => setEditForm(f => { const ph={...(f.phases||{})}; delete ph[p.key]; return {...f,phases:ph} })}
+                      style={{ background:'transparent', color:'var(--text3)', fontSize:16, padding:'0 4px', flexShrink:0 }}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="form-group">
+              <label>Location</label>
+              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder="es. Villa Belvedere, Verona" />
+            </div>
+            <div className="form-group">
+              <label>Note</label>
+              <textarea value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
+            </div>
+            <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+              disabled={saving || !editForm.name?.trim() || !editForm.date}>
+              {saving ? 'Salvataggio...' : 'Salva modifiche'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

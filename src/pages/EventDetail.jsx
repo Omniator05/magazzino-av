@@ -41,6 +41,7 @@ export default function EventDetail() {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState([])
   const [showEventNotes, setShowEventNotes] = useState(false)
+  const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const itemEditDrag = useModalDrag(() => setEditItem(null))
   const [showAssignModal, setShowAssignModal] = useState(false)
@@ -59,7 +60,7 @@ export default function EventDetail() {
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
     return onSnapshot(q, snap => {
-      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker'))
+      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
     })
   }, [])
 
@@ -93,6 +94,7 @@ export default function EventDetail() {
   const loaded = eventItems.filter(i => i.loaded).length
   const returned = eventItems.filter(i => i.returned).length
   const total = eventItems.length
+  const mancanti = eventItems.filter(i => i.mancante).length
 
   const updateEventItems = async (items) => {
     // Se l'evento è parte di una serie ricorrente, aggiorna tutti gli eventi della serie
@@ -132,11 +134,12 @@ export default function EventDetail() {
     if (item?.isExtra) return
 
     const newState = updated.find(i => i.id === itemId)
+    const firestoreId = item?.itemRef || itemId
 
     // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
     if (item?.isBundle || item?.category === 'Kit') {
       try {
-        const kitRef = doc(db, 'items', itemId)
+        const kitRef = doc(db, 'items', firestoreId)
         const kitSnap = await getDoc(kitRef)
         if (kitSnap.exists()) {
           const kitData = kitSnap.data()
@@ -164,7 +167,7 @@ export default function EventDetail() {
 
     // Articolo singolo: aggiorna disponibilità normale
     try {
-      const itemRef = doc(db, 'items', itemId)
+      const itemRef = doc(db, 'items', firestoreId)
       const snap = await getDoc(itemRef)
       if (snap.exists()) {
         const current = snap.data()
@@ -173,6 +176,11 @@ export default function EventDetail() {
         await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty || 0) + delta)) })
       }
     } catch(e) { console.error(e) }
+  }
+
+  const toggleMancante = async itemId => {
+    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante })
+    await updateDoc(eventRef, { items: updated })
   }
 
   const toggleReturned = async itemId => {
@@ -185,11 +193,12 @@ export default function EventDetail() {
     if (item?.isExtra) return
 
     const newState = updated.find(i => i.id === itemId)
+    const firestoreId = item?.itemRef || itemId
 
     // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
     if (item?.isBundle || item?.category === 'Kit') {
       try {
-        const kitRef = doc(db, 'items', itemId)
+        const kitRef = doc(db, 'items', firestoreId)
         const kitSnap = await getDoc(kitRef)
         if (kitSnap.exists()) {
           const kitData = kitSnap.data()
@@ -216,7 +225,7 @@ export default function EventDetail() {
 
     // Articolo singolo
     try {
-      const itemRef = doc(db, 'items', itemId)
+      const itemRef = doc(db, 'items', firestoreId)
       const snap = await getDoc(itemRef)
       if (snap.exists()) {
         const current = snap.data()
@@ -245,22 +254,41 @@ export default function EventDetail() {
   // Conferma e salva tutto il carrello sulla lista evento
   const confirmCart = async () => {
     if (cart.length === 0) return
-    const newItems = cart.filter(c => !eventItems.some(e => e.id === c.id))
-    const updated = [...eventItems, ...newItems.map(c => ({
-      id:c.id, name:c.name, category:c.category, location:c.location||'',
-      isKit:c.isKit||false, kitSize:c.kitSize||null,
-      isBundle:c.isBundle||false, components:c.components||null,
-      qty:c.qty, loaded:false, returned:false
-    }))]
+    let updated = [...eventItems]
+    for (const c of cart) {
+      const alreadyExists = updated.some(e => e.id === c.id || e.itemRef === c.id)
+      if (alreadyExists) {
+        // Riga separata con id unico, itemRef punta all'articolo Firebase originale
+        updated.push({
+          id: `${c.id}_extra_${Date.now()}`,
+          itemRef: c.id,
+          name: c.name, category: c.category, location: c.location||'',
+          isKit: c.isKit||false, kitSize: c.kitSize||null,
+          isBundle: c.isBundle||false, components: c.components||null,
+          qty: c.qty, loaded: false, returned: false,
+          mancante: true,
+        })
+      } else {
+        updated.push({
+          id: c.id, name: c.name, category: c.category, location: c.location||'',
+          isKit: c.isKit||false, kitSize: c.kitSize||null,
+          isBundle: c.isBundle||false, components: c.components||null,
+          qty: c.qty, loaded: false, returned: false,
+          mancante: addAsMancante || false,
+        })
+      }
+    }
     await updateEventItems(updated)
     setCart([])
     setSearch('')
+    setAddAsMancante(false)
     setShowAddItem(false)
   }
 
   const openAddModal = () => {
     setCart([])
     setSearch('')
+    setAddAsMancante(false)
     setShowAddItem(true)
   }
 
@@ -278,7 +306,7 @@ export default function EventDetail() {
       if (!confirm('Questo articolo risulta ancora fuori. Rimuoverlo dalla lista?')) return
       // Ripristina disponibilità
       try {
-        const itemRef = doc(db, 'items', itemId)
+        const itemRef = doc(db, 'items', item.itemRef || itemId)
         const snap = await getDoc(itemRef)
         if (snap.exists()) {
           const current = snap.data()
@@ -290,9 +318,9 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
-  const saveItemEdit = async ({ id, qty, eventNote }) => {
+  const saveItemEdit = async ({ id, qty, eventNote, mancante }) => {
     const updated = eventItems.map(i =>
-      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '' }
+      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false }
     )
     await updateEventItems(updated)
     setEditItem(null)
@@ -315,8 +343,8 @@ export default function EventDetail() {
     setShowExtraModal(false)
   }
 
-  const notInEvent = allItems.filter(i => !eventItems.some(e => e.id === i.id) && !cart.some(c => c.id === i.id))
-  const filtered = notInEvent.filter(i =>
+  const notInCart = allItems.filter(i => !cart.some(c => c.id === i.id))
+  const filtered = notInCart.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
     i.category?.toLowerCase().includes(search.toLowerCase()) ||
     i.brand?.toLowerCase().includes(search.toLowerCase())
@@ -379,7 +407,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} />
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} />
       ))}
     </div>
   ))
@@ -388,7 +416,7 @@ export default function EventDetail() {
     <div className="page">
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-          <button onClick={() => navigate('/events')} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
+          <button onClick={() => navigate(-1)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={exportPDF}
               style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.2)', color:'var(--accent)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
@@ -417,6 +445,22 @@ export default function EventDetail() {
             <div style={{ marginTop:2 }}>
               <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
             </div>
+            {event.phases && ['montaggio','smontaggio'].some(k => event.phases[k]) && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
+                {[
+                  { key:'montaggio',  label:'Montaggio',  color:'#2563eb', bg:'#dbeafe' },
+                  { key:'smontaggio', label:'Smontaggio', color:'#ea580c', bg:'#ffedd5' },
+                ].filter(p => event.phases[p.key]).map(p => {
+                  const isToday = event.phases[p.key] === today
+                  return (
+                    <span key={p.key} style={{ display:'inline-flex', alignItems:'center', gap:5, background: isToday ? p.color : p.bg, color: isToday ? 'white' : p.color, borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:800, border: isToday ? 'none' : `1px solid ${p.color}33` }}>
+                      {p.label} · {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}
+                      {isToday && ' · OGGI'}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
             {/* Worker assegnati */}
             <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:8 }}>
               {(event.assignedWorkers || []).map(wid => {
@@ -491,6 +535,12 @@ export default function EventDetail() {
           </div>
         )}
         {returned === total && total > 0 && <p style={{ color:'var(--green)', fontSize:13, marginTop:8, fontWeight:700 }}>✅ Tutto rientrato! Evento chiuso.</p>}
+        {mancanti > 0 && (
+          <div style={{ marginTop:10, padding:'8px 12px', background:'rgba(234,88,12,0.08)', border:'1px solid rgba(234,88,12,0.25)', borderRadius:10, display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:16 }}>⚠️</span>
+            <p style={{ color:'#ea580c', fontSize:13, fontWeight:700 }}>{mancanti} articol{mancanti===1?'o':'i'} mancant{mancanti===1?'e':'i'} — da reperire o aggiungere</p>
+          </div>
+        )}
 
         {/* Bottone chiudi installazione */}
         {event.type === 'installation' && (
@@ -571,6 +621,23 @@ export default function EventDetail() {
                   <button onClick={() => setSearch('')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'var(--card2)', borderRadius:'50%', width:20, height:20, fontSize:12, color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                 )}
               </div>
+              {/* Toggle mancanti */}
+              <button
+                className="btn-no-anim"
+                onClick={() => setAddAsMancante(v => !v)}
+                style={{ marginTop:10, width:'100%', padding:'10px 14px', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'space-between',
+                  background: addAsMancante ? 'rgba(234,88,12,0.08)' : 'var(--card2)',
+                  border: addAsMancante ? '1.5px solid rgba(234,88,12,0.35)' : '1.5px solid var(--border)',
+                  transition:'all 0.15s',
+                }}
+              >
+                <span style={{ fontSize:13, fontWeight:700, color: addAsMancante ? '#ea580c' : 'var(--text2)' }}>
+                  ⚠️ Segna come mancanti
+                </span>
+                <span style={{ width:36, height:20, borderRadius:10, background: addAsMancante ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: addAsMancante ? 'flex-end' : 'flex-start' }}>
+                  <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
+                </span>
+              </button>
             </div>
 
             {/* Carrello selezionati (se ci sono) */}
@@ -605,6 +672,7 @@ export default function EventDetail() {
                     icon={ICONS[item.category] || '📦'}
                     inCart={cart.some(c => c.id === item.id)}
                     cartQty={cart.find(c => c.id === item.id)?.qty}
+                    alreadyInList={eventItems.some(e => e.id === item.id)}
                   />
                 ))
               }
@@ -745,6 +813,20 @@ export default function EventDetail() {
             </div>
 
             <button
+              className="btn-no-anim"
+              onClick={() => setEditItem(ei => ({ ...ei, mancante: !ei.mancante }))}
+              style={{ width:'100%', marginBottom:12, padding:'11px 14px', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'space-between',
+                background: editItem.mancante ? 'rgba(234,88,12,0.08)' : 'var(--card2)',
+                border: editItem.mancante ? '1.5px solid rgba(234,88,12,0.35)' : '1.5px solid var(--border)',
+              }}
+            >
+              <span style={{ fontSize:13, fontWeight:700, color: editItem.mancante ? '#ea580c' : 'var(--text2)' }}>⚠️ Articolo mancante</span>
+              <span style={{ width:36, height:20, borderRadius:10, background: editItem.mancante ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: editItem.mancante ? 'flex-end' : 'flex-start' }}>
+                <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
+              </span>
+            </button>
+
+            <button
               onClick={() => saveItemEdit(editItem)}
               className="btn btn-primary btn-full"
               style={{ marginTop:8 }}>
@@ -763,7 +845,7 @@ export default function EventDetail() {
   )
 }
 
-function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
+function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
   const [qty, setQty] = useState(cartQty || 1)
   const max = item.availableQty ?? item.totalQty ?? 1
 
@@ -778,10 +860,12 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
     <div className="item-row" style={{ padding:'12px 16px', background: inCart ? 'rgba(105,240,174,0.05)' : 'transparent', borderLeft: inCart ? '3px solid var(--green)' : '3px solid transparent' }}>
       <div className="item-icon" style={{ fontSize:18, flexShrink:0 }}>{icon}</div>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
           <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
           {item.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
           {item.isBundle && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>🧰 BUNDLE</span>}
+          {alreadyInList && !inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>⚠️ Già in lista — verrà aggiunta come mancante</span>}
+          {alreadyInList && inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>⚠️ Riga mancante separata</span>}
         </div>
         <p style={{ color:'var(--text2)', fontSize:12 }}>
           {[item.brand, item.model].filter(Boolean).join(' ')}
@@ -821,7 +905,7 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit }) {
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante }) {
   const [location, setLocation] = useState(item.location || null)
   const [warehouseNotes, setWarehouseNotes] = useState(null)
 
@@ -835,10 +919,10 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
   }, [item.id])
 
   return (
-    <div style={{ borderBottom:'1px solid var(--border)' }}>
+    <div style={{ borderBottom:'1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
       <div
         style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
-        onClick={() => onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '' })}
+        onClick={() => onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false })}
       >
         <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
         <div style={{ flex:1, minWidth:0 }}>
@@ -846,6 +930,9 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
             <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
             {item.isExtra && (
               <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>
+            )}
+            {item.mancante && (
+              <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>
             )}
           </div>
           <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
