@@ -97,14 +97,19 @@ export default function EventDetail() {
   const mancanti = eventItems.filter(i => i.mancante).length
 
   const updateEventItems = async (items) => {
-    // Se l'evento è parte di una serie ricorrente, aggiorna tutti gli eventi della serie
+    await updateDoc(eventRef, { items })
+    // Propaga solo la struttura (nome, qty, categoria) agli altri eventi della serie,
+    // senza copiare lo stato di carico/rientro che è specifico di ogni occorrenza
     if (event.seriesId) {
       const { collection: col, query: q, where, getDocs: gd } = await import('firebase/firestore')
       const seriesSnap = await gd(q(col(db, 'events'), where('seriesId', '==', event.seriesId)))
-      const updates = seriesSnap.docs.map(d => updateDoc(doc(db, 'events', d.id), { items }))
+      const itemsTemplate = items.map(({ loaded, returned, mancante, ...rest }) => ({
+        ...rest, loaded: false, returned: false, mancante: false
+      }))
+      const updates = seriesSnap.docs
+        .filter(d => d.id !== event.id)
+        .map(d => updateDoc(doc(db, 'events', d.id), { items: itemsTemplate }))
       await Promise.all(updates)
-    } else {
-      await updateDoc(eventRef, { items })
     }
   }
 

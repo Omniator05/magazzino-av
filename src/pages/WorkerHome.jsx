@@ -36,6 +36,7 @@ export default function WorkerHome() {
   const effectiveEndDate = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
 
   const daScaricare = events.filter(e => {
+    if (e.seriesId) return false  // gli eventi ricorrenti sono gestiti nella sezione "Ricorrenti"
     if (effectiveEndDate(e) >= today) return false
     const items = e.items || []
     return items.length > 0 && items.some(i => i.loaded && !i.returned)
