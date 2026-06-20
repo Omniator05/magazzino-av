@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
@@ -18,6 +18,29 @@ import WorkerInventory from './pages/WorkerInventory'
 import WorkerCalendar from './pages/WorkerCalendar'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
+import PageTransition from './components/PageTransition'
+
+/* Wrapper che riattiva l'animazione ad ogni cambio di route */
+function AnimatedPage({ children }) {
+  const { pathname } = useLocation()
+  const [key, setKey] = useState(pathname)
+  const prev = useRef(pathname)
+
+  useEffect(() => {
+    // Ignora cambio da/verso /login (gestito dall'overlay PageTransition)
+    const isLoginChange = prev.current === '/login' || pathname === '/login'
+    if (!isLoginChange && prev.current !== pathname) {
+      setKey(pathname)
+    }
+    prev.current = pathname
+  }, [pathname])
+
+  return (
+    <div key={key} className="page-transition">
+      {children}
+    </div>
+  )
+}
 
 function PrivateRoutes({ toggleTheme, theme }) {
   const { user, profile, loading } = useAuth()
@@ -38,14 +61,16 @@ function PrivateRoutes({ toggleTheme, theme }) {
   if (profile?.role === 'worker') {
     return (
       <>
-        <Routes>
-          <Route path="/" element={<WorkerHome />} />
-          <Route path="/inventory" element={<WorkerInventory />} />
-          <Route path="/tasks" element={<Tasks />} />
-          <Route path="/calendar" element={<WorkerCalendar />} />
-          <Route path="/events/:id" element={<WorkerScanner />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <AnimatedPage>
+          <Routes>
+            <Route path="/" element={<WorkerHome />} />
+            <Route path="/inventory" element={<WorkerInventory />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/calendar" element={<WorkerCalendar />} />
+            <Route path="/events/:id" element={<WorkerScanner />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatedPage>
         {!onScannerRoute && <TabBar />}
       </>
     )
@@ -54,20 +79,22 @@ function PrivateRoutes({ toggleTheme, theme }) {
   // Admin view
   return (
     <>
-      <Routes>
-        <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
-        <Route path="/inventory" element={<Inventory />} />
-        <Route path="/scanner" element={<Scanner />} />
-        <Route path="/events" element={<Events />} />
-        <Route path="/calendar" element={<Calendar />} />
-        <Route path="/archive" element={<Archive />} />
-        <Route path="/events/:id" element={<EventDetail />} />
-        <Route path="/events/:id/scan" element={<WorkerScanner />} />
-        <Route path="/admin/users" element={<AdminUsers />} />
-        <Route path="/tasks" element={<Tasks />} />
-        <Route path="/templates" element={<Templates />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AnimatedPage>
+        <Routes>
+          <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/scanner" element={<Scanner />} />
+          <Route path="/events" element={<Events />} />
+          <Route path="/calendar" element={<Calendar />} />
+          <Route path="/archive" element={<Archive />} />
+          <Route path="/events/:id" element={<EventDetail />} />
+          <Route path="/events/:id/scan" element={<WorkerScanner />} />
+          <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/templates" element={<Templates />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AnimatedPage>
       {!onScannerRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}
     </>
   )
@@ -87,6 +114,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <LoadingBar />
+        <PageTransition />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />

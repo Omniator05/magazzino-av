@@ -152,7 +152,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                 {totalBroken === 1 ? '1 oggetto rotto' : `${totalBroken} oggetti rotti`} da riparare
               </p>
             </div>
-            <button onClick={() => navigate('/inventory')} className="btn-no-anim" style={{
+            <button onClick={() => navigate('/inventory', { state: { filter: 'broken' } })} className="btn-no-anim" style={{
               background:'transparent', color:'#e11d48', fontSize:13, fontWeight:700,
               display:'flex', alignItems:'center', gap:2,
             }}>
@@ -260,7 +260,11 @@ export default function Dashboard({ toggleTheme, theme }) {
                       </span>
                     </div>
                     {ev.seriesId && (
-                      <span style={{ position:'absolute', bottom:-4, right:-4, background:'var(--blue)', borderRadius:6, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, border:'2px solid var(--dash-card)' }}>🔁</span>
+                      <span style={{ position:'absolute', bottom:-5, right:-5, background:'#2563eb', borderRadius:7, width:22, height:22, display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid var(--dash-card)' }}>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                        </svg>
+                      </span>
                     )}
                   </div>
 

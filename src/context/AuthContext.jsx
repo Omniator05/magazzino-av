@@ -13,9 +13,11 @@ export function usernameToEmail(username) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser]             = useState(null)
+  const [profile, setProfile]       = useState(null)
+  const [loading, setLoading]       = useState(true)
+  const [loginName, setLoginName]   = useState('')   // nome da mostrare nell'overlay
+  const [showOverlay, setShowOverlay] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async firebaseUser => {
@@ -89,6 +91,10 @@ export function AuthProvider({ children }) {
     }
 
     sessionStorage.setItem('__ap', password)
+    // Ricava il nome da mostrare nell'overlay (prima parte del display name o username)
+    const displayName = result.user.displayName || input.split('@')[0]
+    setLoginName(displayName.split(' ')[0])
+    setShowOverlay(true)
     return result
   }
 
@@ -102,6 +108,7 @@ export function AuthProvider({ children }) {
       user, profile, loading, login, logout,
       isAdmin:  profile?.role === 'admin',
       isWorker: profile?.role === 'worker',
+      showOverlay, setShowOverlay, loginName,
     }}>
       {children}
     </AuthContext.Provider>
