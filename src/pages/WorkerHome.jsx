@@ -145,47 +145,55 @@ function EventCard({ ev, today, navigate, forceState }) {
   else if (total > 0)                   phase = 'ready'
 
   const phaseInfo = {
-    prep:    { color:'var(--text2)',   label:`Lista da preparare`,         icon:'📋' },
-    ready:   { color:'var(--blue)',    label:`${total} articoli da caricare`, icon:'📦' },
-    partial: { color:'var(--accent2)', label:`${loaded}/${total} caricati`, icon:'🚛' },
-    out:     { color:'#ea580c',        label:`In evento · ${returned}/${total} rientrati`, icon:'🚛' },
-    done:    { color:'var(--green)',   label:'Tutto rientrato ✅',          icon:'✅' },
+    prep:    { color:'var(--text2)',   label:'Lista da preparare' },
+    ready:   { color:'var(--blue)',    label:`${total} articoli da caricare` },
+    partial: { color:'var(--accent2)', label:`${loaded}/${total} caricati` },
+    out:     { color:'#ea580c',        label:`In evento · ${returned}/${total} rientrati` },
+    done:    { color:'var(--green)',   label:'Tutto rientrato' },
   }[phase]
 
-  const cardBg     = daScaricare ? 'rgba(234,88,12,0.06)' : isToday ? 'rgba(220,38,38,0.06)' : 'var(--card)'
-  const cardBorder = daScaricare ? 'rgba(234,88,12,0.35)' : isToday ? 'rgba(220,38,38,0.35)' : 'var(--border)'
+  const iconGradient = daScaricare
+    ? '#fb8500'
+    : ev.type === 'installation'
+    ? '#a7c957'
+    : (isToday || phase === 'partial' || phase === 'out')
+    ? '#e63946'
+    : '#a8dadc'
+
+  const cardBorder = daScaricare ? 'rgba(234,88,12,0.4)' : isToday ? 'rgba(220,38,38,0.4)' : 'var(--border)'
+  const dateStr = ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}) : ''
 
   return (
     <div onClick={() => navigate(`/events/${ev.id}`)}
-      style={{ background:cardBg, border:`1px solid ${cardBorder}`, borderRadius:16, margin:'0 16px 10px', overflow:'hidden', cursor:'pointer' }}>
-      {(isToday || daScaricare) && (
-        <div style={{ background: daScaricare ? 'rgba(234,88,12,0.12)' : 'rgba(220,38,38,0.12)', padding:'5px 16px', borderBottom:`1px solid ${daScaricare ? 'rgba(234,88,12,0.25)' : 'rgba(220,38,38,0.2)'}` }}>
-          <p style={{ color: daScaricare ? '#ea580c' : 'var(--red)', fontSize:12, fontWeight:700 }}>
-            {daScaricare ? '🟠 DA SCARICARE' : '🔴 OGGI'}
+      style={{ margin:'0 16px 10px', background:'var(--card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+      onMouseEnter={e => { e.currentTarget.style.transform='scale(1.02)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.12)' }}
+      onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)' }}
+    >
+      {/* Icona gradiente con data */}
+      <div style={{ position:'relative', width:50, height:50, flexShrink:0 }}>
+        <div style={{ width:50, height:50, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
+          <span style={{ fontSize:18, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>
+          <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
+            {ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{month:'short'}) : ''}
+          </span>
+        </div>
+        {ev.seriesId && (
+          <span style={{ position:'absolute', bottom:-4, right:-4, background:'var(--blue)', borderRadius:6, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, border:'2px solid var(--card)' }}>🔁</span>
+        )}
+      </div>
+
+      {/* Contenuto */}
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3 }}>
+          <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>
+            {ev.name}
           </p>
         </div>
-      )}
-      <div style={{ padding:'14px 16px' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <h3 style={{ fontWeight:700, fontSize:16, color:'var(--text)' }}>{ev.name}</h3>
-              {ev.seriesId && <span style={{ background:'rgba(79,195,247,0.12)', color:'var(--blue)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>🔁</span>}
-            </div>
-            <DateBadge dateStr={ev.date} location={ev.location} today={today} />
-          </div>
-          <span style={{ color:'var(--text3)', fontSize:22 }}>›</span>
-        </div>
-        {total > 0 && (
-          <>
-            <div style={{ background:'var(--bg3)', borderRadius:4, height:4, marginBottom:6 }}>
-              <div style={{ background: daScaricare ? '#ea580c' : phaseInfo.color, height:'100%', borderRadius:4, width:`${(Math.max(loaded,returned)/total)*100}%` }} />
-            </div>
-            <p style={{ fontSize:13, color: daScaricare ? '#ea580c' : phaseInfo.color, fontWeight:600 }}>
-              {daScaricare ? `🟠 ${total-returned} articoli da rientrare` : `${phaseInfo.icon} ${phaseInfo.label}`}
-            </p>
-          </>
-        )}
+        <p style={{ fontSize:12, fontWeight:600, color:'var(--text2)' }}>
+          {ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long', day:'numeric', month:'long'}) : ''}
+          {ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + new Date(ev.dateEnd+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric', month:'long'}) : ''}
+        </p>
+        {ev.location && <p style={{ fontSize:11, color:'var(--text2)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📍 {ev.location}</p>}
       </div>
     </div>
   )

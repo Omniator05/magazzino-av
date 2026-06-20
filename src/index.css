@@ -289,6 +289,21 @@ select option { background: var(--bg2); }
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+@keyframes slideDown {
+  from { transform: translateY(0); }
+  to   { transform: translateY(105%); }
+}
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.modal.closing {
+  animation: slideDown 0.28s cubic-bezier(0.32,0.72,0,1) forwards;
+}
+.modal-overlay.closing {
+  animation: overlayFadeOut 0.28s ease forwards;
+  pointer-events: none;
+}
 
 .modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; letter-spacing: -0.3px; }
 .modal .close-btn {
@@ -311,7 +326,9 @@ select option { background: var(--bg2); }
 }
 
 .modal-jiggle {
-  animation: modal-jiggle 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  /* slideUp incluso esplicitamente: così quando la classe viene rimossa
+     la lista animation-name non cambia e il browser non riavvia slideUp */
+  animation: slideUp 0.3s cubic-bezier(0.32,0.72,0,1), modal-jiggle 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 /* ── Form ─────────────────────────────────────── */

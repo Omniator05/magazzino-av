@@ -6,24 +6,41 @@ import { useRef, useState, useCallback, useEffect } from 'react'
  * Uso:
  *   const drag = useModalDrag(() => setShowModal(false))
  *
- *   <div className="modal-overlay" onClick={drag.onOverlayClick}>
- *     <div className={`modal${drag.jiggling ? ' modal-jiggle' : ''}`} {...drag.props}>
+ *   <div className={`modal-overlay${drag.closing ? ' closing' : ''}`} onClick={drag.onOverlayClick}>
+ *     <div className={`modal${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} {...drag.props}>
+ *       <button className="close-btn" onClick={drag.close}>✕</button>
  *
- * Chiude automaticamente il modal alla pressione di ESC.
+ * drag.close   → chiude con animazione slide-down
+ * drag.closing → true durante l'animazione (aggiunge class CSS)
  */
 export function useModalDrag(onClose) {
   const startY     = useRef(null)
   const isDragging = useRef(false)
   const [jiggling, setJiggling] = useState(false)
+  const [closing,  setClosing]  = useState(false)
 
-  // ESC chiude il modal
+  // Ref per avere sempre l'onClose aggiornato senza reinserire negli useEffect
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+
+  // Chiude con animazione slide-down (280ms = durata CSS)
+  const animatedClose = useCallback(() => {
+    if (closing) return
+    setClosing(true)
+    setTimeout(() => {
+      setClosing(false)
+      onCloseRef.current()
+    }, 280)
+  }, [closing])
+
+  // ESC chiude il modal con animazione
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') animatedClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [animatedClose])
 
   const triggerJiggle = useCallback(() => {
     setJiggling(true)
@@ -54,10 +71,11 @@ export function useModalDrag(onClose) {
     const delta = e.changedTouches[0].clientY - startY.current
     const el = e.currentTarget
     if (el) { el.style.transition = ''; el.style.transform = '' }
-    if (isDragging.current && delta > 100) onClose()
+    // Drag manuale: chiude direttamente senza animazione (l'utente ha già trascinato)
+    if (isDragging.current && delta > 100) onCloseRef.current()
     startY.current = null
     isDragging.current = false
-  }, [onClose])
+  }, [])
 
   return {
     // Spread SOLO queste sul <div className="modal"> → {...drag.props}
@@ -66,5 +84,8 @@ export function useModalDrag(onClose) {
     onOverlayClick,
     // Per la className del modal
     jiggling,
+    // Animazione di chiusura
+    closing,
+    close: animatedClose,
   }
 }

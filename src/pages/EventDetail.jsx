@@ -48,6 +48,8 @@ export default function EventDetail() {
   const [workers, setWorkers] = useState([])
   const [unavailability, setUnavailability] = useState([])
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
+  const [suggestionMaps, setSuggestionMaps] = useState(null)
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
   const eventRef = doc(db, 'events', id)
 
@@ -83,6 +85,30 @@ export default function EventDetail() {
     const q = query(collection(db, 'items'), orderBy('name'))
     return onSnapshot(q, snap => setAllItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
+
+  // Calcola frequenza e co-occorrenza dagli eventi passati ogni volta che si apre il modal
+  useEffect(() => {
+    if (!showAddItem) { setSuggestionMaps(null); return }
+    setLoadingSuggestions(true)
+    getDocs(query(collection(db, 'events'), orderBy('date', 'desc')))
+      .then(snap => {
+        const freq = {}, cooc = {}
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(e => e.id !== id && (e.items?.length || 0) > 0)
+          .forEach(ev => {
+            // ID canonico: usa itemRef se presente (righe mancante extra)
+            const ids = [...new Set((ev.items || []).map(i => i.itemRef || i.id))]
+            ids.forEach(a => {
+              freq[a] = (freq[a] || 0) + 1
+              if (!cooc[a]) cooc[a] = {}
+              ids.forEach(b => { if (b !== a) cooc[a][b] = (cooc[a][b] || 0) + 1 })
+            })
+          })
+        setSuggestionMaps({ freq, cooc })
+        setLoadingSuggestions(false)
+      })
+  }, [showAddItem])
 
   if (!event) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}>
@@ -355,6 +381,28 @@ export default function EventDetail() {
     i.brand?.toLowerCase().includes(search.toLowerCase())
   )
 
+  // Suggerimenti intelligenti: frequenza + bonus co-occorrenza con articoli già in lista/carrello
+  const currentEventIds = new Set([
+    ...eventItems.map(i => i.itemRef || i.id),
+    ...cart.map(c => c.id),
+  ])
+  const suggestions = suggestionMaps
+    ? notInCart
+        .map(item => {
+          const base = suggestionMaps.freq[item.id] || 0
+          let coocBonus = 0
+          currentEventIds.forEach(cid => { coocBonus += (suggestionMaps.cooc[cid]?.[item.id] || 0) })
+          return { item, score: base + coocBonus * 2 }
+        })
+        .filter(s => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6)
+        .map(s => s.item)
+    : []
+  const suggestedIds = new Set(suggestions.map(s => s.id))
+  // Nella lista principale (senza ricerca) nascondi gli articoli già mostrati nei suggerimenti
+  const filteredForList = search ? filtered : filtered.filter(i => !suggestedIds.has(i.id))
+
   const exportPDF = () => {
     const items = event.items || []
     const loaded = items.filter(i => i.loaded && !i.isExtra)
@@ -601,14 +649,14 @@ export default function EventDetail() {
       </div>
 
       {showAddItem && (
-        <div className="modal-overlay" onClick={addItemDrag.onOverlayClick}>
-          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag.props}>
+        <div className={`modal-overlay${addItemDrag.closing ? ' closing' : ''}`} onClick={addItemDrag.onOverlayClick}>
+          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}${addItemDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag.props}>
 
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                 <h2 style={{ margin:0, fontSize:18 }}>Aggiungi alla lista</h2>
-                <button className="close-btn" onClick={() => setShowAddItem(false)}>✕</button>
+                <button className="close-btn" onClick={addItemDrag.close}>✕</button>
               </div>
               {/* Barra di ricerca */}
               <div style={{ position:'relative' }}>
@@ -665,11 +713,41 @@ export default function EventDetail() {
 
             {/* Lista articoli scorrevole */}
             <div style={{ overflowY:'auto', flex:1 }}>
-              {filtered.length === 0 && search
+
+              {/* Sezione suggerimenti — visibile solo senza ricerca attiva */}
+              {!search && (loadingSuggestions || suggestions.length > 0) && (
+                <div style={{ borderBottom:'1px solid var(--border)' }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', padding:'12px 16px 6px' }}>
+                    ✨ Suggeriti per questo evento
+                  </p>
+                  {loadingSuggestions
+                    ? <p style={{ fontSize:13, color:'var(--text2)', padding:'8px 16px 14px' }}>Analisi eventi passati...</p>
+                    : suggestions.map(item => (
+                      <AddItemRow
+                        key={`sug_${item.id}`}
+                        item={item}
+                        onAdd={addToCart}
+                        icon={ICONS[item.category] || '📦'}
+                        inCart={cart.some(c => c.id === item.id)}
+                        cartQty={cart.find(c => c.id === item.id)?.qty}
+                        alreadyInList={eventItems.some(e => e.id === item.id)}
+                      />
+                    ))
+                  }
+                </div>
+              )}
+
+              {/* Lista completa */}
+              {!search && filteredForList.length > 0 && (
+                <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', padding:'12px 16px 6px' }}>
+                  Tutti gli articoli
+                </p>
+              )}
+              {filteredForList.length === 0 && search
                 ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>Nessun risultato per "{search}"</p>
-                : filtered.length === 0
+                : filteredForList.length === 0 && !search && suggestions.length === 0
                 ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>Tutti gli articoli sono già in lista</p>
-                : filtered.map(item => (
+                : filteredForList.map(item => (
                   <AddItemRow
                     key={item.id}
                     item={item}
@@ -703,9 +781,9 @@ export default function EventDetail() {
 
       {/* Modal aggiunta extra */}
       {showExtraModal && (
-        <div className="modal-overlay" onClick={extraDrag.onOverlayClick}>
-          <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
-            <button className="close-btn" onClick={() => setShowExtraModal(false)}>✕</button>
+        <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick}>
+          <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}${extraDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
+            <button className="close-btn" onClick={extraDrag.close}>✕</button>
             <h2>+ Oggetto extra</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza in magazzino — usalo per noleggi, adattatori dell'ultimo minuto, ecc.</p>
             <div className="form-group">
@@ -738,9 +816,9 @@ export default function EventDetail() {
 
       {/* Modal assegnazione worker */}
       {showAssignModal && (
-        <div className="modal-overlay" onClick={assignDrag.onOverlayClick}>
-          <div className={`modal${assignDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...assignDrag.props}>
-            <button className="close-btn" onClick={() => setShowAssignModal(false)}>✕</button>
+        <div className={`modal-overlay${assignDrag.closing ? ' closing' : ''}`} onClick={assignDrag.onOverlayClick}>
+          <div className={`modal${assignDrag.jiggling ? ' modal-jiggle' : ''}${assignDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...assignDrag.props}>
+            <button className="close-btn" onClick={assignDrag.close}>✕</button>
             <h2>👷 Assegna magazzinieri</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Seleziona chi deve occuparsi di questo evento. Puoi assegnarne più di uno.</p>
             {workers.length === 0 ? (
@@ -789,9 +867,9 @@ export default function EventDetail() {
 
       {/* Bottom sheet modifica oggetto */}
       {editItem && (
-        <div className="modal-overlay" onClick={itemEditDrag.onOverlayClick}>
-          <div className={`modal${itemEditDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...itemEditDrag.props}>
-            <button className="close-btn" onClick={() => setEditItem(null)}>✕</button>
+        <div className={`modal-overlay${itemEditDrag.closing ? ' closing' : ''}`} onClick={itemEditDrag.onOverlayClick}>
+          <div className={`modal${itemEditDrag.jiggling ? ' modal-jiggle' : ''}${itemEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...itemEditDrag.props}>
+            <button className="close-btn" onClick={itemEditDrag.close}>✕</button>
             <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4 }}>Modifica oggetto</p>
             <h2 style={{ fontSize:18, fontWeight:800, marginBottom:20 }}>{editItem.name}</h2>
 

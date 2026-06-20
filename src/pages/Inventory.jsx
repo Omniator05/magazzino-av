@@ -429,9 +429,9 @@ export default function Inventory() {
       {/* Modal aggiunta/modifica */}
       {/* Modal aggiunta/modifica articolo */}
       {showModal && (
-        <div className="modal-overlay" onClick={myDrag.onOverlayClick}>
-          <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
-            <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
+        <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
+          <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
+            <button className="close-btn" onClick={myDrag.close}>✕</button>
             <h2>{selected ? 'Modifica articolo' : 'Nuovo articolo'}</h2>
             <div className="form-group"><label>Nome *</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Cassa EV ZLX-12P" /></div>
             <div className="form-group"><label>Categoria</label>
@@ -508,9 +508,9 @@ export default function Inventory() {
 
       {/* Modal dettaglio + QR */}
       {showDetail && (
-        <div className="modal-overlay" onClick={detailDrag.onOverlayClick}>
-          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
-            <button className="close-btn" onClick={() => setShowDetail(null)}>✕</button>
+        <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
+          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
+            <button className="close-btn" onClick={detailDrag.close}>✕</button>
             <div style={{ textAlign:'center', marginBottom:20 }}>
               <div style={{ fontSize:40, marginBottom:8 }}>{ICONS[showDetail.category] || '📦'}</div>
               <h2 style={{ margin:0 }}>{showDetail.name}</h2>
@@ -597,9 +597,9 @@ export default function Inventory() {
 
       {/* Menu scelta: Oggetto o Kit */}
       {showAddMenu && (
-        <div className="modal-overlay" onClick={addMenuDrag.onOverlayClick}>
-          <div className={`modal${addMenuDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
-            <button className="close-btn" onClick={() => setShowAddMenu(false)}>✕</button>
+        <div className={`modal-overlay${addMenuDrag.closing ? ' closing' : ''}`} onClick={addMenuDrag.onOverlayClick}>
+          <div className={`modal${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
+            <button className="close-btn" onClick={addMenuDrag.close}>✕</button>
             <h2>Cosa vuoi aggiungere?</h2>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
               <button onClick={() => { setShowAddMenu(false); openAdd() }}
@@ -622,10 +622,10 @@ export default function Inventory() {
       {/* Kit Builder */}
       {/* ── Kit Edit Modal ─────────────────────── */}
       {showKitEditModal && editingKit && (
-        <div className="modal-overlay" onClick={kitEditDrag.onOverlayClick}>
-          <div className={`modal${kitEditDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
+        <div className={`modal-overlay${kitEditDrag.closing ? ' closing' : ''}`} onClick={kitEditDrag.onOverlayClick}>
+          <div className={`modal${kitEditDrag.jiggling ? ' modal-jiggle' : ''}${kitEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={() => setShowKitEditModal(false)}>✕</button>
+              <button className="close-btn" onClick={kitEditDrag.close}>✕</button>
               <h2 style={{ marginBottom:14 }}>🧰 Modifica kit</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino" style={{ fontSize:13, marginBottom:10 }} />
@@ -692,10 +692,10 @@ export default function Inventory() {
       )}
 
       {showKitModal && (
-        <div className="modal-overlay" onClick={kitDrag.onOverlayClick}>
-          <div className={`modal${kitDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
+        <div className={`modal-overlay${kitDrag.closing ? ' closing' : ''}`} onClick={kitDrag.onOverlayClick}>
+          <div className={`modal${kitDrag.jiggling ? ' modal-jiggle' : ''}${kitDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={() => setShowKitModal(false)}>✕</button>
+              <button className="close-btn" onClick={kitDrag.close}>✕</button>
               <h2 style={{ marginBottom:14 }}>🧰 Nuovo kit</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit (es. Baule Tornado)" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino (opzionale)" style={{ fontSize:13, marginBottom:10 }} />

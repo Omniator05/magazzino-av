@@ -85,6 +85,20 @@ export default function WorkerCalendar() {
   const isAssignedToMe = (ev) => (ev.assignedWorkers || []).includes(user?.uid)
   const isUnavailable = (dStr) => unavailability.some(u => dStr >= u.startDate && dStr <= u.endDate)
 
+  const PHASE_META = {
+    montaggio:  { color: '#2563eb' },
+    smontaggio: { color: '#ea580c' },
+  }
+  const phasesByDate = {}
+  allEvents.forEach(e => {
+    if (!e.phases) return
+    Object.entries(e.phases).forEach(([key, date]) => {
+      if (!date || !PHASE_META[key]) return
+      if (!phasesByDate[date]) phasesByDate[date] = []
+      phasesByDate[date].push({ color: PHASE_META[key].color })
+    })
+  })
+
   const goPrevMonth = () => setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 })
   const goNextMonth = () => setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 })
   const goToday = () => { setCursor({ year: today.getFullYear(), month: today.getMonth() }); setSelectedDate(todayStr) }
@@ -224,12 +238,19 @@ export default function WorkerCalendar() {
                   {cell.day}
                 </span>
                 {unavail && <span style={{ fontSize:8, color:'var(--text2)', fontWeight:700 }}>🚫</span>}
-                {!unavail && dayEvents.length > 0 && (
+                {!unavail && (dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0)) && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
-                    {dayEvents.slice(0, 4).map(ev => (
+                    {dayEvents.slice(0, 3).map(ev => (
                       <span key={ev.id} style={{
                         width:7, height:7, borderRadius:'50%', flexShrink:0,
                         background: isAssignedToMe(ev) ? 'var(--accent)' : 'var(--blue)',
+                        opacity: isPast ? 0.55 : 1,
+                      }} />
+                    ))}
+                    {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
+                      <span key={`ph${i}`} style={{
+                        width:7, height:7, borderRadius:'50%', flexShrink:0,
+                        background: p.color,
                         opacity: isPast ? 0.55 : 1,
                       }} />
                     ))}
@@ -260,6 +281,14 @@ export default function WorkerCalendar() {
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Assegnati a te</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:'#2563eb', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Montaggio</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:'#ea580c', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:10, height:10, borderRadius:3, background:'rgba(144,144,176,0.3)', display:'inline-block' }} />

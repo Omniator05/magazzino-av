@@ -152,7 +152,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                 {totalBroken === 1 ? '1 oggetto rotto' : `${totalBroken} oggetti rotti`} da riparare
               </p>
             </div>
-            <button onClick={() => navigate('/inventory')} style={{
+            <button onClick={() => navigate('/inventory')} className="btn-no-anim" style={{
               background:'transparent', color:'#e11d48', fontSize:13, fontWeight:700,
               display:'flex', alignItems:'center', gap:2,
             }}>
@@ -179,7 +179,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                 {reorderItems.length === 1 ? `"${reorderItems[0].name}"` : `${reorderItems.length} consumabili`} da riordinare
               </p>
             </div>
-            <button onClick={() => navigate('/inventory', { state:{ filter:'reorder' } })} style={{
+            <button onClick={() => navigate('/inventory', { state:{ filter:'reorder' } })} className="btn-no-anim" style={{
               background:'transparent', color:'#1d6fce', fontSize:13, fontWeight:700,
               display:'flex', alignItems:'center', gap:2,
             }}>
@@ -231,61 +231,46 @@ export default function Dashboard({ toggleTheme, theme }) {
             </p>
 
             {upcoming.map(ev => {
-              const its      = ev.items || []
-              const total    = its.length
-              const loaded   = its.filter(i => i.loaded).length
-              const returned = its.filter(i => i.returned).length
-              const isToday  = ev.date === today
-
-              let barColor   = '#d1d5db'
-              let statusText = 'Lista vuota'
-              let statusColor= '#9ca3af'
-              if (total > 0) {
-                if (returned === total)    { barColor='#22c55e'; statusColor='#15803d'; statusText='Tutto rientrato' }
-                else if (loaded === total) { barColor='#f59e0b'; statusColor='#b45309'; statusText=`In evento · ${returned}/${total} rientrati` }
-                else if (loaded > 0)       { barColor='#f59e0b'; statusColor='#b45309'; statusText=`Carico · ${loaded}/${total}` }
-                else                       { statusText=`${total} in lista` }
-              }
+              const isToday = ev.date === today
+              const iconGradient = isToday
+                ? 'linear-gradient(135deg,#dc2626,#9333ea)'
+                : 'linear-gradient(135deg,#9ca3af,#6b7280)'
+              const cardBorder = isToday ? '1.5px solid #fca5a5' : '1.5px solid var(--dash-card-border)'
+              const dateLabel = ev.date
+                ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})
+                : ''
+              const dateEndLabel = ev.dateEnd && ev.dateEnd !== ev.date
+                ? ' — ' + new Date(ev.dateEnd+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long'})
+                : ''
 
               return (
                 <div
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
-                  style={{
-                    background:'var(--dash-card)',
-                    borderRadius:18,
-                    marginBottom:10,
-                    overflow:'hidden',
-                    cursor:'pointer',
-                    border: isToday ? '1.5px solid #fca5a5' : '1.5px solid var(--dash-card-border)',
-                    boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
-                  }}
+                  style={{ marginBottom:10, background:'var(--dash-card)', border:cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform='scale(1.015)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.10)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
                 >
-                  {isToday && (
-                    <div style={{ background:'#fef2f2', padding:'5px 16px', borderBottom:'1px solid #fecaca' }}>
-                      <p style={{ color:'#dc2626', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em' }}>● Oggi</p>
+                  {/* Icona gradiente con data */}
+                  <div style={{ position:'relative', width:52, height:52, flexShrink:0 }}>
+                    <div style={{ width:52, height:52, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
+                      <span style={{ fontSize:20, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>
+                      <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
+                        {ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{month:'short'}) : ''}
+                      </span>
                     </div>
-                  )}
-                  <div style={{ padding:'14px 16px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                          {ev.name}
-                        </p>
-                        <p style={{ color:'var(--dash-muted)', fontSize:13, marginTop:2 }}>
-                          <DateBadge dateStr={ev.date} location={ev.location} today={today} />
-                        </p>
-                      </div>
-                      <span style={{ color:'var(--dash-muted)', flexShrink:0, marginLeft:8 }}><IconChevron /></span>
-                    </div>
-                    {total > 0 && (
-                      <>
-                        <div style={{ background:'#f3f4f6', borderRadius:4, height:4, margin:'10px 0 5px', overflow:'hidden' }}>
-                          <div style={{ background:barColor, height:'100%', borderRadius:4, width:`${(Math.max(loaded,returned)/total)*100}%`, transition:'width 0.4s ease' }} />
-                        </div>
-                        <p style={{ fontSize:12, color:statusColor, fontWeight:600 }}>{statusText}</p>
-                      </>
+                    {ev.seriesId && (
+                      <span style={{ position:'absolute', bottom:-4, right:-4, background:'var(--blue)', borderRadius:6, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, border:'2px solid var(--dash-card)' }}>🔁</span>
                     )}
+                  </div>
+
+                  {/* Testo */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
+                      <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{ev.name}</p>
+                    </div>
+                    <p style={{ fontSize:12, fontWeight:500, color:'var(--dash-muted)' }}>{dateLabel}{dateEndLabel}</p>
+                    {ev.location && <p style={{ fontSize:11, color:'var(--dash-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📍 {ev.location}</p>}
                   </div>
                 </div>
               )

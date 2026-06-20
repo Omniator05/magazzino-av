@@ -42,7 +42,7 @@ function toDateStr(d) {
 
 export default function Calendar() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isWorker } = useAuth()
   const today = new Date()
   const todayStr = toDateStr(today)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
@@ -248,13 +248,16 @@ export default function Calendar() {
                 {/* Puntini: eventi + fasi + assenze */}
                 {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || dayAbsences.length > 0) && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
-                    {dayEvents.slice(0, 3).map(ev => (
-                      <span key={ev.id} style={{
-                        width:7, height:7, borderRadius:'50%', flexShrink:0,
-                        background: ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)',
-                        opacity: isPast ? 0.55 : 1,
-                      }} />
-                    ))}
+                    {dayEvents.slice(0, 3).map(ev => {
+                      const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
+                      return (
+                        <span key={ev.id} style={{
+                          width:7, height:7, borderRadius:'50%', flexShrink:0,
+                          background: ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)',
+                          opacity: isPast ? 0.55 : 1,
+                        }} />
+                      )
+                    })}
                     {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
                       <span key={`ph${i}`} style={{
                         width:7, height:7, borderRadius:'50%', flexShrink:0,
@@ -279,9 +282,15 @@ export default function Calendar() {
         {/* Legenda */}
         <div style={{ display:'flex', gap:12, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Eventi</span>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--blue)', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{isWorker ? 'Eventi' : 'Eventi'}</span>
           </div>
+          {isWorker && (
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
+              <span style={{ fontSize:12, color:'var(--text2)' }}>Assegnato a me</span>
+            </div>
+          )}
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#7c6fcd', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Installazioni</span>
@@ -409,9 +418,9 @@ export default function Calendar() {
 
       {/* Modal segnala assenza */}
       {showAbsenceModal && (
-        <div className="modal-overlay" onClick={absenceDrag.onOverlayClick}>
-          <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...absenceDrag}>
-            <button className="close-btn" onClick={() => setShowAbsenceModal(false)}>✕</button>
+        <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
+          <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
+            <button className="close-btn" onClick={absenceDrag.close}>✕</button>
             <h2>🚫 Segnala assenza</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Indica i giorni in cui non sei disponibile. Apparirà nel calendario e negli avvisi di assegnazione evento.</p>
             <div className="form-group">
@@ -436,9 +445,9 @@ export default function Calendar() {
 
       {/* Modal modifica evento */}
       {editingEvent && (
-        <div className="modal-overlay" onClick={editDrag.onOverlayClick}>
-          <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...editDrag}>
-            <button className="close-btn" onClick={() => setEditingEvent(null)}>✕</button>
+        <div className={`modal-overlay${editDrag.closing ? ' closing' : ''}`} onClick={editDrag.onOverlayClick}>
+          <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}${editDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...editDrag.props}>
+            <button className="close-btn" onClick={editDrag.close}>✕</button>
             <h2>Modifica evento</h2>
             <div className="form-group">
               <label>Nome evento *</label>

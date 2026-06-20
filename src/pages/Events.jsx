@@ -307,17 +307,9 @@ export default function Events() {
     const returned = items.filter(i => i.returned).length
     const total    = items.length
     const isToday  = event.date === today
-    const evEnd        = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
-    const isPast       = evEnd < today
-    const daScaricare  = isPast && items.some(i => i.loaded && !i.returned)
-
-    // Colori card: rosso=oggi, arancio=da scaricare, neutro=futuro
-    const cardBg     = isToday      ? 'rgba(220,38,38,0.06)'   : daScaricare ? 'rgba(234,88,12,0.06)'   : 'var(--dash-card)'
-    const cardBorder = isToday      ? 'rgba(220,38,38,0.35)'   : daScaricare ? 'rgba(234,88,12,0.35)'   : 'var(--dash-card-border)'
-    const badgeBg    = isToday      ? 'rgba(220,38,38,0.12)'   : daScaricare ? 'rgba(234,88,12,0.12)'   : ''
-    const badgeBorder= isToday      ? 'rgba(220,38,38,0.25)'   : daScaricare ? 'rgba(234,88,12,0.3)'    : ''
-    const badgeColor = isToday      ? '#dc2626'                 : daScaricare ? '#ea580c'               : ''
-    const badgeLabel = isToday      ? 'OGGI'                    : daScaricare ? 'DA SCARICARE'           : ''
+    const evEnd    = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+    const isPast   = evEnd < today
+    const daScaricare = isPast && items.some(i => i.loaded && !i.returned)
 
     let statusColor = 'var(--dash-muted)', statusText = 'Lista vuota'
     if (total > 0) {
@@ -327,55 +319,64 @@ export default function Events() {
       else                       { statusColor = 'var(--dash-muted)'; statusText = `${total} in lista` }
     }
 
+    const iconGradient = daScaricare
+      ? '#fb8500'
+      : event.type === 'installation'
+      ? '#a7c957'
+      : (isToday || loaded > 0)
+      ? '#e63946'
+      : '#a8dadc'
+
+    const cardBorder = isToday ? 'rgba(220,38,38,0.4)' : daScaricare ? 'rgba(234,88,12,0.4)' : 'var(--dash-card-border)'
+    const dateStr = event.date ? new Date(event.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}) : ''
+    const dateEndStr = event.dateEnd && event.dateEnd !== event.date
+      ? ' — ' + new Date(event.dateEnd+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})
+      : ''
+
     return (
       <div onClick={() => navigate(`/events/${event.id}`)}
-        style={{ cursor:'pointer', background:cardBg, border:`1.5px solid ${cardBorder}`, borderRadius:18, margin:'0 16px 10px', overflow:'hidden', boxShadow:'0 1px 6px rgba(0,0,0,0.05)' }}>
-        {(isToday || daScaricare) && (
-          <div style={{ background:badgeBg, padding:'5px 16px', borderBottom:`1px solid ${badgeBorder}`, display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ color:badgeColor }}><IconAlertDot /></span>
-            <p style={{ color:badgeColor, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.06em' }}>{badgeLabel}</p>
+        style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+        onMouseEnter={e => { e.currentTarget.style.transform='scale(1.015)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.10)' }}
+        onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
+      >
+        {/* Icona gradiente con data */}
+        <div style={{ position:'relative', width:52, height:52, flexShrink:0 }}>
+          <div style={{ width:52, height:52, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
+            <span style={{ fontSize:20, fontWeight:800 }}>{event.date ? new Date(event.date+'T12:00:00').getDate() : '?'}</span>
+            <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
+              {event.date ? new Date(event.date+'T12:00:00').toLocaleDateString('it-IT',{month:'short'}) : ''}
+            </span>
           </div>
-        )}
-        <div style={{ padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:2 }}>
-              <h3 style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:15, fontWeight:700, color:'var(--dash-title)' }}>{event.name}</h3>
-              {event.seriesId && (
-                <span style={{ background:'#dbeafe', color:'#1d6fce', borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, flexShrink:0, display:'flex', alignItems:'center', gap:3 }}>
-                  <IconRepeat />
-                </span>
-              )}
-            </div>
-            <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
-            {event.phases && PHASE_CONFIG.some(p => event.phases[p.key]) && (
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
-                {PHASE_CONFIG.filter(p => event.phases[p.key]).map(p => (
-                  <span key={p.key} style={{ background:p.bg, color:p.color, borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, letterSpacing:'0.02em' }}>
-                    {p.label} · {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-            <EditButton onClick={e => openEdit(e, event)} size={34} />
-            <DeleteButton onClick={e => deleteEvent(e, event)} size={34} />
-          </div>
+          {event.seriesId && (
+            <span style={{ position:'absolute', bottom:-4, right:-4, background:'var(--blue)', borderRadius:6, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, border:'2px solid var(--dash-card)' }}>🔁</span>
+          )}
         </div>
-        <div style={{ padding:'0 16px 14px' }}>
-          {total > 0 && (
-            <div style={{ background:'#f3f4f6', borderRadius:4, height:4, marginBottom:8, overflow:'hidden' }}>
-              <div style={{ background: returned === total ? '#22c55e' : isToday ? '#dc2626' : daScaricare ? '#ea580c' : '#f59e0b', height:'100%', borderRadius:4, width:`${(Math.max(loaded,returned)/total)*100}%`, transition:'width 0.3s' }} />
+
+        {/* Contenuto centrale */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
+            <h3 style={{ fontSize:15, fontWeight:700, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{event.name}</h3>
+          </div>
+          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor }}>
+            {daScaricare ? `🟠 ${total-returned} da rientrare` : isToday ? `🔴 OGGI · ${statusText.toLowerCase()}` : statusText}
+          </p>
+          {(event.location || (event.phases && PHASE_CONFIG.some(p => event.phases[p.key]))) && (
+            <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, flexWrap:'wrap' }}>
+              {event.location && <span style={{ fontSize:11, color:'var(--dash-muted)' }}>📍 {event.location}</span>}
+              {event.phases && PHASE_CONFIG.filter(p => event.phases[p.key]).map(p => (
+                <span key={p.key} style={{ background:p.bg, color:p.color, borderRadius:5, padding:'1px 6px', fontSize:10, fontWeight:700 }}>
+                  {p.label} {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
+                </span>
+              ))}
             </div>
           )}
-          <p style={{ color:statusColor, fontSize:13, fontWeight:600 }}>{statusText}</p>
         </div>
-        {event.notes && (
-          <div style={{ padding:'0 16px 14px', display:'flex', alignItems:'flex-start', gap:6 }}>
-            <span style={{ color:'var(--dash-muted)', flexShrink:0, marginTop:2 }}><IconNote /></span>
-            <p style={{ color:'var(--dash-muted)', fontSize:12, fontStyle:'italic' }}>{event.notes}</p>
-          </div>
-        )}
+
+        {/* Azioni */}
+        <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
+          <EditButton onClick={e => openEdit(e, event)} size={32} />
+          <DeleteButton onClick={e => deleteEvent(e, event)} size={32} />
+        </div>
       </div>
     )
   }
@@ -589,9 +590,9 @@ export default function Events() {
 
       {/* Modal scelta: template o vuoto */}
       {showTemplateMenu && (
-        <div className="modal-overlay" onClick={templateDrag.onOverlayClick}>
-          <div className={`modal${templateDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...templateDrag}>
-            <button className="close-btn" onClick={() => setShowTemplateMenu(false)}>✕</button>
+        <div className={`modal-overlay${templateDrag.closing ? ' closing' : ''}`} onClick={templateDrag.onOverlayClick}>
+          <div className={`modal${templateDrag.jiggling ? ' modal-jiggle' : ''}${templateDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templateDrag.props}>
+            <button className="close-btn" onClick={templateDrag.close}>✕</button>
             <h2>Nuovo evento</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>Vuoi partire da un template o creare un evento vuoto?</p>
 
@@ -634,9 +635,9 @@ export default function Events() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={eventDrag.onOverlayClick}>
-          <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}`} style={{ position:'relative' }} {...eventDrag}>
-            <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
+        <div className={`modal-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={eventDrag.onOverlayClick}>
+          <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
+            <button className="close-btn" onClick={eventDrag.close}>✕</button>
             <h2>{editing ? 'Modifica evento' : pendingTemplateItems ? 'Nuovo evento da template' : 'Nuovo evento'}</h2>
 
             {/* Toggle tipo: Evento / Installazione */}
