@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDocs } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { Pin, Cart, Box, Wrench, Warn, Check } from '../components/Icon'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Kit','Altro']
 const ICONS = {
@@ -177,9 +178,9 @@ export default function WorkerInventory() {
         <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
           { key:'all',    label:'Tutti',      count: items.length },
-          { key:'out',     label:'🚛 Fuori',        count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
-          { key:'broken',  label:'🔴 Rotti',         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
-          { key:'reorder', label:'🛒 Da riordinare', count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
+          { key:'out',     label:'Fuori',         count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
+          { key:'broken',  label:'Rotti',         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'reorder', label:'Da riordinare', count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)}
             style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
@@ -197,7 +198,7 @@ export default function WorkerInventory() {
       {/* Lista */}
       <div style={{ paddingBottom:8 }}>
         {filtered.length === 0
-          ? <div className="empty-state"><p style={{ fontSize:40 }}>📦</p><h3>Nessun articolo</h3></div>
+          ? <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>Nessun articolo</h3></div>
           : filtered.map(item => {
             const avail = item.availableQty ?? item.totalQty
             const isBroken = (item.brokenQty || 0) > 0
@@ -208,16 +209,16 @@ export default function WorkerInventory() {
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ fontWeight:700, fontSize:15, marginBottom:2 }}>{item.name}</p>
                   <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
-                  {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2 }}>📍 {item.location}</p>}
+                  {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {item.location}</p>}
                 </div>
                 <div style={{ textAlign:'right', flexShrink:0 }}>
                   <span style={{ fontWeight:800, fontSize:15, color: avail === item.totalQty ? 'var(--green)' : avail === 0 ? 'var(--red)' : 'var(--accent2)' }}>
                     {avail}/{item.totalQty}
                   </span>
-                  {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>🔴 {item.brokenQty} rott{item.brokenQty===1?'o':'i'}</span></div>}
-                  {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>🚛 fuori</span></div>}
+                  {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Wrench size={11} /> {item.brokenQty} rott{item.brokenQty===1?'o':'i'}</span></div>}
+                  {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>fuori</span></div>}
                   {item.category === 'Consumabili' && item.minStock > 0 && avail <= item.minStock && (
-                    <div style={{ marginTop:4 }}><span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>🛒 da riordinare</span></div>
+                    <div style={{ marginTop:4 }}><span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Cart size={11} /> da riordinare</span></div>
                   )}
                   <p style={{ color:'var(--text2)', fontSize:11, marginTop:4 }}>{item.category}</p>
                 </div>
@@ -254,7 +255,7 @@ export default function WorkerInventory() {
 
             {scanError && (
               <div style={{ marginTop:14, background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.3)', borderRadius:10, padding:'12px 14px' }}>
-                <p style={{ color:'var(--red)', fontSize:13, fontWeight:600 }}>⚠️ {scanError}</p>
+                <p style={{ color:'var(--red)', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6 }}><Warn size={14} /> {scanError}</p>
               </div>
             )}
 
@@ -297,7 +298,7 @@ export default function WorkerInventory() {
 
             {detail.location && (
               <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:10, padding:'10px 14px', marginBottom:16 }}>
-                <p style={{ color:'var(--blue)', fontSize:14 }}>📍 {detail.location}</p>
+                <p style={{ color:'var(--blue)', fontSize:14, display:'flex', alignItems:'center', gap:6 }}><Pin size={14} /> {detail.location}</p>
               </div>
             )}
             {detail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{detail.notes}</p>}
@@ -321,7 +322,7 @@ export default function WorkerInventory() {
                   </div>
                   {detail.minStock > 0 && (detail.availableQty??detail.totalQty) <= detail.minStock && (
                     <div style={{ marginTop:10, background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:8, padding:'8px 12px', textAlign:'center' }}>
-                      <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700 }}>🛒 Scorta bassa — da riordinare</p>
+                      <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}><Cart size={14} /> Scorta bassa — da riordinare</p>
                     </div>
                   )}
                 </div>
@@ -335,14 +336,14 @@ export default function WorkerInventory() {
                     <button
                       onClick={() => markBroken(detail, 1)}
                       disabled={(detail.brokenQty||0) >= detail.totalQty}
-                      style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.3)', color:'var(--red)', opacity:(detail.brokenQty||0)>=detail.totalQty?0.4:1 }}>
-                      🔴 Segna rotto
+                      style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.3)', color:'var(--red)', opacity:(detail.brokenQty||0)>=detail.totalQty?0.4:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                      <Wrench size={15} /> Segna rotto
                     </button>
                     <button
                       onClick={() => markBroken(detail, -1)}
                       disabled={(detail.brokenQty||0) === 0}
-                      style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', opacity:(detail.brokenQty||0)===0?0.4:1 }}>
-                      ✅ Segna riparato
+                      style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', opacity:(detail.brokenQty||0)===0?0.4:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                      <Check size={15} /> Segna riparato
                     </button>
                   </div>
                 </div>

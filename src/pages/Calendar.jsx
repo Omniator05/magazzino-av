@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
 import EditButton from '../components/EditButton'
+import { Pin, User, List, Wrench, Check } from '../components/Icon'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
@@ -330,10 +331,10 @@ export default function Calendar() {
                     <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />
                       <div onClick={() => navigate(`/events/${ev.id}`)} style={{ flex:1, minWidth:0, cursor:'pointer' }}>
-                        <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {ev.type === 'installation' ? '🔧 ' : ''}{ev.name}
+                        <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6 }}>
+                          {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                         </p>
-                        {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>📍 {ev.location}</p>}
+                        {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                         {phaseOnDay && (
                           <span style={{ display:'inline-block', marginTop:5, background: phaseOnDay.color + '18', color: phaseOnDay.color, border:`1px solid ${phaseOnDay.color}44`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
                             {phaseOnDay.label}
@@ -342,8 +343,8 @@ export default function Calendar() {
                         {assignedNames.length > 0 && (
                           <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:7 }}>
                             {assignedNames.map(name => (
-                              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:4, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'2px 9px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>
-                                👷 {name}
+                              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>
+                                <User size={12} /> {name}
                               </span>
                             ))}
                           </div>
@@ -360,10 +361,10 @@ export default function Calendar() {
           {/* Assenze worker in questo giorno */}
           {selectedAbsences.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>🚫 Assenti</p>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Assenti</p>
               {selectedAbsences.map(a => (
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
-                  <span style={{ fontSize:18, flexShrink:0 }}>👷</span>
+                  <span style={{ flexShrink:0, color:'var(--text2)' }}><User size={18} /></span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>{a.workerName}</p>
                     <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
@@ -377,7 +378,7 @@ export default function Calendar() {
           {/* Le mie assenze */}
           {myAbsences.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>📋 Le mie assenze</p>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><List size={13} /> Le mie assenze</p>
               {myAbsences.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
@@ -436,9 +437,9 @@ export default function Calendar() {
               <label>Motivo <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
               <input value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({...f, reason:e.target.value}))} placeholder="es. Ferie, impegno personale..." />
             </div>
-            <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+            <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={savingAbsence || !absenceForm.startDate}>
-              {savingAbsence ? 'Salvataggio...' : '✅ Conferma assenza'}
+              {savingAbsence ? 'Salvataggio...' : <><Check size={16} /> Conferma assenza</>}
             </button>
           </div>
         </div>

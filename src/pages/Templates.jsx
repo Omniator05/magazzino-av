@@ -6,6 +6,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useNavigate } from 'react-router-dom'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
+import { List } from '../components/Icon'
 
 const ICONS = {
   'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️','Corrente':'⚡',
@@ -103,7 +104,7 @@ export default function Templates() {
       <div style={{ padding:'16px 0' }}>
         {templates.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize:40 }}>📋</p>
+            <p style={{ color:'var(--text3)', marginBottom:4 }}><List size={40} /></p>
             <h3>Nessun template</h3>
             <p>Crea template per velocizzare la creazione degli eventi</p>
           </div>
@@ -112,7 +113,7 @@ export default function Templates() {
             <div style={{ padding:'14px 16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>📋 {t.name}</p>
+                  <p style={{ fontWeight:700, fontSize:16, marginBottom:4, display:'flex', alignItems:'center', gap:7 }}><List size={16} /> {t.name}</p>
                   {t.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:8 }}>{t.notes}</p>}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                     {(t.components||[]).slice(0,6).map((c,i) => (
@@ -205,7 +206,7 @@ export default function Templates() {
               <button onClick={save} className="btn btn-primary btn-full"
                 disabled={saving || !form.name.trim() || components.length === 0}
                 style={{ opacity: saving || !form.name.trim() || components.length === 0 ? 0.4 : 1 }}>
-                {saving ? '⏳ Salvataggio...' : editing ? '💾 Salva modifiche' : `✅ Crea template con ${components.length} articoli`}
+                {saving ? 'Salvataggio...' : editing ? 'Salva modifiche' : `Crea template con ${components.length} articoli`}
               </button>
             </div>
           </div>

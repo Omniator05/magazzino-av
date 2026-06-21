@@ -135,7 +135,7 @@ export default function Archive() {
                         </p>
                         {total > 0 && (
                           <p style={{ color:'var(--text2)', fontSize:12, marginTop:4 }}>
-                            {total} articoli · {returned === total ? '✅ tutto rientrato' : `${returned}/${total} rientrati`}
+                            {total} articoli · {returned === total ? 'tutto rientrato' : `${returned}/${total} rientrati`}
                           </p>
                         )}
                       </div>
@@ -150,7 +150,7 @@ export default function Archive() {
                             opacity: isCopying ? 0.6 : 1,
                             minWidth:110, textAlign:'center',
                           }}>
-                          {isCopied ? '✅ Creato!' : isCopying ? '⏳ Copio...' : '📋 Usa template'}
+                          {isCopied ? 'Creato!' : isCopying ? 'Copio...' : 'Usa template'}
                         </button>
                         <DeleteButton onClick={() => deleteArchiveEvent(event)} size={38} />
                       </div>

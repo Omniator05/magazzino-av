@@ -235,9 +235,6 @@ export default function AdminUsers() {
       )}
 
       <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-          <button onClick={() => navigate('/')} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
-        </div>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>Utenti</h1><p>{users.length} account totali</p></div>
           <button onClick={() => { setShowCreate(true); setError('') }} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Nuovo</button>

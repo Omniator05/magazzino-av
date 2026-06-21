@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
-import ThemeToggle from '../components/ThemeToggle'
 import DateBadge from '../components/DateBadge'
+import { Pin } from '../components/Icon'
 
 const greeting = () => {
   const h = new Date().getHours()
@@ -74,6 +74,8 @@ export default function Dashboard({ toggleTheme, theme }) {
   const openTasks    = tasks.filter(t => !t.done)
   const upcoming     = events.filter(e => e.date >= today).slice(0, 3)
 
+  const todayLabel = new Date().toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })
+
   /* Tool cards config */
   const tools = [
     {
@@ -105,29 +107,33 @@ export default function Dashboard({ toggleTheme, theme }) {
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:110 }}>
 
-      {/* ── Header ──────────────────────────────── */}
-      <div style={{ padding:'56px 22px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-        <div>
-          <p style={{ fontSize:13, fontWeight:600, color:'var(--dash-muted)', letterSpacing:'0.06em', textTransform:'uppercase', marginBottom:4 }}>
-            {greeting()}
-          </p>
-          <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1, marginBottom:3 }}>
-            {name}
-          </h1>
-          <p style={{ fontSize:12, color:'var(--dash-muted)', fontWeight:500 }}>
-            {profile?.role === 'admin' ? 'Amministratore' : 'Magazziniere'}
-          </p>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:4 }}>
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+      {/* ── Header hero (card) ──────────────────────────────── */}
+      <div style={{ position:'relative', overflow:'hidden', background:'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)', margin:'calc(env(safe-area-inset-top) + 24px) 16px 20px', padding:'26px 22px', borderRadius:26, boxShadow:'0 12px 32px rgba(34,44,66,0.26)' }}>
+        {/* Orb decorativi */}
+        <div style={{ position:'absolute', top:'-55%', right:'-6%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle, rgba(255,255,255,0.14) 0%, transparent 65%)', animation:'dashOrb1 14s ease-in-out infinite', pointerEvents:'none' }} />
+        <div style={{ position:'absolute', bottom:'-70%', left:'-5%', width:280, height:280, borderRadius:'50%', background:'radial-gradient(circle, rgba(0,0,0,0.2) 0%, transparent 65%)', animation:'dashOrb2 18s ease-in-out infinite', pointerEvents:'none' }} />
+
+        {/* Riga principale */}
+        <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
+            <div style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)' }}>
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ minWidth:0 }}>
+              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.78)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{greeting()}</p>
+              <h1 style={{ fontSize:28, fontWeight:800, color:'white', lineHeight:1.08, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</h1>
+              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}</p>
+            </div>
+          </div>
           <button onClick={logout} style={{
-            background:'var(--dash-pill-bg)',
-            border:'1px solid var(--dash-pill-border)',
-            color:'var(--dash-muted)',
-            borderRadius:50,
-            padding:'7px 16px',
+            flexShrink:0,
+            background:'rgba(255,255,255,0.16)',
+            border:'1px solid rgba(255,255,255,0.3)',
+            color:'white',
+            borderRadius:12,
+            padding:'9px 16px',
             fontSize:13,
-            fontWeight:600,
+            fontWeight:700,
           }}>Esci</button>
         </div>
       </div>
@@ -274,7 +280,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                       <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{ev.name}</p>
                     </div>
                     <p style={{ fontSize:12, fontWeight:500, color:'var(--dash-muted)' }}>{dateLabel}{dateEndLabel}</p>
-                    {ev.location && <p style={{ fontSize:11, color:'var(--dash-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📍 {ev.location}</p>}
+                    {ev.location && <p style={{ fontSize:11, color:'var(--dash-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                   </div>
                 </div>
               )
@@ -305,26 +311,10 @@ export default function Dashboard({ toggleTheme, theme }) {
       </div>
 
       <style>{`
-        /* ── Dashboard light/dark tokens ── */
-        :root {
-          --surface:           #f5f5f3;
-          --dash-title:        #111827;
-          --dash-muted:        #6b7280;
-          --dash-card:         #ffffff;
-          --dash-card-border:  #e5e7eb;
-          --dash-pill-bg:      #f3f4f6;
-          --dash-pill-border:  #e5e7eb;
-        }
-        [data-theme="dark"] {
-          --surface:           var(--bg);
-          --dash-title:        var(--text);
-          --dash-muted:        var(--text2);
-          --dash-card:         var(--card);
-          --dash-card-border:  var(--border2);
-          --dash-pill-bg:      var(--card2);
-          --dash-pill-border:  var(--border2);
-        }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @keyframes dashOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
+        @keyframes dashOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
+        @media (prefers-reduced-motion:reduce){ [style*="dashOrb"]{animation:none!important} }
       `}</style>
     </div>
   )

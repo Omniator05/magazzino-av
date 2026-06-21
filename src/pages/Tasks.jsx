@@ -3,13 +3,14 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import DeleteButton from '../components/DeleteButton'
+import { Dot, Check, User } from '../components/Icon'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 
 const PRIORITY_COLORS = {
-  alta:   { bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.35)', color:'var(--red)',     label:'🔴 Alta' },
-  media:  { bg:'rgba(245,166,35,0.12)',  border:'rgba(245,166,35,0.35)',  color:'var(--accent2)', label:'🟡 Media' },
-  bassa:  { bg:'rgba(52,211,153,0.12)',  border:'rgba(52,211,153,0.35)',  color:'var(--green)',   label:'🟢 Bassa' },
+  alta:   { bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.35)', color:'var(--red)',     dot:'#f87171', label:'Alta' },
+  media:  { bg:'rgba(245,166,35,0.12)',  border:'rgba(245,166,35,0.35)',  color:'var(--accent2)', dot:'#f5a623', label:'Media' },
+  bassa:  { bg:'rgba(52,211,153,0.12)',  border:'rgba(52,211,153,0.35)',  color:'var(--green)',   dot:'#34d399', label:'Bassa' },
 }
 
 export default function Tasks() {
@@ -117,7 +118,7 @@ export default function Tasks() {
         {/* Task aperte */}
         {openTasks.length === 0 && doneTasks.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize:40 }}>✅</p>
+            <p style={{ color:'var(--text3)', marginBottom:4 }}><Check size={40} /></p>
             <h3>Nessuna task</h3>
             <p>{isAdmin ? 'Crea la prima task per i magazzinieri' : 'Non hai task assegnate'}</p>
           </div>
@@ -188,8 +189,9 @@ export default function Tasks() {
                     style={{ flex:1, padding:'9px 6px', borderRadius:10, fontSize:13, fontWeight:700,
                       border: `2px solid ${form.priority === key ? val.border : 'var(--border)'}`,
                       background: form.priority === key ? val.bg : 'var(--card2)',
-                      color: form.priority === key ? val.color : 'var(--text2)' }}>
-                    {val.label}
+                      color: form.priority === key ? val.color : 'var(--text2)',
+                      display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                    <Dot size={8} color={val.dot} /> {val.label}
                   </button>
                 ))}
               </div>
@@ -208,9 +210,9 @@ export default function Tasks() {
               </div>
             )}
 
-            <button onClick={createTask} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+            <button onClick={createTask} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={!form.title.trim()}>
-              ✅ {isAdmin ? 'Crea task' : 'Aggiungi task'}
+              <Check size={16} /> {isAdmin ? 'Crea task' : 'Aggiungi task'}
             </button>
           </div>
         </div>
@@ -239,12 +241,12 @@ function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
           {task.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:4, lineHeight:1.5 }}>{task.notes}</p>}
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             {!task.done && (
-              <span style={{ background:p.bg, color:p.color, border:`1px solid ${p.border}`, borderRadius:6, padding:'1px 8px', fontSize:11, fontWeight:700 }}>
-                {p.label}
+              <span style={{ background:p.bg, color:p.color, border:`1px solid ${p.border}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:5 }}>
+                <Dot size={7} color={p.dot} /> {p.label}
               </span>
             )}
-            <span style={{ color:'var(--text2)', fontSize:12 }}>
-              👤 {assigneeName}
+            <span style={{ color:'var(--text2)', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
+              <User size={12} /> {assigneeName}
             </span>
             {task.createdByName && isAdmin && task.assignee === task.createdBy && (
               <span style={{ background:'rgba(79,195,247,0.1)', color:'var(--blue)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:6, padding:'1px 7px', fontSize:11, fontWeight:600 }}>

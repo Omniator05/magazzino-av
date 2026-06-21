@@ -3,22 +3,22 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
-import ThemeToggle from '../components/ThemeToggle'
 import DateBadge from '../components/DateBadge'
+import { Unload, Recurring, Pin, Box } from '../components/Icon'
+
+const greeting = () => {
+  const h = new Date().getHours()
+  if (h < 5)  return 'Buonanotte'
+  if (h < 12) return 'Buongiorno'
+  if (h < 18) return 'Buon pomeriggio'
+  return 'Buonasera'
+}
 
 export default function WorkerHome() {
   const { profile, logout } = useAuth()
   const [events, setEvents] = useState([])
   const navigate = useNavigate()
   const today = new Date().toISOString().split('T')[0]
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    setTheme(next)
-    localStorage.setItem('theme', next)
-    document.documentElement.setAttribute('data-theme', next)
-  }
 
   useEffect(() => {
     const q = query(collection(db, 'events'), orderBy('date'))
@@ -64,30 +64,48 @@ export default function WorkerHome() {
   const singleEvents = events.filter(e => !e.seriesId)
   const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today)
 
+  const displayName = name || profile?.username || 'Magazziniere'
+  const initial = displayName.charAt(0).toUpperCase()
+  const todayLabel = new Date().toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })
+
   return (
     <div className="page">
-      {/* Header */}
-      <div style={{ padding:'52px 20px 24px', background:'var(--gradient-header)', borderBottom:'1px solid var(--border)' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-          <div>
-            <p style={{ fontSize:11, color:'var(--text2)', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:2 }}>Ciao,</p>
-            <h1 style={{ fontSize:28, fontWeight:500, color:'var(--text)', lineHeight:1.1, marginBottom:6 }}>{name || profile?.username || 'Magazziniere'}</h1>
-            <p style={{ fontSize:12, color:'var(--text2)' }}>Magazziniere</p>
+      {/* Header hero (card) */}
+      <div style={{ position:'relative', overflow:'hidden', background:'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)', margin:'calc(env(safe-area-inset-top) + 24px) 16px 18px', padding:'26px 22px', borderRadius:26, boxShadow:'0 12px 32px rgba(34,44,66,0.26)' }}>
+        {/* Orb decorativi */}
+        <div style={{ position:'absolute', top:'-55%', right:'-6%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle, rgba(255,255,255,0.16) 0%, transparent 65%)', animation:'whOrb1 14s ease-in-out infinite', pointerEvents:'none' }} />
+        <div style={{ position:'absolute', bottom:'-70%', left:'-5%', width:280, height:280, borderRadius:'50%', background:'radial-gradient(circle, rgba(0,0,0,0.18) 0%, transparent 65%)', animation:'whOrb2 18s ease-in-out infinite', pointerEvents:'none' }} />
+
+        {/* Riga principale */}
+        <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
+            {/* Avatar */}
+            <div style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)' }}>
+              {initial}
+            </div>
+            <div style={{ minWidth:0 }}>
+              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.8)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{greeting()},</p>
+              <h1 style={{ fontSize:28, fontWeight:800, color:'white', lineHeight:1.08, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{displayName}</h1>
+              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}</p>
+            </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <ThemeToggle theme={theme} onToggle={toggleTheme} />
-            <button onClick={logout} style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:600 }}>Esci</button>
-          </div>
+          <button onClick={logout} style={{ flexShrink:0, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)', color:'white', borderRadius:12, padding:'9px 16px', fontSize:13, fontWeight:700 }}>Esci</button>
         </div>
       </div>
+
+      <style>{`
+        @keyframes whOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
+        @keyframes whOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
+        @media (prefers-reduced-motion:reduce){ [style*="whOrb"]{animation:none!important} }
+      `}</style>
 
       <div style={{ padding:'16px 0' }}>
 
         {/* DA SCARICARE — in evidenza */}
         {daScaricare.length > 0 && (
-          <div style={{ margin:'0 0 8px' }}>
+          <div id="sec-dascaricare" style={{ margin:'0 0 8px', scrollMarginTop:16 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px' }}>
-              <p style={{ color:'#ea580c', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>🟠 Da scaricare</p>
+              <p style={{ color:'#ea580c', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Unload size={15} /> Da scaricare</p>
               <div style={{ flex:1, height:1, background:'rgba(234,88,12,0.25)' }} />
             </div>
             {daScaricare.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} forceState="daScaricare" />)}
@@ -96,7 +114,7 @@ export default function WorkerHome() {
 
         {events.length === 0 ? (
           <div className="empty-state">
-            <p style={{ fontSize:48 }}>📭</p>
+            <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={46} /></p>
             <h3>Nessun evento</h3>
             <p>Non ci sono eventi in programma</p>
           </div>
@@ -105,8 +123,8 @@ export default function WorkerHome() {
             {/* Ricorrenti */}
             {pinnedRecurring.length > 0 && (
               <>
-                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px', marginTop:4 }}>
-                  <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>🔁 Ricorrenti</p>
+                <div id="sec-ricorrenti" style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px', marginTop:4, scrollMarginTop:16 }}>
+                  <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={15} /> Ricorrenti</p>
                   <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
                 </div>
                 {pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} />)}
@@ -116,12 +134,12 @@ export default function WorkerHome() {
 
             {/* Prossimi singoli */}
             {upcomingSingle.length > 0 && (
-              <>
+              <div id="sec-prossimi" style={{ scrollMarginTop:16 }}>
                 {pinnedRecurring.length > 0 && (
                   <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'0 16px 8px' }}>Prossimi</p>
                 )}
                 {upcomingSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} />)}
-              </>
+              </div>
             )}
           </>
         )}
@@ -197,7 +215,7 @@ function EventCard({ ev, today, navigate, forceState }) {
           {ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long', day:'numeric', month:'long'}) : ''}
           {ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + new Date(ev.dateEnd+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric', month:'long'}) : ''}
         </p>
-        {ev.location && <p style={{ fontSize:11, color:'var(--text2)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📍 {ev.location}</p>}
+        {ev.location && <p style={{ fontSize:11, color:'var(--text2)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
       </div>
     </div>
   )

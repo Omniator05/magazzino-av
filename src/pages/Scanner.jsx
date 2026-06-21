@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, where, getDocs } from 'firebase/firestore'
+import { Pin, Check, Warn } from '../components/Icon'
 
 const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
 
@@ -79,7 +80,7 @@ export default function Scanner() {
             boxShadow:'0 12px 48px rgba(0,0,0,0.7)',
             animation:'fadeInUp 0.2s cubic-bezier(0.32,0.72,0,1) both',
           }}>
-            <div style={{ fontSize:52, marginBottom:12 }}>{scanToast.found ? '✅' : '❓'}</div>
+            <div style={{ marginBottom:12, display:'flex', justifyContent:'center', color: scanToast.found ? 'var(--green)' : 'var(--red)' }}>{scanToast.found ? <Check size={48} /> : <Warn size={48} />}</div>
             <p style={{ fontWeight:800, fontSize:20, color: scanToast.found ? 'var(--green)' : 'var(--red)', marginBottom:6 }}>
               {scanToast.found ? 'Trovato!' : 'Non trovato'}
             </p>
@@ -88,8 +89,8 @@ export default function Scanner() {
                 <p style={{ color:'var(--text)', fontSize:15 }}>{scanToast.item.name}</p>
                 <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{scanToast.item.brand} {scanToast.item.model}</p>
                 {scanToast.item.location && (
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:10, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'5px 14px' }}>
-                    <span>📍</span>
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:10, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'5px 14px', color:'var(--blue)' }}>
+                    <Pin size={14} />
                     <span style={{ color:'var(--blue)', fontWeight:800, fontSize:14 }}>{scanToast.item.location}</span>
                   </div>
                 )}

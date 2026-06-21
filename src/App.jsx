@@ -101,14 +101,14 @@ function PrivateRoutes({ toggleTheme, theme }) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
-
+  // Tema fisso chiaro (toggle modalità notturna rimosso)
+  const theme = 'light'
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
-  }, [theme])
+    document.documentElement.setAttribute('data-theme', 'light')
+    localStorage.setItem('theme', 'light')
+  }, [])
 
-  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
+  const toggleTheme = () => {}
 
   return (
     <AuthProvider>

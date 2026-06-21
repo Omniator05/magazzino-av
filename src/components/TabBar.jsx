@@ -37,24 +37,81 @@ export default function TabBar() {
     })
   }, [user, profile?.role])
 
+  const activeIndex = tabs.findIndex(t =>
+    pathname === t.path || (t.path !== '/' && pathname.startsWith(t.path))
+  )
+
   return (
-    <nav className="tab-bar">
-      {tabs.map(t => (
-        <button
-          key={t.path}
-          className={pathname === t.path || (t.path !== '/' && pathname.startsWith(t.path)) ? 'active' : ''}
-          onClick={() => navigate(t.path)}
-          style={{ position:'relative' }}
-        >
-          {t.icon}
-          {t.label}
-          {t.path === '/tasks' && openTasks > 0 && (
-            <span style={{ position:'absolute', top:6, right:'calc(50% - 18px)', background:'var(--accent)', color:'white', borderRadius:10, fontSize:9, fontWeight:800, padding:'1px 5px', lineHeight:1.4 }}>
-              {openTasks}
-            </span>
-          )}
-        </button>
-      ))}
+    <nav style={{
+      position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 18px)',
+      transform:'translateX(-50%)', zIndex:100,
+    }}>
+      <div className="ftabs" style={{ '--active-index': activeIndex }}>
+        {/* Glider */}
+        {activeIndex >= 0 && <span className="ftab-glider" />}
+
+        {tabs.map((t, i) => {
+          const active = i === activeIndex
+          return (
+            <button
+              key={t.path}
+              aria-label={t.label}
+              className="ftab-btn"
+              onClick={() => navigate(t.path)}
+              style={{ color: active ? '#fff' : 'var(--text2)' }}
+            >
+              <span className="ftab-icon" style={{ display:'flex' }}>{t.icon}</span>
+              {t.path === '/tasks' && openTasks > 0 && (
+                <span className="ftab-badge">{openTasks}</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      <style>{`
+        .ftabs {
+          --tab-w: 54px; --tab-h: 46px; --tab-pad: 7px;
+          position: relative; display: flex; padding: var(--tab-pad); border-radius: 99px;
+          background: rgba(255,255,255,0.35);
+          border: 1px solid rgba(255,255,255,0.40);
+          backdrop-filter: blur(18px) saturate(180%);
+          -webkit-backdrop-filter: blur(18px) saturate(180%);
+          box-shadow: 0 1px 2px rgba(34,44,66,0.10), 0 10px 30px rgba(34,44,66,0.16);
+        }
+        .ftab-glider {
+          position: absolute; top: var(--tab-pad); left: var(--tab-pad);
+          width: var(--tab-w); height: var(--tab-h); border-radius: 99px; z-index: 1;
+          background: linear-gradient(135deg,#3b4a66 0%,#222c42 100%);
+          box-shadow: 0 4px 14px rgba(34,44,66,0.30);
+          transform: translateX(calc(var(--tab-w) * var(--active-index)));
+          transition: transform 0.28s cubic-bezier(0.34,1.2,0.64,1);
+        }
+        .ftab-btn {
+          position: relative; z-index: 2;
+          width: var(--tab-w); height: var(--tab-h);
+          display: flex; align-items: center; justify-content: center;
+          background: transparent; border: none; cursor: pointer; padding: 0;
+          border-radius: 99px; outline: none; -webkit-tap-highlight-color: transparent;
+          -webkit-appearance: none; appearance: none;
+          transition: color 0.2s ease;
+        }
+        .ftab-btn:focus { outline: none; }
+        .ftab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .ftab-icon svg { width: 25px; height: 25px; display: block; }
+        .ftab-badge {
+          position: absolute; top: 3px; right: 4px;
+          background: var(--accent); color: #fff; border-radius: 11px;
+          font-size: 11px; font-weight: 800; min-width: 19px; height: 19px;
+          display: flex; align-items: center; justify-content: center;
+          padding: 0 4px; line-height: 1;
+        }
+        @media (min-width: 700px) {
+          .ftabs { --tab-w: 72px; --tab-h: 58px; --tab-pad: 9px; }
+          .ftab-icon svg { width: 30px; height: 30px; }
+          .ftab-badge { top: 5px; right: 9px; font-size: 12px; min-width: 21px; height: 21px; }
+        }
+      `}</style>
     </nav>
   )
 }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
+import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
 
 const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -177,8 +178,8 @@ export default function WorkerCalendar() {
         {/* Banner modalità selezione assenza */}
         {reportMode && (
           <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
-            <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4 }}>
-              {!rangeStart ? '📅 Tocca il primo giorno della tua assenza' : '📅 Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
+            <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4, display:'flex', alignItems:'center', gap:7 }}>
+              <Calendar size={15} /> {!rangeStart ? 'Tocca il primo giorno della tua assenza' : 'Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
             </p>
             <button onClick={cancelReportMode} style={{ color:'var(--text2)', fontSize:13, fontWeight:700, flexShrink:0 }}>Annulla</button>
           </div>
@@ -322,11 +323,11 @@ export default function WorkerCalendar() {
                 >
                   <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: mine ? 'var(--accent)' : 'var(--blue)' }} />
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {ev.type === 'installation' ? '🔧 ' : ''}{ev.name}
+                    <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6 }}>
+                      {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                     </p>
-                    {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>📍 {ev.location}</p>}
-                    {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:2 }}>👤 Assegnato a te</p>}
+                    {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
+                    {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:2, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> Assegnato a te</p>}
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
                 </div>
@@ -373,8 +374,8 @@ export default function WorkerCalendar() {
               <label>Motivo (opzionale)</label>
               <input value={reasonInput} onChange={e => setReasonInput(e.target.value)} placeholder="es. Ferie, visita medica..." />
             </div>
-            <button onClick={confirmUnavailability} className="btn btn-primary btn-full" style={{ marginTop:8 }}>
-              ✅ Confermo assenza
+            <button onClick={confirmUnavailability} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              <Check size={16} /> Confermo assenza
             </button>
           </div>
         </div>

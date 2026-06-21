@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import DeleteButton from '../components/DeleteButton'
 import DateBadge from '../components/DateBadge'
 import EditButton from '../components/EditButton'
+import { Pin, Dot } from '../components/Icon'
 import { useAuth } from '../context/AuthContext'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
@@ -361,12 +362,13 @@ export default function Events() {
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
             <h3 style={{ fontSize:15, fontWeight:700, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{event.name}</h3>
           </div>
-          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor }}>
-            {daScaricare ? `🟠 ${total-returned} da rientrare` : isToday ? `🔴 OGGI · ${statusText.toLowerCase()}` : statusText}
+          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
+            {(daScaricare || isToday) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
+            {daScaricare ? `${total-returned} da rientrare` : isToday ? `OGGI · ${statusText.toLowerCase()}` : statusText}
           </p>
           {(event.location || (event.phases && PHASE_CONFIG.some(p => event.phases[p.key]))) && (
             <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, flexWrap:'wrap' }}>
-              {event.location && <span style={{ fontSize:11, color:'var(--dash-muted)' }}>📍 {event.location}</span>}
+              {event.location && <span style={{ fontSize:11, color:'var(--dash-muted)', display:'inline-flex', alignItems:'center', gap:4 }}><Pin size={12} /> {event.location}</span>}
               {event.phases && PHASE_CONFIG.filter(p => event.phases[p.key]).map(p => (
                 <span key={p.key} style={{ background:p.bg, color:p.color, borderRadius:5, padding:'1px 6px', fontSize:10, fontWeight:700 }}>
                   {p.label} {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
@@ -473,11 +475,10 @@ export default function Events() {
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
-      <div style={{ padding:'56px 22px 20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+      <div style={{ padding:'56px 22px 18px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
         <div>
-          <p style={{ fontSize:13, fontWeight:600, color:'var(--dash-muted)', letterSpacing:'0.06em', textTransform:'uppercase', marginBottom:4 }}>Gestione</p>
-          <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1, marginBottom:3 }}>Eventi</h1>
-          <p style={{ fontSize:12, color:'var(--dash-muted)', fontWeight:500 }}>{upcomingSingle.length + pinnedRecurring.length} prossimi</p>
+          <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1 }}>Eventi</h1>
+          <p style={{ fontSize:13, color:'var(--dash-muted)', fontWeight:500, marginTop:3 }}>{upcomingSingle.length + pinnedRecurring.length} prossimi</p>
         </div>
         <div style={{ display:'flex', gap:8, paddingTop:4 }}>
           <button onClick={() => navigate('/archive')} style={{
@@ -487,7 +488,7 @@ export default function Events() {
             <IconArchive /> Archivio
           </button>
           <button onClick={() => setShowTemplateMenu(true)} style={{
-            background:'#111827', color:'white', border:'none',
+            background:'var(--accent)', color:'white', border:'none',
             borderRadius:50, padding:'8px 16px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6,
           }}>
             <IconPlus /> Evento
@@ -749,25 +750,6 @@ export default function Events() {
       )}
 
       <style>{`
-        /* ── Events: stessi token light/dark della Dashboard ── */
-        :root {
-          --surface:           #f5f5f3;
-          --dash-title:        #111827;
-          --dash-muted:        #6b7280;
-          --dash-card:         #ffffff;
-          --dash-card-border:  #e5e7eb;
-          --dash-pill-bg:      #f3f4f6;
-          --dash-pill-border:  #e5e7eb;
-        }
-        [data-theme="dark"] {
-          --surface:           var(--bg);
-          --dash-title:        var(--text);
-          --dash-muted:        var(--text2);
-          --dash-card:         var(--card);
-          --dash-card-border:  var(--border2);
-          --dash-pill-bg:      var(--card2);
-          --dash-pill-border:  var(--border2);
-        }
         /* Hover sezioni: si ingrandisce solo il testo label, non la barra intera */
         .section-label { display:inline-block; transition: transform 0.15s ease; transform-origin: left center; }
         .btn-section:hover .section-label { transform: scale(1.06); }

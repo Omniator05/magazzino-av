@@ -9,7 +9,7 @@
   --card2:   #1e1e3a;
   --card3:   #24244a;
 
-  --accent:  #e94560;
+  --accent:  #e63946;
   --accent2: #f5a623;
   --blue:    #4fc3f7;
   --green:   #34d399;
@@ -33,6 +33,15 @@
   --radius:    14px;
   --radius-lg: 22px;
   --radius-xl: 28px;
+
+  /* ── Token "premium" condivisi (default = mappa sul tema scuro) ── */
+  --surface:           var(--bg);
+  --dash-title:        var(--text);
+  --dash-muted:        var(--text2);
+  --dash-card:         var(--card);
+  --dash-card-border:  var(--border2);
+  --dash-pill-bg:      var(--card2);
+  --dash-pill-border:  var(--border2);
 
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -153,11 +162,10 @@ select option { background: var(--bg2); }
 /* ── Page header ──────────────────────────────── */
 .page-header {
   padding: 56px 20px 18px;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+  background: transparent;
 }
-.page-header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
-.page-header p  { color: var(--text2); font-size: 14px; margin-top: 4px; }
+.page-header h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; color: var(--dash-title); }
+.page-header p  { color: var(--dash-muted); font-size: 13px; margin-top: 3px; font-weight: 500; }
 
 /* ── Cards ────────────────────────────────────── */
 .card {
@@ -466,12 +474,11 @@ select option { background: var(--bg2); }
 
 /* ── Transizione pagina ─────────────────────────────── */
 @keyframes pageEnter {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .page-transition {
-  animation: pageEnter 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-  will-change: opacity, transform;
+  animation: pageEnter 0.2s ease;
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -494,33 +501,42 @@ select option { background: var(--bg2); }
 
 /* ── TEMA CHIARO ─────────────────────────────── */
 [data-theme="light"] {
-  --bg:      #f0f0f5;
-  --bg2:     #e8e8f0;
-  --bg3:     #e0e0ec;
+  --bg:      #f5f5f3;
+  --bg2:     #ececea;
+  --bg3:     #e2e2df;
   --card:    #ffffff;
-  --card2:   #f4f4f8;
-  --card3:   #ebebf2;
+  --card2:   #f4f4f2;
+  --card3:   #ebebe8;
 
-  --text:    #1a1a2e;
-  --text2:   #5a5a7a;
-  --text3:   #9090b0;
+  --text:    #111827;
+  --text2:   #6b7280;
+  --text3:   #9ca3af;
 
   --border:  rgba(0,0,0,0.08);
-  --border2: rgba(0,0,0,0.12);
+  --border2: rgba(0,0,0,0.10);
 
-  --glow-accent: rgba(233,69,96,0.12);
+  --glow-accent: rgba(230,57,70,0.12);
   --glow-blue:   rgba(0,100,200,0.10);
   --glow-green:  rgba(0,150,80,0.10);
 
-  --accent:  #d63551;
+  --accent:  #e63946;
   --accent2: #d4820a;
   --blue:    #0066cc;
   --green:   #1a9e5c;
   --red:     #cc2222;
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.10);
-  --shadow:    0 4px 20px rgba(0,0,0,0.12);
-  --shadow-lg: 0 12px 48px rgba(0,0,0,0.15);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow:    0 4px 20px rgba(0,0,0,0.10);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.14);
+
+  /* Token premium → valori chiari (allineati a Dashboard/Events) */
+  --surface:           #f5f5f3;
+  --dash-title:        #111827;
+  --dash-muted:        #6b7280;
+  --dash-card:         #ffffff;
+  --dash-card-border:  #e5e7eb;
+  --dash-pill-bg:      #f3f4f6;
+  --dash-pill-border:  #e5e7eb;
 }
 
 [data-theme="light"] body,
@@ -531,8 +547,8 @@ select option { background: var(--bg2); }
 }
 
 [data-theme="light"] .tab-bar {
-  background: rgba(240,240,245,0.90);
-  border-top: 1px solid rgba(0,0,0,0.10);
+  background: rgba(245,245,243,0.90);
+  border-top: 1px solid rgba(0,0,0,0.08);
 }
 
 [data-theme="light"] .modal {
@@ -548,12 +564,8 @@ select option { background: var(--bg2); }
   color: var(--text);
 }
 
-[data-theme="light"] .page-header {
-  background: var(--bg2);
-}
-
 [data-theme="light"] .search-bar {
-  background: rgba(240,240,245,0.92);
+  background: rgba(245,245,243,0.92);
 }
 
 [data-theme="light"] .event-card,
