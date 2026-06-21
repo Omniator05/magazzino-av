@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
+import LogoutButton from '../components/LogoutButton'
 import { Pin } from '../components/Icon'
 
 const greeting = () => {
@@ -125,7 +126,7 @@ export default function Dashboard({ toggleTheme, theme }) {
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}</p>
             </div>
           </div>
-          <button onClick={logout} style={{
+          <LogoutButton name={name} style={{
             flexShrink:0,
             background:'rgba(255,255,255,0.16)',
             border:'1px solid rgba(255,255,255,0.3)',
@@ -134,7 +135,8 @@ export default function Dashboard({ toggleTheme, theme }) {
             padding:'9px 16px',
             fontSize:13,
             fontWeight:700,
-          }}>Esci</button>
+            cursor:'pointer',
+          }} />
         </div>
       </div>
 
@@ -254,7 +256,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
                   style={{ marginBottom:10, background:'var(--dash-card)', border:cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.transform='scale(1.015)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.10)' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform='scale(1.008)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.07)' }}
                   onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
                 >
                   {/* Icona gradiente con data */}

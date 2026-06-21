@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { auth, db } from '../firebase'
 import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword
@@ -18,15 +18,26 @@ export function AuthProvider({ children }) {
   const [loading, setLoading]       = useState(true)
   const [loginName, setLoginName]   = useState('')   // nome da mostrare nell'overlay
   const [showOverlay, setShowOverlay] = useState(false)
+  const coldStartHandled = useRef(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async firebaseUser => {
+      // Mostra l'overlay "flap" solo alla PRIMA apertura dell'app (avvio a freddo
+      // con sessione già salvata). Il login manuale lo attiva da login().
+      const isColdStart = !coldStartHandled.current
+      coldStartHandled.current = true
+
       if (firebaseUser) {
         setUser(firebaseUser)
+        if (isColdStart) {
+          setLoginName(firebaseUser.displayName?.split(' ')[0] || '')
+          setShowOverlay(true)
+        }
         const snap = await getDoc(doc(db, 'profiles', firebaseUser.uid))
         if (snap.exists()) {
           const profileData = snap.data()
           setProfile(profileData)
+          if (isColdStart && profileData.name) setLoginName(profileData.name.split(' ')[0])
 
           // Applica pendingPassword se presente (impostata dall'admin)
           if (profileData.pendingPassword) {

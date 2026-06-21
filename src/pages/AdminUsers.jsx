@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { db, auth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
+import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -78,10 +79,10 @@ export default function AdminUsers() {
       // Firebase ci ha switchato all'utente appena creato → rientra come admin
       if (adminPassword) {
         await signInWithEmailAndPassword(auth, adminEmail, adminPassword)
-        showToast(`✅ Account creato per ${form.name}!`)
+        showToast(`Account creato per ${form.name}!`)
       } else {
         // Non abbiamo la password admin in sessione → avvisa e forza logout
-        showToast(`✅ Account creato! Dovrai riaccedere come admin.`)
+        showToast(`Account creato! Dovrai riaccedere come admin.`)
         setTimeout(() => logout(), 2500)
       }
 
@@ -152,7 +153,7 @@ export default function AdminUsers() {
           pendingPassword: btoa(newPw),
           pendingPasswordSetAt: new Date().toISOString(),
         })
-        setDetailMsg({ text: `✅ Nuova password salvata. Verrà applicata al prossimo accesso di ${showDetail.name}.`, type:'success' })
+        setDetailMsg({ text: `Nuova password salvata. Verrà applicata al prossimo accesso di ${showDetail.name}.`, type:'success' })
         setNewPw(''); setAdminPw(''); setPwSection(false)
       } catch(e) {
         setDetailMsg({ text: 'Password admin non corretta o errore di connessione.', type:'error' })
@@ -162,7 +163,7 @@ export default function AdminUsers() {
 
     // Rientra come admin
     try { await signInWithEmailAndPassword(auth, adminEmail, adminPw) } catch(e) {}
-    setDetailMsg({ text: `✅ Password di ${showDetail.name} aggiornata!`, type:'success' })
+    setDetailMsg({ text: `Password di ${showDetail.name} aggiornata!`, type:'success' })
     setNewPw(''); setAdminPw(''); setPwSection(false)
     setLoading(false)
   }
@@ -196,7 +197,7 @@ export default function AdminUsers() {
     // Il record Firebase Auth rimane ma senza profilo l'utente non accede all'app.
     // Per rimuoverlo del tutto serve Firebase Console → Authentication → elimina utente.
     setShowDetail(null)
-    showToast(`🗑 Account di ${name} eliminato.`)
+    showToast(`Account di ${name} eliminato.`)
   }
 
   const workers = users.filter(u => u.role === 'worker')
@@ -205,9 +206,11 @@ export default function AdminUsers() {
   const UserRow = ({ u }) => (
     <div className="item-row" onClick={() => { setShowDetail(u); setPwSection(false); clearDetailMsg(); setNewPw(''); setAdminPw('') }} style={{ cursor:'pointer' }}>
       <div className="item-icon" style={{
-        background: u.role === 'admin' ? 'rgba(233,69,96,0.15)' : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)'
+        background: u.role === 'admin' ? 'rgba(233,69,96,0.15)' : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
+        color: u.role === 'admin' ? 'var(--accent)' : u.active !== false ? 'var(--blue)' : 'var(--text2)',
+        fontWeight: 800, fontSize: 18,
       }}>
-        {u.role === 'admin' ? '👑' : u.active !== false ? '👷' : '🚫'}
+        {(u.name || u.username || '?').charAt(0).toUpperCase()}
       </div>
       <div style={{ flex:1, minWidth:0 }}>
         <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)' }}>{u.name}</p>
@@ -226,7 +229,16 @@ export default function AdminUsers() {
   )
 
   return (
-    <div className="page">
+    <div className="page users-page">
+      <style>{`
+        /* Hover sobrio sui bottoni d'azione di questa pagina (no lift/ombra esagerati) */
+        .users-page button:not(.btn):not(:disabled):hover {
+          transform: none;
+          box-shadow: none;
+          filter: brightness(0.97);
+        }
+        .users-page button:not(.btn):not(:disabled):active { transform: scale(0.98); }
+      `}</style>
       {/* Toast globale */}
       {toast && (
         <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
@@ -255,7 +267,7 @@ export default function AdminUsers() {
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px', overflow:'hidden' }}>
           {workers.length === 0
             ? <div className="empty-state" style={{ padding:'30px' }}>
-                <p style={{ fontSize:32 }}>👷</p>
+                <p style={{ color:'var(--text3)', marginBottom:4 }}><User size={34} /></p>
                 <h3>Nessun magazziniere</h3>
                 <p>Crea il primo account con il tasto + in alto</p>
               </div>
@@ -264,7 +276,7 @@ export default function AdminUsers() {
         </div>
 
         <div style={{ margin:'16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
-          <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>ℹ️ Come funziona il login</p>
+          <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>Come funziona il login</p>
           <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>I magazzinieri accedono con il loro <strong style={{ color:'var(--text)' }}>nome utente</strong> (es. <code>marco.bianchi</code>) o con la loro <strong style={{ color:'var(--text)' }}>email</strong> se inserita, più la password impostata da te.</p>
         </div>
       </div>
@@ -317,12 +329,12 @@ export default function AdminUsers() {
 
             <div style={{ background:'rgba(79,195,247,0.06)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 12px', marginBottom:16 }}>
               <p style={{ color:'var(--blue)', fontSize:12, lineHeight:1.6 }}>
-                💡 Il magazziniere accede con <strong>nome utente</strong> o <strong>email</strong> (se inserita) e la password. Dopo la creazione potresti dover riaccedere come admin.
+                Il magazziniere accede con <strong>nome utente</strong> o <strong>email</strong> (se inserita) e la password. Dopo la creazione potresti dover riaccedere come admin.
               </p>
             </div>
 
-            <button onClick={createAccount} className="btn btn-primary btn-full" disabled={loading}>
-              {loading ? 'Creazione in corso...' : '✅ Crea account'}
+            <button onClick={createAccount} className="btn btn-primary btn-full" disabled={loading} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+              {loading ? 'Creazione in corso...' : <><Check size={16} /> Crea account</>}
             </button>
           </div>
         </div>
@@ -336,8 +348,14 @@ export default function AdminUsers() {
 
             {/* Intestazione */}
             <div style={{ textAlign:'center', marginBottom:20 }}>
-              <div style={{ fontSize:52, marginBottom:8 }}>
-                {showDetail.role === 'admin' ? '👑' : showDetail.active !== false ? '👷' : '🚫'}
+              <div style={{
+                width:64, height:64, borderRadius:20, margin:'0 auto 12px',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:26, fontWeight:800,
+                background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.12)',
+                color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.active !== false ? 'var(--blue)' : 'var(--text2)',
+              }}>
+                {(showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
               </div>
               <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
 
@@ -347,9 +365,9 @@ export default function AdminUsers() {
                   <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600 }}>@{showDetail.username}</p>
                   <button
                     onClick={() => { setNewUsername(showDetail.username); setEditUsername(true); clearDetailMsg() }}
-                    style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:6, padding:'3px 8px', fontSize:12, fontWeight:600 }}
+                    style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:6, padding:'3px 9px', fontSize:12, fontWeight:600, display:'inline-flex', alignItems:'center', gap:5 }}
                   >
-                    ✏️ modifica
+                    <Edit size={12} /> modifica
                   </button>
                 </div>
               ) : (
@@ -362,21 +380,21 @@ export default function AdminUsers() {
                     autoFocus
                     onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditUsername(false) }}
                   />
-                  <button onClick={saveUsername} style={{ background:'var(--green)', color:'#000', borderRadius:8, padding:'6px 12px', fontWeight:700, fontSize:13 }}>✓</button>
+                  <button onClick={saveUsername} style={{ background:'var(--green)', color:'#fff', borderRadius:8, padding:'7px 12px', fontWeight:700, fontSize:13, display:'inline-flex', alignItems:'center' }}><Check size={15} /></button>
                   <button onClick={() => setEditUsername(false)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:8, padding:'6px 10px', fontWeight:700, fontSize:13 }}>✕</button>
                 </div>
               )}
 
               {/* Email opzionale */}
               {showDetail.email && (
-                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>📧 {showDetail.email}</p>
+                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{showDetail.email}</p>
               )}
               <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:10 }}>
                 <span className="badge" style={{
                   background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : 'rgba(79,195,247,0.15)',
                   color: showDetail.role === 'admin' ? 'var(--accent)' : 'var(--blue)', fontSize:13, padding:'5px 14px'
                 }}>
-                  {showDetail.role === 'admin' ? '👑 Amministratore' : '👷 Magazziniere'}
+                  {showDetail.role === 'admin' ? 'Amministratore' : 'Magazziniere'}
                 </span>
                 <span className="badge" style={{
                   background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
@@ -398,7 +416,7 @@ export default function AdminUsers() {
             {/* Indisponibilità (solo worker) */}
             {showDetail.role === 'worker' && detailUnavail.length > 0 && (
               <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>🚫 Indisponibilità segnalate</p>
+                <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Indisponibilità segnalate</p>
                 {[...detailUnavail].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(u => (
                   <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
                     <div>
@@ -433,9 +451,10 @@ export default function AdminUsers() {
               <button onClick={toggleActive} style={{
                 background: showDetail.active !== false ? 'rgba(255,82,82,0.1)' : 'rgba(105,240,174,0.1)',
                 color: showDetail.active !== false ? 'var(--red)' : 'var(--green)',
-                borderRadius:10, padding:'12px', fontWeight:700, fontSize:13
+                borderRadius:10, padding:'12px', fontWeight:700, fontSize:13,
+                display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7
               }}>
-                {showDetail.active !== false ? '🚫 Disattiva accesso' : '✅ Riattiva accesso'}
+                {showDetail.active !== false ? <><Warn size={15} /> Disattiva accesso</> : <><Check size={15} /> Riattiva accesso</>}
               </button>
               {showDetail.id !== user.uid && (
                 <button onClick={toggleRole}
@@ -446,7 +465,7 @@ export default function AdminUsers() {
                   } : {
                     borderRadius:10, padding:'12px', fontWeight:700, fontSize:13
                   }}>
-                  {showDetail.role === 'admin' ? '👷 Rendi Magazziniere' : '👑 Rendi Admin'}
+                  {showDetail.role === 'admin' ? 'Rendi Magazziniere' : 'Rendi Admin'}
                 </button>
               )}
             </div>
@@ -457,7 +476,7 @@ export default function AdminUsers() {
                 onClick={() => { setPwSection(!pwSection); clearDetailMsg(); setNewPw(''); setAdminPw('') }}
                 style={{ background:'transparent', color:'var(--text)', fontWeight:700, fontSize:14, width:'100%', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}
               >
-                <span>🔑 Cambia password</span>
+                <span>Cambia password</span>
                 <span style={{ color:'var(--text2)', fontSize:18 }}>{pwSection ? '▲' : '▼'}</span>
               </button>
 
@@ -471,8 +490,8 @@ export default function AdminUsers() {
                     <label>Tua password admin <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(per confermare)</span></label>
                     <input type="password" value={adminPw} onChange={e => setAdminPw(e.target.value)} placeholder="La tua password attuale" />
                   </div>
-                  <button onClick={changePassword} className="btn btn-secondary" style={{ width:'100%' }} disabled={loading}>
-                    {loading ? 'Salvataggio...' : '💾 Salva nuova password'}
+                  <button onClick={changePassword} className="btn btn-secondary" style={{ width:'100%', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }} disabled={loading}>
+                    {loading ? 'Salvataggio...' : <><Save size={16} /> Salva nuova password</>}
                   </button>
                 </div>
               )}
@@ -483,9 +502,10 @@ export default function AdminUsers() {
               <button onClick={deleteAccount} style={{
                 width:'100%', background:'rgba(255,82,82,0.07)',
                 color:'var(--red)', border:'1px solid rgba(255,82,82,0.2)',
-                borderRadius:10, padding:'13px', fontWeight:700, fontSize:14
+                borderRadius:10, padding:'13px', fontWeight:700, fontSize:14,
+                display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8
               }}>
-                🗑 Elimina account definitivamente
+                <Trash size={16} /> Elimina account definitivamente
               </button>
             )}
           </div>

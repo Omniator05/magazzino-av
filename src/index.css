@@ -71,9 +71,9 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 button:not(:disabled):hover {
-  filter: brightness(1.15);
+  filter: brightness(1.06);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.14);
 }
 button.btn-no-anim:hover {
   filter: none;

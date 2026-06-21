@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
+import LogoutButton from '../components/LogoutButton'
 import { Unload, Recurring, Pin, Box } from '../components/Icon'
 
 const greeting = () => {
@@ -89,7 +90,7 @@ export default function WorkerHome() {
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}</p>
             </div>
           </div>
-          <button onClick={logout} style={{ flexShrink:0, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)', color:'white', borderRadius:12, padding:'9px 16px', fontSize:13, fontWeight:700 }}>Esci</button>
+          <LogoutButton name={displayName} style={{ flexShrink:0, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)', color:'white', borderRadius:12, padding:'9px 16px', fontSize:13, fontWeight:700, cursor:'pointer' }} />
         </div>
       </div>
 
@@ -184,7 +185,7 @@ function EventCard({ ev, today, navigate, forceState }) {
   return (
     <div onClick={() => navigate(`/events/${ev.id}`)}
       style={{ margin:'0 16px 10px', background:'var(--card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
-      onMouseEnter={e => { e.currentTarget.style.transform='scale(1.02)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.12)' }}
+      onMouseEnter={e => { e.currentTarget.style.transform='scale(1.008)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.08)' }}
       onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)' }}
     >
       {/* Icona gradiente con data */}

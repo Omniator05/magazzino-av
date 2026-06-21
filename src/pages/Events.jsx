@@ -5,6 +5,7 @@ import DeleteButton from '../components/DeleteButton'
 import DateBadge from '../components/DateBadge'
 import EditButton from '../components/EditButton'
 import { Pin, Dot } from '../components/Icon'
+import { EventListSkeleton } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
@@ -126,6 +127,7 @@ const IconCalendarSm = () => (
 export default function Events() {
   const { user } = useAuth()
   const [events, setEvents]       = useState([])
+  const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
   const eventDrag = useModalDrag(() => setShowModal(false))
   const templateDrag = useModalDrag(() => setShowTemplateMenu(false))
@@ -163,7 +165,7 @@ export default function Events() {
 
   useEffect(() => {
     const q = query(collection(db, 'events'), orderBy('date'))
-    return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+    return onSnapshot(q, snap => { setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false) })
   }, [])
 
   useEffect(() => {
@@ -337,7 +339,7 @@ export default function Events() {
     return (
       <div onClick={() => navigate(`/events/${event.id}`)}
         style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
-        onMouseEnter={e => { e.currentTarget.style.transform='scale(1.015)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.10)' }}
+        onMouseEnter={e => { e.currentTarget.style.transform='scale(1.008)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.07)' }}
         onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
       >
         {/* Icona gradiente con data */}
@@ -508,7 +510,9 @@ export default function Events() {
       <div style={{ padding:'12px 0 0' }}>
 
         {/* Risultati ricerca */}
-        {search.trim() ? (
+        {loading ? (
+          <EventListSkeleton count={6} />
+        ) : search.trim() ? (
           <>
             <p style={{ padding:'0 16px 12px', color:'var(--dash-muted)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em' }}>Risultati ({searchResults.length})</p>
             {searchResults.length === 0

@@ -76,29 +76,35 @@ export default function WorkerCalendar() {
 
   const cells = getMonthGrid(cursor.year, cursor.month)
 
-  const eventsByDate = {}
-  allEvents.forEach(e => {
-    if (!e.date) return
-    if (!eventsByDate[e.date]) eventsByDate[e.date] = []
-    eventsByDate[e.date].push(e)
-  })
-
   const isAssignedToMe = (ev) => (ev.assignedWorkers || []).includes(user?.uid)
   const isUnavailable = (dStr) => unavailability.some(u => dStr >= u.startDate && dStr <= u.endDate)
 
   const PHASE_META = {
-    montaggio:  { color: '#2563eb' },
-    smontaggio: { color: '#ea580c' },
+    montaggio:  { color: '#2563eb', label: 'Montaggio' },
+    smontaggio: { color: '#ea580c', label: 'Smontaggio' },
   }
-  const phasesByDate = {}
-  allEvents.forEach(e => {
-    if (!e.phases) return
-    Object.entries(e.phases).forEach(([key, date]) => {
-      if (!date || !PHASE_META[key]) return
-      if (!phasesByDate[date]) phasesByDate[date] = []
-      phasesByDate[date].push({ color: PHASE_META[key].color })
+
+  // Tutti gli "elementi" che toccano un giorno: l'evento (data inizio) + le fasi
+  // (montaggio/smontaggio). Colore ROSSO se l'evento è assegnato a questo worker,
+  // altrimenti blu (evento azienda) o il colore della fase.
+  const dayItems = (dStr) => {
+    const items = []
+    allEvents.forEach(e => {
+      if (!e.date) return
+      const assigned = isAssignedToMe(e)
+      if (e.date === dStr) {
+        items.push({ event: e, assigned, color: assigned ? 'var(--accent)' : 'var(--blue)' })
+      }
+      if (e.phases) {
+        Object.entries(e.phases).forEach(([k, v]) => {
+          if (v === dStr && PHASE_META[k]) {
+            items.push({ event: e, assigned, color: assigned ? 'var(--accent)' : PHASE_META[k].color, phaseLabel: PHASE_META[k].label, phaseColor: PHASE_META[k].color })
+          }
+        })
+      }
     })
-  })
+    return items
+  }
 
   const goPrevMonth = () => setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 })
   const goNextMonth = () => setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 })
@@ -153,7 +159,16 @@ export default function WorkerCalendar() {
   }
 
   const sortedUnavailability = [...unavailability].sort((a,b) => a.startDate.localeCompare(b.startDate))
-  const selectedEvents = selectedDate ? (eventsByDate[selectedDate] || []) : []
+  const selectedItems = selectedDate ? dayItems(selectedDate) : []
+  const selectedEvents = (() => {
+    const m = new Map()
+    selectedItems.forEach(it => {
+      const cur = m.get(it.event.id) || { event: it.event, assigned: it.assigned, phases: [] }
+      if (it.phaseLabel) cur.phases.push({ label: it.phaseLabel, color: it.phaseColor })
+      m.set(it.event.id, cur)
+    })
+    return [...m.values()]
+  })()
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
   return (
@@ -196,9 +211,8 @@ export default function WorkerCalendar() {
         <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
           {cells.map((cell, i) => {
             const dStr = toDateStr(cell.dateObj)
-            const dayEvents = eventsByDate[dStr] || []
-            const myEventsToday = dayEvents.filter(isAssignedToMe)
-            const hasMyEvent = myEventsToday.length > 0
+            const items = dayItems(dStr)
+            const hasMyEvent = items.some(it => it.assigned)
             const unavail = isUnavailable(dStr)
             const isToday = dStr === todayStr
             const isPast = dStr < todayStr
@@ -238,20 +252,13 @@ export default function WorkerCalendar() {
                 }}>
                   {cell.day}
                 </span>
-                {unavail && <span style={{ fontSize:8, color:'var(--text2)', fontWeight:700 }}>🚫</span>}
-                {!unavail && (dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0)) && (
+                {unavail && <span style={{ width:10, height:10, borderRadius:3, background:'rgba(144,144,176,0.45)' }} />}
+                {!unavail && items.length > 0 && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
-                    {dayEvents.slice(0, 3).map(ev => (
-                      <span key={ev.id} style={{
+                    {items.slice(0, 4).map((it, i) => (
+                      <span key={i} style={{
                         width:7, height:7, borderRadius:'50%', flexShrink:0,
-                        background: isAssignedToMe(ev) ? 'var(--accent)' : 'var(--blue)',
-                        opacity: isPast ? 0.55 : 1,
-                      }} />
-                    ))}
-                    {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
-                      <span key={`ph${i}`} style={{
-                        width:7, height:7, borderRadius:'50%', flexShrink:0,
-                        background: p.color,
+                        background: it.color,
                         opacity: isPast ? 0.55 : 1,
                       }} />
                     ))}
@@ -267,9 +274,9 @@ export default function WorkerCalendar() {
           <div style={{ display:'flex', justifyContent:'flex-end', marginTop:12 }}>
             <button
               onClick={startReportMode}
-              style={{ padding:'9px 16px', borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', fontWeight:600, fontSize:13, display:'inline-flex', alignItems:'center', gap:6 }}
+              style={{ padding:'9px 16px', borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', fontWeight:600, fontSize:13, display:'inline-flex', alignItems:'center', gap:7 }}
             >
-              ✍️ Segnala assenza
+              <Calendar size={15} /> Segnala assenza
             </button>
           </div>
         )}
@@ -308,9 +315,7 @@ export default function WorkerCalendar() {
           {selectedEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>Nessun evento in questo giorno.</p>
           ) : (
-            selectedEvents.map(ev => {
-              const mine = isAssignedToMe(ev)
-              return (
+            selectedEvents.map(({ event: ev, assigned: mine, phases }) => (
                 <div
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
@@ -327,12 +332,20 @@ export default function WorkerCalendar() {
                       {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                     </p>
                     {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
-                    {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:2, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> Assegnato a te</p>}
+                    {phases.length > 0 && (
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:5 }}>
+                        {phases.map((p, i) => (
+                          <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, background:p.color+'18', color:p.color, border:`1px solid ${p.color}44`, borderRadius:6, padding:'1px 8px', fontSize:11, fontWeight:700 }}>
+                            <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:4, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> Assegnato a te</p>}
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
                 </div>
-              )
-            })
+              ))
           )}
         </div>
       )}

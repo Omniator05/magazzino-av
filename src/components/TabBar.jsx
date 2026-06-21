@@ -6,7 +6,7 @@ import { collection, onSnapshot, query } from 'firebase/firestore'
 
 const adminTabs = [
   { path:'/',            label:'Home',      icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> },
-  { path:'/inventory',  label:'Magazzino', icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.88.18-1.36C18 2.52 15.5 0 12.36 0c-1.73 0-3.25.92-4.16 2.27L12 6H4.5L3 4H1v2h1l3 6.92V18c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8l1-2V6h-2z"/></svg> },
+  { path:'/inventory',  label:'Magazzino', icon:<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="4" cy="6" r="1.7"/><circle cx="4" cy="12" r="1.7"/><circle cx="4" cy="18" r="1.7"/><rect x="8.5" y="5" width="13" height="2.2" rx="1.1"/><rect x="8.5" y="10.9" width="13" height="2.2" rx="1.1"/><rect x="8.5" y="16.8" width="13" height="2.2" rx="1.1"/></svg> },
   { path:'/events',     label:'Eventi',    icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg> },
   { path:'/calendar',   label:'Calendario',icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg> },
   { path:'/admin/users',label:'Utenti',    icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> },
@@ -14,7 +14,7 @@ const adminTabs = [
 
 const workerTabs = [
   { path:'/',           label:'Home',      icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg> },
-  { path:'/inventory',  label:'Magazzino', icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.88.18-1.36C18 2.52 15.5 0 12.36 0c-1.73 0-3.25.92-4.16 2.27L12 6H4.5L3 4H1v2h1l3 6.92V18c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8l1-2V6h-2z"/></svg> },
+  { path:'/inventory',  label:'Magazzino', icon:<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="4" cy="6" r="1.7"/><circle cx="4" cy="12" r="1.7"/><circle cx="4" cy="18" r="1.7"/><rect x="8.5" y="5" width="13" height="2.2" rx="1.1"/><rect x="8.5" y="10.9" width="13" height="2.2" rx="1.1"/><rect x="8.5" y="16.8" width="13" height="2.2" rx="1.1"/></svg> },
   { path:'/calendar',   label:'Calendario',icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg> },
   { path:'/tasks',      label:'Task',      icon:<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> },
 ]
@@ -43,7 +43,7 @@ export default function TabBar() {
 
   return (
     <nav style={{
-      position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 18px)',
+      position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 30px)',
       transform:'translateX(-50%)', zIndex:100,
     }}>
       <div className="ftabs" style={{ '--active-index': activeIndex }}>
@@ -71,8 +71,8 @@ export default function TabBar() {
 
       <style>{`
         .ftabs {
-          --tab-w: 54px; --tab-h: 46px; --tab-pad: 7px;
-          position: relative; display: flex; padding: var(--tab-pad); border-radius: 99px;
+          --tab-w: 54px; --tab-h: 46px; --tab-pad: 7px; --tab-gap: 5px;
+          position: relative; display: flex; gap: var(--tab-gap); padding: var(--tab-pad); border-radius: 99px;
           background: rgba(255,255,255,0.35);
           border: 1px solid rgba(255,255,255,0.40);
           backdrop-filter: blur(18px) saturate(180%);
@@ -84,7 +84,7 @@ export default function TabBar() {
           width: var(--tab-w); height: var(--tab-h); border-radius: 99px; z-index: 1;
           background: linear-gradient(135deg,#3b4a66 0%,#222c42 100%);
           box-shadow: 0 4px 14px rgba(34,44,66,0.30);
-          transform: translateX(calc(var(--tab-w) * var(--active-index)));
+          transform: translateX(calc((var(--tab-w) + var(--tab-gap)) * var(--active-index)));
           transition: transform 0.28s cubic-bezier(0.34,1.2,0.64,1);
         }
         .ftab-btn {
@@ -98,6 +98,11 @@ export default function TabBar() {
         }
         .ftab-btn:focus { outline: none; }
         .ftab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        /* Hover contenuto: pillola dentro il bottone, niente ombra che sborda sui vicini */
+        .ftab-btn:not(:disabled):hover {
+          background: rgba(0,0,0,0.06);
+          box-shadow: none; transform: none; filter: none;
+        }
         .ftab-icon svg { width: 25px; height: 25px; display: block; }
         .ftab-badge {
           position: absolute; top: 3px; right: 4px;
@@ -107,7 +112,7 @@ export default function TabBar() {
           padding: 0 4px; line-height: 1;
         }
         @media (min-width: 700px) {
-          .ftabs { --tab-w: 72px; --tab-h: 58px; --tab-pad: 9px; }
+          .ftabs { --tab-w: 72px; --tab-h: 58px; --tab-pad: 9px; --tab-gap: 7px; }
           .ftab-icon svg { width: 30px; height: 30px; }
           .ftab-badge { top: 5px; right: 9px; font-size: 12px; min-width: 21px; height: 21px; }
         }
