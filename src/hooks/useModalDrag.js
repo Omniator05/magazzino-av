@@ -1,31 +1,37 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 
 /**
- * useModalDrag
+ * useModalDrag(onClose, guard?)
  *
- * Uso:
  *   const drag = useModalDrag(() => setShowModal(false))
  *
  *   <div className={`modal-overlay${drag.closing ? ' closing' : ''}`} onClick={drag.onOverlayClick}>
  *     <div className={`modal${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} {...drag.props}>
  *       <button className="close-btn" onClick={drag.close}>✕</button>
  *
- * drag.close   → chiude con animazione slide-down
- * drag.closing → true durante l'animazione (aggiunge class CSS)
+ * - Lo "swipe verso il basso" per chiudere parte SOLO se il contenuto scrollabile
+ *   interno è già in cima (così scrollare la lista non chiude il modal).
+ * - `guard` (opzionale): funzione che ritorna `false` per BLOCCARE la chiusura
+ *   (es. mostrare una conferma se ci sono modifiche non salvate). Vale per ✕, ESC e drag.
  */
-export function useModalDrag(onClose) {
+export function useModalDrag(onClose, guard) {
   const startY     = useRef(null)
   const isDragging = useRef(false)
+  const canDrag    = useRef(true)   // deciso a inizio gesto: true se la lista è in cima
   const [jiggling, setJiggling] = useState(false)
   const [closing,  setClosing]  = useState(false)
 
-  // Ref per avere sempre l'onClose aggiornato senza reinserire negli useEffect
   const onCloseRef = useRef(onClose)
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  const guardRef = useRef(guard)
+  useEffect(() => { guardRef.current = guard }, [guard])
 
-  // Chiude con animazione slide-down (280ms = durata CSS)
+  // true se è permesso chiudere (guard assente o ritorna truthy)
+  const allowClose = () => !guardRef.current || guardRef.current() !== false
+
   const animatedClose = useCallback(() => {
     if (closing) return
+    if (!allowClose()) return
     setClosing(true)
     setTimeout(() => {
       setClosing(false)
@@ -33,11 +39,8 @@ export function useModalDrag(onClose) {
     }, 280)
   }, [closing])
 
-  // ESC chiude il modal con animazione
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') animatedClose()
-    }
+    const handleKeyDown = (e) => { if (e.key === 'Escape') animatedClose() }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [animatedClose])
@@ -51,13 +54,27 @@ export function useModalDrag(onClose) {
     if (e.target === e.currentTarget) triggerJiggle()
   }, [triggerJiggle])
 
+  // Trova l'antenato scrollabile del target, fermandosi al modal stesso
+  const findScrollable = (node, root) => {
+    let el = node
+    while (el && el !== root && el !== document.body) {
+      const oy = getComputedStyle(el).overflowY
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el
+      el = el.parentElement
+    }
+    return null
+  }
+
   const onTouchStart = useCallback((e) => {
     startY.current = e.touches[0].clientY
     isDragging.current = false
+    // Drag-to-dismiss consentito solo se la zona scrollabile è già in cima
+    const scrollable = findScrollable(e.target, e.currentTarget)
+    canDrag.current = !scrollable || scrollable.scrollTop <= 0
   }, [])
 
   const onTouchMove = useCallback((e) => {
-    if (startY.current === null) return
+    if (startY.current === null || !canDrag.current) return
     const delta = e.touches[0].clientY - startY.current
     if (delta > 10) isDragging.current = true
     if (isDragging.current && e.currentTarget) {
@@ -71,20 +88,18 @@ export function useModalDrag(onClose) {
     const delta = e.changedTouches[0].clientY - startY.current
     const el = e.currentTarget
     if (el) { el.style.transition = ''; el.style.transform = '' }
-    // Drag manuale: chiude direttamente senza animazione (l'utente ha già trascinato)
-    if (isDragging.current && delta > 100) onCloseRef.current()
+    if (isDragging.current && delta > 100) {
+      // chiude direttamente (senza animazione) solo se consentito dal guard
+      if (allowClose()) onCloseRef.current()
+    }
     startY.current = null
     isDragging.current = false
   }, [])
 
   return {
-    // Spread SOLO queste sul <div className="modal"> → {...drag.props}
     props: { onTouchStart, onTouchMove, onTouchEnd },
-    // Per l'overlay
     onOverlayClick,
-    // Per la className del modal
     jiggling,
-    // Animazione di chiusura
     closing,
     close: animatedClose,
   }

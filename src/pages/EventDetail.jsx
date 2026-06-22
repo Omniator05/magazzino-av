@@ -6,6 +6,7 @@ import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import DateBadge from '../components/DateBadge'
+import { Warn } from '../components/Icon'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -35,11 +36,15 @@ export default function EventDetail() {
   const [allItems, setAllItems] = useState([])
   const [showAddItem, setShowAddItem] = useState(false)
   const [showExtraModal, setShowExtraModal] = useState(false)
-  const addItemDrag   = useModalDrag(() => setShowAddItem(false))
+  const [cart, setCart] = useState([])
+  const [showDiscardCart, setShowDiscardCart] = useState(false)
+  const addItemDrag   = useModalDrag(
+    () => setShowAddItem(false),
+    () => { if (cart.length > 0) { setShowDiscardCart(true); return false } return true }
+  )
   const extraDrag     = useModalDrag(() => setShowExtraModal(false))
   const [extraForm, setExtraForm] = useState({ name:'', qty:1, notes:'' })
   const [search, setSearch] = useState('')
-  const [cart, setCart] = useState([])
   const [showEventNotes, setShowEventNotes] = useState(false)
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
@@ -404,39 +409,107 @@ export default function EventDetail() {
   const filteredForList = search ? filtered : filtered.filter(i => !suggestedIds.has(i.id))
 
   const exportPDF = () => {
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]))
     const items = event.items || []
     const loaded = items.filter(i => i.loaded && !i.isExtra)
     const extras = items.filter(i => i.loaded && i.isExtra)
-    const date = event.date ? new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) : ''
+    const list = [...loaded, ...extras]
+    const totPezzi = list.reduce((s, i) => s + (i.qty || 1), 0)
 
-    const rows = [...loaded, ...extras].map(i =>
-      `<tr><td style="padding:8px 12px;border-bottom:1px solid #e8e4fb;font-weight:600;">${i.name}</td><td style="padding:8px 12px;border-bottom:1px solid #e8e4fb;text-align:center;font-weight:700;color:#7c3aed;">${i.qty || 1}</td></tr>`
+    const fmt = (d, opt) => d ? new Date(d + 'T12:00:00').toLocaleDateString('it-IT', opt) : ''
+    const dateFull = fmt(event.date, { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+    const dateEnd  = event.dateEnd && event.dateEnd !== event.date ? ' → ' + fmt(event.dateEnd, { day:'numeric', month:'long', year:'numeric' }) : ''
+    const phases = []
+    if (event.phases?.montaggio)  phases.push('Montaggio: ' + fmt(event.phases.montaggio, { day:'numeric', month:'long' }))
+    if (event.phases?.smontaggio) phases.push('Smontaggio: ' + fmt(event.phases.smontaggio, { day:'numeric', month:'long' }))
+    const origin = window.location.origin
+    const genDate = new Date().toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
+
+    const rows = list.map((i, n) =>
+      `<tr>
+        <td class="num">${n + 1}</td>
+        <td class="art">${esc(i.name)}${i.isExtra ? ' <span class="tag">EXTRA</span>' : ''}${i.eventNote ? `<div class="note">${esc(i.eventNote)}</div>` : ''}</td>
+        <td class="qty">${i.qty || 1}</td>
+        <td class="chk"></td>
+      </tr>`
     ).join('')
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista Carico – ${event.name}</title>
+    const metaRow = (label, val) => val ? `<div class="mrow"><span class="mlabel">${label}</span><span class="mval">${esc(val)}</span></div>` : ''
+
+    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Lista di Carico – ${esc(event.name)}</title>
     <style>
-      body { font-family: -apple-system, sans-serif; padding: 40px; color: #1a1033; }
-      h1 { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
-      .meta { color: #7c6faa; font-size: 14px; margin-bottom: 32px; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 40px; }
+      .head { display:flex; align-items:center; justify-content:space-between; border-bottom: 3px solid #e63946; padding-bottom: 16px; margin-bottom: 22px; }
+      .head img { height: 46px; width:auto; }
+      .head .org { text-align:right; }
+      .head .org .name { font-weight: 800; font-size: 15px; letter-spacing: 0.3px; }
+      .head .org .sub  { color: #6b7280; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+      .doctitle { font-size: 12px; font-weight: 700; color: #e63946; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+      h1 { font-size: 24px; font-weight: 800; margin: 0 0 14px; letter-spacing: -0.4px; }
+      .meta { background:#f5f5f3; border:1px solid #e5e7eb; border-radius:10px; padding:12px 16px; margin-bottom:22px; }
+      .mrow { display:flex; gap:10px; font-size:13px; padding:3px 0; }
+      .mlabel { color:#6b7280; min-width:96px; font-weight:600; }
+      .mval { color:#111827; font-weight:600; text-transform: capitalize; }
       table { width: 100%; border-collapse: collapse; }
-      thead th { background: #7c3aed; color: white; padding: 10px 12px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-      thead th:last-child { text-align: center; width: 80px; }
-      tbody tr:hover { background: #f4f3ff; }
-      .footer { margin-top: 24px; color: #9b8ec4; font-size: 12px; }
+      thead th { background: #222c42; color: #fff; padding: 9px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+      thead th.num { width: 36px; text-align:center; }
+      thead th.qty { width: 60px; text-align:center; }
+      thead th.chk { width: 44px; text-align:center; }
+      tbody td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; vertical-align: top; }
+      tbody td.num { text-align:center; color:#9ca3af; font-weight:700; }
+      tbody td.art { font-weight: 600; }
+      tbody td.qty { text-align:center; font-weight: 800; color:#e63946; }
+      tbody td.chk { text-align:center; }
+      tbody td.chk::before { content:''; display:inline-block; width:16px; height:16px; border:1.5px solid #9ca3af; border-radius:4px; }
+      tbody tr:nth-child(even) { background:#fafafa; }
+      .tag { background:#fef3c7; color:#92400e; border-radius:4px; padding:0 5px; font-size:9px; font-weight:800; vertical-align:middle; }
+      .note { color:#6b7280; font-size:11px; font-weight:400; margin-top:2px; }
+      .tot { margin-top:12px; text-align:right; font-size:13px; color:#374151; }
+      .tot strong { color:#111827; }
+      .sign { display:flex; gap:40px; margin-top:54px; }
+      .sigbox { flex:1; }
+      .sigline { border-top:1px solid #111827; padding-top:6px; font-size:12px; color:#6b7280; font-weight:600; }
+      .footer { margin-top:40px; padding-top:12px; border-top:1px solid #e5e7eb; color:#9ca3af; font-size:11px; display:flex; justify-content:space-between; }
+      @page { margin: 16mm; }
     </style></head><body>
-    <h1>${event.name}</h1>
-    <p class="meta">${date}${event.location ? ' · 📍 ' + event.location : ''}</p>
-    <table>
-      <thead><tr><th>Articolo</th><th>Qtà</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <p class="footer">Lista carico generata il ${new Date().toLocaleDateString('it-IT')} – Magazzino TSG</p>
+      <div class="head">
+        <img src="${origin}/logo.png" alt="The Service Group" onerror="this.style.display='none'" />
+        <div class="org"><div class="name">The Service Group</div><div class="sub">Gestione Magazzino</div></div>
+      </div>
+
+      <div class="doctitle">Lista di Carico</div>
+      <h1>${esc(event.name)}</h1>
+
+      <div class="meta">
+        ${metaRow('Data evento', dateFull + dateEnd)}
+        ${metaRow('Luogo', event.location)}
+        ${phases.length ? metaRow('Fasi', phases.join('  ·  ')) : ''}
+        ${metaRow('Articoli', `${list.length} voci · ${totPezzi} pezzi totali`)}
+      </div>
+
+      <table>
+        <thead><tr><th class="num">#</th><th>Articolo</th><th class="qty">Q.tà</th><th class="chk">✓</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px;">Nessun articolo caricato</td></tr>'}</tbody>
+      </table>
+      <p class="tot">Totale: <strong>${list.length} voci · ${totPezzi} pezzi</strong></p>
+
+      <div class="sign">
+        <div class="sigbox"><div class="sigline">Firma magazziniere</div></div>
+        <div class="sigbox"><div class="sigline">Firma caricatore / autista</div></div>
+      </div>
+
+      <div class="footer">
+        <span>Documento generato il ${genDate}</span>
+        <span>The Service Group — Gestione Magazzino</span>
+      </div>
     </body></html>`
 
     const win = window.open('', '_blank')
     win.document.write(html)
     win.document.close()
-    win.print()
+    win.focus()
+    setTimeout(() => win.print(), 250)
   }
 
   const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Kit:'🧰', Extra:'✨', Altro:'📦' }
@@ -633,24 +706,51 @@ export default function EventDetail() {
           ? <div className="empty-state" style={{ padding:'40px 20px' }}>
               <p style={{ fontSize:32 }}>📋</p>
               <h3>Lista vuota</h3>
-              <p>Aggiungi articoli alla lista di carico</p>
+              <p>Tocca il <strong style={{ color:'var(--accent)' }}>+</strong> in basso a destra per aggiungere articoli</p>
             </div>
           : <>{groupedEventItems}</>
         }
       </div>
 
-      <div style={{ padding:'16px', display:'flex', gap:10 }}>
-        <button onClick={openAddModal} className="btn btn-secondary" style={{ flex:2 }}>
-          + Aggiungi dalla lista
-        </button>
-        <button onClick={() => setShowExtraModal(true)} className="btn btn-secondary" style={{ flex:1, borderColor:'rgba(245,166,35,0.4)', color:'var(--accent2)' }}>
-          + Extra
-        </button>
-      </div>
+      {/* FAB aggiungi articoli */}
+      <button
+        onClick={openAddModal}
+        aria-label="Aggiungi articoli"
+        style={{
+          position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 110px)', right:20, zIndex:50,
+          width:56, height:56, borderRadius:'50%',
+          background:'var(--accent)', color:'white',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          boxShadow:'0 6px 20px rgba(230,57,70,0.45)', border:'none',
+        }}
+      >
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+
+      {/* Conferma: chiusura con articoli selezionati non aggiunti */}
+      {showDiscardCart && (
+        <div onClick={() => setShowDiscardCart(false)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:320, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
+            <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(234,88,12,0.12)', color:'#ea580c' }}>
+              <Warn size={26} />
+            </div>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>Scartare la selezione?</h3>
+            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
+              Hai {cart.length} articol{cart.length === 1 ? 'o' : 'i'} selezionat{cart.length === 1 ? 'o' : 'i'} non ancora aggiunti alla lista.
+            </p>
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              <button onClick={() => setShowDiscardCart(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none' }}>Continua</button>
+              <button onClick={() => { setShowDiscardCart(false); setCart([]); setShowAddItem(false) }} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#ea580c', color:'#fff', border:'none' }}>Scarta</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddItem && (
         <div className={`modal-overlay${addItemDrag.closing ? ' closing' : ''}`} onClick={addItemDrag.onOverlayClick}>
-          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}${addItemDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'60dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag.props}>
+          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}${addItemDrag.closing ? ' closing' : ''}`} style={{ position:'relative', height:'88dvh', maxHeight:'88dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag.props}>
 
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
@@ -691,20 +791,28 @@ export default function EventDetail() {
                   <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
                 </span>
               </button>
+              {/* Articolo extra (non a magazzino) */}
+              <button
+                className="btn-no-anim"
+                onClick={() => { addItemDrag.close(); setTimeout(() => setShowExtraModal(true), 200) }}
+                style={{ marginTop:8, width:'100%', padding:'9px 14px', borderRadius:10, background:'transparent', border:'1.5px dashed var(--border)', color:'var(--text2)', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
+              >
+                + Articolo extra (non a magazzino)
+              </button>
             </div>
 
-            {/* Carrello selezionati (se ci sono) */}
+            {/* Carrello selezionati — riga unica scrollabile in orizzontale */}
             {cart.length > 0 && (
-              <div style={{ background:'rgba(105,240,174,0.06)', borderBottom:'1px solid rgba(105,240,174,0.2)', padding:'10px 16px', flexShrink:0 }}>
-                <p style={{ color:'var(--green)', fontWeight:700, fontSize:12, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
-                  ✅ Selezionati - {cart.length} articol{cart.length === 1 ? 'o' : 'i'}
+              <div style={{ background:'rgba(105,240,174,0.06)', borderBottom:'1px solid rgba(105,240,174,0.2)', padding:'10px 0 10px 16px', flexShrink:0 }}>
+                <p style={{ color:'var(--green)', fontWeight:700, fontSize:12, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8, paddingRight:16 }}>
+                  Selezionati · {cart.length} articol{cart.length === 1 ? 'o' : 'i'}
                 </p>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                <div style={{ display:'flex', flexWrap:'nowrap', gap:6, overflowX:'auto', paddingRight:16, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
                   {cart.map(c => (
-                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:6, background:'var(--card2)', borderRadius:20, padding:'4px 10px 4px 12px', fontSize:13 }}>
+                    <div key={c.id} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:6, background:'var(--card2)', borderRadius:20, padding:'5px 8px 5px 12px', fontSize:13, whiteSpace:'nowrap' }}>
                       <span style={{ fontWeight:600 }}>{c.name}</span>
                       <span style={{ color:'var(--text2)', fontSize:12 }}>×{c.qty}</span>
-                      <button onClick={() => removeFromCart(c.id)} style={{ background:'rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:'50%', width:18, height:18, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                      <button onClick={() => removeFromCart(c.id)} style={{ background:'rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:'50%', width:18, height:18, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
                     </div>
                   ))}
                 </div>
