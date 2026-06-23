@@ -16,6 +16,7 @@ import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import WorkerInventory from './pages/WorkerInventory'
 import WorkerCalendar from './pages/WorkerCalendar'
+import Profile from './pages/Profile'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
@@ -68,6 +69,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatedPage>
@@ -92,6 +94,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/templates" element={<Templates />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatedPage>

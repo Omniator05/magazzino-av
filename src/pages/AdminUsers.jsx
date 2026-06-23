@@ -210,7 +210,7 @@ export default function AdminUsers() {
         color: u.role === 'admin' ? 'var(--accent)' : u.active !== false ? 'var(--blue)' : 'var(--text2)',
         fontWeight: 800, fontSize: 18,
       }}>
-        {(u.name || u.username || '?').charAt(0).toUpperCase()}
+        {u.avatar || (u.name || u.username || '?').charAt(0).toUpperCase()}
       </div>
       <div style={{ flex:1, minWidth:0 }}>
         <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)' }}>{u.name}</p>
@@ -355,7 +355,7 @@ export default function AdminUsers() {
                 background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.12)',
                 color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.active !== false ? 'var(--blue)' : 'var(--text2)',
               }}>
-                {(showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
+                {showDetail.avatar || (showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
               </div>
               <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
 

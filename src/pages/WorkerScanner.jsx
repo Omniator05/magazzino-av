@@ -629,6 +629,14 @@ export default function WorkerScanner() {
                       await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
                     }
                   },
+                  _onTogglePronto: async (itemId) => {
+                    const snap = await getDoc(eventRef)
+                    if (!snap.exists()) return
+                    const evData = snap.data()
+                    const evItems = evData.items || []
+                    const updated = evItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto })
+                    await updateDoc(eventRef, { items: updated })
+                  },
                 }} />
               ))}
                     </div>
@@ -764,12 +772,14 @@ function ChecklistRow({ item }) {
   return (
     <>
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showInfo ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item.loaded ? 0.45 : 1, transition:'opacity 0.3s' }}>
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
+            {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
             {hasInfo && (
               <button onClick={() => setShowInfo(s => !s)}
                 style={{
@@ -793,18 +803,45 @@ function ChecklistRow({ item }) {
             <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>pz</span>
           </div>
         </div>
+        </div>
         {/* Bottoni touch-friendly - grandi abbastanza per il dito */}
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>
-          <button
-            style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
-              background: item.loaded ? 'rgba(245,166,35,0.18)' : 'var(--card2)',
-              color: item.loaded ? 'var(--accent2)' : 'var(--text2)',
-              WebkitTapHighlightColor:'transparent',
-            }}
-            onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
-          >
-            {item.loaded ? '🚛 Carico' : '○ Carico'}
-          </button>
+          {!item.loaded ? (
+            <div style={{ display:'flex', gap:5 }}>
+              <button
+                style={{ padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                  background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
+                  color: item.pronto ? '#059669' : 'var(--text3)',
+                  border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
+                  WebkitTapHighlightColor:'transparent',
+                }}
+                onClick={() => item._onTogglePronto && item._onTogglePronto(item.id)}
+              >
+                {item.pronto ? '✓ Pronto' : 'Pronto'}
+              </button>
+              <button
+                style={{ minWidth:70, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                  background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
+                  color: item.pronto ? 'var(--accent2)' : 'var(--text2)',
+                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid transparent',
+                  WebkitTapHighlightColor:'transparent',
+                }}
+                onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
+              >
+                ○ Carico
+              </button>
+            </div>
+          ) : (
+            <button
+              style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+                background:'rgba(245,166,35,0.18)', color:'var(--accent2)',
+                WebkitTapHighlightColor:'transparent',
+              }}
+              onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
+            >
+              🚛 Carico
+            </button>
+          )}
           <button
             disabled={!item.loaded}
             style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',

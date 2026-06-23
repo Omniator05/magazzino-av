@@ -54,17 +54,16 @@ export default function Calendar() {
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
-  const editDrag = useModalDrag(() => setEditingEvent(null))
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
   const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'' })
   const [savingAbsence, setSavingAbsence] = useState(false)
-  const absenceDrag = useModalDrag(() => setShowAbsenceModal(false))
   const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
 
-  useModalScrollLock(!!editingEvent || showAbsenceModal)
-
+  // Funzioni di salvataggio prima dei drag hook → Enter può invocarle
   const addAbsence = async () => {
     if (!absenceForm.startDate) return
     setSavingAbsence(true)
@@ -81,6 +80,43 @@ export default function Calendar() {
     } finally { setSavingAbsence(false) }
   }
 
+  const saveEdit = async () => {
+    if (!editForm.name.trim() || !editForm.date) return
+    setSaving(true)
+    try {
+      await updateDoc(doc(db, 'events', editingEvent.id), {
+        name: editForm.name.trim(), date: editForm.date,
+        dateEnd: editForm.dateEnd || null,
+        location: editForm.location.trim(), notes: editForm.notes.trim(),
+        phases: editForm.phases || {},
+      })
+      setEditingEvent(null)
+    } finally { setSaving(false) }
+  }
+
+  const createEvent = async () => {
+    if (!editForm.name.trim() || !editForm.date) return
+    setCreating(true)
+    try {
+      await addDoc(collection(db, 'events'), {
+        name: editForm.name.trim(),
+        date: editForm.date,
+        dateEnd: editForm.dateEnd || null,
+        location: (editForm.location || '').trim(),
+        notes: (editForm.notes || '').trim(),
+        phases: editForm.phases || {},
+        createdAt: serverTimestamp(),
+      })
+      setShowCreate(false)
+    } finally { setCreating(false) }
+  }
+
+  const editDrag = useModalDrag(() => setEditingEvent(null), undefined, saveEdit)
+  const createDrag = useModalDrag(() => setShowCreate(false), undefined, createEvent)
+  const absenceDrag = useModalDrag(() => setShowAbsenceModal(false), undefined, addAbsence)
+
+  useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
+
   const removeAbsence = async (id) => {
     if (!confirm('Rimuovere questa assenza?')) return
     await deleteDoc(doc(db, 'unavailability', id))
@@ -95,20 +131,6 @@ export default function Calendar() {
     e.stopPropagation()
     setEditingEvent(ev)
     setEditForm({ name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'', location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{} })
-  }
-
-  const saveEdit = async () => {
-    if (!editForm.name.trim() || !editForm.date) return
-    setSaving(true)
-    try {
-      await updateDoc(doc(db, 'events', editingEvent.id), {
-        name: editForm.name.trim(), date: editForm.date,
-        dateEnd: editForm.dateEnd || null,
-        location: editForm.location.trim(), notes: editForm.notes.trim(),
-        phases: editForm.phases || {},
-      })
-      setEditingEvent(null)
-    } finally { setSaving(false) }
   }
 
   useEffect(() => {
@@ -403,7 +425,10 @@ export default function Calendar() {
 
       {/* FAB nuovo evento */}
       <button
-        onClick={() => navigate('/events', { state: { openNewEvent: true } })}
+        onClick={() => {
+          setEditForm({ name:'', date: selectedDate || todayStr, dateEnd:'', location:'', notes:'', phases:{} })
+          setShowCreate(true)
+        }}
         style={{
           position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 110px)', right:20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
@@ -440,6 +465,55 @@ export default function Calendar() {
             <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={savingAbsence || !absenceForm.startDate}>
               {savingAbsence ? 'Salvataggio...' : <><Check size={16} /> Conferma assenza</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal crea evento */}
+      {showCreate && (
+        <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
+          <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
+            <button className="close-btn" onClick={createDrag.close}>✕</button>
+            <h2>Nuovo evento</h2>
+            <div className="form-group">
+              <label>Nome evento *</label>
+              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder="es. Matrimonio Rossi" />
+            </div>
+            <div className="form-group">
+              <label>Data inizio *</label>
+              <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              <input type="date" value={editForm.dateEnd||''} min={editForm.date} onChange={e => setEditForm(f => ({...f, dateEnd:e.target.value}))} />
+            </div>
+            <div className="form-group">
+              <label>Fasi <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              {PHASE_FORM_CONFIG.map(p => (
+                <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
+                  <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
+                  <input type="date" value={editForm.phases?.[p.key]||''}
+                    onChange={e => setEditForm(f => ({...f, phases:{...(f.phases||{}), [p.key]:e.target.value}}))}
+                    style={{ flex:1, fontSize:13, padding:'8px 10px' }} />
+                  {editForm.phases?.[p.key] && (
+                    <button type="button" className="btn-no-anim" onClick={() => setEditForm(f => { const ph={...(f.phases||{})}; delete ph[p.key]; return {...f,phases:ph} })}
+                      style={{ background:'transparent', color:'var(--text3)', fontSize:16, padding:'0 4px', flexShrink:0 }}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="form-group">
+              <label>Location</label>
+              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder="es. Villa Belvedere, Verona" />
+            </div>
+            <div className="form-group">
+              <label>Note</label>
+              <textarea value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
+            </div>
+            <button onClick={createEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+              disabled={creating || !editForm.name?.trim() || !editForm.date}>
+              {creating ? 'Creazione...' : 'Crea evento'}
             </button>
           </div>
         </div>

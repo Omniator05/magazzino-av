@@ -114,9 +114,15 @@ export function AuthProvider({ children }) {
     return signOut(auth)
   }
 
+  const updateProfileData = async (data) => {
+    if (!user) return
+    await updateDoc(doc(db, 'profiles', user.uid), data)
+    setProfile(prev => ({ ...prev, ...data }))
+  }
+
   return (
     <AuthContext.Provider value={{
-      user, profile, loading, login, logout,
+      user, profile, loading, login, logout, updateProfileData,
       isAdmin:  profile?.role === 'admin',
       isWorker: profile?.role === 'worker',
       showOverlay, setShowOverlay, loginName,

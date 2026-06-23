@@ -14,7 +14,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
  * - `guard` (opzionale): funzione che ritorna `false` per BLOCCARE la chiusura
  *   (es. mostrare una conferma se ci sono modifiche non salvate). Vale per ✕, ESC e drag.
  */
-export function useModalDrag(onClose, guard) {
+export function useModalDrag(onClose, guard, onSubmit) {
   const startY     = useRef(null)
   const isDragging = useRef(false)
   const canDrag    = useRef(true)   // deciso a inizio gesto: true se la lista è in cima
@@ -25,6 +25,8 @@ export function useModalDrag(onClose, guard) {
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
   const guardRef = useRef(guard)
   useEffect(() => { guardRef.current = guard }, [guard])
+  const onSubmitRef = useRef(onSubmit)
+  useEffect(() => { onSubmitRef.current = onSubmit }, [onSubmit])
 
   // true se è permesso chiudere (guard assente o ritorna truthy)
   const allowClose = () => !guardRef.current || guardRef.current() !== false
@@ -40,7 +42,13 @@ export function useModalDrag(onClose, guard) {
   }, [closing])
 
   useEffect(() => {
-    const handleKeyDown = (e) => { if (e.key === 'Escape') animatedClose() }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') { animatedClose(); return }
+      if (e.key === 'Enter' && onSubmitRef.current && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        onSubmitRef.current()
+      }
+    }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [animatedClose])
@@ -68,6 +76,12 @@ export function useModalDrag(onClose, guard) {
   const onTouchStart = useCallback((e) => {
     startY.current = e.touches[0].clientY
     isDragging.current = false
+    // Mai drag-to-dismiss quando si tocca un campo di testo (serve per scrollare il form)
+    const tag = e.target.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      canDrag.current = false
+      return
+    }
     // Drag-to-dismiss consentito solo se la zona scrollabile è già in cima
     const scrollable = findScrollable(e.target, e.currentTarget)
     canDrag.current = !scrollable || scrollable.scrollTop <= 0

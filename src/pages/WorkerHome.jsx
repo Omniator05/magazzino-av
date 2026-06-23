@@ -80,10 +80,10 @@ export default function WorkerHome() {
         {/* Riga principale */}
         <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
           <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
-            {/* Avatar */}
-            <div style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)' }}>
-              {initial}
-            </div>
+            {/* Avatar — tap → pagina profilo */}
+            <button onClick={() => navigate('/profile')} style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
+              {profile?.avatar || initial}
+            </button>
             <div style={{ minWidth:0 }}>
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.8)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{greeting()},</p>
               <h1 style={{ fontSize:28, fontWeight:800, color:'white', lineHeight:1.08, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{displayName}</h1>

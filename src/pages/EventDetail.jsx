@@ -42,13 +42,34 @@ export default function EventDetail() {
     () => setShowAddItem(false),
     () => { if (cart.length > 0) { setShowDiscardCart(true); return false } return true }
   )
-  const extraDrag     = useModalDrag(() => setShowExtraModal(false))
   const [extraForm, setExtraForm] = useState({ name:'', qty:1, notes:'' })
+  const addExtraItem = () => {
+    if (!extraForm.name.trim()) return
+    const extra = {
+      id: `extra-${Date.now()}`,
+      name: extraForm.name.trim(),
+      qty: extraForm.qty || 1,
+      notes: extraForm.notes.trim(),
+      category: 'Extra',
+      isExtra: true,
+    }
+    setCart(prev => [...prev, extra])
+    setExtraForm({ name:'', qty:1, notes:'' })
+    setShowExtraModal(false)
+  }
+  const extraDrag     = useModalDrag(() => setShowExtraModal(false), undefined, addExtraItem)
   const [search, setSearch] = useState('')
   const [showEventNotes, setShowEventNotes] = useState(false)
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const itemEditDrag = useModalDrag(() => setEditItem(null))
+  const saveItemEdit = async ({ id, qty, eventNote, mancante }) => {
+    const updated = eventItems.map(i =>
+      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false }
+    )
+    await updateEventItems(updated)
+    setEditItem(null)
+  }
+  const itemEditDrag = useModalDrag(() => setEditItem(null), undefined, () => editItem && saveItemEdit(editItem))
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [workers, setWorkers] = useState([])
   const [unavailability, setUnavailability] = useState([])
@@ -134,8 +155,8 @@ export default function EventDetail() {
     if (event.seriesId) {
       const { collection: col, query: q, where, getDocs: gd } = await import('firebase/firestore')
       const seriesSnap = await gd(q(col(db, 'events'), where('seriesId', '==', event.seriesId)))
-      const itemsTemplate = items.map(({ loaded, returned, mancante, ...rest }) => ({
-        ...rest, loaded: false, returned: false, mancante: false
+      const itemsTemplate = items.map(({ loaded, returned, mancante, pronto, ...rest }) => ({
+        ...rest, loaded: false, returned: false, mancante: false, pronto: false
       }))
       const updates = seriesSnap.docs
         .filter(d => d.id !== event.id)
@@ -161,7 +182,7 @@ export default function EventDetail() {
     const updated = eventItems.map(i => {
       if (i.id !== itemId) return i
       const newLoaded = !i.loaded
-      return { ...i, loaded: newLoaded, returned: newLoaded ? false : i.returned }
+      return { ...i, loaded: newLoaded, returned: newLoaded ? false : i.returned, pronto: newLoaded ? i.pronto : false }
     })
     await updateEventItems(updated)
 
@@ -216,6 +237,11 @@ export default function EventDetail() {
 
   const toggleMancante = async itemId => {
     const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante })
+    await updateDoc(eventRef, { items: updated })
+  }
+
+  const togglePronto = async itemId => {
+    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto })
     await updateDoc(eventRef, { items: updated })
   }
 
@@ -292,6 +318,14 @@ export default function EventDetail() {
     if (cart.length === 0) return
     let updated = [...eventItems]
     for (const c of cart) {
+      if (c.isExtra) {
+        updated.push({
+          id: c.id, name: c.name, qty: c.qty || 1,
+          notes: c.notes || '', category: 'Extra', isExtra: true,
+          loaded: false, returned: false,
+        })
+        continue
+      }
       const alreadyExists = updated.some(e => e.id === c.id || e.itemRef === c.id)
       if (alreadyExists) {
         // Riga separata con id unico, itemRef punta all'articolo Firebase originale
@@ -354,32 +388,7 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
-  const saveItemEdit = async ({ id, qty, eventNote, mancante }) => {
-    const updated = eventItems.map(i =>
-      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false }
-    )
-    await updateEventItems(updated)
-    setEditItem(null)
-  }
-
-  const addExtraItem = async () => {
-    if (!extraForm.name.trim()) return
-    const extra = {
-      id: `extra-${Date.now()}`,
-      name: extraForm.name.trim(),
-      qty: extraForm.qty || 1,
-      notes: extraForm.notes.trim(),
-      category: 'Extra',
-      isExtra: true,
-      loaded: false,
-      returned: false,
-    }
-    await updateEventItems([...eventItems, extra])
-    setExtraForm({ name:'', qty:1, notes:'' })
-    setShowExtraModal(false)
-  }
-
-  const notInCart = allItems.filter(i => !cart.some(c => c.id === i.id))
+  const notInCart = allItems.filter(i => !cart.some(c => c.id === i.id) && !eventItems.some(e => (e.itemRef || e.id) === i.id))
   const filtered = notInCart.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
     i.category?.toLowerCase().includes(search.toLowerCase()) ||
@@ -533,7 +542,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} />
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} />
       ))}
     </div>
   ))
@@ -791,13 +800,13 @@ export default function EventDetail() {
                   <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
                 </span>
               </button>
-              {/* Articolo extra (non a magazzino) */}
+              {/* Articolo extra */}
               <button
                 className="btn-no-anim"
-                onClick={() => { addItemDrag.close(); setTimeout(() => setShowExtraModal(true), 200) }}
-                style={{ marginTop:8, width:'100%', padding:'9px 14px', borderRadius:10, background:'transparent', border:'1.5px dashed var(--border)', color:'var(--text2)', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
+                onClick={() => setShowExtraModal(true)}
+                style={{ marginTop:8, width:'100%', padding:'9px 14px', borderRadius:10, background:'#111827', border:'none', color:'#fff', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
               >
-                + Articolo extra (non a magazzino)
+                + Aggiungi articolo extra
               </button>
             </div>
 
@@ -887,9 +896,9 @@ export default function EventDetail() {
         </div>
       )}
 
-      {/* Modal aggiunta extra */}
+      {/* Modal aggiunta extra — sovrapposto al modal principale (z-index 300) */}
       {showExtraModal && (
-        <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick}>
+        <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick} style={{ zIndex: 300 }}>
           <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}${extraDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
             <button className="close-btn" onClick={extraDrag.close}>✕</button>
             <h2>+ Oggetto extra</h2>
@@ -1096,7 +1105,7 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante }) {
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto }) {
   const [location, setLocation] = useState(item.location || null)
   const [warehouseNotes, setWarehouseNotes] = useState(null)
 
@@ -1115,6 +1124,7 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
         style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
         onClick={() => onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false })}
       >
+        <div style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:0, opacity: item.loaded ? 0.45 : 1, transition:'opacity 0.3s' }}>
         <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap' }}>
@@ -1124,6 +1134,9 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
             )}
             {item.mancante && (
               <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>
+            )}
+            {item.pronto && !item.loaded && (
+              <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>
             )}
           </div>
           <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
@@ -1141,11 +1154,36 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
             <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
           )}
         </div>
+        </div>
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
-          <button onClick={() => onToggleLoaded(item.id)}
-            style={{ background: item.loaded ? 'rgba(245,166,35,0.15)' : 'var(--card2)', color: item.loaded ? 'var(--accent2)' : 'var(--text2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-            {item.loaded ? '🚛 Caricato' : '○ Da caricare'}
-          </button>
+          {!item.loaded ? (
+            <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+              <button
+                onClick={() => onTogglePronto(item.id)}
+                style={{
+                  background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
+                  color: item.pronto ? '#059669' : 'var(--text3)',
+                  border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
+                  borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700,
+                }}>
+                {item.pronto ? '✓ Pronto' : 'Pronto'}
+              </button>
+              <button onClick={() => onToggleLoaded(item.id)}
+                style={{
+                  background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
+                  color: item.pronto ? 'var(--accent2)' : 'var(--text2)',
+                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid transparent',
+                  borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center',
+                }}>
+                ○ Da caricare
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => onToggleLoaded(item.id)}
+              style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
+              🚛 Caricato
+            </button>
+          )}
           <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
             style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
             {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
