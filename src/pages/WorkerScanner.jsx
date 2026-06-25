@@ -822,8 +822,8 @@ function ChecklistRow({ item }) {
               <button
                 style={{ minWidth:70, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
                   background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
-                  color: item.pronto ? 'var(--accent2)' : 'var(--text2)',
-                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid transparent',
+                  color: item.pronto ? 'var(--accent2)' : 'var(--text)',
+                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
                   WebkitTapHighlightColor:'transparent',
                 }}
                 onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}

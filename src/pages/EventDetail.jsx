@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import DateBadge from '../components/DateBadge'
 import { Warn } from '../components/Icon'
 
@@ -42,6 +43,7 @@ export default function EventDetail() {
     () => setShowAddItem(false),
     () => { if (cart.length > 0) { setShowDiscardCart(true); return false } return true }
   )
+  const kbInset = useKeyboardInset(showAddItem)
   const [extraForm, setExtraForm] = useState({ name:'', qty:1, notes:'' })
   const addExtraItem = () => {
     if (!extraForm.name.trim()) return
@@ -759,7 +761,7 @@ export default function EventDetail() {
 
       {showAddItem && (
         <div className={`modal-overlay${addItemDrag.closing ? ' closing' : ''}`} onClick={addItemDrag.onOverlayClick}>
-          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}${addItemDrag.closing ? ' closing' : ''}`} style={{ position:'relative', height:'88dvh', maxHeight:'88dvh', display:'flex', flexDirection:'column', padding:0 }} {...addItemDrag.props}>
+          <div className={`modal${addItemDrag.jiggling ? ' modal-jiggle' : ''}${addItemDrag.closing ? ' closing' : ''}`} style={{ position:'relative', height:`calc(88dvh - ${kbInset}px)`, maxHeight:`calc(88dvh - ${kbInset}px)`, marginBottom:kbInset, display:'flex', flexDirection:'column', padding:0, transition:'height 0.22s ease, margin-bottom 0.22s ease' }} {...addItemDrag.props}>
 
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
@@ -1171,8 +1173,8 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
               <button onClick={() => onToggleLoaded(item.id)}
                 style={{
                   background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
-                  color: item.pronto ? 'var(--accent2)' : 'var(--text2)',
-                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid transparent',
+                  color: item.pronto ? 'var(--accent2)' : 'var(--text)',
+                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
                   borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center',
                 }}>
                 ○ Da caricare
