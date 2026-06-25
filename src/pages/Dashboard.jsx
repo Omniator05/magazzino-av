@@ -255,9 +255,10 @@ export default function Dashboard({ toggleTheme, theme }) {
                 <div
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
-                  style={{ marginBottom:10, background:'var(--dash-card)', border:cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.transform='scale(1.008)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.07)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
+                  className={isToday ? 'evt-card evt-today' : 'evt-card evt-soft'}
+                  style={{ marginBottom:10, background:'var(--dash-card)', border: isToday ? '1.5px solid transparent' : cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.07)' }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
                 >
                   {/* Icona gradiente con data */}
                   <div style={{ position:'relative', width:52, height:52, flexShrink:0 }}>
@@ -316,7 +317,57 @@ export default function Dashboard({ toggleTheme, theme }) {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         @keyframes dashOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
         @keyframes dashOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
-        @media (prefers-reduced-motion:reduce){ [style*="dashOrb"]{animation:none!important} }
+
+        /* ── Bordo gradiente rotante sulle card evento ── */
+        @property --evtAngle {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        @keyframes evtSpin { to { --evtAngle: 360deg; } }
+
+        .evt-card { position: relative; }
+        /* Bordo nitido (anello sottile) */
+        .evt-card::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 20px;
+          padding: 1.5px;
+          pointer-events: none;
+          z-index: 1;
+          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+                  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+                  mask-composite: exclude;
+        }
+        /* Glow tenue, aderente al bordo rotante */
+        .evt-card::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 20px;
+          z-index: -1;
+          filter: blur(3.5px);
+          pointer-events: none;
+        }
+        .evt-today::before, .evt-today::after {
+          background: conic-gradient(from var(--evtAngle),
+            #dc2626, #f59e0b, #9333ea, #4f46e5, #06b6d4, #dc2626);
+          animation: evtSpin 4s linear infinite;
+        }
+        .evt-today::after { opacity: 0.3; }
+        .evt-soft::before, .evt-soft::after {
+          background: conic-gradient(from var(--evtAngle),
+            rgba(37,99,235,0.55), rgba(148,163,184,0.12), rgba(37,99,235,0.55));
+          animation: evtSpin 10s linear infinite;
+        }
+        .evt-soft::after { opacity: 0.18; }
+
+        @media (prefers-reduced-motion:reduce){
+          [style*="dashOrb"]{animation:none!important}
+          .evt-card::before, .evt-card::after { animation:none!important }
+        }
       `}</style>
     </div>
   )

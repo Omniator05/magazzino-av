@@ -252,7 +252,7 @@ export default function WorkerCalendar() {
                 }}>
                   {cell.day}
                 </span>
-                {unavail && <span style={{ width:10, height:10, borderRadius:3, background:'rgba(144,144,176,0.45)' }} />}
+                {unavail && <span style={{ width:0, height:0, borderLeft:'5px solid transparent', borderRight:'5px solid transparent', borderBottom:'9px solid rgba(144,144,176,0.55)' }} />}
                 {!unavail && items.length > 0 && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
                     {items.slice(0, 4).map((it, i) => (

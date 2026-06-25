@@ -290,8 +290,10 @@ export default function Calendar() {
                     ))}
                     {dayAbsences.length > 0 && (
                       <span style={{
-                        width:7, height:7, borderRadius:'50%', flexShrink:0,
-                        background: 'var(--text3)',
+                        width:0, height:0, flexShrink:0,
+                        borderLeft:'4px solid transparent',
+                        borderRight:'4px solid transparent',
+                        borderBottom:'7px solid var(--text3)',
                         opacity: isPast ? 0.55 : 1,
                       }} />
                     )}
@@ -327,7 +329,7 @@ export default function Calendar() {
             <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--text3)', display:'inline-block' }} />
+            <span style={{ width:0, height:0, borderLeft:'4px solid transparent', borderRight:'4px solid transparent', borderBottom:'8px solid var(--text3)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Assenze</span>
           </div>
         </div>

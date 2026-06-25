@@ -97,7 +97,38 @@ export default function WorkerHome() {
       <style>{`
         @keyframes whOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
         @keyframes whOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
-        @media (prefers-reduced-motion:reduce){ [style*="whOrb"]{animation:none!important} }
+
+        /* ── Bordo gradiente rotante + glow sulle card evento ── */
+        @property --evtAngle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+        @keyframes evtSpin { to { --evtAngle: 360deg; } }
+
+        .evt-card { position: relative; }
+        .evt-card::before {
+          content: ''; position: absolute; inset: 0; border-radius: 20px;
+          padding: 1.5px; pointer-events: none; z-index: 1;
+          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+                  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor; mask-composite: exclude;
+        }
+        .evt-card::after {
+          content: ''; position: absolute; inset: 0; border-radius: 20px;
+          z-index: -1; filter: blur(3.5px); pointer-events: none;
+        }
+        .evt-today::before, .evt-today::after {
+          background: conic-gradient(from var(--evtAngle), #dc2626, #f59e0b, #9333ea, #4f46e5, #06b6d4, #dc2626);
+          animation: evtSpin 4s linear infinite;
+        }
+        .evt-today::after { opacity: 0.3; }
+        .evt-soft::before, .evt-soft::after {
+          background: conic-gradient(from var(--evtAngle), rgba(37,99,235,0.55), rgba(148,163,184,0.12), rgba(37,99,235,0.55));
+          animation: evtSpin 10s linear infinite;
+        }
+        .evt-soft::after { opacity: 0.18; }
+
+        @media (prefers-reduced-motion:reduce){
+          [style*="whOrb"]{animation:none!important}
+          .evt-card::before, .evt-card::after { animation:none!important }
+        }
       `}</style>
 
       <div style={{ padding:'16px 0' }}>
@@ -184,9 +215,10 @@ function EventCard({ ev, today, navigate, forceState }) {
 
   return (
     <div onClick={() => navigate(`/events/${ev.id}`)}
-      style={{ margin:'0 16px 10px', background:'var(--card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
-      onMouseEnter={e => { e.currentTarget.style.transform='scale(1.008)'; e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.08)' }}
-      onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)' }}
+      className={isToday ? 'evt-card evt-today' : 'evt-card evt-soft'}
+      style={{ margin:'0 16px 10px', background:'var(--card)', border: isToday ? '1.5px solid transparent' : `1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.08)' }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)' }}
     >
       {/* Icona gradiente con data */}
       <div style={{ position:'relative', width:50, height:50, flexShrink:0 }}>

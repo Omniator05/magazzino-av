@@ -775,7 +775,6 @@ export default function EventDetail() {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Cerca per nome, categoria, marca..."
-                  autoFocus
                   style={{ paddingLeft:36 }}
                 />
                 <svg style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16">
