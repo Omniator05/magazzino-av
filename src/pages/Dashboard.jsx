@@ -105,14 +105,72 @@ export default function Dashboard({ toggleTheme, theme }) {
     },
   ]
 
+  // Posizione corpo celeste basata sull'orario
+  const _now = new Date()
+  const _h = _now.getHours() + _now.getMinutes() / 60
+  const _DAY_START = 6, _DAY_END = 20
+  const _isDay = _h >= _DAY_START && _h < _DAY_END
+  const _prog = _isDay
+    ? (_h - _DAY_START) / (_DAY_END - _DAY_START)
+    : (_h >= _DAY_END ? _h - _DAY_END : _h + (24 - _DAY_END)) / (24 - _DAY_END + _DAY_START)
+  const _cx = 5 + _prog * 90
+  const _cy = 82 - Math.sin(_prog * Math.PI) * 72
+
+  const _bg = _h >= 5 && _h < 7   ? 'linear-gradient(135deg,#2a3560 0%,#18234a 100%)'
+            : _h >= 7 && _h < 17  ? 'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)'
+            : _h >= 17 && _h < 20 ? 'linear-gradient(135deg,#3a2f58 0%,#201730 100%)'
+                                  : 'linear-gradient(135deg,#1a2240 0%,#0d1525 100%)'
+
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:110 }}>
 
       {/* ── Header hero (card) ──────────────────────────────── */}
-      <div style={{ position:'relative', overflow:'hidden', background:'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)', margin:'calc(env(safe-area-inset-top) + 24px) 16px 20px', padding:'26px 22px', borderRadius:26, boxShadow:'0 12px 32px rgba(34,44,66,0.26)' }}>
+      <div style={{ position:'relative', overflow:'hidden', background:_bg, margin:'calc(env(safe-area-inset-top) + 24px) 16px 20px', padding:'26px 22px', borderRadius:26, boxShadow:'0 12px 32px rgba(34,44,66,0.26)' }}>
         {/* Orb decorativi */}
         <div style={{ position:'absolute', top:'-55%', right:'-6%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle, rgba(255,255,255,0.14) 0%, transparent 65%)', animation:'dashOrb1 14s ease-in-out infinite', pointerEvents:'none' }} />
         <div style={{ position:'absolute', bottom:'-70%', left:'-5%', width:280, height:280, borderRadius:'50%', background:'radial-gradient(circle, rgba(0,0,0,0.2) 0%, transparent 65%)', animation:'dashOrb2 18s ease-in-out infinite', pointerEvents:'none' }} />
+
+        {/* Sole / Luna */}
+        <div style={{
+          position:'absolute', pointerEvents:'none', zIndex:0,
+          left:`${_cx}%`, top:`${_cy}%`,
+          transform:'translate(-50%,-50%)',
+          width: _isDay ? 100 : 72,
+          height: _isDay ? 100 : 72,
+          borderRadius:'50%',
+          background: _isDay
+            ? 'radial-gradient(circle, rgba(255,230,100,0.95) 0%, rgba(255,190,50,0.65) 45%, transparent 72%)'
+            : 'radial-gradient(circle, rgba(210,220,255,0.90) 0%, rgba(170,190,245,0.55) 45%, transparent 72%)',
+          filter:`blur(${_isDay ? 22 : 17}px)`,
+        }} />
+
+        {/* Stelle (notte) */}
+        {!_isDay && [
+          { l:'8%',  t:'22%', s:2,   dur:'3.2s', d:'0s' },
+          { l:'22%', t:'48%', s:1.5, dur:'4.6s', d:'-1.5s' },
+          { l:'38%', t:'14%', s:2.5, dur:'2.9s', d:'-0.8s' },
+          { l:'52%', t:'52%', s:1.5, dur:'5.1s', d:'-2s' },
+          { l:'65%', t:'24%', s:2,   dur:'3.7s', d:'-3s' },
+          { l:'78%', t:'56%', s:1.5, dur:'4.1s', d:'-1s' },
+          { l:'88%', t:'18%', s:2,   dur:'3.4s', d:'-2.5s' },
+          { l:'30%', t:'66%', s:1,   dur:'6s',   d:'-0.5s' },
+        ].map((s,i) => (
+          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
+            left:s.l, top:s.t, width:s.s, height:s.s, borderRadius:'50%',
+            background:'white', animation:`dashStarTwinkle ${s.dur} ease-in-out infinite ${s.d}` }} />
+        ))}
+
+        {/* Nuvole (giorno) */}
+        {_isDay && [
+          { l:'-12%', t:'22%', w:88, h:26, op:0.09, dur:'28s', d:'0s' },
+          { l:'35%',  t:'55%', w:68, h:20, op:0.07, dur:'40s', d:'-15s' },
+          { l:'62%',  t:'8%',  w:54, h:18, op:0.08, dur:'33s', d:'-8s' },
+        ].map((c,i) => (
+          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
+            left:c.l, top:c.t, width:c.w, height:c.h, borderRadius:'50%',
+            background:'white', opacity:c.op, filter:'blur(9px)',
+            animation:`dashCloudDrift ${c.dur} linear infinite ${c.d}` }} />
+        ))}
 
         {/* Riga principale */}
         <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
@@ -317,6 +375,8 @@ export default function Dashboard({ toggleTheme, theme }) {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         @keyframes dashOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
         @keyframes dashOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
+        @keyframes dashStarTwinkle { 0%,100%{opacity:0.85;transform:scale(1)} 50%{opacity:0.15;transform:scale(0.5)} }
+        @keyframes dashCloudDrift { from{transform:translateX(0)} to{transform:translateX(130vw)} }
 
         /* ── Bordo gradiente rotante sulle card evento ── */
         @property --evtAngle {

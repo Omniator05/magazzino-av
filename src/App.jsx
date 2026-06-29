@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ConfirmProvider } from './context/ConfirmProvider'
 import { useState, useEffect, useRef } from 'react'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -115,14 +116,16 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <LoadingBar />
-        <PageTransition />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
-        </Routes>
-      </BrowserRouter>
+      <ConfirmProvider>
+        <BrowserRouter>
+          <LoadingBar />
+          <PageTransition />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
+          </Routes>
+        </BrowserRouter>
+      </ConfirmProvider>
     </AuthProvider>
   )
 }

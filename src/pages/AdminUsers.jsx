@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
 import { db, auth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
@@ -14,6 +15,7 @@ import {
 
 export default function AdminUsers() {
   const { user, profile, logout } = useAuth()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const [users, setUsers]             = useState([])
   const [showCreate, setShowCreate]   = useState(false)
@@ -100,7 +102,12 @@ export default function AdminUsers() {
   // ── Attiva / disattiva ────────────────────────────────────────
   const toggleActive = async () => {
     const isActive = showDetail.active !== false
-    if (!confirm(`Vuoi ${isActive ? 'disattivare' : 'riattivare'} l'account di ${showDetail.name}?`)) return
+    if (!(await confirm({
+      title: isActive ? 'Disattiva account' : 'Riattiva account',
+      message: `Vuoi ${isActive ? 'disattivare' : 'riattivare'} l'account di ${showDetail.name}?`,
+      confirmLabel: isActive ? 'Disattiva' : 'Riattiva',
+      danger: isActive,
+    }))) return
     await updateDoc(doc(db, 'profiles', showDetail.id), { active: !isActive })
     setShowDetail(d => ({ ...d, active: !isActive }))
     clearDetailMsg()
@@ -109,7 +116,11 @@ export default function AdminUsers() {
   // ── Promuovi / declassa ruolo ─────────────────────────────────
   const toggleRole = async () => {
     const newRole = showDetail.role === 'admin' ? 'worker' : 'admin'
-    if (!confirm(`Vuoi rendere ${showDetail.name} ${newRole === 'admin' ? 'Amministratore' : 'Magazziniere'}?`)) return
+    if (!(await confirm({
+      title: 'Cambia ruolo',
+      message: `Vuoi rendere ${showDetail.name} ${newRole === 'admin' ? 'Amministratore' : 'Magazziniere'}?`,
+      confirmLabel: 'Conferma',
+    }))) return
     await updateDoc(doc(db, 'profiles', showDetail.id), { role: newRole })
     setShowDetail(d => ({ ...d, role: newRole }))
     setDetailMsg({ text: `${showDetail.name} è ora ${newRole === 'admin' ? 'Amministratore' : 'Magazziniere'}.`, type:'success' })
@@ -117,7 +128,7 @@ export default function AdminUsers() {
 
   // ── Rimuovi indisponibilità ────────────────────────────────────
   const removeUnavailability = async (id) => {
-    if (!confirm('Rimuovere questo periodo di indisponibilità?')) return
+    if (!(await confirm({ title: 'Rimuovi indisponibilità', message: 'Rimuovere questo periodo di indisponibilità?', confirmLabel: 'Rimuovi', danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
@@ -191,7 +202,12 @@ export default function AdminUsers() {
 
   // ── Elimina account ───────────────────────────────────────────
   const deleteAccount = async () => {
-    if (!confirm(`Eliminare definitivamente l'account di ${showDetail.name}?\nQuesta azione non può essere annullata.`)) return
+    if (!(await confirm({
+      title: 'Elimina account',
+      message: `Eliminare definitivamente l'account di ${showDetail.name}?\nQuesta azione non può essere annullata.`,
+      confirmLabel: 'Elimina',
+      danger: true,
+    }))) return
     const name = showDetail.name
     await deleteDoc(doc(db, 'profiles', showDetail.id))
     // Il record Firebase Auth rimane ma senza profilo l'utente non accede all'app.

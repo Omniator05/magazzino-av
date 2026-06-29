@@ -7,6 +7,8 @@ import EditButton from '../components/EditButton'
 import { Pin, Dot } from '../components/Icon'
 import { EventListSkeleton } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
+import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
@@ -126,6 +128,7 @@ const IconCalendarSm = () => (
 
 export default function Events() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -296,10 +299,10 @@ export default function Events() {
   const deleteEvent = async (e, event) => {
     e.stopPropagation()
     if (event.seriesId) {
-      if (confirm('Elimina SOLO questo evento della serie?'))
+      if (await confirm({ title: 'Elimina evento', message: 'Elimina SOLO questo evento della serie?', confirmLabel: 'Elimina', danger: true }))
         await deleteDoc(doc(db, 'events', event.id))
     } else {
-      if (confirm('Eliminare questo evento?'))
+      if (await confirm({ title: 'Elimina evento', message: 'Eliminare questo evento?', confirmLabel: 'Elimina', danger: true }))
         await deleteDoc(doc(db, 'events', event.id))
     }
   }
@@ -403,7 +406,7 @@ export default function Events() {
   }
 
   const closeInstallation = async (installation) => {
-    if (!confirm(`Chiudere l'installazione "${installation.name}" e ripristinare la giacenza di tutti gli articoli?`)) return
+    if (!(await confirm({ title: 'Chiudi installazione', message: `Chiudere l'installazione "${installation.name}" e ripristinare la giacenza di tutti gli articoli?`, confirmLabel: 'Chiudi e ripristina' }))) return
     const items = installation.items || []
     for (const item of items) {
       if (item.loaded && !item.returned && !item.isExtra) {
@@ -685,11 +688,11 @@ export default function Events() {
             </div>
             <div className="form-group">
               <label>Data inizio *</label>
-              <input type="date" value={form.date} onChange={e => setForm({...form,date:e.target.value})} />
+              <DateField value={form.date} onChange={v => setForm({...form,date:v})} />
             </div>
             <div className="form-group">
               <label>Data fine {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — fine contratto prevista)</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span>}</label>
-              <input type="date" value={form.dateEnd} min={form.date} onChange={e => setForm({...form, dateEnd:e.target.value})} />
+              <DateField value={form.dateEnd} min={form.date} clearable onChange={v => setForm({...form, dateEnd:v})} placeholder="Nessuna" />
             </div>
             {form.type !== 'installation' && (
               <div className="form-group">
@@ -697,13 +700,10 @@ export default function Events() {
                 {PHASE_CONFIG.map(p => (
                   <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                     <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                    <input type="date" value={form.phases?.[p.key]||''}
-                      onChange={e => setForm(f => ({...f, phases:{...(f.phases||{}), [p.key]:e.target.value}}))}
-                      style={{ flex:1, fontSize:13, padding:'8px 10px' }} />
-                    {form.phases?.[p.key] && (
-                      <button type="button" onClick={() => setForm(f => { const ph={...(f.phases||{})}; delete ph[p.key]; return {...f,phases:ph} })}
-                        style={{ background:'transparent', color:'var(--text3)', fontSize:16, padding:'0 4px', flexShrink:0 }}>✕</button>
-                    )}
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <DateField value={form.phases?.[p.key]||''} clearable placeholder="—"
+                        onChange={v => setForm(f => { const ph={...(f.phases||{})}; if (v) ph[p.key]=v; else delete ph[p.key]; return {...f, phases:ph} })} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -727,8 +727,8 @@ export default function Events() {
                 {form.recurrence !== 'never' && (
                   <div className="form-group">
                     <label>Fine ripetizione</label>
-                    <input type="date" value={form.endDate} min={form.date || today}
-                      onChange={e => setForm({...form, endDate:e.target.value})} />
+                    <DateField value={form.endDate} min={form.date || today}
+                      onChange={v => setForm({...form, endDate:v})} />
                   </div>
                 )}
                 {futureDates.length > 0 && (

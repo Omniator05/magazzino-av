@@ -7,6 +7,8 @@ import { Pin, User, List, Wrench, Check } from '../components/Icon'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
+import DateField from '../components/DateField'
 
 const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -44,6 +46,7 @@ function toDateStr(d) {
 export default function Calendar() {
   const navigate = useNavigate()
   const { user, isWorker } = useAuth()
+  const confirm = useConfirm()
   const today = new Date()
   const todayStr = toDateStr(today)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
@@ -62,6 +65,30 @@ export default function Calendar() {
   const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'' })
   const [savingAbsence, setSavingAbsence] = useState(false)
   const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
+
+  // Selezione assenza tap-sul-calendario
+  const [reportMode, setReportMode] = useState(false)
+  const [rangeStart, setRangeStart] = useState(null)
+
+  const startReportMode = () => { setReportMode(true); setRangeStart(null); setSelectedDate(null) }
+  const cancelReportMode = () => { setReportMode(false); setRangeStart(null); setSelectedDate(todayStr) }
+
+  const handleDayTap = (dStr) => {
+    if (reportMode) {
+      if (!rangeStart) {
+        setRangeStart(dStr)
+      } else {
+        const start = dStr <= rangeStart ? dStr : rangeStart
+        const end = dStr <= rangeStart ? rangeStart : dStr
+        setAbsenceForm({ startDate: start, endDate: end, reason: '' })
+        setShowAbsenceModal(true)
+        setReportMode(false)
+        setRangeStart(null)
+      }
+    } else {
+      setSelectedDate(dStr)
+    }
+  }
 
   // Funzioni di salvataggio prima dei drag hook → Enter può invocarle
   const addAbsence = async () => {
@@ -118,7 +145,7 @@ export default function Calendar() {
   useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
 
   const removeAbsence = async (id) => {
-    if (!confirm('Rimuovere questa assenza?')) return
+    if (!(await confirm({ title: 'Rimuovi assenza', message: 'Rimuovere questa assenza?', confirmLabel: 'Rimuovi', danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
@@ -201,15 +228,15 @@ export default function Calendar() {
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
   return (
-    <div className="page" style={{ paddingBottom:90 }}>
+    <div className="page" style={{ paddingBottom:160 }}>
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <h1>Calendario</h1>
             <p>{events.length} eventi totali</p>
           </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => { setAbsenceForm({ startDate: selectedDate || todayStr, endDate:'', reason:'' }); setShowAbsenceModal(true) }}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <button onClick={startReportMode}
               style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
               🚫 Assenza
             </button>
@@ -223,6 +250,15 @@ export default function Calendar() {
           <h2 style={{ fontSize:17, fontWeight:800 }}>{MONTHS[cursor.month]} {cursor.year}</h2>
           <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
+
+        {reportMode && (
+          <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
+            <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4 }}>
+              🚫 {!rangeStart ? 'Tocca il primo giorno della tua assenza' : 'Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
+            </p>
+            <button onClick={cancelReportMode} style={{ color:'var(--text2)', fontSize:13, fontWeight:700, flexShrink:0 }}>Annulla</button>
+          </div>
+        )}
       </div>
 
       <div style={{ padding:'0 16px 16px' }}>
@@ -239,20 +275,24 @@ export default function Calendar() {
             const dStr = toDateStr(cell.dateObj)
             const dayEvents = eventsByDate[dStr] || []
             const dayAbsences = absencesOnDate(dStr)
+            const hasMyAbsence = dayAbsences.some(a => a.workerId === user?.uid)
+            const hasOtherAbsences = dayAbsences.some(a => a.workerId !== user?.uid)
             const isToday = dStr === todayStr
             const isPast = dStr < todayStr
             const isSelected = dStr === selectedDate
+            const isRangeStart = reportMode && dStr === rangeStart
 
             return (
               <button
                 key={i}
-                onClick={() => setSelectedDate(dStr)}
+                onClick={() => handleDayTap(dStr)}
                 style={{
+                  position:'relative',
                   minHeight:52,
                   borderRadius:10,
                   padding:'5px 3px',
-                  background: isSelected ? 'rgba(216,56,63,0.10)' : cell.current ? 'var(--card)' : 'transparent',
-                  border: isSelected ? '1.5px solid var(--accent)' : isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)',
+                  background: isSelected ? 'rgba(216,56,63,0.10)' : isRangeStart ? 'rgba(216,56,63,0.12)' : cell.current ? 'var(--card)' : 'transparent',
+                  border: isSelected ? '1.5px solid var(--accent)' : isRangeStart ? '1.5px solid var(--accent)' : isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)',
                   opacity: cell.current ? (isPast ? 0.5 : 1) : 0.3,
                   display:'flex',
                   flexDirection:'column',
@@ -268,8 +308,8 @@ export default function Calendar() {
                 }}>
                   {cell.day}
                 </span>
-                {/* Puntini: eventi + fasi + assenze */}
-                {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || dayAbsences.length > 0) && (
+                {/* Puntini: eventi + fasi + assenze altrui */}
+                {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || hasOtherAbsences) && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
                     {dayEvents.slice(0, 3).map(ev => {
                       const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
@@ -288,7 +328,7 @@ export default function Calendar() {
                         opacity: isPast ? 0.55 : 1,
                       }} />
                     ))}
-                    {dayAbsences.length > 0 && (
+                    {hasOtherAbsences && (
                       <span style={{
                         width:0, height:0, flexShrink:0,
                         borderLeft:'4px solid transparent',
@@ -298,6 +338,14 @@ export default function Calendar() {
                       }} />
                     )}
                   </div>
+                )}
+                {/* Striscia solo per la mia assenza */}
+                {hasMyAbsence && (
+                  <div style={{
+                    position:'absolute', inset:0,
+                    background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.18) 0px, rgba(144,144,176,0.18) 1.5px, transparent 1.5px, transparent 6px)',
+                    pointerEvents:'none',
+                  }} />
                 )}
               </button>
             )
@@ -329,8 +377,12 @@ export default function Calendar() {
             <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:0, height:0, borderLeft:'4px solid transparent', borderRight:'4px solid transparent', borderBottom:'8px solid var(--text3)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Assenze</span>
+            <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>La mia assenza</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:0, height:0, borderLeft:'4px solid transparent', borderRight:'4px solid transparent', borderBottom:'7px solid var(--text3)', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Assenze personale</span>
           </div>
         </div>
       </div>
@@ -454,11 +506,11 @@ export default function Calendar() {
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Indica i giorni in cui non sei disponibile. Apparirà nel calendario e negli avvisi di assegnazione evento.</p>
             <div className="form-group">
               <label>Primo giorno *</label>
-              <input type="date" value={absenceForm.startDate} onChange={e => setAbsenceForm(f => ({...f, startDate:e.target.value, endDate: f.endDate < e.target.value ? e.target.value : f.endDate}))} />
+              <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({...f, startDate:v, endDate: f.endDate < v ? v : f.endDate}))} />
             </div>
             <div className="form-group">
               <label>Ultimo giorno <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(lascia vuoto se un solo giorno)</span></label>
-              <input type="date" value={absenceForm.endDate} min={absenceForm.startDate} onChange={e => setAbsenceForm(f => ({...f, endDate:e.target.value}))} />
+              <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder="Un solo giorno" onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
             </div>
             <div className="form-group">
               <label>Motivo <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
@@ -484,24 +536,21 @@ export default function Calendar() {
             </div>
             <div className="form-group">
               <label>Data inizio *</label>
-              <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date:e.target.value}))} />
+              <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
             </div>
             <div className="form-group">
               <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
-              <input type="date" value={editForm.dateEnd||''} min={editForm.date} onChange={e => setEditForm(f => ({...f, dateEnd:e.target.value}))} />
+              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder="Nessuna" onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
             </div>
             <div className="form-group">
               <label>Fasi <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
               {PHASE_FORM_CONFIG.map(p => (
                 <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                   <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                  <input type="date" value={editForm.phases?.[p.key]||''}
-                    onChange={e => setEditForm(f => ({...f, phases:{...(f.phases||{}), [p.key]:e.target.value}}))}
-                    style={{ flex:1, fontSize:13, padding:'8px 10px' }} />
-                  {editForm.phases?.[p.key] && (
-                    <button type="button" className="btn-no-anim" onClick={() => setEditForm(f => { const ph={...(f.phases||{})}; delete ph[p.key]; return {...f,phases:ph} })}
-                      style={{ background:'transparent', color:'var(--text3)', fontSize:16, padding:'0 4px', flexShrink:0 }}>✕</button>
-                  )}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <DateField value={editForm.phases?.[p.key]||''} clearable placeholder="—"
+                      onChange={v => setEditForm(f => { const ph={...(f.phases||{})}; if (v) ph[p.key]=v; else delete ph[p.key]; return {...f, phases:ph} })} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -533,24 +582,21 @@ export default function Calendar() {
             </div>
             <div className="form-group">
               <label>Data inizio *</label>
-              <input type="date" value={editForm.date} onChange={e => setEditForm(f => ({...f, date:e.target.value}))} />
+              <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
             </div>
             <div className="form-group">
               <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
-              <input type="date" value={editForm.dateEnd||''} min={editForm.date} onChange={e => setEditForm(f => ({...f, dateEnd:e.target.value}))} />
+              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder="Nessuna" onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
             </div>
             <div className="form-group">
               <label>Fasi <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
               {PHASE_FORM_CONFIG.map(p => (
                 <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                   <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                  <input type="date" value={editForm.phases?.[p.key]||''}
-                    onChange={e => setEditForm(f => ({...f, phases:{...(f.phases||{}), [p.key]:e.target.value}}))}
-                    style={{ flex:1, fontSize:13, padding:'8px 10px' }} />
-                  {editForm.phases?.[p.key] && (
-                    <button type="button" className="btn-no-anim" onClick={() => setEditForm(f => { const ph={...(f.phases||{})}; delete ph[p.key]; return {...f,phases:ph} })}
-                      style={{ background:'transparent', color:'var(--text3)', fontSize:16, padding:'0 4px', flexShrink:0 }}>✕</button>
-                  )}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <DateField value={editForm.phases?.[p.key]||''} clearable placeholder="—"
+                      onChange={v => setEditForm(f => { const ph={...(f.phases||{})}; if (v) ph[p.key]=v; else delete ph[p.key]; return {...f, phases:ph} })} />
+                  </div>
                 </div>
               ))}
             </div>

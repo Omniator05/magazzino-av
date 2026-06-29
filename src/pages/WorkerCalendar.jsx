@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
@@ -35,6 +36,7 @@ function toDateStr(d) {
 
 export default function WorkerCalendar() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const today = new Date()
   const todayStr = toDateStr(today)
@@ -154,7 +156,7 @@ export default function WorkerCalendar() {
   }
 
   const removeUnavailability = async (id) => {
-    if (!confirm('Rimuovere questo periodo di indisponibilità?')) return
+    if (!(await confirm({ title: 'Rimuovi indisponibilità', message: 'Rimuovere questo periodo di indisponibilità?', confirmLabel: 'Rimuovi', danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
@@ -180,14 +182,20 @@ export default function WorkerCalendar() {
             <p>{allEvents.filter(isAssignedToMe).length} eventi assegnati a te</p>
           </div>
           {!reportMode && (
-            <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={startReportMode}
+                style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
+                🚫 Assenza
+              </button>
+              <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
+            </div>
           )}
         </div>
 
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:14 }}>
-          <button onClick={goPrevMonth} disabled={reportMode} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)', opacity: reportMode ? 0.4 : 1 }}>‹</button>
+          <button onClick={goPrevMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
           <h2 style={{ fontSize:17, fontWeight:800 }}>{MONTHS[cursor.month]} {cursor.year}</h2>
-          <button onClick={goNextMonth} disabled={reportMode} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)', opacity: reportMode ? 0.4 : 1 }}>›</button>
+          <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
 
         {/* Banner modalità selezione assenza */}
@@ -222,7 +230,6 @@ export default function WorkerCalendar() {
             let bg = cell.current ? 'var(--card)' : 'transparent'
             let border = isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)'
             if (hasMyEvent) { bg = 'rgba(216,56,63,0.12)'; border = '1.5px solid var(--accent)' }
-            if (unavail) { bg = 'rgba(144,144,176,0.15)' }
             if (isSelected) { bg = 'rgba(79,195,247,0.10)'; border = '1.5px solid var(--blue)' }
             if (isRangeStart) { border = '1.5px solid var(--accent)' }
 
@@ -232,6 +239,7 @@ export default function WorkerCalendar() {
                 onClick={() => cell.current && handleDayTap(dStr, isPast)}
                 disabled={!cell.current || isPast}
                 style={{
+                  position:'relative',
                   minHeight:52,
                   borderRadius:10,
                   padding:'5px 3px',
@@ -252,8 +260,7 @@ export default function WorkerCalendar() {
                 }}>
                   {cell.day}
                 </span>
-                {unavail && <span style={{ width:0, height:0, borderLeft:'5px solid transparent', borderRight:'5px solid transparent', borderBottom:'9px solid rgba(144,144,176,0.55)' }} />}
-                {!unavail && items.length > 0 && (
+                {items.length > 0 && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
                     {items.slice(0, 4).map((it, i) => (
                       <span key={i} style={{
@@ -264,22 +271,17 @@ export default function WorkerCalendar() {
                     ))}
                   </div>
                 )}
+                {unavail && (
+                  <div style={{
+                    position:'absolute', inset:0,
+                    background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.18) 0px, rgba(144,144,176,0.18) 1.5px, transparent 1.5px, transparent 6px)',
+                    pointerEvents:'none',
+                  }} />
+                )}
               </button>
             )
           })}
         </div>
-
-        {/* Bottone Segnala assenza — sotto il calendario, a destra */}
-        {!reportMode && (
-          <div style={{ display:'flex', justifyContent:'flex-end', marginTop:12 }}>
-            <button
-              onClick={startReportMode}
-              style={{ padding:'9px 16px', borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', fontWeight:600, fontSize:13, display:'inline-flex', alignItems:'center', gap:7 }}
-            >
-              <Calendar size={15} /> Segnala assenza
-            </button>
-          </div>
-        )}
 
         <div style={{ display:'flex', gap:14, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -299,7 +301,7 @@ export default function WorkerCalendar() {
             <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:10, height:10, borderRadius:3, background:'rgba(144,144,176,0.3)', display:'inline-block' }} />
+            <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Non disponibile</span>
           </div>
         </div>
@@ -355,17 +357,21 @@ export default function WorkerCalendar() {
         <div style={{ padding:'8px 16px 24px' }}>
           <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Le mie indisponibilità</p>
           {sortedUnavailability.map(u => (
-            <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', marginBottom:8 }}>
-              <div>
-                <p style={{ fontWeight:700, fontSize:14 }}>
+            <div key={u.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
+              <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
                   {u.startDate === u.endDate
-                    ? new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
-                    : `${new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate).toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
+                    ? new Date(u.startDate+'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
+                    : `${new Date(u.startDate+'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate+'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
                   }
                 </p>
-                {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>{u.reason}</p>}
+                {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
               </div>
-              <button onClick={() => removeUnavailability(u.id)} style={{ color:'var(--red)', fontSize:13, fontWeight:700, flexShrink:0 }}>Rimuovi</button>
+              <button onClick={() => removeUnavailability(u.id)}
+                style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
+                Rimuovi
+              </button>
             </div>
           ))}
         </div>

@@ -277,6 +277,17 @@ export default function WorkerScanner() {
   const returned = items.filter(i => i.returned).length
   const total    = items.length
 
+  const firstUnloadedRef = useRef(null)
+  const WS_ORDER_CONST = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+  let firstUnloadedId = null
+  for (const cat of WS_ORDER_CONST) {
+    const catItems = items
+      .filter(i => (i.isExtra ? 'Extra' : (i.category || 'Altro')) === cat)
+      .sort((a, b) => (a.loaded ? 1 : 0) - (b.loaded ? 1 : 0))
+    const first = catItems.find(i => !i.loaded)
+    if (first) { firstUnloadedId = first.id; break }
+  }
+
   // Popup quando tutto è caricato — non ripetere se già mostrato per questo evento
   useEffect(() => {
     if (
@@ -560,6 +571,45 @@ export default function WorkerScanner() {
           <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>
             Lista carico · {items.filter(i=>i.returned).length}/{total} rientrati
           </p>
+
+          {/* Contatore mancanti al carico completo */}
+          {total > 0 && mode === 'load' && (
+            <div
+              onClick={() => firstUnloadedRef.current?.scrollIntoView({ behavior:'smooth', block:'center' })}
+              style={{
+                display:'flex', alignItems:'center', gap:10,
+                padding:'10px 14px', borderRadius:12, marginBottom:8,
+                background: loaded === total ? 'rgba(52,211,153,0.10)' : 'rgba(216,56,63,0.07)',
+                border: `1px solid ${loaded === total ? 'rgba(52,211,153,0.30)' : 'rgba(216,56,63,0.20)'}`,
+                cursor: loaded === total ? 'default' : 'pointer',
+              }}>
+              <div style={{
+                width:36, height:36, borderRadius:10, flexShrink:0,
+                background: loaded === total ? 'rgba(52,211,153,0.22)' : 'var(--accent)',
+                color: loaded === total ? 'var(--green)' : 'white',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontWeight:900, fontSize: loaded === total ? 20 : 17,
+              }}>
+                {loaded === total ? '✓' : total - loaded}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
+                  {loaded === total
+                    ? 'Tutto caricato!'
+                    : `${total - loaded} ${total - loaded === 1 ? 'oggetto manca' : 'oggetti mancano'} al carico`}
+                </p>
+                <div style={{ marginTop:5, height:4, borderRadius:4, background:'var(--border)', overflow:'hidden' }}>
+                  <div style={{
+                    height:'100%', borderRadius:4, transition:'width 0.4s ease',
+                    width:`${total > 0 ? (loaded / total) * 100 : 0}%`,
+                    background: loaded === total ? 'var(--green)' : 'var(--accent)',
+                  }} />
+                </div>
+                <p style={{ fontSize:11, color:'var(--text2)', marginTop:3 }}>{loaded} di {total} caricati</p>
+              </div>
+            </div>
+          )}
+
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             {items.length === 0
               ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
@@ -593,7 +643,8 @@ export default function WorkerScanner() {
                         </div>
                       )}
                       {wsCatGrouped[cat].map(item => (
-                <ChecklistRow key={item.id} item={{
+                <div key={item.id} ref={mode === 'load' && !item.loaded && item.id === firstUnloadedId ? firstUnloadedRef : null}>
+                <ChecklistRow item={{
                   ...item,
                   _onToggleLoaded: async (itemId) => {
                     const snap = await getDoc(eventRef)
@@ -638,6 +689,7 @@ export default function WorkerScanner() {
                     await updateDoc(eventRef, { items: updated })
                   },
                 }} />
+                </div>
               ))}
                     </div>
                   ))

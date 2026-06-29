@@ -6,6 +6,7 @@ import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
+import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import { Warn } from '../components/Icon'
 
@@ -31,6 +32,7 @@ const ICONS = {
 export default function EventDetail() {
   const { id } = useParams()
   const { user } = useAuth()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const [event, setEvent] = useState(null)
   const today = new Date().toISOString().split('T')[0]
@@ -60,6 +62,9 @@ export default function EventDetail() {
     setShowExtraModal(false)
   }
   const extraDrag     = useModalDrag(() => setShowExtraModal(false), undefined, addExtraItem)
+  const [templates, setTemplates] = useState([])
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const templatePickerDrag = useModalDrag(() => setShowTemplatePicker(false))
   const [search, setSearch] = useState('')
   const [showEventNotes, setShowEventNotes] = useState(false)
   const [addAsMancante, setAddAsMancante] = useState(false)
@@ -113,6 +118,21 @@ export default function EventDetail() {
     const q = query(collection(db, 'items'), orderBy('name'))
     return onSnapshot(q, snap => setAllItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
+
+  // Template disponibili (per applicarli a un evento già esistente)
+  useEffect(() => {
+    const q = query(collection(db, 'templates'), orderBy('name'))
+    return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [])
+
+  const applyTemplate = async (template) => {
+    const items = (template.components || []).map(c => ({
+      id: c.id, name: c.name, category: c.category, qty: c.qty,
+      loaded: false, returned: false,
+    }))
+    await updateEventItems(items)
+    setShowTemplatePicker(false)
+  }
 
   // Calcola frequenza e co-occorrenza dagli eventi passati ogni volta che si apre il modal
   useEffect(() => {
@@ -375,7 +395,7 @@ export default function EventDetail() {
   const removeFromEvent = async itemId => {
     const item = eventItems.find(i => i.id === itemId)
     if (item.loaded && !item.returned) {
-      if (!confirm('Questo articolo risulta ancora fuori. Rimuoverlo dalla lista?')) return
+      if (!(await confirm({ title: 'Articolo ancora fuori', message: 'Questo articolo risulta ancora fuori. Rimuoverlo dalla lista?', confirmLabel: 'Rimuovi', danger: true }))) return
       // Ripristina disponibilità
       try {
         const itemRef = doc(db, 'items', item.itemRef || itemId)
@@ -683,7 +703,7 @@ export default function EventDetail() {
         {event.type === 'installation' && (
           <button
             onClick={async () => {
-              if (!confirm(`Chiudere l'installazione e ripristinare la giacenza di tutti gli articoli?`)) return
+              if (!(await confirm({ title: 'Chiudi installazione', message: 'Chiudere l\'installazione e ripristinare la giacenza di tutti gli articoli?', confirmLabel: 'Chiudi e ripristina' }))) return
               for (const item of eventItems) {
                 if (item.loaded && !item.returned && !item.isExtra) {
                   try {
@@ -718,6 +738,14 @@ export default function EventDetail() {
               <p style={{ fontSize:32 }}>📋</p>
               <h3>Lista vuota</h3>
               <p>Tocca il <strong style={{ color:'var(--accent)' }}>+</strong> in basso a destra per aggiungere articoli</p>
+              {templates.length > 0 && (
+                <button
+                  onClick={() => setShowTemplatePicker(true)}
+                  style={{ marginTop:14, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px solid rgba(90,82,201,0.35)', color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
+                >
+                  📋 Usa un template
+                </button>
+              )}
             </div>
           : <>{groupedEventItems}</>
         }
@@ -928,6 +956,35 @@ export default function EventDetail() {
               disabled={!extraForm.name.trim()}>
               ✅ Aggiungi alla lista
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal scelta template — applica una lista a evento già esistente */}
+      {showTemplatePicker && (
+        <div className={`modal-overlay${templatePickerDrag.closing ? ' closing' : ''}`} onClick={templatePickerDrag.onOverlayClick}>
+          <div className={`modal${templatePickerDrag.jiggling ? ' modal-jiggle' : ''}${templatePickerDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templatePickerDrag.props}>
+            <button className="close-btn" onClick={templatePickerDrag.close}>✕</button>
+            <h2>📋 Usa un template</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Carica la lista articoli da un template salvato. Potrai comunque modificarla dopo.</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'55dvh', overflowY:'auto' }}>
+              {templates.map(t => {
+                const count = (t.components || []).length
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => applyTemplate(t)}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left' }}
+                  >
+                    <div style={{ minWidth:0 }}>
+                      <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.name}</p>
+                      <p style={{ color:'var(--text2)', fontSize:13 }}>{count} articol{count === 1 ? 'o' : 'i'}</p>
+                    </div>
+                    <span style={{ flexShrink:0, color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:3 }}>Usa →</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}

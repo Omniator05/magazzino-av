@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useNavigate } from 'react-router-dom'
 import EditButton from '../components/EditButton'
@@ -15,6 +16,7 @@ const ICONS = {
 
 export default function Templates() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
   const [items, setItems]         = useState([])
@@ -72,7 +74,7 @@ export default function Templates() {
   }
 
   const deleteTemplate = async (id) => {
-    if (!confirm('Eliminare questo template?')) return
+    if (!(await confirm({ title: 'Elimina template', message: 'Eliminare questo template?', confirmLabel: 'Elimina', danger: true }))) return
     await deleteDoc(doc(db, 'templates', id))
   }
 

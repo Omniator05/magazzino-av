@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import DeleteButton from '../components/DeleteButton'
 
@@ -12,6 +13,7 @@ const PAGE_SIZE = 30
 export default function Archive() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const confirm = useConfirm()
   const [events, setEvents]           = useState([])
   const [search, setSearch]           = useState('')
   const [loading, setLoading]         = useState(true)
@@ -79,7 +81,7 @@ export default function Archive() {
   }
 
   const deleteArchiveEvent = async (event) => {
-    if (!window.confirm(`Eliminare "${event.name}" dall'archivio? Questa azione è irreversibile.`)) return
+    if (!(await confirm({ title: 'Elimina dall\'archivio', message: `Eliminare "${event.name}" dall'archivio?\nQuesta azione è irreversibile.`, confirmLabel: 'Elimina', danger: true }))) return
     await deleteDoc(doc(db, 'events', event.id))
     setEvents(prev => prev.filter(e => e.id !== event.id))
   }

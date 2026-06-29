@@ -6,6 +6,7 @@ import DeleteButton from '../components/DeleteButton'
 import { Dot, Check, User } from '../components/Icon'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmProvider'
 
 const PRIORITY_COLORS = {
   alta:   { bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.35)', color:'var(--red)',     dot:'#f87171', label:'Alta' },
@@ -15,6 +16,7 @@ const PRIORITY_COLORS = {
 
 export default function Tasks() {
   const { user, profile } = useAuth()
+  const confirm = useConfirm()
   const [tasks, setTasks]       = useState([])
   const [users, setUsers]       = useState([])
   const [showModal, setShowModal] = useState(false)
@@ -89,7 +91,7 @@ export default function Tasks() {
   }
 
   const deleteTask = async (id) => {
-    if (!window.confirm('Eliminare questa task?')) return
+    if (!(await confirm({ title: 'Elimina task', message: 'Eliminare questa task?', confirmLabel: 'Elimina', danger: true }))) return
     await deleteDoc(doc(db, 'tasks', id))
   }
 
