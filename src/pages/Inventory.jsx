@@ -179,15 +179,14 @@ export default function Inventory() {
     const itemsWithCodes = items.map(i => ({ ...i, code: i.code || generateItemCode(i.id) }))
     const qrUrls = await Promise.all(itemsWithCodes.map(i => generateQRDataURL(i.code)))
 
-    // Etichetta termica 54×25mm → resa a 204×94px @96dpi (2px/mm circa)
-    // Layout: QR a sx, nome+codice a dx
+    // Etichetta 60×38mm orizzontale → QR grande a sx, nome e posizione ben leggibili a dx, tutto in nero
     const labelHTML = itemsWithCodes.map((item, idx) => `
       <div class="label">
         <img src="${qrUrls[idx]}" class="qr" />
         <div class="info">
           <div class="name">${item.name}</div>
+          ${item.location ? `<div class="loc">📌 ${item.location}</div>` : ''}
           <div class="code">${item.code}</div>
-          ${item.location ? `<div class="loc">📍 ${item.location}</div>` : ''}
         </div>
       </div>
     `).join('')
@@ -197,57 +196,65 @@ export default function Inventory() {
       <title>Etichette magazzino</title>
       <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: 'Courier New', monospace; background:#fff; }
+        body { font-family: Arial, sans-serif; background:#fff; }
         .label {
-          width: 54mm;
-          height: 25mm;
+          width: 60mm;
+          height: 38mm;
           display: flex;
+          flex-direction: row;
           align-items: center;
-          gap: 2mm;
-          padding: 1.5mm 2mm;
+          gap: 0.2mm;
+          padding: 1.3mm 2mm;
           border: 0.3mm solid #ccc;
           page-break-inside: avoid;
           overflow: hidden;
+          color: #000;
         }
         .qr {
-          width: 22mm;
-          height: 22mm;
+          width: 35mm;
+          height: 35mm;
           flex-shrink: 0;
           image-rendering: pixelated;
         }
         .info {
           flex: 1;
           min-width: 0;
-          overflow: hidden;
+          text-align: left;
         }
         .name {
-          font-size: 7pt;
-          font-weight: bold;
-          line-height: 1.2;
+          font-size: 9.5pt;
+          font-weight: 800;
+          line-height: 1.15;
+          word-break: break-word;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          color: #000;
+        }
+        .loc {
+          font-size: 8.5pt;
+          font-weight: 800;
+          color: #000;
+          line-height: 1.15;
           word-break: break-word;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+          margin-top: 1.2mm;
         }
         .code {
           font-size: 6pt;
-          color: #555;
-          margin-top: 1mm;
+          font-weight: 600;
+          color: #000;
           letter-spacing: 0.5px;
-        }
-        .loc {
-          font-size: 5.5pt;
-          color: #777;
-          margin-top: 0.5mm;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          margin-top: 1.2mm;
         }
         @media print {
           body { margin: 0; }
           .label { border-color: transparent; }
-          @page { margin: 3mm; size: 54mm auto; }
+          @page { margin: 3mm; size: 60mm 38mm; }
         }
       </style>
     </head><body>
