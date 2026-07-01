@@ -77,6 +77,7 @@ export default function Inventory() {
   const [kitSearch, setKitSearch]       = useState('')
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
+  const [showDetailEvents, setShowDetailEvents] = useState(false)
   const [qrUrl, setQrUrl] = useState(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
@@ -92,6 +93,28 @@ export default function Inventory() {
     const q = query(collection(db, 'items'), orderBy('name'))
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
+
+  // Arrivo dallo Scanner con un codice già identificato → apri direttamente il modal dettaglio
+  useEffect(() => {
+    if (!navState?.openItemId || items.length === 0) return
+    const found = items.find(i => i.id === navState.openItemId)
+    if (found) openDetail(found)
+    navigate('.', { replace: true, state: {} })
+  }, [navState?.openItemId, items])
+
+  // Eventi — per rintracciare in quale evento/lista si trova un oggetto "fuori"
+  const [events, setEvents] = useState([])
+  useEffect(() => {
+    const q = query(collection(db, 'events'), orderBy('date'))
+    return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [])
+
+  // Eventi in cui l'oggetto attualmente selezionato è caricato e non ancora rientrato
+  const detailEvents = showDetail
+    ? events.filter(ev => (ev.items || []).some(i =>
+        (i.id === showDetail.id || i.itemRef === showDetail.id) && i.loaded && !i.returned
+      ))
+    : []
 
   // Migrazione automatica vecchie categorie → nuove (gira una volta sola)
   useEffect(() => {
@@ -163,11 +186,80 @@ export default function Inventory() {
   const printCode = () => {
     const code = showDetail.code || generateItemCode(showDetail.id)
     const w = window.open('', '_blank')
-    w.document.write(`<html><body style="text-align:center;padding:20px;font-family:sans-serif">
-      <h2>${showDetail.name}</h2>
-      <p style="color:#666">${showDetail.brand || ''} ${showDetail.model || ''}</p>
-      <img src="${qrUrl}" style="width:200px;margin:10px 0"/>
-      <p style="font-family:monospace;font-size:18px;font-weight:bold;margin:10px 0">${code}</p>
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Etichetta</title>
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: Arial, sans-serif; background:#fff; }
+        .label {
+          width: 60mm;
+          height: 38mm;
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 0.2mm;
+          padding: 1.3mm 2mm;
+          border: 0.3mm solid #ccc;
+          page-break-inside: avoid;
+          overflow: hidden;
+          color: #000;
+        }
+        .qr {
+          width: 35mm;
+          height: 35mm;
+          flex-shrink: 0;
+          image-rendering: pixelated;
+        }
+        .info {
+          flex: 1;
+          min-width: 0;
+          text-align: left;
+        }
+        .name {
+          font-size: 9.5pt;
+          font-weight: 800;
+          line-height: 1.15;
+          word-break: break-word;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          color: #000;
+        }
+        .loc {
+          font-size: 8.5pt;
+          font-weight: 800;
+          color: #000;
+          line-height: 1.15;
+          word-break: break-word;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          margin-top: 1.2mm;
+        }
+        .code {
+          font-size: 6pt;
+          font-weight: 600;
+          color: #000;
+          letter-spacing: 0.5px;
+          margin-top: 1.2mm;
+        }
+        @media print {
+          body { margin: 0; }
+          .label { border-color: transparent; }
+          @page { margin: 3mm; size: 60mm 38mm; }
+        }
+      </style>
+    </head><body>
+      <div class="label">
+        <img src="${qrUrl}" class="qr" />
+        <div class="info">
+          <div class="name">${showDetail.name}</div>
+          ${showDetail.location ? `<div class="loc">📌 ${showDetail.location}</div>` : ''}
+          <div class="code">${code}</div>
+        </div>
+      </div>
       <script>window.onload=()=>window.print()</script>
     </body></html>`)
     w.document.close()
@@ -538,86 +630,141 @@ export default function Inventory() {
         <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
           <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
             <button className="close-btn" onClick={detailDrag.close}>✕</button>
-            <div style={{ textAlign:'center', marginBottom:20 }}>
-              <div style={{ fontSize:40, marginBottom:8 }}>{ICONS[showDetail.category] || '📦'}</div>
-              <h2 style={{ margin:0 }}>{showDetail.name}</h2>
-              {(showDetail.brand || showDetail.model) && <p style={{ color:'var(--text2)', marginTop:4 }}>{showDetail.brand} {showDetail.model}</p>}
-            </div>
-            <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
-                <span style={{ fontWeight:800, fontSize:18 }}>
-                  {showDetail.category === 'Consumabili'
-                    ? (showDetail.availableQty ?? showDetail.totalQty)
-                    : `${showDetail.availableQty}/${showDetail.totalQty}`
-                  }
-                </span>
-              </div>
-              {/* Barra segmentata: disponibili / fuori / rotti */}
-              <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
-                <div style={{ background:'var(--green)', width:`${((showDetail.availableQty||0)/(showDetail.totalQty||1))*100}%`, transition:'width 0.3s' }} />
-                {showDetail.brokenQty > 0 && (
-                  <div style={{ background:'var(--red)', width:`${((showDetail.brokenQty||0)/(showDetail.totalQty||1))*100}%` }} />
-                )}
-              </div>
-              <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
-                <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} disponibili</span>
-                {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
-                  <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} fuori</span>
-                )}
-                {showDetail.brokenQty > 0 && (
-                  <span style={{ fontSize:12, color:'var(--red)' }}>● {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}</span>
-                )}
-              </div>
-            </div>
-            <div className="code-preview" style={{ marginBottom:14 }}>
-              {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>Generazione...</p></div>}
-              <p style={{ color:'#333', fontFamily:'monospace', fontWeight:700, fontSize:16 }}>{showDetail.code || generateItemCode(showDetail.id)}</p>
-              <svg id="barcode-svg"></svg>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              <button onClick={printCode} className="btn btn-secondary">🖨 Stampa</button>
-              <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
-            </div>
-            {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
-            {(showDetail.brokenQty||0) > 0 && (
-              <button
-                onClick={async () => {
-                  const currentBroken = showDetail.brokenQty || 0
-                  const newBroken = Math.max(0, currentBroken - 1)
-                  const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
-                  const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
-                  await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
-                  setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
-                }}
-                style={{ width:'100%', marginTop:10, background:'rgba(248,113,113,0.15)', border:'1px solid rgba(248,113,113,0.4)', color:'var(--red)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
-              >
-                <Wrench size={15} /> {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}
-              </button>
-            )}
-            {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
-            {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
-              <button
-                onClick={async () => {
-                  const newAvailable = (showDetail.totalQty||0) - (showDetail.brokenQty||0)
-                  await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
-                  setShowDetail(d => ({ ...d, availableQty: newAvailable }))
-                }}
-                style={{ width:'100%', marginTop:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
-              >
-                Ripristina giacenza ({(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} risultano fuori)
-              </button>
-            )}
-            {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
-            {showDetail.location && (
-              <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ color:'var(--blue)' }}><Pin size={17} /></span>
-                <div>
-                  <p style={{ color:'var(--text2)', fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>Posizione magazzino</p>
-                  <p style={{ color:'var(--blue)', fontWeight:700, fontSize:15, marginTop:2 }}>{showDetail.location}</p>
+
+            {/* Wrapper scorrevole: pannello principale + pannello "dove si trova" */}
+            <div style={{ overflow:'hidden' }}>
+              <div style={{
+                display:'flex', alignItems:'flex-start',
+                transform: showDetailEvents ? 'translateX(-100%)' : 'translateX(0)',
+                transition:'transform 0.32s cubic-bezier(0.32,0.72,0,1)',
+              }}>
+
+                {/* ── Pannello principale ── */}
+                <div style={{ width:'100%', flexShrink:0 }}>
+                  <div style={{ textAlign:'center', marginBottom:20 }}>
+                    <div style={{ fontSize:40, marginBottom:8 }}>{ICONS[showDetail.category] || '📦'}</div>
+                    <h2 style={{ margin:0 }}>{showDetail.name}</h2>
+                    {(showDetail.brand || showDetail.model) && <p style={{ color:'var(--text2)', marginTop:4 }}>{showDetail.brand} {showDetail.model}</p>}
+                  </div>
+                  <div
+                    onClick={() => detailEvents.length > 0 && setShowDetailEvents(true)}
+                    style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor: detailEvents.length > 0 ? 'pointer' : 'default' }}
+                  >
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                      <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
+                      <span style={{ fontWeight:800, fontSize:18 }}>
+                        {showDetail.category === 'Consumabili'
+                          ? (showDetail.availableQty ?? showDetail.totalQty)
+                          : `${showDetail.availableQty}/${showDetail.totalQty}`
+                        }
+                      </span>
+                    </div>
+                    {/* Barra segmentata: disponibili / fuori / rotti */}
+                    <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
+                      <div style={{ background:'var(--green)', width:`${((showDetail.availableQty||0)/(showDetail.totalQty||1))*100}%`, transition:'width 0.3s' }} />
+                      {showDetail.brokenQty > 0 && (
+                        <div style={{ background:'var(--red)', width:`${((showDetail.brokenQty||0)/(showDetail.totalQty||1))*100}%` }} />
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} disponibili</span>
+                      {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
+                        <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} fuori</span>
+                      )}
+                      {showDetail.brokenQty > 0 && (
+                        <span style={{ fontSize:12, color:'var(--red)' }}>● {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}</span>
+                      )}
+                    </div>
+                    {detailEvents.length > 0 && (
+                      <p style={{ fontSize:11, color:'var(--accent)', marginTop:8, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
+                        🔍 Tocca per vedere {detailEvents.length === 1 ? "l'evento" : "gli eventi"} dove si trova
+                        <span style={{ marginLeft:'auto' }}>→</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="code-preview" style={{ marginBottom:14 }}>
+                    {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>Generazione...</p></div>}
+                    <p style={{ color:'#333', fontFamily:'monospace', fontWeight:700, fontSize:16 }}>{showDetail.code || generateItemCode(showDetail.id)}</p>
+                    <svg id="barcode-svg"></svg>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <button onClick={printCode} className="btn btn-secondary">🖨 Stampa</button>
+                    <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
+                  </div>
+                  {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
+                  {(showDetail.brokenQty||0) > 0 && (
+                    <button
+                      onClick={async () => {
+                        const currentBroken = showDetail.brokenQty || 0
+                        const newBroken = Math.max(0, currentBroken - 1)
+                        const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
+                        const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
+                        await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
+                        setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
+                      }}
+                      style={{ width:'100%', marginTop:10, background:'rgba(248,113,113,0.15)', border:'1px solid rgba(248,113,113,0.4)', color:'var(--red)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+                    >
+                      <Wrench size={15} /> {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}
+                    </button>
+                  )}
+                  {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
+                  {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
+                    <button
+                      onClick={async () => {
+                        const newAvailable = (showDetail.totalQty||0) - (showDetail.brokenQty||0)
+                        await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
+                        setShowDetail(d => ({ ...d, availableQty: newAvailable }))
+                      }}
+                      style={{ width:'100%', marginTop:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
+                    >
+                      Ripristina giacenza ({(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} risultano fuori)
+                    </button>
+                  )}
+                  {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
+                  {showDetail.location && (
+                    <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ color:'var(--blue)' }}><Pin size={17} /></span>
+                      <div>
+                        <p style={{ color:'var(--text2)', fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>Posizione magazzino</p>
+                        <p style={{ color:'var(--blue)', fontWeight:700, fontSize:15, marginTop:2 }}>{showDetail.location}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* ── Pannello "dove si trova" ── */}
+                <div style={{ width:'100%', flexShrink:0, paddingLeft:2 }}>
+                  <button
+                    onClick={() => setShowDetailEvents(false)}
+                    className="btn-no-anim"
+                    style={{ display:'flex', alignItems:'center', gap:6, background:'transparent', color:'var(--text2)', fontWeight:700, fontSize:14, marginBottom:16 }}
+                  >
+                    ← Indietro
+                  </button>
+                  <h2 style={{ marginBottom:4 }}>Dove si trova</h2>
+                  <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{showDetail.name}</p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {detailEvents.map(ev => (
+                      <button
+                        key={ev.id}
+                        onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
+                        style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                      >
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                          <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
+                            {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
+                            {ev.location ? ` · ${ev.location}` : ''}
+                          </p>
+                        </div>
+                        <span style={{ color:'var(--text2)' }}>→</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

@@ -59,7 +59,9 @@ export default function Dashboard({ toggleTheme, theme }) {
   const [items, setItems]   = useState([])
   const [tasks, setTasks]   = useState([])
   const [events, setEvents] = useState([])
-  const [weather, setWeather] = useState(null)
+  const [weather, setWeather] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
+  })
 
   useEffect(() => {
     const u1 = onSnapshot(query(collection(db, 'items'),  orderBy('name')),  s => setItems(s.docs.map(d => ({ id:d.id,...d.data() }))))
@@ -71,7 +73,11 @@ export default function Dashboard({ toggleTheme, theme }) {
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')
       .then(r => r.json())
-      .then(d => setWeather({ code: d.current.weather_code, temp: Math.round(d.current.temperature_2m) }))
+      .then(d => {
+        const w = { code: d.current.weather_code, temp: Math.round(d.current.temperature_2m) }
+        setWeather(w)
+        localStorage.setItem('weatherCache', JSON.stringify(w))
+      })
       .catch(() => {})
   }, [])
 

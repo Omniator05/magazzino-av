@@ -18,7 +18,9 @@ const greeting = () => {
 export default function WorkerHome() {
   const { profile, logout } = useAuth()
   const [events, setEvents] = useState([])
-  const [weather, setWeather] = useState(null)
+  const [weather, setWeather] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
+  })
   const navigate = useNavigate()
   const today = new Date().toISOString().split('T')[0]
 
@@ -32,7 +34,11 @@ export default function WorkerHome() {
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')
       .then(r => r.json())
-      .then(d => setWeather({ code: d.current.weather_code, temp: Math.round(d.current.temperature_2m) }))
+      .then(d => {
+        const w = { code: d.current.weather_code, temp: Math.round(d.current.temperature_2m) }
+        setWeather(w)
+        localStorage.setItem('weatherCache', JSON.stringify(w))
+      })
       .catch(() => {})
   }, [])
 

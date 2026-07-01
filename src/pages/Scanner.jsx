@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { Pin, Check, Warn } from '../components/Icon'
 
-const ICONS = {'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥','Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈','Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮','Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜','Altro':'📦'}
-
 export default function Scanner() {
+  const navigate = useNavigate()
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -48,9 +48,16 @@ export default function Scanner() {
           await html5QrCodeRef.current.stop()
           setScanning(false)
           const res = await lookupCode(decodedText)
-          setResult(res)
-          setScanToast({ ...res, ts: Date.now() })
-          setTimeout(() => setScanToast(null), 3000)
+          if (res.found) {
+            if (navigator.vibrate) navigator.vibrate([60, 40, 120])
+            setScanToast({ ...res, ts: Date.now() })
+            setTimeout(() => navigate('/inventory', { state: { openItemId: res.item.id } }), 650)
+          } else {
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+            setResult(res)
+            setScanToast({ ...res, ts: Date.now() })
+            setTimeout(() => setScanToast(null), 3000)
+          }
         },
         () => {}
       )
@@ -109,10 +116,19 @@ export default function Scanner() {
       <div style={{ padding:'20px 16px' }}>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', overflow:'hidden', marginBottom:16 }}>
           {!scanning ? (
-            <div style={{ padding:'30px 20px', textAlign:'center' }}>
-              <div style={{ fontSize:64, marginBottom:12 }}>📷</div>
-              <p style={{ color:'var(--text2)', marginBottom:20, fontSize:15 }}>Scansiona per identificare un articolo e vederne la disponibilità</p>
-              <button onClick={startScanner} className="btn btn-primary" style={{ minWidth:200 }}>Avvia fotocamera</button>
+            <div style={{ padding:'16px' }}>
+              <p style={{ color:'var(--text2)', marginBottom:14, fontSize:14, textAlign:'center' }}>
+                Scansiona il QR o il codice a barre di un articolo per aprirne subito la scheda nel magazzino
+              </p>
+              <button onClick={startScanner} style={{
+                width:'100%', padding:'40px 16px', borderRadius:14,
+                background:'rgba(79,195,247,0.08)', border:'2px dashed rgba(79,195,247,0.3)',
+                display:'flex', flexDirection:'column', alignItems:'center', gap:10,
+              }}>
+                <span style={{ fontSize:36 }}>📷</span>
+                <span style={{ fontWeight:800, fontSize:16, color:'var(--text)' }}>Avvia fotocamera</span>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>Inquadra il QR o il codice a barre</span>
+              </button>
             </div>
           ) : (
             <div style={{ position:'relative' }}>
@@ -127,36 +143,14 @@ export default function Scanner() {
 
         {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:'var(--radius)', padding:'14px 16px', color:'var(--red)', marginBottom:16, fontSize:14 }}>{error}</div>}
 
-        {result && (
+        {result && !result.found && (
           <div style={{ marginBottom:16 }}>
-            <div style={{ background: result.found ? 'rgba(105,240,174,0.1)' : 'rgba(255,82,82,0.1)', border:`1px solid ${result.found ? 'rgba(105,240,174,0.3)' : 'rgba(255,82,82,0.3)'}`, borderRadius:'var(--radius)', padding:'16px' }}>
-              {result.found ? (
-                <>
-                  <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
-                    <div style={{ fontSize:36 }}>{ICONS[result.item.category] || '📦'}</div>
-                    <div>
-                      <p style={{ fontWeight:800, fontSize:18 }}>{result.item.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:13 }}>{result.item.brand} {result.item.model}</p>
-                    </div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                    <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 12px' }}>
-                      <p style={{ color:'var(--text2)', fontSize:12 }}>Categoria</p>
-                      <p style={{ fontWeight:700, fontSize:14 }}>{result.item.category}</p>
-                    </div>
-                    <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 12px' }}>
-                      <p style={{ color:'var(--text2)', fontSize:12 }}>Disponibili</p>
-                      <p style={{ fontWeight:800, fontSize:18, color: (result.item.availableQty || 0) === 0 ? 'var(--accent)' : 'var(--green)' }}>{result.item.availableQty ?? result.item.totalQty}/{result.item.totalQty}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div style={{ textAlign:'center', padding:'10px' }}>
-                  <p style={{ fontSize:32, marginBottom:8 }}>❓</p>
-                  <p style={{ fontWeight:700, color:'var(--red)' }}>Articolo non trovato</p>
-                  <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>Codice: <code>{result.code}</code></p>
-                </div>
-              )}
+            <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:'var(--radius)', padding:'16px' }}>
+              <div style={{ textAlign:'center', padding:'10px' }}>
+                <p style={{ fontSize:32, marginBottom:8 }}>❓</p>
+                <p style={{ fontWeight:700, color:'var(--red)' }}>Articolo non trovato</p>
+                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>Codice: <code>{result.code}</code></p>
+              </div>
             </div>
           </div>
         )}
@@ -165,9 +159,9 @@ export default function Scanner() {
           <p style={{ fontWeight:700, marginBottom:12, fontSize:15 }}>Inserimento manuale</p>
           <div style={{ display:'flex', gap:10 }}>
             <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder="Codice articolo (es. WAV-ABC12345)"
-              onKeyDown={async e => { if (e.key === 'Enter') { const r = await lookupCode(manualCode); setResult(r); setManualCode('') } }}
+              onKeyDown={async e => { if (e.key === 'Enter') { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) } }}
               style={{ fontFamily:'monospace' }} />
-            <button onClick={async () => { const r = await lookupCode(manualCode); setResult(r); setManualCode('') }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 16px' }}>Cerca</button>
+            <button onClick={async () => { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 16px' }}>Cerca</button>
           </div>
         </div>
 
