@@ -18,6 +18,7 @@ const greeting = () => {
 export default function WorkerHome() {
   const { profile, logout } = useAuth()
   const [events, setEvents] = useState([])
+  const [weather, setWeather] = useState(null)
   const navigate = useNavigate()
   const today = new Date().toISOString().split('T')[0]
 
@@ -26,6 +27,13 @@ export default function WorkerHome() {
     return onSnapshot(q, snap => {
       setEvents(snap.docs.map(d => ({ id:d.id, ...d.data() })))
     })
+  }, [])
+
+  useEffect(() => {
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')
+      .then(r => r.json())
+      .then(d => setWeather({ code: d.current.weather_code, temp: Math.round(d.current.temperature_2m) }))
+      .catch(() => {})
   }, [])
 
   const name = profile?.name?.split(' ')[0] || profile?.username || ''
@@ -80,10 +88,23 @@ export default function WorkerHome() {
   const _cx = 5 + _prog * 90
   const _cy = 82 - Math.sin(_prog * Math.PI) * 72
 
-  const _bg = _h >= 5 && _h < 7   ? 'linear-gradient(135deg,#2a3560 0%,#18234a 100%)' // alba
-            : _h >= 7 && _h < 17  ? 'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)' // giorno
-            : _h >= 17 && _h < 20 ? 'linear-gradient(135deg,#3a2f58 0%,#201730 100%)' // tramonto
-                                  : 'linear-gradient(135deg,#1a2240 0%,#0d1525 100%)' // notte
+  const _bg = _h >= 5 && _h < 7   ? 'linear-gradient(135deg,#2a3560 0%,#18234a 100%)'
+            : _h >= 7 && _h < 17  ? 'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)'
+            : _h >= 17 && _h < 20 ? 'linear-gradient(135deg,#3a2f58 0%,#201730 100%)'
+                                  : 'linear-gradient(135deg,#1a2240 0%,#0d1525 100%)'
+
+  const _wc = weather?.code ?? -1
+  const _wCond = _wc < 0 ? 'clear'
+    : _wc <= 1  ? 'clear'
+    : _wc === 2 ? 'partly'
+    : _wc === 3 ? 'overcast'
+    : _wc === 45 || _wc === 48 ? 'fog'
+    : (_wc >= 71 && _wc <= 77) ? 'snow'
+    : (_wc >= 51 && _wc <= 67) || (_wc >= 80 && _wc <= 82) ? 'rain'
+    : _wc >= 95 ? 'storm'
+    : 'clear'
+  const _showCelestial = _wCond === 'clear' || _wCond === 'partly'
+  const _cloudOpMult   = _wCond === 'overcast' ? 3 : _wCond === 'partly' ? 1.6 : 1
 
   return (
     <div className="page">
@@ -94,21 +115,20 @@ export default function WorkerHome() {
         <div style={{ position:'absolute', bottom:'-70%', left:'-5%', width:280, height:280, borderRadius:'50%', background:'radial-gradient(circle, rgba(0,0,0,0.18) 0%, transparent 65%)', animation:'whOrb2 18s ease-in-out infinite', pointerEvents:'none' }} />
 
         {/* Sole / Luna */}
-        <div style={{
-          position:'absolute', pointerEvents:'none', zIndex:0,
-          left:`${_cx}%`, top:`${_cy}%`,
-          transform:'translate(-50%,-50%)',
-          width: _isDay ? 100 : 72,
-          height: _isDay ? 100 : 72,
-          borderRadius:'50%',
-          background: _isDay
-            ? 'radial-gradient(circle, rgba(255,230,100,0.95) 0%, rgba(255,190,50,0.65) 45%, transparent 72%)'
-            : 'radial-gradient(circle, rgba(210,220,255,0.90) 0%, rgba(170,190,245,0.55) 45%, transparent 72%)',
-          filter:`blur(${_isDay ? 22 : 17}px)`,
-        }} />
+        {_showCelestial && (
+          <div style={{
+            position:'absolute', pointerEvents:'none', zIndex:0,
+            left:`${_cx}%`, top:`${_cy}%`, transform:'translate(-50%,-50%)',
+            width: _isDay ? 100 : 72, height: _isDay ? 100 : 72, borderRadius:'50%',
+            background: _isDay
+              ? 'radial-gradient(circle, rgba(255,230,100,0.95) 0%, rgba(255,190,50,0.65) 45%, transparent 72%)'
+              : 'radial-gradient(circle, rgba(210,220,255,0.90) 0%, rgba(170,190,245,0.55) 45%, transparent 72%)',
+            filter:`blur(${_isDay ? 22 : 17}px)`,
+          }} />
+        )}
 
-        {/* Stelle (notte) */}
-        {!_isDay && [
+        {/* Stelle (notte, solo con cielo sereno/parziale) */}
+        {!_isDay && _showCelestial && [
           { l:'8%',  t:'22%', s:2,   dur:'3.2s', d:'0s' },
           { l:'22%', t:'48%', s:1.5, dur:'4.6s', d:'-1.5s' },
           { l:'38%', t:'14%', s:2.5, dur:'2.9s', d:'-0.8s' },
@@ -123,17 +143,73 @@ export default function WorkerHome() {
             background:'white', animation:`whStarTwinkle ${s.dur} ease-in-out infinite ${s.d}` }} />
         ))}
 
-        {/* Nuvole (giorno) */}
-        {_isDay && [
+        {/* Nuvole (giorno o coperto) */}
+        {(_isDay || _wCond === 'overcast') && _wCond !== 'rain' && _wCond !== 'storm' && _wCond !== 'snow' && _wCond !== 'fog' && [
           { l:'-12%', t:'22%', w:88, h:26, op:0.09, dur:'28s', d:'0s' },
           { l:'35%',  t:'55%', w:68, h:20, op:0.07, dur:'40s', d:'-15s' },
           { l:'62%',  t:'8%',  w:54, h:18, op:0.08, dur:'33s', d:'-8s' },
         ].map((c,i) => (
           <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
             left:c.l, top:c.t, width:c.w, height:c.h, borderRadius:'50%',
-            background:'white', opacity:c.op, filter:'blur(9px)',
+            background:'white', opacity: Math.min(c.op * _cloudOpMult, 0.32), filter:'blur(9px)',
             animation:`whCloudDrift ${c.dur} linear infinite ${c.d}` }} />
         ))}
+
+        {/* Nuvole pioggia/temporale */}
+        {(_wCond === 'rain' || _wCond === 'storm') && [
+          { l:'-8%',  t:'-30%', w:130, h:50, op:0.55, dur:'38s', d:'0s' },
+          { l:'35%',  t:'-35%', w:110, h:44, op:0.45, dur:'50s', d:'-20s' },
+          { l:'72%',  t:'-25%', w:95,  h:38, op:0.50, dur:'42s', d:'-11s' },
+        ].map((c,i) => (
+          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
+            left:c.l, top:c.t, width:c.w, height:c.h, borderRadius:'50%',
+            background:'rgba(90,100,120,1)', opacity:c.op, filter:'blur(16px)',
+            animation:`whCloudDrift ${c.dur} linear infinite ${c.d}` }} />
+        ))}
+
+        {/* Pioggia — px assoluti per coprire tutto l'header */}
+        {(_wCond === 'rain' || _wCond === 'storm') && Array.from({length:18}, (_,i) => (
+          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:1,
+            left:`${(i*5.8+1)%100}%`, top:0,
+            width:1, height: 5+(i%3), borderRadius:1,
+            background:`rgba(180,215,255,${0.4+((i%3)*0.1)})`,
+            animation:`whRainFall ${(0.45+(i%5)*0.06).toFixed(2)}s linear infinite -${(i*0.04).toFixed(2)}s` }} />
+        ))}
+
+        {/* Fulmini */}
+        {(_wCond === 'rain' || _wCond === 'storm') && <>
+          <div style={{ position:'absolute', inset:0, zIndex:2, pointerEvents:'none', borderRadius:'inherit',
+            background:'linear-gradient(95deg, rgba(200,225,255,0.5) 0%, transparent 65%)',
+            animation:'whLightning 15s ease-out infinite 0s', opacity:0 }}>
+            <svg viewBox="0 0 30 90" width="13" height="58" style={{ position:'absolute', left:'11%', top:0 }}
+              fill="none" stroke="rgba(255,255,250,0.95)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22,0 9,34 17,34 4,90" />
+            </svg>
+          </div>
+          <div style={{ position:'absolute', inset:0, zIndex:2, pointerEvents:'none', borderRadius:'inherit',
+            background:'linear-gradient(265deg, rgba(200,225,255,0.5) 0%, transparent 65%)',
+            animation:'whLightning 21s ease-out infinite -8s', opacity:0 }}>
+            <svg viewBox="0 0 30 90" width="11" height="52" style={{ position:'absolute', right:'13%', top:'6%' }}
+              fill="none" stroke="rgba(255,255,250,0.95)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="8,0 21,32 13,32 26,90" />
+            </svg>
+          </div>
+        </>}
+
+        {/* Neve */}
+        {_wCond === 'snow' && Array.from({length:10}, (_,i) => (
+          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
+            left:`${(i*10.5+3)%100}%`, top:'-8%',
+            width: 3+(i%3), height: 3+(i%3), borderRadius:'50%',
+            background:'rgba(255,255,255,0.85)', filter:'blur(1px)',
+            animation:`whSnowFall ${(2.2+(i%4)*0.5).toFixed(2)}s linear infinite -${(i*0.22).toFixed(2)}s` }} />
+        ))}
+
+        {/* Nebbia */}
+        {_wCond === 'fog' && (
+          <div style={{ position:'absolute', inset:0, zIndex:0, pointerEvents:'none',
+            background:'rgba(200,210,230,0.22)', borderRadius:'inherit' }} />
+        )}
 
         {/* Riga principale */}
         <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
@@ -145,7 +221,7 @@ export default function WorkerHome() {
             <div style={{ minWidth:0 }}>
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.8)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{greeting()},</p>
               <h1 style={{ fontSize:28, fontWeight:800, color:'white', lineHeight:1.08, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{displayName}</h1>
-              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}</p>
+              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
             </div>
           </div>
           <LogoutButton name={displayName} style={{ flexShrink:0, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)', color:'white', borderRadius:12, padding:'9px 16px', fontSize:13, fontWeight:700, cursor:'pointer' }} />
@@ -156,7 +232,10 @@ export default function WorkerHome() {
         @keyframes whOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
         @keyframes whOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
         @keyframes whStarTwinkle { 0%,100%{opacity:0.85;transform:scale(1)} 50%{opacity:0.15;transform:scale(0.5)} }
-        @keyframes whCloudDrift { from{transform:translateX(0)} to{transform:translateX(130vw)} }
+        @keyframes whCloudDrift  { from{transform:translateX(0)} to{transform:translateX(130vw)} }
+        @keyframes whRainFall    { from{transform:translateY(-10px)} to{transform:translateY(180px)} }
+        @keyframes whSnowFall    { 0%{transform:translateY(-10px) translateX(0)} 50%{transform:translateY(90px) translateX(12px)} 100%{transform:translateY(190px) translateX(0)} }
+        @keyframes whLightning   { 0%,86%,100%{opacity:0} 88%{opacity:1} 89%{opacity:0} 91%{opacity:0.5} 92%{opacity:0} }
 
         /* ── Bordo gradiente rotante + glow sulle card evento ── */
         @property --evtAngle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
