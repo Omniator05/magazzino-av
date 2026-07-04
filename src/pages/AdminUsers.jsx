@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
+import { useModalDrag } from '../hooks/useModalDrag'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, auth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
@@ -20,17 +22,22 @@ export default function AdminUsers() {
   const [users, setUsers]             = useState([])
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
-  const [form, setForm]               = useState({ name:'', username:'', password:'', email:'' })
-  const [pwSection, setPwSection]     = useState(false)
+  const createDrag = useModalDrag(() => setShowCreate(false))
+  const detailDrag  = useModalDrag(() => setShowDetail(null))
+  useModalScrollLock(showCreate || !!showDetail)
+  const [editMode, setEditMode]       = useState(false)
+  const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker' })
   const [newPw, setNewPw]             = useState('')
   const [adminPw, setAdminPw]         = useState('')
-  const [editUsername, setEditUsername] = useState(false)
   const [newUsername, setNewUsername]   = useState('')
   const [error, setError]             = useState('')
   const [detailMsg, setDetailMsg]     = useState({ text:'', type:'' })
   const [loading, setLoading]         = useState(false)
   const [toast, setToast]             = useState('')
   const [detailUnavail, setDetailUnavail] = useState([])
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false)
+  const [orgConfig, setOrgConfig]     = useState({ eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' })
+  const [newCustomDate, setNewCustomDate] = useState('')
 
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
@@ -72,7 +79,7 @@ export default function AdminUsers() {
         username,
         internalEmail,
         email:         form.email.trim().toLowerCase() || null,
-        role:          'worker',
+        role:          form.role || 'worker',
         active:        true,
         createdAt:     new Date().toISOString(),
         createdBy:     user.uid,
@@ -88,7 +95,7 @@ export default function AdminUsers() {
         setTimeout(() => logout(), 2500)
       }
 
-      setForm({ name:'', username:'', password:'', email:'' })
+      setForm({ name:'', username:'', password:'', email:'', role:'worker' })
       setShowCreate(false)
     } catch(e) {
       const msgs = {
@@ -111,19 +118,42 @@ export default function AdminUsers() {
     await updateDoc(doc(db, 'profiles', showDetail.id), { active: !isActive })
     setShowDetail(d => ({ ...d, active: !isActive }))
     clearDetailMsg()
+    showToast(isActive ? '✓ Accesso disattivato' : '✓ Accesso riattivato')
   }
 
-  // ── Promuovi / declassa ruolo ─────────────────────────────────
-  const toggleRole = async () => {
-    const newRole = showDetail.role === 'admin' ? 'worker' : 'admin'
+  // ── Cambia ruolo (Admin / Magazziniere / Organizzatore) ──
+  const ROLE_LABELS = { admin: 'Amministratore', worker: 'Magazziniere', 'organizzatore-brasserie': 'Organizzatore' }
+  const changeRole = async (newRole) => {
+    if (newRole === showDetail.role) return
     if (!(await confirm({
       title: 'Cambia ruolo',
-      message: `Vuoi rendere ${showDetail.name} ${newRole === 'admin' ? 'Amministratore' : 'Magazziniere'}?`,
+      message: `Vuoi rendere ${showDetail.name} ${ROLE_LABELS[newRole]}?`,
       confirmLabel: 'Conferma',
     }))) return
     await updateDoc(doc(db, 'profiles', showDetail.id), { role: newRole })
     setShowDetail(d => ({ ...d, role: newRole }))
-    setDetailMsg({ text: `${showDetail.name} è ora ${newRole === 'admin' ? 'Amministratore' : 'Magazziniere'}.`, type:'success' })
+    clearDetailMsg()
+    setRoleMenuOpen(false)
+    showToast(`✓ ${showDetail.name} è ora ${ROLE_LABELS[newRole]}`)
+  }
+
+  // ── Configurazione evento organizzatore (nome + frequenza) ──────
+  const WEEKDAY_NAMES = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
+  const saveOrgConfig = async () => {
+    if (!orgConfig.eventName.trim()) { setDetailMsg({ text:'Inserisci il nome dell\'evento.', type:'error' }); return }
+    const cleaned = { ...orgConfig, eventName: orgConfig.eventName.trim() }
+    await updateDoc(doc(db, 'profiles', showDetail.id), { organizerConfig: cleaned })
+    setShowDetail(d => ({ ...d, organizerConfig: cleaned }))
+    clearDetailMsg()
+    showToast('✓ Configurazione evento salvata')
+  }
+  const addCustomDate = () => {
+    if (!newCustomDate || orgConfig.customDates.includes(newCustomDate)) return
+    setOrgConfig(c => ({ ...c, customDates: [...c.customDates, newCustomDate].sort() }))
+    setNewCustomDate('')
+  }
+  const removeCustomDate = (d) => {
+    setOrgConfig(c => ({ ...c, customDates: c.customDates.filter(x => x !== d) }))
   }
 
   // ── Rimuovi indisponibilità ────────────────────────────────────
@@ -164,8 +194,9 @@ export default function AdminUsers() {
           pendingPassword: btoa(newPw),
           pendingPasswordSetAt: new Date().toISOString(),
         })
-        setDetailMsg({ text: `Nuova password salvata. Verrà applicata al prossimo accesso di ${showDetail.name}.`, type:'success' })
-        setNewPw(''); setAdminPw(''); setPwSection(false)
+        clearDetailMsg()
+        setNewPw(''); setAdminPw('')
+        showToast(`✓ Nuova password salvata, verrà applicata al prossimo accesso di ${showDetail.name}`)
       } catch(e) {
         setDetailMsg({ text: 'Password admin non corretta o errore di connessione.', type:'error' })
       } finally { setLoading(false) }
@@ -174,16 +205,17 @@ export default function AdminUsers() {
 
     // Rientra come admin
     try { await signInWithEmailAndPassword(auth, adminEmail, adminPw) } catch(e) {}
-    setDetailMsg({ text: `Password di ${showDetail.name} aggiornata!`, type:'success' })
-    setNewPw(''); setAdminPw(''); setPwSection(false)
+    clearDetailMsg()
+    setNewPw(''); setAdminPw('')
     setLoading(false)
+    showToast(`✓ Password di ${showDetail.name} aggiornata`)
   }
 
   // ── Modifica username ─────────────────────────────────────────
   const saveUsername = async () => {
     const cleaned = newUsername.toLowerCase().trim().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')
     if (!cleaned) { setDetailMsg({ text:'Il nome utente non può essere vuoto.', type:'error' }); return }
-    if (cleaned === showDetail.username) { setEditUsername(false); return }
+    if (cleaned === showDetail.username) return
     if (users.some(u => u.username === cleaned && u.id !== showDetail.id)) {
       setDetailMsg({ text:'Nome utente già in uso da un altro account.', type:'error' }); return
     }
@@ -196,8 +228,8 @@ export default function AdminUsers() {
       internalEmail: newInternalEmail,
     })
     setShowDetail(d => ({ ...d, username: cleaned, internalEmail: newInternalEmail }))
-    setEditUsername(false)
-    setDetailMsg({ text: `Nome utente aggiornato a @${cleaned}.`, type:'success' })
+    clearDetailMsg()
+    showToast(`✓ Nome utente aggiornato a @${cleaned}`)
   }
 
   // ── Elimina account ───────────────────────────────────────────
@@ -216,45 +248,48 @@ export default function AdminUsers() {
     showToast(`Account di ${name} eliminato.`)
   }
 
-  const workers = users.filter(u => u.role === 'worker')
-  const admins  = users.filter(u => u.role === 'admin')
+  const workers   = users.filter(u => u.role === 'worker')
+  const admins    = users.filter(u => u.role === 'admin')
+  const organizers = users.filter(u => u.role === 'organizzatore-brasserie')
 
-  const UserRow = ({ u }) => (
-    <div className="item-row" onClick={() => { setShowDetail(u); setPwSection(false); clearDetailMsg(); setNewPw(''); setAdminPw('') }} style={{ cursor:'pointer' }}>
-      <div className="item-icon" style={{
-        background: u.role === 'admin' ? 'rgba(233,69,96,0.15)' : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
-        color: u.role === 'admin' ? 'var(--accent)' : u.active !== false ? 'var(--blue)' : 'var(--text2)',
-        fontWeight: 800, fontSize: 18,
-      }}>
-        {u.avatar || (u.name || u.username || '?').charAt(0).toUpperCase()}
-      </div>
-      <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)' }}>{u.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:13 }}>@{u.username}</p>
-      </div>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <span className="badge" style={{
-          background: u.role === 'admin' ? 'rgba(233,69,96,0.15)' : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
-          color: u.role === 'admin' ? 'var(--accent)' : u.active !== false ? 'var(--blue)' : 'var(--text2)'
+  const ROLE_COLORS = {
+    admin: { bg:'rgba(233,69,96,0.15)', color:'var(--accent)' },
+    'organizzatore-brasserie': { bg:'rgba(155,89,224,0.15)', color:'#9b59e0' },
+  }
+
+  const UserRow = ({ u }) => {
+    const roleColor = ROLE_COLORS[u.role]
+    return (
+      <div className="item-row" onClick={() => {
+        setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setAdminPw(''); setRoleMenuOpen(false)
+        setOrgConfig(u.organizerConfig || { eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' })
+      }} style={{ cursor:'pointer' }}>
+        <div className="item-icon" style={{
+          background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
+          color: roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)',
+          fontWeight: 800, fontSize: 18,
         }}>
-          {u.role === 'admin' ? 'Admin' : u.active !== false ? 'Attivo' : 'Disattivato'}
-        </span>
-        <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
+          {u.avatar || (u.name || u.username || '?').charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)' }}>{u.name}</p>
+          <p style={{ color:'var(--text2)', fontSize:13 }}>@{u.username}</p>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span className="badge" style={{
+            background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
+            color: roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
+          }}>
+            {u.role === 'admin' ? 'Admin' : u.role === 'organizzatore-brasserie' ? 'Organizzatore' : u.active !== false ? 'Attivo' : 'Disattivato'}
+          </span>
+          <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="page users-page">
-      <style>{`
-        /* Hover sobrio sui bottoni d'azione di questa pagina (no lift/ombra esagerati) */
-        .users-page button:not(.btn):not(:disabled):hover {
-          transform: none;
-          box-shadow: none;
-          filter: brightness(0.97);
-        }
-        .users-page button:not(.btn):not(:disabled):active { transform: scale(0.98); }
-      `}</style>
       {/* Toast globale */}
       {toast && (
         <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
@@ -280,7 +315,7 @@ export default function AdminUsers() {
         )}
 
         <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>Magazzinieri</p>
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px', overflow:'hidden' }}>
+        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
           {workers.length === 0
             ? <div className="empty-state" style={{ padding:'30px' }}>
                 <p style={{ color:'var(--text3)', marginBottom:4 }}><User size={34} /></p>
@@ -291,6 +326,15 @@ export default function AdminUsers() {
           }
         </div>
 
+        {organizers.length > 0 && (
+          <>
+            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>Organizzatori</p>
+            <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
+              {organizers.map(u => <UserRow key={u.id} u={u} />)}
+            </div>
+          </>
+        )}
+
         <div style={{ margin:'16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
           <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>Come funziona il login</p>
           <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>I magazzinieri accedono con il loro <strong style={{ color:'var(--text)' }}>nome utente</strong> (es. <code>marco.bianchi</code>) o con la loro <strong style={{ color:'var(--text)' }}>email</strong> se inserita, più la password impostata da te.</p>
@@ -299,9 +343,9 @@ export default function AdminUsers() {
 
       {/* ── Modal crea account ─────────────────────────────── */}
       {showCreate && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowCreate(false)}>
-          <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowCreate(false)}>✕</button>
+        <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
+          <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
+            <button className="close-btn" onClick={createDrag.close}>✕</button>
             <h2>Nuovo account</h2>
 
             {error && (
@@ -338,6 +382,13 @@ export default function AdminUsers() {
                 autoCapitalize="none"
               />
             </div>
+            <div className="form-group">
+              <label>Ruolo</label>
+              <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
+                <option value="worker">Magazziniere</option>
+                <option value="organizzatore-brasserie">Organizzatore</option>
+              </select>
+            </div>
             <div className="form-group" style={{ marginBottom:6 }}>
               <label>Password * <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(min. 6 caratteri)</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
@@ -358,146 +409,103 @@ export default function AdminUsers() {
 
       {/* ── Modal dettaglio account ────────────────────────── */}
       {showDetail && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowDetail(null)}>
-          <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowDetail(null)}>✕</button>
+        <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
+          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
+            <button className="close-btn" onClick={detailDrag.close}>✕</button>
 
-            {/* Intestazione */}
-            <div style={{ textAlign:'center', marginBottom:20 }}>
-              <div style={{
-                width:64, height:64, borderRadius:20, margin:'0 auto 12px',
-                display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:26, fontWeight:800,
-                background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.12)',
-                color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.active !== false ? 'var(--blue)' : 'var(--text2)',
-              }}>
-                {showDetail.avatar || (showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
-              </div>
-              <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
-
-              {/* Username modificabile */}
-              {!editUsername ? (
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:6 }}>
-                  <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600 }}>@{showDetail.username}</p>
-                  <button
-                    onClick={() => { setNewUsername(showDetail.username); setEditUsername(true); clearDetailMsg() }}
-                    style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:6, padding:'3px 9px', fontSize:12, fontWeight:600, display:'inline-flex', alignItems:'center', gap:5 }}
-                  >
-                    <Edit size={12} /> modifica
-                  </button>
-                </div>
-              ) : (
-                <div style={{ marginTop:8, display:'flex', gap:8, alignItems:'center', justifyContent:'center' }}>
-                  <span style={{ color:'var(--text2)', fontFamily:'monospace', fontSize:15 }}>@</span>
-                  <input
-                    value={newUsername}
-                    onChange={e => setNewUsername(e.target.value.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, ''))}
-                    style={{ fontFamily:'monospace', fontSize:14, padding:'6px 10px', maxWidth:180, textAlign:'center' }}
-                    autoFocus
-                    onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditUsername(false) }}
-                  />
-                  <button onClick={saveUsername} style={{ background:'var(--green)', color:'#fff', borderRadius:8, padding:'7px 12px', fontWeight:700, fontSize:13, display:'inline-flex', alignItems:'center' }}><Check size={15} /></button>
-                  <button onClick={() => setEditUsername(false)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:8, padding:'6px 10px', fontWeight:700, fontSize:13 }}>✕</button>
-                </div>
-              )}
-
-              {/* Email opzionale */}
-              {showDetail.email && (
-                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{showDetail.email}</p>
-              )}
-              <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:10 }}>
-                <span className="badge" style={{
-                  background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : 'rgba(79,195,247,0.15)',
-                  color: showDetail.role === 'admin' ? 'var(--accent)' : 'var(--blue)', fontSize:13, padding:'5px 14px'
-                }}>
-                  {showDetail.role === 'admin' ? 'Amministratore' : 'Magazziniere'}
-                </span>
-                <span className="badge" style={{
-                  background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
-                  color: showDetail.active !== false ? 'var(--green)' : 'var(--text2)', fontSize:13, padding:'5px 14px'
-                }}>
-                  {showDetail.active !== false ? '● Attivo' : '○ Disattivato'}
-                </span>
-              </div>
-            </div>
-
-            {/* Info creazione */}
-            {showDetail.createdAt && (
-              <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 14px', marginBottom:16, display:'flex', justifyContent:'space-between' }}>
-                <span style={{ color:'var(--text2)', fontSize:13 }}>Account creato il</span>
-                <span style={{ fontSize:13, fontWeight:600 }}>{new Date(showDetail.createdAt).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
-              </div>
-            )}
-
-            {/* Indisponibilità (solo worker) */}
-            {showDetail.role === 'worker' && detailUnavail.length > 0 && (
-              <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Indisponibilità segnalate</p>
-                {[...detailUnavail].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(u => (
-                  <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
-                    <div>
-                      <p style={{ fontWeight:700, fontSize:13 }}>
-                        {u.startDate === u.endDate
-                          ? new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
-                          : `${new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate).toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
-                        }
-                      </p>
-                      {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
-                    </div>
-                    <button onClick={() => removeUnavailability(u.id)} style={{ color:'var(--red)', fontSize:12, fontWeight:700, flexShrink:0 }}>Rimuovi</button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Messaggio feedback */}
-            {detailMsg.text && (
-              <div style={{
-                background: detailMsg.type === 'error' ? 'rgba(255,82,82,0.1)' : 'rgba(105,240,174,0.1)',
-                border: `1px solid ${detailMsg.type === 'error' ? 'rgba(255,82,82,0.3)' : 'rgba(105,240,174,0.3)'}`,
-                color: detailMsg.type === 'error' ? 'var(--red)' : 'var(--green)',
-                borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13, lineHeight:1.5
-              }}>
-                {detailMsg.text}
-              </div>
-            )}
-
-            {/* Azioni stato + ruolo */}
-            <div style={{ display:'grid', gridTemplateColumns: showDetail.id !== user.uid ? '1fr 1fr' : '1fr', gap:10, marginBottom:16 }}>
-              <button onClick={toggleActive} style={{
-                background: showDetail.active !== false ? 'rgba(255,82,82,0.1)' : 'rgba(105,240,174,0.1)',
-                color: showDetail.active !== false ? 'var(--red)' : 'var(--green)',
-                borderRadius:10, padding:'12px', fontWeight:700, fontSize:13,
-                display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7
-              }}>
-                {showDetail.active !== false ? <><Warn size={15} /> Disattiva accesso</> : <><Check size={15} /> Riattiva accesso</>}
+            {editMode && (
+              <button onClick={() => setEditMode(false)} className="btn-no-anim" style={{ background:'transparent', display:'flex', alignItems:'center', gap:6, color:'var(--text2)', fontWeight:700, fontSize:14, marginBottom:14 }}>
+                ← Indietro
               </button>
-              {showDetail.id !== user.uid && (
-                <button onClick={toggleRole}
-                  className={showDetail.role === 'admin' ? '' : 'btn-gold'}
-                  style={showDetail.role === 'admin' ? {
-                    background:'rgba(245,166,35,0.1)', color:'var(--accent2)',
-                    borderRadius:10, padding:'12px', fontWeight:700, fontSize:13
-                  } : {
-                    borderRadius:10, padding:'12px', fontWeight:700, fontSize:13
+            )}
+
+            {/* Intestazione — in modifica solo il nome, altrimenti tutti i dati principali */}
+            {!editMode ? (
+              <div style={{ textAlign:'center', marginBottom:20 }}>
+                <div style={{
+                  width:64, height:64, borderRadius:20, margin:'0 auto 12px',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize:26, fontWeight:800,
+                  background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.12)',
+                  color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.active !== false ? 'var(--blue)' : 'var(--text2)',
+                }}>
+                  {showDetail.avatar || (showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
+                </div>
+                <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
+                <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>@{showDetail.username}</p>
+
+                {showDetail.email && (
+                  <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{showDetail.email}</p>
+                )}
+                <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:10 }}>
+                  <span className="badge" style={{
+                    background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.role === 'organizzatore-brasserie' ? 'rgba(155,89,224,0.15)' : 'rgba(79,195,247,0.15)',
+                    color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.role === 'organizzatore-brasserie' ? '#9b59e0' : 'var(--blue)', fontSize:13, padding:'5px 14px'
                   }}>
-                  {showDetail.role === 'admin' ? 'Rendi Magazziniere' : 'Rendi Admin'}
+                    {showDetail.role === 'admin' ? 'Amministratore' : showDetail.role === 'organizzatore-brasserie' ? 'Organizzatore' : 'Magazziniere'}
+                  </span>
+                  <span className="badge" style={{
+                    background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
+                    color: showDetail.active !== false ? 'var(--green)' : 'var(--text2)', fontSize:13, padding:'5px 14px'
+                  }}>
+                    {showDetail.active !== false ? '● Attivo' : '○ Disattivato'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <h2 style={{ margin:'0 0 20px', fontSize:22, textAlign:'center' }}>{showDetail.name}</h2>
+            )}
+
+            {!editMode ? (
+              <>
+                {/* Info creazione */}
+                {showDetail.createdAt && (
+                  <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 14px', marginBottom:16, display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'var(--text2)', fontSize:13 }}>Account creato il</span>
+                    <span style={{ fontSize:13, fontWeight:600 }}>{new Date(showDetail.createdAt).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => { setEditMode(true); setNewUsername(showDetail.username); clearDetailMsg() }}
+                  className="btn btn-secondary btn-full"
+                  style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+                >
+                  <Edit size={16} /> Modifica
                 </button>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                {/* Messaggio feedback */}
+                {detailMsg.text && (
+                  <div style={{
+                    background: detailMsg.type === 'error' ? 'rgba(255,82,82,0.1)' : 'rgba(105,240,174,0.1)',
+                    border: `1px solid ${detailMsg.type === 'error' ? 'rgba(255,82,82,0.3)' : 'rgba(105,240,174,0.3)'}`,
+                    color: detailMsg.type === 'error' ? 'var(--red)' : 'var(--green)',
+                    borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13, lineHeight:1.5
+                  }}>
+                    {detailMsg.text}
+                  </div>
+                )}
 
-            {/* Cambio password */}
-            <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-              <button
-                onClick={() => { setPwSection(!pwSection); clearDetailMsg(); setNewPw(''); setAdminPw('') }}
-                style={{ background:'transparent', color:'var(--text)', fontWeight:700, fontSize:14, width:'100%', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center' }}
-              >
-                <span>Cambia password</span>
-                <span style={{ color:'var(--text2)', fontSize:18 }}>{pwSection ? '▲' : '▼'}</span>
-              </button>
+                {/* Nome utente */}
+                <div className="form-group">
+                  <label>Nome utente</label>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <span style={{ color:'var(--text2)', fontFamily:'monospace', fontSize:15 }}>@</span>
+                    <input
+                      value={newUsername}
+                      onChange={e => setNewUsername(e.target.value.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, ''))}
+                      style={{ fontFamily:'monospace', flex:1 }}
+                      onKeyDown={e => { if (e.key === 'Enter') saveUsername() }}
+                    />
+                    <button onClick={saveUsername} className="btn btn-secondary" style={{ padding:'9px 16px', flexShrink:0 }}>Salva</button>
+                  </div>
+                </div>
 
-              {pwSection && (
-                <div style={{ marginTop:12 }}>
+                {/* Cambio password — sempre aperta */}
+                <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                  <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Cambia password</p>
                   <div className="form-group">
                     <label>Nuova password</label>
                     <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Minimo 6 caratteri" />
@@ -510,19 +518,137 @@ export default function AdminUsers() {
                     {loading ? 'Salvataggio...' : <><Save size={16} /> Salva nuova password</>}
                   </button>
                 </div>
-              )}
-            </div>
 
-            {/* Elimina (non su se stesso) */}
-            {showDetail.id !== user.uid && (
-              <button onClick={deleteAccount} style={{
-                width:'100%', background:'rgba(255,82,82,0.07)',
-                color:'var(--red)', border:'1px solid rgba(255,82,82,0.2)',
-                borderRadius:10, padding:'13px', fontWeight:700, fontSize:14,
-                display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8
-              }}>
-                <Trash size={16} /> Elimina account definitivamente
-              </button>
+                {/* Cambio ruolo — menu ad hamburger */}
+                {showDetail.id !== user.uid && (
+                  <div style={{ marginBottom:16, position:'relative' }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Ruolo</p>
+                    <button onClick={() => setRoleMenuOpen(o => !o)} className="btn btn-secondary" style={{ width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ display:'flex', alignItems:'center', gap:9 }}>☰ {ROLE_LABELS[showDetail.role]}</span>
+                      <span style={{ fontSize:12 }}>{roleMenuOpen ? '▲' : '▼'}</span>
+                    </button>
+                    {roleMenuOpen && (
+                      <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,0.16)', zIndex:20, overflow:'hidden' }}>
+                        {[
+                          { key:'worker', label:'Magazziniere' },
+                          { key:'admin', label:'Admin' },
+                          { key:'organizzatore-brasserie', label:'Organizzatore' },
+                        ].map(r => (
+                          <button key={r.key} onClick={() => changeRole(r.key)} className="btn-no-anim" style={{
+                            width:'100%', textAlign:'left', padding:'11px 14px', fontSize:14, fontWeight:600,
+                            background: showDetail.role === r.key ? 'var(--card2)' : 'transparent',
+                            color: showDetail.role === r.key ? 'var(--accent)' : 'var(--text)',
+                          }}>
+                            {r.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Sotto-menu: configurazione evento (solo per il ruolo Organizzatore) */}
+                {showDetail.role === 'organizzatore-brasserie' && (
+                  <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Configurazione evento</p>
+                    <div className="form-group">
+                      <label>Nome evento</label>
+                      <input value={orgConfig.eventName} onChange={e => setOrgConfig(c => ({ ...c, eventName:e.target.value }))} placeholder="es. Brasserie" />
+                    </div>
+                    <div className="form-group">
+                      <label>Frequenza</label>
+                      <select value={orgConfig.frequency} onChange={e => setOrgConfig(c => ({ ...c, frequency:e.target.value }))}>
+                        <option value="weekly">Settimanale</option>
+                        <option value="monthly">Mensile</option>
+                        <option value="custom">Date singole</option>
+                      </select>
+                    </div>
+
+                    {orgConfig.frequency === 'weekly' && (
+                      <div className="form-group">
+                        <label>Giorno della settimana</label>
+                        <select value={orgConfig.weekday} onChange={e => setOrgConfig(c => ({ ...c, weekday:Number(e.target.value) }))}>
+                          {WEEKDAY_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {orgConfig.frequency === 'monthly' && (
+                      <div className="form-group">
+                        <label>Giorno del mese</label>
+                        <input type="number" min="1" max="31" value={orgConfig.monthDay} onChange={e => setOrgConfig(c => ({ ...c, monthDay:Number(e.target.value) }))} />
+                      </div>
+                    )}
+
+                    {orgConfig.frequency === 'custom' && (
+                      <div className="form-group">
+                        <label>Date specifiche</label>
+                        <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                          <input type="date" value={newCustomDate} onChange={e => setNewCustomDate(e.target.value)} style={{ flex:1 }} />
+                          <button onClick={addCustomDate} className="btn btn-secondary" style={{ flexShrink:0 }}>+ Aggiungi</button>
+                        </div>
+                        {orgConfig.customDates.map(d => (
+                          <div key={d} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'7px 10px', marginBottom:5 }}>
+                            <span style={{ fontSize:13 }}>{new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+                            <button onClick={() => removeCustomDate(d)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700 }}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {orgConfig.frequency !== 'custom' && (
+                      <div className="form-group" style={{ marginBottom:0 }}>
+                        <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale, lascia vuoto per nessuna scadenza)</span></label>
+                        <input type="date" value={orgConfig.endDate} onChange={e => setOrgConfig(c => ({ ...c, endDate:e.target.value }))} />
+                      </div>
+                    )}
+
+                    <button onClick={saveOrgConfig} className="btn btn-primary btn-full" style={{ marginTop:12 }}>Salva configurazione evento</button>
+                  </div>
+                )}
+
+                {/* Indisponibilità (solo worker) */}
+                {showDetail.role === 'worker' && detailUnavail.length > 0 && (
+                  <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Indisponibilità segnalate</p>
+                    {[...detailUnavail].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(u => (
+                      <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
+                        <div>
+                          <p style={{ fontWeight:700, fontSize:13 }}>
+                            {u.startDate === u.endDate
+                              ? new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
+                              : `${new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate).toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
+                            }
+                          </p>
+                          {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
+                        </div>
+                        <button onClick={() => removeUnavailability(u.id)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700, flexShrink:0 }}>Rimuovi</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Disattiva / Elimina — affiancati */}
+                <div style={{ display:'grid', gridTemplateColumns: showDetail.id !== user.uid ? '1fr 1fr' : '1fr', gap:10 }}>
+                  <button onClick={toggleActive} style={{
+                    background: showDetail.active !== false ? 'rgba(245,166,35,0.12)' : 'rgba(105,240,174,0.1)',
+                    color: showDetail.active !== false ? 'var(--accent2)' : 'var(--green)',
+                    borderRadius:10, padding:'12px', fontWeight:700, fontSize:13,
+                    display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7
+                  }}>
+                    {showDetail.active !== false ? <><Warn size={15} /> Disattiva accesso</> : <><Check size={15} /> Riattiva accesso</>}
+                  </button>
+                  {showDetail.id !== user.uid && (
+                    <button onClick={deleteAccount} style={{
+                      background:'rgba(255,82,82,0.1)', color:'var(--red)',
+                      borderRadius:10, padding:'12px', fontWeight:700, fontSize:13,
+                      display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7
+                    }}>
+                      <Trash size={15} /> Elimina account
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

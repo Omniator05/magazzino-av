@@ -1,0 +1,18 @@
+{
+  "name": "resolume-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bridge locale per pilotare Resolume Arena (Brasserie ledwall) da config Firestore/Storage. Gira sul PC del ledwall, separato dalla webapp.",
+  "scripts": {
+    "test:connection": "node test-connection.js",
+    "sync": "node sync.js",
+    "live": "node live.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

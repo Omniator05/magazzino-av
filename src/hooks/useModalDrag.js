@@ -9,15 +9,28 @@ import { useRef, useState, useCallback, useEffect } from 'react'
  *     <div className={`modal${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} {...drag.props}>
  *       <button className="close-btn" onClick={drag.close}>✕</button>
  *
- * - Lo "swipe verso il basso" per chiudere parte SOLO se il contenuto scrollabile
- *   interno è già in cima (così scrollare la lista non chiude il modal).
+ * - Lo "swipe verso il basso" per chiudere parte SOLO se il gesto INIZIA nella
+ *   zona della maniglia in alto (la strisciolina, primi ~44px del modal) — così
+ *   scrollare il contenuto sotto, ovunque ci si trovi, non chiude mai il modal.
+ * - Mentre si trascina, lo sfondo (l'overlay, elemento padre del modal) si
+ *   schiarisce proporzionalmente, così la pagina dietro torna leggibile.
+ * - Se si supera METÀ dell'altezza del modal, il rilascio prosegue lo
+ *   scivolamento verso il basso (invece di scomparire di scatto) e poi chiude.
+ *   Sotto la soglia, modal e sfondo tornano morbidamente alla posizione iniziale.
  * - `guard` (opzionale): funzione che ritorna `false` per BLOCCARE la chiusura
  *   (es. mostrare una conferma se ci sono modifiche non salvate). Vale per ✕, ESC e drag.
  */
+const HANDLE_ZONE_PX = 44
+const FADE_PROGRESS_FRACTION = 0.92  // l'overlay raggiunge opacità 0 solo quasi a fine trascinamento
+const SNAP_BACK_TRANSITION = 'transform 0.25s cubic-bezier(0.32,0.72,0,1)'
+const OVERLAY_SNAP_BACK_TRANSITION = 'opacity 0.25s ease'
+const DISMISS_TRANSITION = 'transform 0.22s cubic-bezier(0.32,0.72,0,1)'
+const OVERLAY_DISMISS_TRANSITION = 'opacity 0.22s ease'
+
 export function useModalDrag(onClose, guard, onSubmit) {
   const startY     = useRef(null)
   const isDragging = useRef(false)
-  const canDrag    = useRef(true)   // deciso a inizio gesto: true se la lista è in cima
+  const canDrag    = useRef(false)  // deciso a inizio gesto: true solo se si parte dalla maniglia
   const [jiggling, setJiggling] = useState(false)
   const [closing,  setClosing]  = useState(false)
 
@@ -62,29 +75,14 @@ export function useModalDrag(onClose, guard, onSubmit) {
     if (e.target === e.currentTarget) triggerJiggle()
   }, [triggerJiggle])
 
-  // Trova l'antenato scrollabile del target, fermandosi al modal stesso
-  const findScrollable = (node, root) => {
-    let el = node
-    while (el && el !== root && el !== document.body) {
-      const oy = getComputedStyle(el).overflowY
-      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el
-      el = el.parentElement
-    }
-    return null
-  }
-
   const onTouchStart = useCallback((e) => {
     startY.current = e.touches[0].clientY
     isDragging.current = false
-    // Mai drag-to-dismiss quando si tocca un campo di testo (serve per scrollare il form)
-    const tag = e.target.tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-      canDrag.current = false
-      return
-    }
-    // Drag-to-dismiss consentito solo se la zona scrollabile è già in cima
-    const scrollable = findScrollable(e.target, e.currentTarget)
-    canDrag.current = !scrollable || scrollable.scrollTop <= 0
+    // Drag-to-dismiss consentito SOLO se il tocco parte dalla zona della maniglia
+    // in alto — così scrollare il contenuto, ovunque ci si trovi, non chiude mai il modal
+    const rect = e.currentTarget.getBoundingClientRect()
+    const relativeY = e.touches[0].clientY - rect.top
+    canDrag.current = relativeY <= HANDLE_ZONE_PX
   }, [])
 
   const onTouchMove = useCallback((e) => {
@@ -92,8 +90,19 @@ export function useModalDrag(onClose, guard, onSubmit) {
     const delta = e.touches[0].clientY - startY.current
     if (delta > 10) isDragging.current = true
     if (isDragging.current && e.currentTarget) {
-      e.currentTarget.style.transform = `translateY(${Math.max(0, delta)}px)`
-      e.currentTarget.style.transition = 'none'
+      const el = e.currentTarget
+      const y = Math.max(0, delta)
+      el.style.transition = 'none'
+      el.style.transform = `translateY(${y}px)`
+      // Overlay (elemento padre) sempre più chiaro/leggibile man mano che si trascina —
+      // dissolvenza più graduale: il modal resta ben visibile fino a ~4/5 del trascinamento
+      const overlay = el.parentElement
+      if (overlay) {
+        const fadeDistance = el.offsetHeight * FADE_PROGRESS_FRACTION || 1
+        const progress = Math.min(y / fadeDistance, 1)
+        overlay.style.transition = 'none'
+        overlay.style.opacity = String(1 - progress)
+      }
     }
   }, [])
 
@@ -101,11 +110,38 @@ export function useModalDrag(onClose, guard, onSubmit) {
     if (startY.current === null) return
     const delta = e.changedTouches[0].clientY - startY.current
     const el = e.currentTarget
-    if (el) { el.style.transition = ''; el.style.transform = '' }
-    if (isDragging.current && delta > 100) {
-      // chiude direttamente (senza animazione) solo se consentito dal guard
-      if (allowClose()) onCloseRef.current()
+    const overlay = el?.parentElement
+    const threshold = el ? (el.offsetHeight / 2 || 1) : Infinity
+    const pastThreshold = isDragging.current && delta > threshold
+
+    if (pastThreshold && allowClose()) {
+      // Prosegui lo scivolamento verso il basso invece di scomparire di scatto
+      if (el) {
+        const offScreen = el.offsetHeight + 40
+        el.style.transition = DISMISS_TRANSITION
+        el.style.transform = `translateY(${offScreen}px)`
+      }
+      if (overlay) {
+        overlay.style.transition = OVERLAY_DISMISS_TRANSITION
+        overlay.style.opacity = '0'
+      }
+      setTimeout(() => {
+        if (el) { el.style.transition = ''; el.style.transform = '' }
+        if (overlay) { overlay.style.transition = ''; overlay.style.opacity = '' }
+        onCloseRef.current()
+      }, 220)
+    } else {
+      // Sotto soglia (o guard che blocca): torna morbidamente alla posizione iniziale
+      if (el) {
+        el.style.transition = SNAP_BACK_TRANSITION
+        el.style.transform = ''
+      }
+      if (overlay) {
+        overlay.style.transition = OVERLAY_SNAP_BACK_TRANSITION
+        overlay.style.opacity = ''
+      }
     }
+
     startY.current = null
     isDragging.current = false
   }, [])

@@ -125,6 +125,7 @@ export function AuthProvider({ children }) {
       user, profile, loading, login, logout, updateProfileData,
       isAdmin:  profile?.role === 'admin',
       isWorker: profile?.role === 'worker',
+      isBrasserieOrganizer: profile?.role === 'organizzatore-brasserie',
       showOverlay, setShowOverlay, loginName,
     }}>
       {children}

@@ -186,15 +186,20 @@ export default function Events() {
       recurringSeriesMap[ev.seriesId].push(ev)
     }
   })
-  const pinnedRecurring = Object.values(recurringSeriesMap).map(series => {
+  const pinnedRecurring = Object.values(recurringSeriesMap).flatMap(series => {
     const sorted = [...series].sort((a,b) => a.date.localeCompare(b.date))
-    // Preferisci il prossimo futuro, poi il più recente passato non ancora rientrato
-    return sorted.find(e => e.date >= today)
-      || sorted.filter(e => {
-           const items = e.items || []
-           return items.length > 0 && items.some(i => i.loaded && !i.returned)
-         }).pop()
-      || sorted[sorted.length - 1]
+    const nextFuture = sorted.find(e => e.date >= today)
+    // Tutte le occorrenze passate con articoli ancora non rientrati — mai nascoste
+    // solo perché esiste già una prossima occorrenza futura da mostrare
+    const pastUnfinished = sorted.filter(e => {
+      if (e.date >= today) return false
+      const items = e.items || []
+      return items.length > 0 && items.some(i => i.loaded && !i.returned)
+    })
+    const result = [...pastUnfinished]
+    if (nextFuture) result.push(nextFuture)
+    else if (result.length === 0) result.push(sorted[sorted.length - 1])
+    return result
   })
 
   const singleEvents   = events.filter(e => !e.seriesId && e.type !== 'installation')

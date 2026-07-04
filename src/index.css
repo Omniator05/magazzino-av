@@ -85,8 +85,8 @@ button.btn-no-anim:hover {
   box-shadow: none;
 }
 button:not(:disabled):active {
-  transform: scale(0.95) translateY(0);
-  filter: brightness(0.92);
+  transform: scale(0.98) translateY(0);
+  filter: brightness(0.96);
   box-shadow: none;
 }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -201,12 +201,13 @@ select option { background: var(--bg2); }
 .btn-secondary {
   background: var(--card3);
   color: var(--text);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid var(--border2);
 }
 .btn-secondary:not(:disabled):hover {
-  background: #2e2e58;
-  border-color: rgba(255,255,255,0.22);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  background: var(--card3);
+  filter: brightness(0.97);
+  border-color: var(--border2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 .btn-green { background: rgba(52,211,153,0.20); color: var(--green); border: 1px solid rgba(52,211,153,0.30); }

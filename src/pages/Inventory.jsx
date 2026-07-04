@@ -86,6 +86,7 @@ export default function Inventory() {
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
   const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
   const kitDrag     = useModalDrag(() => setShowKitModal(false))
+  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail)
   // Kit form: nome + componenti
 
   // Items in shared global collection so workers can read them
@@ -114,6 +115,14 @@ export default function Inventory() {
     ? events.filter(ev => (ev.items || []).some(i =>
         (i.id === showDetail.id || i.itemRef === showDetail.id) && i.loaded && !i.returned
       ))
+    : []
+
+  // Storico: ultimi 5 eventi (di qualunque stato) in cui è comparso l'oggetto
+  const detailEventHistory = showDetail
+    ? events
+        .filter(ev => (ev.items || []).some(i => i.id === showDetail.id || i.itemRef === showDetail.id))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 5)
     : []
 
   // Migrazione automatica vecchie categorie → nuove (gira una volta sola)
@@ -647,8 +656,8 @@ export default function Inventory() {
                     {(showDetail.brand || showDetail.model) && <p style={{ color:'var(--text2)', marginTop:4 }}>{showDetail.brand} {showDetail.model}</p>}
                   </div>
                   <div
-                    onClick={() => detailEvents.length > 0 && setShowDetailEvents(true)}
-                    style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor: detailEvents.length > 0 ? 'pointer' : 'default' }}
+                    onClick={() => setShowDetailEvents(true)}
+                    style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor:'pointer' }}
                   >
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                       <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
@@ -675,12 +684,10 @@ export default function Inventory() {
                         <span style={{ fontSize:12, color:'var(--red)' }}>● {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}</span>
                       )}
                     </div>
-                    {detailEvents.length > 0 && (
-                      <p style={{ fontSize:11, color:'var(--accent)', marginTop:8, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
-                        🔍 Tocca per vedere {detailEvents.length === 1 ? "l'evento" : "gli eventi"} dove si trova
-                        <span style={{ marginLeft:'auto' }}>→</span>
-                      </p>
-                    )}
+                    <p style={{ fontSize:11, color:'var(--accent)', marginTop:8, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
+                      🔍 Tocca per vedere l'oggetto dove si trova
+                      <span style={{ marginLeft:'auto' }}>→</span>
+                    </p>
                   </div>
                   <div className="code-preview" style={{ marginBottom:14 }}>
                     {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>Generazione...</p></div>}
@@ -743,24 +750,61 @@ export default function Inventory() {
                   </button>
                   <h2 style={{ marginBottom:4 }}>Dove si trova</h2>
                   <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{showDetail.name}</p>
-                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                    {detailEvents.map(ev => (
-                      <button
-                        key={ev.id}
-                        onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
-                        style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
-                      >
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                          <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                            {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
-                            {ev.location ? ` · ${ev.location}` : ''}
-                          </p>
-                        </div>
-                        <span style={{ color:'var(--text2)' }}>→</span>
-                      </button>
-                    ))}
-                  </div>
+
+                  {detailEvents.length === 0 && detailEventHistory.length === 0 && (
+                    <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>Nessuno storico disponibile per questo oggetto.</p>
+                  )}
+
+                  {detailEvents.length > 0 && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Attualmente fuori</p>
+                      {detailEvents.map(ev => (
+                        <button
+                          key={ev.id}
+                          onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
+                          style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                        >
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                            <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
+                              {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
+                              {ev.location ? ` · ${ev.location}` : ''}
+                            </p>
+                          </div>
+                          <span style={{ color:'var(--text2)' }}>→</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {detailEventHistory.length > 0 && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Storico (ultimi {detailEventHistory.length} event{detailEventHistory.length === 1 ? 'o' : 'i'})</p>
+                      {detailEventHistory.map(ev => {
+                        const itm = (ev.items || []).find(i => i.id === showDetail.id || i.itemRef === showDetail.id)
+                        const stillOut = itm?.loaded && !itm?.returned
+                        return (
+                          <button
+                            key={ev.id}
+                            onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
+                            style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                          >
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                              <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
+                                {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
+                                {ev.location ? ` · ${ev.location}` : ''}
+                              </p>
+                            </div>
+                            {stillOut && (
+                              <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>fuori</span>
+                            )}
+                            <span style={{ color:'var(--text2)' }}>→</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
               </div>

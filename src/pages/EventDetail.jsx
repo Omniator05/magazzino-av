@@ -3,12 +3,20 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, getDoc } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import { Warn } from '../components/Icon'
+import JSZip from 'jszip'
+
+function slugifyName(s) {
+  const normalized = (s || 'file').toLowerCase().trim().normalize('NFD')
+  const diacriticsPattern = '[' + String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f) + ']'
+  const noDiacritics = normalized.replace(new RegExp(diacriticsPattern, 'g'), '')
+  return noDiacritics.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file'
+}
 
 const ICONS = {
   'Audio':    '🔊',
@@ -37,6 +45,9 @@ export default function EventDetail() {
   const [event, setEvent] = useState(null)
   const today = new Date().toISOString().split('T')[0]
   const [allItems, setAllItems] = useState([])
+  const [brasserieWeek, setBrasserieWeek] = useState(null)
+  const [zipping, setZipping] = useState(false)
+  const [zipError, setZipError] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
   const [showExtraModal, setShowExtraModal] = useState(false)
   const [cart, setCart] = useState([])
@@ -83,6 +94,7 @@ export default function EventDetail() {
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  useModalScrollLock(showAddItem || showExtraModal || showTemplatePicker || !!editItem || showAssignModal)
 
   const eventRef = doc(db, 'events', id)
 
@@ -91,6 +103,21 @@ export default function EventDetail() {
       if (snap.exists()) setEvent({ id: snap.id, ...snap.data() })
     })
   }, [id])
+
+  // Se questa data corrisponde a una settimana Brasserie configurata da un organizzatore,
+  // mostra la card di verifica contenuti in cima alla lista di carico
+  useEffect(() => {
+    if (!event?.date) { setBrasserieWeek(null); return }
+    const q = query(collection(db, 'brasserieWeeks'), where('date', '==', event.date))
+    return onSnapshot(q, snap => {
+      if (snap.empty) { setBrasserieWeek(null); return }
+      // Se per la stessa data esistono più documenti (es. residui di test con schema id vecchio),
+      // prendi sempre quello aggiornato più di recente
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      docs.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0))
+      setBrasserieWeek(docs[0])
+    })
+  }, [event?.date])
 
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
@@ -169,6 +196,50 @@ export default function EventDetail() {
   const returned = eventItems.filter(i => i.returned).length
   const total = eventItems.length
   const mancanti = eventItems.filter(i => i.mancante).length
+
+  // Contenuti Brasserie per questa data (se un organizzatore ne ha configurata una)
+  const brasserieArtistiSlots = brasserieWeek?.layers?.artisti || []
+  const brasserieArtistiFilled = brasserieArtistiSlots.filter(s => s.logoUrl).length
+  const brasserieSponsorSlots = brasserieWeek?.layers?.sponsor || []
+  const brasserieFood = brasserieSponsorSlots.find(s => s.slotId === 'sponsor-food')
+  const brasserieDj = brasserieSponsorSlots.find(s => s.slotId === 'sponsor-dj')
+  const brasserieNext = brasserieWeek?.nextGraphic
+
+  const downloadBrasserieZip = async () => {
+    if (!brasserieWeek) return
+    setZipping(true)
+    setZipError('')
+    try {
+      const files = []
+      brasserieArtistiSlots.forEach((s, i) => { if (s.logoUrl) files.push({ name: `artisti-${i + 1}-${slugifyName(s.artistName)}`, url: s.logoUrl }) })
+      if (brasserieFood?.logoUrl) files.push({ name: `sponsor-cibo-${slugifyName(brasserieFood.artistName)}`, url: brasserieFood.logoUrl })
+      if (brasserieDj?.logoUrl) files.push({ name: `sponsor-dj-${slugifyName(brasserieDj.artistName)}`, url: brasserieDj.logoUrl })
+      if (brasserieNext?.url) files.push({ name: 'next', url: brasserieNext.url })
+
+      if (files.length === 0) { setZipError('Nessun file da scaricare per questa settimana.'); return }
+
+      const zip = new JSZip()
+      await Promise.all(files.map(async f => {
+        const res = await fetch(f.url)
+        if (!res.ok) throw new Error(`Download fallito per ${f.name} (HTTP ${res.status})`)
+        const blob = await res.blob()
+        const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+        zip.file(`${f.name}.${ext}`, blob)
+      }))
+
+      const content = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(content)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `brasserie-${event.date}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setZipError('Download fallito. Se il problema persiste, controlla la configurazione CORS di Firebase Storage.')
+    } finally {
+      setZipping(false)
+    }
+  }
 
   const updateEventItems = async (items) => {
     await updateDoc(eventRef, { items })
@@ -731,6 +802,45 @@ export default function EventDetail() {
         )}
       </div>
 
+      {/* Contenuti Brasserie — solo se un organizzatore ha configurato una settimana per questa data */}
+      {brasserieWeek && (
+        <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid rgba(155,89,224,0.3)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+            <p style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:6 }}>🍺 Contenuti Brasserie</p>
+            <span className="badge" style={{
+              background: brasserieWeek.status === 'published' ? 'rgba(105,240,174,0.15)' : 'rgba(245,166,35,0.15)',
+              color: brasserieWeek.status === 'published' ? 'var(--green)' : 'var(--accent2)',
+            }}>
+              {brasserieWeek.status === 'published' ? '● Pubblicata' : '○ Bozza'}
+            </span>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:12 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+              <span style={{ color:'var(--text2)' }}>Artisti</span>
+              <span style={{ fontWeight:700, color: brasserieArtistiFilled === brasserieArtistiSlots.length && brasserieArtistiSlots.length > 0 ? 'var(--green)' : 'var(--text)' }}>{brasserieArtistiFilled}/{brasserieArtistiSlots.length}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+              <span style={{ color:'var(--text2)' }}>Bancarella cibo</span>
+              <span style={{ fontWeight:700, color: brasserieFood?.logoUrl ? 'var(--green)' : 'var(--red)' }}>{brasserieFood?.logoUrl ? '✓' : '✗'}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+              <span style={{ color:'var(--text2)' }}>DJ pre-serata</span>
+              <span style={{ fontWeight:700, color: brasserieDj?.logoUrl ? 'var(--green)' : 'var(--red)' }}>{brasserieDj?.logoUrl ? '✓' : '✗'}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+              <span style={{ color:'var(--text2)' }}>Grafica Next</span>
+              <span style={{ fontWeight:700, color: brasserieNext?.url ? 'var(--green)' : 'var(--red)' }}>{brasserieNext?.url ? '✓' : '✗'}</span>
+            </div>
+          </div>
+          <button onClick={downloadBrasserieZip} disabled={zipping} className="btn btn-secondary btn-full" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            {zipping ? 'Preparazione ZIP...' : '⬇ Scarica ZIP loghi'}
+          </button>
+          {zipError && (
+            <p style={{ color:'var(--red)', fontSize:12, marginTop:8, lineHeight:1.5 }}>{zipError}</p>
+          )}
+        </div>
+      )}
+
       {/* Lista articoli */}
       <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
         {eventItems.length === 0
@@ -781,7 +891,7 @@ export default function EventDetail() {
             </p>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
               <button onClick={() => setShowDiscardCart(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none' }}>Continua</button>
-              <button onClick={() => { setShowDiscardCart(false); setCart([]); setShowAddItem(false) }} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#ea580c', color:'#fff', border:'none' }}>Scarta</button>
+              <button onClick={() => { setShowDiscardCart(false); setCart([]); setShowAddItem(false) }} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#ea580c', color:'#fff', border:'none' }}>Esci</button>
             </div>
           </div>
         </div>
