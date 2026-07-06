@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react'
 import { db } from '../firebase'
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
 import LogoutButton from '../components/LogoutButton'
+import { useSwipeMonth } from '../hooks/useSwipeMonth'
+import { deleteStorageFile } from '../utils/brasserieStorage'
+
+// La grafica "Next" serve solo per la serata a cui è legata: passata questa
+// finestra di grazia dalla data dell'evento, viene eliminata da Storage per
+// non far crescere inutilmente lo spazio occupato
+const NEXT_GRAPHIC_RETENTION_DAYS = 7
 
 // Config di default se l'admin non ha ancora impostato nulla per questo organizzatore
 // (mantiene il comportamento storico di Brasserie: ogni giovedì fino al 17/09/2026)
@@ -74,6 +81,20 @@ export default function BrasserieHome({ onSelectDate }) {
     return onSnapshot(q, snap => setWeeks(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [user])
 
+  // Pulizia grafiche "Next" ormai scadute (settimane passate da più di NEXT_GRAPHIC_RETENTION_DAYS giorni)
+  useEffect(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - NEXT_GRAPHIC_RETENTION_DAYS)
+    const cutoffYMD = toYMD(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate())
+    weeks.forEach(w => {
+      if (w.nextGraphic?.path && w.date < cutoffYMD) {
+        deleteStorageFile(w.nextGraphic.path).finally(() => {
+          updateDoc(doc(db, 'brasserieWeeks', w.id), { nextGraphic: null }).catch(() => {})
+        })
+      }
+    })
+  }, [weeks])
+
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')
       .then(r => r.json())
@@ -90,6 +111,7 @@ export default function BrasserieHome({ onSelectDate }) {
 
   const prevMonth = () => setView(v => v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 })
   const nextMonth = () => setView(v => v.month === 11 ? { year: v.year + 1, month: 0 } : { ...v, month: v.month + 1 })
+  const swipeMonth = useSwipeMonth(prevMonth, nextMonth)
 
   const cells = monthCells(view.year, view.month)
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
@@ -126,7 +148,7 @@ export default function BrasserieHome({ onSelectDate }) {
   const _cloudOpMult   = _wCond === 'overcast' ? 3 : _wCond === 'partly' ? 1.6 : 1
 
   return (
-    <div className="page">
+    <div className="page bh-page">
       {/* Header hero (card) — stesso stile del resto dell'app */}
       <div style={{ position: 'relative', overflow: 'hidden', background: _bg, margin: 'calc(env(safe-area-inset-top) + 24px) 16px 18px', padding: '26px 22px', borderRadius: 26, boxShadow: '0 12px 32px rgba(34,44,66,0.26)' }}>
         <div style={{ position: 'absolute', top: '-55%', right: '-6%', width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.16) 0%, transparent 65%)', animation: 'bhOrb1 14s ease-in-out infinite', pointerEvents: 'none' }} />
@@ -177,27 +199,41 @@ export default function BrasserieHome({ onSelectDate }) {
         @keyframes bhOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
         @keyframes bhStarTwinkle { 0%,100%{opacity:0.85;transform:scale(1)} 50%{opacity:0.15;transform:scale(0.5)} }
         @keyframes bhCloudDrift  { from{transform:translateX(0)} to{transform:translateX(130vw)} }
+        @keyframes bhGridIn { from{opacity:0;transform:translateX(6px)} to{opacity:1;transform:translateX(0)} }
         .bh-day:not(:disabled):hover { background: var(--card2) !important; }
         .bh-nav-btn:hover { opacity: 0.65; }
+        .bh-grid-anim { animation: bhGridIn 0.2s ease; touch-action: pan-y; }
+
+        @media (min-width: 700px) {
+          .bh-page .bh-content { max-width: 640px; margin-left: auto; margin-right: auto; }
+          .bh-subtitle { font-size: 24px !important; text-align: center !important; }
+          .bh-weekday { font-size: 13px !important; padding: 8px 0 !important; }
+          .bh-nav-btn { width: 40px !important; height: 40px !important; font-size: 20px !important; }
+          .bh-month-label { font-size: 17px !important; }
+          .bh-grid { gap: 8px !important; }
+          .bh-day { min-height: 78px !important; border-radius: 14px !important; padding: 8px 4px !important; }
+          .bh-day-number { font-size: 15px !important; }
+          .bh-dot { width: 10px !important; height: 10px !important; }
+        }
       `}</style>
 
-      <div style={{ padding: '0 16px 16px' }}>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 14 }}>Scegli la data del tuo evento e aggiungi contenuti.</p>
+      <div className="bh-content" style={{ padding: '0 16px 16px' }}>
+        <p className="bh-subtitle" style={{ color: 'var(--text)', fontSize: 19, fontWeight: 800, letterSpacing: '-0.3px', marginBottom: 16 }}>Scegli la data del tuo evento e aggiungi contenuti.</p>
         {/* Header giorni settimana */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', marginBottom: 6 }}>
           {WEEKDAYS.map((w, i) => (
-            <div key={i} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text2)', padding: '6px 0' }}>{w}</div>
+            <div key={i} className="bh-weekday" style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text2)', padding: '6px 0' }}>{w}</div>
           ))}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <button className="bh-nav-btn" onClick={prevMonth} style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>‹</button>
-          <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', textTransform: 'capitalize' }}>{MONTHS[view.month]} {view.year}</span>
+          <span className="bh-month-label" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', textTransform: 'capitalize' }}>{MONTHS[view.month]} {view.year}</span>
           <button className="bh-nav-btn" onClick={nextMonth} style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>›</button>
         </div>
 
-        {/* Griglia mese — celle compatte, un puntino colorato per il giorno evento */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+        {/* Griglia mese — celle compatte, un puntino colorato per il giorno evento; swipe orizzontale per cambiare mese */}
+        <div key={`${view.year}-${view.month}`} className="bh-grid bh-grid-anim" {...swipeMonth} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
           {cells.map((cell, i) => {
             const dStr = toYMD(cell.dateObj.getFullYear(), cell.dateObj.getMonth(), cell.dateObj.getDate())
             const isToday = dStr === today
@@ -210,6 +246,7 @@ export default function BrasserieHome({ onSelectDate }) {
             return (
               <button
                 key={i}
+                className="bh-day"
                 onClick={() => setSelectedDate(dStr)}
                 style={{
                   position: 'relative', minHeight: 44, borderRadius: 10, padding: '5px 3px',
@@ -219,10 +256,10 @@ export default function BrasserieHome({ onSelectDate }) {
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer',
                 }}
               >
-                <span style={{ fontSize: 12.5, fontWeight: isToday ? 800 : 600, color: isToday ? 'var(--accent)' : (cell.current ? 'var(--text)' : 'var(--text3)') }}>
+                <span className="bh-day-number" style={{ fontSize: 12.5, fontWeight: isToday ? 800 : 600, color: isToday ? 'var(--accent)' : (cell.current ? 'var(--text)' : 'var(--text3)') }}>
                   {cell.day}
                 </span>
-                {dotColor && <span style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor, opacity: isPast ? 0.55 : 1 }} />}
+                {dotColor && <span className="bh-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, opacity: isPast ? 0.55 : 1 }} />}
               </button>
             )
           })}
@@ -247,7 +284,7 @@ export default function BrasserieHome({ onSelectDate }) {
 
       {/* Pannello giorno selezionato */}
       {selectedDate && (
-        <div style={{ padding: '0 16px 24px' }}>
+        <div className="bh-content" style={{ padding: '0 16px 24px' }}>
           <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
             {selectedDateObj.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
             {selectedDate === today && ' · Oggi'}

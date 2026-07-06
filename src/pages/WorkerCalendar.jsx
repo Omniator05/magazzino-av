@@ -5,6 +5,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
+import { useSwipeMonth } from '../hooks/useSwipeMonth'
 
 const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -42,6 +43,7 @@ export default function WorkerCalendar() {
   const todayStr = toDateStr(today)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [allEvents, setAllEvents] = useState([])
+  const [googleEvents, setGoogleEvents] = useState([])
   const [unavailability, setUnavailability] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
 
@@ -65,6 +67,14 @@ export default function WorkerCalendar() {
       setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
   }, [user])
+
+  // Eventi importati da Google Calendar (sync giornaliero in sola lettura, vedi /api/sync-google-calendar)
+  useEffect(() => {
+    const q = query(collection(db, 'googleCalendarEvents'), orderBy('date'))
+    return onSnapshot(q, snap => {
+      setGoogleEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
+  }, [])
 
   // ESC chiude il modal di conferma assenza
   useEffect(() => {
@@ -108,9 +118,17 @@ export default function WorkerCalendar() {
     return items
   }
 
+  // Eventi Google Calendar che toccano un giorno (multi-giorno se dateEnd è impostata)
+  const dayGoogleEvents = (dStr) => googleEvents.filter(e => {
+    if (!e.date) return false
+    const end = e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
+    return dStr >= e.date && dStr <= end
+  })
+
   const goPrevMonth = () => setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 })
   const goNextMonth = () => setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 })
   const goToday = () => { setCursor({ year: today.getFullYear(), month: today.getMonth() }); setSelectedDate(todayStr) }
+  const swipeMonth = useSwipeMonth(goPrevMonth, goNextMonth)
 
   const startReportMode = () => {
     setReportMode(true)
@@ -171,6 +189,7 @@ export default function WorkerCalendar() {
     })
     return [...m.values()]
   })()
+  const selectedGoogleEvents = selectedDate ? dayGoogleEvents(selectedDate) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
   return (
@@ -216,10 +235,11 @@ export default function WorkerCalendar() {
           ))}
         </div>
 
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
+        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
           {cells.map((cell, i) => {
             const dStr = toDateStr(cell.dateObj)
             const items = dayItems(dStr)
+            const googleItems = dayGoogleEvents(dStr)
             const hasMyEvent = items.some(it => it.assigned)
             const unavail = isUnavailable(dStr)
             const isToday = dStr === todayStr
@@ -260,8 +280,11 @@ export default function WorkerCalendar() {
                 }}>
                   {cell.day}
                 </span>
-                {items.length > 0 && (
+                {(items.length > 0 || googleItems.length > 0) && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
+                    {googleItems.length > 0 && (
+                      <span style={{ width:7, height:7, borderRadius:2, flexShrink:0, background:'#4285F4', opacity: isPast ? 0.55 : 1 }} />
+                    )}
                     {items.slice(0, 4).map((it, i) => (
                       <span key={i} style={{
                         width:7, height:7, borderRadius:'50%', flexShrink:0,
@@ -304,6 +327,10 @@ export default function WorkerCalendar() {
             <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Non disponibile</span>
           </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:2, background:'#4285F4', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Da Google Calendar</span>
+          </div>
         </div>
       </div>
 
@@ -314,7 +341,7 @@ export default function WorkerCalendar() {
             {selectedDateObj.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
             {selectedDate === todayStr && ' · Oggi'}
           </p>
-          {selectedEvents.length === 0 ? (
+          {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>Nessun evento in questo giorno.</p>
           ) : (
             selectedEvents.map(({ event: ev, assigned: mine, phases }) => (
@@ -348,6 +375,19 @@ export default function WorkerCalendar() {
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
                 </div>
               ))
+          )}
+          {selectedGoogleEvents.length > 0 && (
+            <div style={{ marginTop: selectedEvents.length > 0 ? 14 : 0 }}>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Da Google Calendar</p>
+              {selectedGoogleEvents.map(ev => (
+                <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(66,133,244,0.06)', border:'1px solid rgba(66,133,244,0.22)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
+                  <span style={{ width:9, height:9, borderRadius:2, flexShrink:0, background:'#4285F4' }} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.title}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

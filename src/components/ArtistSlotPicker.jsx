@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import { uploadArtistLogo, ALLOWED_IMAGE_TYPES, ACCEPT_IMAGE_ATTR } from '../utils/brasserieStorage'
+import { useConfirm } from '../context/ConfirmProvider'
+import { uploadArtistLogo, deleteStorageFile, ALLOWED_IMAGE_TYPES, ACCEPT_IMAGE_ATTR } from '../utils/brasserieStorage'
+import { Trash } from './Icon'
 
 function deriveNameFromFilename(filename) {
   const base = filename.replace(/\.[^.]+$/, '')
@@ -18,6 +20,7 @@ function deriveNameFromFilename(filename) {
  */
 export default function ArtistSlotPicker({ slot, label, artists, onChange, onRemove }) {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const [query, setQuery] = useState(slot.artistName || '')
   const [editing, setEditing] = useState(!slot.artistId)
   const [dragOver, setDragOver] = useState(false)
@@ -107,6 +110,15 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
     setPendingName('')
   }
 
+  // Rimuove un artista dalla libreria (es. caricato per errore): non tocca le settimane
+  // già salvate, che tengono nome/logo copiati e non un riferimento vivo a questo doc
+  const removeArtist = async (artist, e) => {
+    e.stopPropagation()
+    if (!(await confirm({ title: 'Elimina artista', message: `Eliminare "${artist.name}" dalla libreria? Non comparirà più nei suggerimenti o nella ricerca.`, confirmLabel: 'Elimina', danger: true }))) return
+    await deleteDoc(doc(db, 'brasserieArtists', artist.id))
+    deleteStorageFile(artist.storagePath)
+  }
+
   return (
     <div style={{ background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', marginBottom:10 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: editing ? 8 : 0 }}>
@@ -164,14 +176,22 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
           {trimmed && filtered.length > 0 && (
             <div style={{ marginBottom:8 }}>
               {filtered.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => pickArtist(a)}
-                  style={{ width:'100%', display:'flex', alignItems:'center', gap:10, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 10px', marginBottom:5, textAlign:'left' }}
-                >
-                  <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'#fff', borderRadius:5, flexShrink:0 }} />
-                  <span style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
-                </button>
+                <div key={a.id} style={{ display:'flex', gap:6, marginBottom:5 }}>
+                  <button
+                    onClick={() => pickArtist(a)}
+                    style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:10, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 10px', textAlign:'left' }}
+                  >
+                    <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'#fff', borderRadius:5, flexShrink:0 }} />
+                    <span style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
+                  </button>
+                  <button
+                    onClick={e => removeArtist(a, e)}
+                    className="btn-no-anim"
+                    style={{ flexShrink:0, width:36, background:'rgba(255,82,82,0.08)', border:'1px solid rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}
+                  >
+                    <Trash size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -180,14 +200,22 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
             <div style={{ marginBottom:8 }}>
               <p style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:5 }}>Più usati</p>
               {mostUsed.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => pickArtist(a)}
-                  style={{ width:'100%', display:'flex', alignItems:'center', gap:10, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 10px', marginBottom:5, textAlign:'left' }}
-                >
-                  <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'#fff', borderRadius:5, flexShrink:0 }} />
-                  <span style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
-                </button>
+                <div key={a.id} style={{ display:'flex', gap:6, marginBottom:5 }}>
+                  <button
+                    onClick={() => pickArtist(a)}
+                    style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:10, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 10px', textAlign:'left' }}
+                  >
+                    <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'#fff', borderRadius:5, flexShrink:0 }} />
+                    <span style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
+                  </button>
+                  <button
+                    onClick={e => removeArtist(a, e)}
+                    className="btn-no-anim"
+                    style={{ flexShrink:0, width:36, background:'rgba(255,82,82,0.08)', border:'1px solid rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}
+                  >
+                    <Trash size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           )}

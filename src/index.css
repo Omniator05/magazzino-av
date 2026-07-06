@@ -194,9 +194,9 @@ select option { background: var(--bg2); }
 }
 .btn-primary   { background: var(--accent); color: #fff; box-shadow: 0 2px 12px rgba(233,69,96,0.30); }
 @media (hover: hover) and (pointer: fine) {
-  .btn-primary:not(:disabled):hover { box-shadow: 0 6px 22px rgba(233,69,96,0.55); transform: translateY(-2px); filter: brightness(1.08); }
+  .btn-primary:not(:disabled):hover { box-shadow: 0 6px 22px rgba(233,69,96,0.55); transform: translateY(-1px); filter: brightness(1.08); }
 }
-.btn-primary:not(:disabled):active { transform: scale(0.96) translateY(0); box-shadow: 0 2px 8px rgba(233,69,96,0.25); }
+.btn-primary:not(:disabled):active { transform: scale(0.98) translateY(0); box-shadow: 0 2px 8px rgba(233,69,96,0.25); }
 
 .btn-secondary {
   background: var(--card3);
@@ -477,6 +477,14 @@ select option { background: var(--bg2); }
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+@keyframes calGridIn {
+  from { opacity: 0; transform: translateX(6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.cal-grid-swipe {
+  animation: calGridIn 0.2s ease;
+  touch-action: pan-y;
 }
 
 /* ── Transizione pagina ─────────────────────────────── */
@@ -856,12 +864,12 @@ select option { background: var(--bg2); }
   background: rgb(255, 255, 255);
   color: rgb(24, 118, 7);
   border-color: rgba(41, 138, 43, 0.54);
-  transform: scale(1.08);
+  transform: scale(1.03);
 }
 .edit-btn:hover .edit-svg {
-  transform: rotate(-15deg) scale(1.15);
+  transform: scale(1.06);
 }
-.edit-btn:active { transform: scale(0.95); }
+.edit-btn:active { transform: scale(0.98); }
 
 /* Sezioni collassabili — nessun hover */
 .section-toggle:hover { transform: none !important; box-shadow: none !important; background: transparent !important; }

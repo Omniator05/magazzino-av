@@ -6,6 +6,7 @@ import EditButton from '../components/EditButton'
 import { Pin, User, List, Wrench, Check } from '../components/Icon'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
@@ -51,6 +52,7 @@ export default function Calendar() {
   const todayStr = toDateStr(today)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [events, setEvents] = useState([])
+  const [googleEvents, setGoogleEvents] = useState([])
   const [unavailability, setUnavailability] = useState([])
   const [workers, setWorkers] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
@@ -173,6 +175,14 @@ export default function Calendar() {
     })
   }, [])
 
+  // Eventi importati da Google Calendar (sync giornaliero in sola lettura, vedi /api/sync-google-calendar)
+  useEffect(() => {
+    const q = query(collection(db, 'googleCalendarEvents'), orderBy('date'))
+    return onSnapshot(q, snap => {
+      setGoogleEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
+  }, [])
+
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
     return onSnapshot(q, snap => {
@@ -212,9 +222,25 @@ export default function Calendar() {
     })
   })
 
+  // Eventi Google raggruppati per data (stessa logica multi-giorno degli eventi normali)
+  const googleEventsByDate = {}
+  googleEvents.forEach(e => {
+    if (!e.date) return
+    const start = new Date(e.date + 'T12:00:00')
+    const end = e.dateEnd && e.dateEnd >= e.date ? new Date(e.dateEnd + 'T12:00:00') : start
+    const cur = new Date(start)
+    while (cur <= end) {
+      const dStr = toDateStr(cur)
+      if (!googleEventsByDate[dStr]) googleEventsByDate[dStr] = []
+      googleEventsByDate[dStr].push(e)
+      cur.setDate(cur.getDate() + 1)
+    }
+  })
+
   const goPrevMonth = () => setCursor(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 })
   const goNextMonth = () => setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 })
   const goToday = () => { setCursor({ year: today.getFullYear(), month: today.getMonth() }); setSelectedDate(todayStr) }
+  const swipeMonth = useSwipeMonth(goPrevMonth, goNextMonth)
 
   const absencesOnDate = (dStr) => unavailability
     .filter(u => dStr >= u.startDate && dStr <= u.endDate)
@@ -225,6 +251,7 @@ export default function Calendar() {
   // Aggiungi anche gli eventi con fasi nel giorno selezionato (non già presenti come evento del giorno)
   const selectedPhaseEvents = selectedPhases.filter(p => !selectedEvents.some(e => e.id === p.event.id))
   const selectedAbsences = selectedDate ? absencesOnDate(selectedDate) : []
+  const selectedGoogleEvents = selectedDate ? (googleEventsByDate[selectedDate] || []) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
   return (
@@ -269,11 +296,12 @@ export default function Calendar() {
           ))}
         </div>
 
-        {/* Griglia mese — puntini colorati, tap per selezionare il giorno */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
+        {/* Griglia mese — puntini colorati, tap per selezionare il giorno; swipe orizzontale per cambiare mese */}
+        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
           {cells.map((cell, i) => {
             const dStr = toDateStr(cell.dateObj)
             const dayEvents = eventsByDate[dStr] || []
+            const dayGoogleEvents = googleEventsByDate[dStr] || []
             const dayAbsences = absencesOnDate(dStr)
             const hasMyAbsence = dayAbsences.some(a => a.workerId === user?.uid)
             const hasOtherAbsences = dayAbsences.some(a => a.workerId !== user?.uid)
@@ -308,9 +336,16 @@ export default function Calendar() {
                 }}>
                   {cell.day}
                 </span>
-                {/* Puntini: eventi + fasi + assenze altrui */}
-                {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || hasOtherAbsences) && (
+                {/* Puntini: eventi + fasi + assenze altrui + eventi Google Calendar */}
+                {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || hasOtherAbsences || dayGoogleEvents.length > 0) && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
+                    {dayGoogleEvents.length > 0 && (
+                      <span style={{
+                        width:7, height:7, borderRadius:2, flexShrink:0,
+                        background:'#4285F4',
+                        opacity: isPast ? 0.55 : 1,
+                      }} />
+                    )}
                     {dayEvents.slice(0, 3).map(ev => {
                       const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
                       return (
@@ -384,6 +419,10 @@ export default function Calendar() {
             <span style={{ width:0, height:0, borderLeft:'4px solid transparent', borderRight:'4px solid transparent', borderBottom:'7px solid var(--text3)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>Assenze personale</span>
           </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:2, background:'#4285F4', display:'inline-block' }} />
+            <span style={{ fontSize:12, color:'var(--text2)' }}>Da Google Calendar</span>
+          </div>
         </div>
       </div>
 
@@ -394,7 +433,7 @@ export default function Calendar() {
             {selectedDateObj.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
             {selectedDate === todayStr && ' · Oggi'}
           </p>
-          {selectedEvents.length === 0 && selectedPhaseEvents.length === 0 ? (
+          {selectedEvents.length === 0 && selectedPhaseEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>Nessun evento in questo giorno.</p>
           ) : (
             <>
@@ -432,6 +471,21 @@ export default function Calendar() {
                 )
               })}
             </>
+          )}
+
+          {/* Eventi importati da Google Calendar (sola lettura) */}
+          {selectedGoogleEvents.length > 0 && (
+            <div style={{ marginTop:14 }}>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Da Google Calendar</p>
+              {selectedGoogleEvents.map(ev => (
+                <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(66,133,244,0.06)', border:'1px solid rgba(66,133,244,0.22)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
+                  <span style={{ width:9, height:9, borderRadius:2, flexShrink:0, background:'#4285F4' }} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.title}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Assenze worker in questo giorno */}
