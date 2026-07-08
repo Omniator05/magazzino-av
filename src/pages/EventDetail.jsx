@@ -235,7 +235,11 @@ export default function EventDetail() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
-      setZipError('Download fallito. Se il problema persiste, controlla la configurazione CORS di Firebase Storage.')
+      // Errore con messaggio esplicito (es. "Download fallito per X (HTTP 404)") → mostralo così com'è,
+      // è più utile del generico avviso CORS che altrimenti lo maschererebbe
+      setZipError(e?.message?.startsWith('Download fallito per')
+        ? e.message
+        : 'Download fallito. Se il problema persiste, controlla la configurazione CORS di Firebase Storage.')
     } finally {
       setZipping(false)
     }

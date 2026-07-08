@@ -30,6 +30,8 @@ export default function BrasserieEditor({ date, onBack }) {
   const [status, setStatus] = useState('draft')
   const [meta, setMeta] = useState({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [publishState, setPublishState] = useState(null) // null | 'loading' | 'success' | 'error'
@@ -52,6 +54,7 @@ export default function BrasserieEditor({ date, onBack }) {
   // Carica la config della settimana selezionata
   useEffect(() => {
     setLoading(true)
+    setLoadError('')
     const ref = doc(db, 'brasserieWeeks', weekDocId)
     getDoc(ref).then(snap => {
       const d = snap.exists() ? snap.data() : null
@@ -67,8 +70,13 @@ export default function BrasserieEditor({ date, onBack }) {
       setMeta({ createdAt: d?.createdAt || null, createdBy: d?.createdBy || null })
       baselineRef.current = JSON.stringify({ artisti, sponsor, next, st })
       setLoading(false)
+    }).catch(e => {
+      setLoadError(e?.code === 'permission-denied'
+        ? 'Non hai i permessi per accedere a questa settimana. Riprova, oppure contatta chi gestisce il gestionale.'
+        : 'Errore nel caricamento di questa settimana. Riprova.')
+      setLoading(false)
     })
-  }, [weekDocId])
+  }, [weekDocId, retryCount])
 
   const isDirty = !loading && JSON.stringify({ artisti: artistiSlots, sponsor: sponsorSlots, next: nextGraphic, st: status }) !== baselineRef.current
 
@@ -215,7 +223,13 @@ export default function BrasserieEditor({ date, onBack }) {
       </div>
 
       <div className="be-content" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {!loading && (
+        {loadError && (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '20px 16px', textAlign: 'center' }}>
+            <p style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 12 }}>{loadError}</p>
+            <button onClick={() => setRetryCount(c => c + 1)} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }}>Riprova</button>
+          </div>
+        )}
+        {!loading && !loadError && (
           <>
             {/* Layer ARTISTI */}
             <div className="be-card" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
@@ -261,7 +275,7 @@ export default function BrasserieEditor({ date, onBack }) {
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 13, color: 'var(--text2)' }}>Grafica caricata</p>
                   </div>
-                  <button onClick={() => nextFileInputRef.current?.click()} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: 12 }}>Sostituisci</button>
+                  <button onClick={() => nextFileInputRef.current?.click()} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: 12 }}>Cambia</button>
                   <button onClick={() => setNextGraphic(null)} className="btn-no-anim" style={{ background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>Rimuovi</button>
                   <input ref={nextFileInputRef} type="file" accept={ACCEPT_IMAGE_ATTR} style={{ display: 'none' }} onChange={e => handleNextFiles(e.target.files)} />
                 </div>

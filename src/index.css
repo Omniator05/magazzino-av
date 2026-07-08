@@ -74,9 +74,8 @@ button {
    e può spostare il bottone (transform) facendo perdere il primo tocco */
 @media (hover: hover) and (pointer: fine) {
   button:not(:disabled):hover {
-    filter: brightness(1.06);
-    transform: translateY(-1px);
-    box-shadow: 0 3px 10px rgba(0,0,0,0.14);
+    filter: brightness(1.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
   }
 }
 button.btn-no-anim:hover {
@@ -194,7 +193,7 @@ select option { background: var(--bg2); }
 }
 .btn-primary   { background: var(--accent); color: #fff; box-shadow: 0 2px 12px rgba(233,69,96,0.30); }
 @media (hover: hover) and (pointer: fine) {
-  .btn-primary:not(:disabled):hover { box-shadow: 0 6px 22px rgba(233,69,96,0.55); transform: translateY(-1px); filter: brightness(1.08); }
+  .btn-primary:not(:disabled):hover { box-shadow: 0 3px 12px rgba(233,69,96,0.35); filter: brightness(1.05); }
 }
 .btn-primary:not(:disabled):active { transform: scale(0.98) translateY(0); box-shadow: 0 2px 8px rgba(233,69,96,0.25); }
 

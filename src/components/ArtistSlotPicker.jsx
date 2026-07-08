@@ -3,7 +3,7 @@ import { collection, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/fi
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
-import { uploadArtistLogo, deleteStorageFile, ALLOWED_IMAGE_TYPES, ACCEPT_IMAGE_ATTR } from '../utils/brasserieStorage'
+import { uploadArtistLogo, ALLOWED_IMAGE_TYPES, ACCEPT_IMAGE_ATTR } from '../utils/brasserieStorage'
 import { Trash } from './Icon'
 
 function deriveNameFromFilename(filename) {
@@ -110,13 +110,13 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
     setPendingName('')
   }
 
-  // Rimuove un artista dalla libreria (es. caricato per errore): non tocca le settimane
-  // già salvate, che tengono nome/logo copiati e non un riferimento vivo a questo doc
+  // Rimuove un artista dalla libreria (es. caricato per errore): NON elimina il file
+  // dallo Storage, perché le settimane già salvate puntano allo stesso URL (non una
+  // copia) — cancellarlo romperebbe le grafiche di eventi passati o già pubblicati
   const removeArtist = async (artist, e) => {
     e.stopPropagation()
     if (!(await confirm({ title: 'Elimina artista', message: `Eliminare "${artist.name}" dalla libreria? Non comparirà più nei suggerimenti o nella ricerca.`, confirmLabel: 'Elimina', danger: true }))) return
     await deleteDoc(doc(db, 'brasserieArtists', artist.id))
-    deleteStorageFile(artist.storagePath)
   }
 
   return (

@@ -51,7 +51,8 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
     <div ref={containerRef} style={{ position: 'relative' }}>
       <style>{`
         .df-trigger { transition: border-color 0.15s; }
-        .df-trigger:hover { border-color: var(--text2) !important; }
+        .df-trigger:hover { border-color: var(--text2) !important; filter: none !important; transform: none !important; box-shadow: none !important; }
+        .df-trigger:active { transform: none !important; filter: none !important; }
         .df-day { transition: background 0.1s; }
         .df-day:not(:disabled):not(.df-sel):hover { background: var(--card2) !important; }
         .df-nav-btn:hover { opacity: 0.65; }
