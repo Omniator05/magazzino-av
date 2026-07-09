@@ -101,22 +101,29 @@ export default function WorkerInventory() {
         try { await html5QrRef.current.stop() } catch(e) {}
         try { html5QrRef.current.clear() } catch(e) {}
       }
-      html5QrRef.current = new Html5Qrcode('qr-inventory')
+      html5QrRef.current = new Html5Qrcode('qr-inventory', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+        ],
+      })
       await html5QrRef.current.start(
         { facingMode: 'environment' },
         {
           fps: 15,
           qrbox: { width: 280, height: 160 },
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.DATA_MATRIX,
-          ]
+          videoConstraints: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' }],
+          },
         },
         async decodedText => {
           const normalized = decodedText.trim().toUpperCase()
