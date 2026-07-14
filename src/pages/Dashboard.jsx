@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import { Pin } from '../components/Icon'
@@ -54,7 +54,7 @@ const IconCart = () => (
 )
 
 export default function Dashboard({ toggleTheme, theme }) {
-  const { profile, logout } = useAuth()
+  const { profile, logout, teamId } = useAuth()
   const navigate = useNavigate()
   const [items, setItems]   = useState([])
   const [tasks, setTasks]   = useState([])
@@ -64,11 +64,12 @@ export default function Dashboard({ toggleTheme, theme }) {
   })
 
   useEffect(() => {
-    const u1 = onSnapshot(query(collection(db, 'items'),  orderBy('name')),  s => setItems(s.docs.map(d => ({ id:d.id,...d.data() }))))
-    const u2 = onSnapshot(query(collection(db, 'events'), orderBy('date')),  s => setEvents(s.docs.map(d => ({ id:d.id,...d.data() }))))
-    const u3 = onSnapshot(query(collection(db, 'tasks')),                    s => setTasks(s.docs.map(d => ({ id:d.id,...d.data() }))))
+    if (!teamId) return
+    const u1 = onSnapshot(query(collection(db, 'items'),  where('teamId','==',teamId), orderBy('name')),  s => setItems(s.docs.map(d => ({ id:d.id,...d.data() }))))
+    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => setEvents(s.docs.map(d => ({ id:d.id,...d.data() }))))
+    const u3 = onSnapshot(query(collection(db, 'tasks'),  where('teamId','==',teamId)),                   s => setTasks(s.docs.map(d => ({ id:d.id,...d.data() }))))
     return () => { u1(); u2(); u3() }
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')

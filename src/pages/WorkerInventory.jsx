@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDocs } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useAuth } from '../context/AuthContext'
 import { Pin, Cart, Box, Wrench, Warn, Check } from '../components/Icon'
 import { parseScannedCode } from '../utils/generateCode'
 
@@ -26,6 +27,7 @@ const ICONS = {
 }
 
 export default function WorkerInventory() {
+  const { teamId } = useAuth()
   const [items, setItems]   = useState([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
@@ -36,9 +38,10 @@ export default function WorkerInventory() {
   const html5QrRef = useRef(null)
 
   useEffect(() => {
-    const q = query(collection(db, 'items'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'items'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)).length
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
@@ -131,7 +134,7 @@ export default function WorkerInventory() {
         },
         async decodedText => {
           const { baseCode } = parseScannedCode(decodedText)
-          const q = query(collection(db, 'items'), where('code', '==', baseCode))
+          const q = query(collection(db, 'items'), where('teamId', '==', teamId), where('code', '==', baseCode))
           const snap = await getDocs(q)
           if (snap.empty) {
             if (navigator.vibrate) navigator.vibrate([100, 50, 100])

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
-import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, deleteDoc, doc, serverTimestamp, where } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -12,7 +12,7 @@ const PAGE_SIZE = 30
 
 export default function Archive() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const [events, setEvents]           = useState([])
   const [search, setSearch]           = useState('')
@@ -26,10 +26,11 @@ export default function Archive() {
   const today = new Date().toISOString().split('T')[0]
 
   const loadEvents = useCallback(async (after = null) => {
+    if (!teamId) return
     after ? setLoadingMore(true) : setLoading(true)
     try {
-      let q = query(collection(db, 'events'), orderBy('date', 'desc'), limit(PAGE_SIZE * 3))
-      if (after) q = query(collection(db, 'events'), orderBy('date', 'desc'), startAfter(after), limit(PAGE_SIZE * 3))
+      let q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date', 'desc'), limit(PAGE_SIZE * 3))
+      if (after) q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date', 'desc'), startAfter(after), limit(PAGE_SIZE * 3))
 
       const snap = await getDocs(q)
       const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -52,7 +53,7 @@ export default function Archive() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [today])
+  }, [today, teamId])
 
   useEffect(() => { loadEvents() }, [loadEvents])
 

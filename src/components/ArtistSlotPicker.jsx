@@ -19,7 +19,7 @@ function deriveNameFromFilename(filename) {
  * prima di salvarlo (utile quando il file è solo uno screenshot tipo "IMG_1234").
  */
 export default function ArtistSlotPicker({ slot, label, artists, onChange, onRemove }) {
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const [query, setQuery] = useState(slot.artistName || '')
   const [editing, setEditing] = useState(!slot.artistId)
@@ -79,6 +79,7 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
         logoUrl: url,
         storagePath: path,
         organizerId: user.uid,
+        teamId,
         usageCount: 0,
         lastUsedAt: null,
         createdAt: serverTimestamp(),

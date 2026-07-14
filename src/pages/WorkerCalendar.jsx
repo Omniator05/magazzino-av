@@ -36,7 +36,7 @@ function toDateStr(d) {
 }
 
 export default function WorkerCalendar() {
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const today = new Date()
@@ -54,27 +54,29 @@ export default function WorkerCalendar() {
   const [reasonInput, setReasonInput] = useState('')
 
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
       setAllEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => !e.archived))
     })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    if (!user) return
-    const q = query(collection(db, 'unavailability'), where('workerId', '==', user.uid))
+    if (!user || !teamId) return
+    const q = query(collection(db, 'unavailability'), where('teamId', '==', teamId), where('workerId', '==', user.uid))
     return onSnapshot(q, snap => {
       setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-  }, [user])
+  }, [user, teamId])
 
   // Eventi importati da Google Calendar (sync giornaliero in sola lettura, vedi /api/sync-google-calendar)
   useEffect(() => {
-    const q = query(collection(db, 'googleCalendarEvents'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'googleCalendarEvents'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
       setGoogleEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-  }, [])
+  }, [teamId])
 
   // ESC chiude il modal di conferma assenza
   useEffect(() => {
@@ -164,6 +166,7 @@ export default function WorkerCalendar() {
     if (!pendingRange || !user) return
     await addDoc(collection(db, 'unavailability'), {
       workerId: user.uid,
+      teamId,
       startDate: pendingRange.start,
       endDate: pendingRange.end,
       reason: reasonInput.trim() || null,

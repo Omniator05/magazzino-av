@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from '../firebase'
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -15,7 +15,7 @@ const ICONS = {
 }
 
 export default function Templates() {
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
@@ -29,14 +29,16 @@ export default function Templates() {
   useModalScrollLock(showModal)
 
   useEffect(() => {
-    const q = query(collection(db, 'templates'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'templates'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    const q = query(collection(db, 'items'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'items'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   const openNew = () => {
     setEditing(null)
@@ -67,7 +69,7 @@ export default function Templates() {
       if (editing) {
         await updateDoc(doc(db, 'templates', editing.id), data)
       } else {
-        await addDoc(collection(db, 'templates'), { ...data, createdAt: serverTimestamp(), createdBy: user.uid })
+        await addDoc(collection(db, 'templates'), { ...data, teamId, createdAt: serverTimestamp(), createdBy: user.uid })
       }
       setShowModal(false)
     } finally { setSaving(false) }

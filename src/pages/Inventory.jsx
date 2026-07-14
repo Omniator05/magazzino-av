@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG, generateUnitCode, qrPayloadForCode } from '../utils/generateCode'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import JSZip from 'jszip'
@@ -61,7 +61,7 @@ const CATEGORY_MIGRATION = {
 }
 
 export default function Inventory() {
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const { state: navState } = useLocation()
@@ -94,9 +94,10 @@ export default function Inventory() {
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
-    const q = query(collection(db, 'items'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'items'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   // Arrivo dallo Scanner con un codice già identificato → apri direttamente il modal dettaglio
   useEffect(() => {
@@ -109,9 +110,10 @@ export default function Inventory() {
   // Eventi — per rintracciare in quale evento/lista si trova un oggetto "fuori"
   const [events, setEvents] = useState([])
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   // Eventi in cui l'oggetto attualmente selezionato è caricato e non ancora rientrato
   const detailEvents = showDetail
@@ -173,7 +175,7 @@ export default function Inventory() {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes,
-        createdAt:serverTimestamp(), createdBy: user.uid
+        teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
     }
@@ -904,7 +906,7 @@ export default function Inventory() {
                     category: kitForm.category || 'Altro', isBundle: true,
                     components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
                     totalQty: kitQty, availableQty: kitQty,
-                    createdAt: serverTimestamp(), createdBy: user.uid,
+                    teamId, createdAt: serverTimestamp(), createdBy: user.uid,
                   })
                   await updateDoc(ref, { code: generateItemCode(ref.id) })
                   setShowKitModal(false)

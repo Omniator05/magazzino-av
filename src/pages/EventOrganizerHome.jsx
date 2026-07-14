@@ -42,7 +42,7 @@ export default function EventOrganizerHome() {
 
   const saveItems = async (newItems) => {
     await setDoc(doc(db, 'eventOrganizerContent', eventId), {
-      eventId, items: newItems, updatedAt: new Date().toISOString(),
+      eventId, teamId: profile.teamId, items: newItems, updatedAt: new Date().toISOString(),
     }, { merge: true })
   }
 

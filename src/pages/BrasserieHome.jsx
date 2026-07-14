@@ -76,10 +76,10 @@ export default function BrasserieHome({ onSelectDate }) {
   const today = todayYMD()
 
   useEffect(() => {
-    if (!user) return
-    const q = query(collection(db, 'brasserieWeeks'), where('organizerId', '==', user.uid), orderBy('date'))
+    if (!user || !profile?.teamId) return
+    const q = query(collection(db, 'brasserieWeeks'), where('teamId', '==', profile.teamId), where('organizerId', '==', user.uid), orderBy('date'))
     return onSnapshot(q, snap => setWeeks(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [user])
+  }, [user, profile?.teamId])
 
   // Pulizia grafiche "Next" ormai scadute (settimane passate da più di NEXT_GRAPHIC_RETENTION_DAYS giorni)
   useEffect(() => {

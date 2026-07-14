@@ -46,7 +46,7 @@ function toDateStr(d) {
 
 export default function Calendar() {
   const navigate = useNavigate()
-  const { user, isWorker } = useAuth()
+  const { user, isWorker, teamId } = useAuth()
   const confirm = useConfirm()
   const today = new Date()
   const todayStr = toDateStr(today)
@@ -99,6 +99,7 @@ export default function Calendar() {
     try {
       await addDoc(collection(db, 'unavailability'), {
         workerId: user.uid,
+        teamId,
         startDate: absenceForm.startDate,
         endDate: absenceForm.endDate || absenceForm.startDate,
         reason: absenceForm.reason.trim(),
@@ -134,6 +135,7 @@ export default function Calendar() {
         location: (editForm.location || '').trim(),
         notes: (editForm.notes || '').trim(),
         phases: editForm.phases || {},
+        teamId,
         createdAt: serverTimestamp(),
       })
       setShowCreate(false)
@@ -163,32 +165,36 @@ export default function Calendar() {
   }
 
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
       setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => !e.archived))
     })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    return onSnapshot(collection(db, 'unavailability'), snap => {
+    if (!teamId) return
+    return onSnapshot(query(collection(db, 'unavailability'), where('teamId', '==', teamId)), snap => {
       setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-  }, [])
+  }, [teamId])
 
   // Eventi importati da Google Calendar (sync giornaliero in sola lettura, vedi /api/sync-google-calendar)
   useEffect(() => {
-    const q = query(collection(db, 'googleCalendarEvents'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'googleCalendarEvents'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
       setGoogleEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    const q = query(collection(db, 'profiles'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'profiles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => {
       setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
     })
-  }, [])
+  }, [teamId])
 
   const cells = getMonthGrid(cursor.year, cursor.month)
 

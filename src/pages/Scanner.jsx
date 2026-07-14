@@ -8,6 +8,7 @@ import { parseScannedCode } from '../utils/generateCode'
 
 export default function Scanner() {
   const navigate = useNavigate()
+  const { teamId } = useAuth()
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -16,7 +17,7 @@ export default function Scanner() {
 
   const lookupCode = async raw => {
     const { baseCode } = parseScannedCode(raw)
-    const q = query(collection(db, 'items'), where('code', '==', baseCode))
+    const q = query(collection(db, 'items'), where('teamId', '==', teamId), where('code', '==', baseCode))
     const snap = await getDocs(q)
     if (!snap.empty) return { found: true, item: { id: snap.docs[0].id, ...snap.docs[0].data() } }
     return { found: false, code: baseCode }

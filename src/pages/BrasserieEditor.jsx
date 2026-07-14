@@ -47,7 +47,7 @@ export default function BrasserieEditor({ date, onBack }) {
 
   // Libreria artisti dell'organizzatore — sottoscrizione unica, riusata per l'autocomplete su tutti gli slot
   useEffect(() => {
-    const q = query(collection(db, 'brasserieArtists'), where('organizerId', '==', user.uid), orderBy('nameLower'))
+    const q = query(collection(db, 'brasserieArtists'), where('teamId', '==', profile.teamId), where('organizerId', '==', user.uid), orderBy('nameLower'))
     return onSnapshot(q, snap => setArtists(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [user.uid])
 
@@ -121,6 +121,7 @@ export default function BrasserieEditor({ date, onBack }) {
       await setDoc(ref, {
         date,
         organizerId: user.uid,
+        teamId: profile.teamId,
         layers: { artisti: artistiSlots, sponsor: sponsorSlots },
         nextGraphic: nextGraphic || null,
         status: newStatus,

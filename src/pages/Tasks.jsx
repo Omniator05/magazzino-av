@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import DeleteButton from '../components/DeleteButton'
 import { Dot, Check, User } from '../components/Icon'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -15,7 +15,7 @@ const PRIORITY_COLORS = {
 }
 
 export default function Tasks() {
-  const { user, profile } = useAuth()
+  const { user, profile, teamId } = useAuth()
   const confirm = useConfirm()
   const [tasks, setTasks]       = useState([])
   const [users, setUsers]       = useState([])
@@ -26,16 +26,18 @@ export default function Tasks() {
   useModalScrollLock(showModal)
 
   useEffect(() => {
-    const q = query(collection(db, 'tasks'), orderBy('createdAt', 'desc'))
+    if (!teamId) return
+    const q = query(collection(db, 'tasks'), where('teamId', '==', teamId), orderBy('createdAt', 'desc'))
     return onSnapshot(q, snap => setTasks(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
     // Carica sempre i profili — servono per mostrare i nomi nelle task
-    return onSnapshot(collection(db, 'profiles'), snap => {
+    if (!teamId) return
+    return onSnapshot(query(collection(db, 'profiles'), where('teamId', '==', teamId)), snap => {
       setUsers(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(u => u.active !== false))
     })
-  }, [])
+  }, [teamId])
 
   // Pulizia automatica task completate: ogni lunedì (giorno dopo domenica)
   // si eliminano tutte le task completate prima di domenica scorsa
@@ -49,14 +51,14 @@ export default function Tasks() {
 
     // Elimina task completate
     const cleanupDone = async () => {
-      const { getDocs, query: q2, where, collection: col } = await import('firebase/firestore')
-      const snap = await getDocs(q2(col(db, 'tasks'), where('done', '==', true)))
+      const { getDocs, query: q2, where: w2, collection: col } = await import('firebase/firestore')
+      const snap = await getDocs(q2(col(db, 'tasks'), w2('teamId', '==', teamId), w2('done', '==', true)))
       await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'tasks', d.id))))
       localStorage.setItem(CLEANUP_KEY, weekKey)
       console.log(`🧹 Pulizia task: rimosse ${snap.docs.length} task completate`)
     }
     cleanupDone().catch(console.error)
-  }, [isAdmin])
+  }, [isAdmin, teamId])
 
   const myTasks = isAdmin
     ? tasks
@@ -71,6 +73,7 @@ export default function Tasks() {
       title: form.title.trim(),
       notes: form.notes.trim(),
       priority: form.priority,
+      teamId,
       // Worker può solo assegnare a se stesso
       assignee: isAdmin ? form.assignee : user.uid,
       done: false,

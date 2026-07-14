@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+    function myTeamId() {
+      return myProfile().data.teamId;
+    }
+    // Membro approvato e attivo della squadra indicata — condizione di
+    // accesso base per leggere/scrivere qualunque dato di quella squadra.
+    function isApprovedMember(teamId) {
+      // .get(key, default) invece di .data.approved: sui profili creati prima
+      // dell'introduzione del flusso di approvazione il campo non esiste, e
+      // leggere un campo assente con .data.x genera un errore di valutazione
+      // (non null) che farebbe fallire la regola per tutti gli account storici.
+      return request.auth != null
+        && myProfile().data.teamId == teamId
+        && myProfile().data.get('approved', true) != false
+        && myProfile().data.get('active', true) != false;
+    }
+    function isTeamAdmin(teamId) {
+      return isApprovedMember(teamId) && myProfile().data.role == 'admin';
+    }
+
+    match /profiles/{uid} {
+      // Signup: il profilo non esiste ancora, non può dipendere da myProfile().
+      allow create: if request.auth != null && request.auth.uid == uid;
+      // Il proprio profilo è sempre leggibile (serve anche prima dell'approvazione,
+      // per la schermata "in attesa"); un membro approvato legge anche i profili
+      // della propria squadra (es. AdminUsers, assegnazione worker a un evento).
+      allow read: if request.auth != null
+        && (request.auth.uid == uid || isApprovedMember(resource.data.teamId));
+      allow update: if request.auth != null
+        && (isTeamAdmin(resource.data.teamId) || request.auth.uid == uid);
+      allow delete: if isTeamAdmin(resource.data.teamId);
+    }
+
+    match /teams/{teamId} {
+      // Lettura/creazione aperta a chiunque sia autenticato: serve per la ricerca
+      // per nome azienda in Signup, prima che l'utente abbia un proprio profilo.
+      // Espone solo nome squadra, non è un dato sensibile.
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if isTeamAdmin(teamId);
+    }
+
+    // Pattern comune per tutte le collection dati applicative: items, events,
+    // tasks, templates, unavailability, brasserieWeeks, brasserieArtists,
+    // googleCalendarEvents, eventOrganizerContent.
+    match /{collection}/{docId} {
+      allow read, update, delete: if collection != 'profiles' && collection != 'teams'
+        && isApprovedMember(resource.data.teamId);
+      allow create: if collection != 'profiles' && collection != 'teams'
+        && isApprovedMember(request.resource.data.teamId);
+    }
+  }
+}

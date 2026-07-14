@@ -127,20 +127,22 @@ export default function AdminUsers() {
   const [assignedEventId, setAssignedEventId] = useState('')
 
   useEffect(() => {
-    const q = query(collection(db, 'profiles'), orderBy('name'))
+    if (!profile?.teamId) return
+    const q = query(collection(db, 'profiles'), where('teamId', '==', profile.teamId), orderBy('name'))
     return onSnapshot(q, snap => setUsers(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [])
+  }, [profile?.teamId])
 
   // Eventi da oggi in poi, per il selettore dell'Organizzatore evento
   useEffect(() => {
+    if (!profile?.teamId) return
     const todayStr = new Date().toISOString().slice(0, 10)
-    const q = query(collection(db, 'events'), orderBy('date'))
+    const q = query(collection(db, 'events'), where('teamId', '==', profile.teamId), orderBy('date'))
     return onSnapshot(q, snap => setEvents(
       snap.docs
         .map(d => ({ id:d.id, ...d.data() }))
         .filter(e => (e.dateEnd || e.date) >= todayStr)
     ))
-  }, [])
+  }, [profile?.teamId])
 
   useEffect(() => {
     if (!showDetail) { setDetailUnavail([]); return }
@@ -184,6 +186,8 @@ export default function AdminUsers() {
         internalEmail,
         email:         form.email.trim().toLowerCase() || null,
         role:          form.role || 'worker',
+        teamId:        profile.teamId,
+        approved:      true,
         active:        true,
         createdAt:     new Date().toISOString(),
         createdBy:     user.uid,
@@ -216,6 +220,28 @@ export default function AdminUsers() {
       }
       setError(msgs[e.code] || e.message)
     } finally { setLoading(false) }
+  }
+
+  // ── Approva richiesta di adesione (self-signup "unisciti a squadra") ──
+  const approveUser = async () => {
+    await updateDoc(doc(db, 'profiles', showDetail.id), { approved: true })
+    setShowDetail(d => ({ ...d, approved: true }))
+    clearDetailMsg()
+    showToast(`✓ ${showDetail.name} è stato approvato`)
+  }
+
+  // ── Rifiuta richiesta di adesione ──────────────────────────────
+  const rejectUser = async () => {
+    if (!(await confirm({
+      title: 'Rifiuta richiesta',
+      message: `Rifiutare ed eliminare la richiesta di ${showDetail.name}?`,
+      confirmLabel: 'Rifiuta',
+      danger: true,
+    }))) return
+    const name = showDetail.name
+    await deleteDoc(doc(db, 'profiles', showDetail.id))
+    setShowDetail(null)
+    showToast(`Richiesta di ${name} rifiutata.`)
   }
 
   // ── Attiva / disattiva ────────────────────────────────────────
@@ -368,9 +394,10 @@ export default function AdminUsers() {
     showToast(`Account di ${name} eliminato.`)
   }
 
-  const workers   = users.filter(u => u.role === 'worker')
-  const admins    = users.filter(u => u.role === 'admin')
-  const organizers = users.filter(u => u.role === 'organizzatore-brasserie' || u.role === 'organizzatore-evento')
+  const pending   = users.filter(u => u.approved === false)
+  const workers   = users.filter(u => u.role === 'worker' && u.approved !== false)
+  const admins    = users.filter(u => u.role === 'admin' && u.approved !== false)
+  const organizers = users.filter(u => (u.role === 'organizzatore-brasserie' || u.role === 'organizzatore-evento') && u.approved !== false)
 
   const ROLE_COLORS = {
     admin: { bg:'rgba(233,69,96,0.15)', color:'var(--accent)' },
@@ -395,14 +422,14 @@ export default function AdminUsers() {
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)' }}>{u.name}</p>
-          <p style={{ color:'var(--text2)', fontSize:13 }}>@{u.username}</p>
+          <p style={{ color:'var(--text2)', fontSize:13 }}>{u.username ? `@${u.username}` : u.email}</p>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span className="badge" style={{
-            background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
-            color: roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
+            background: u.approved === false ? 'rgba(245,166,35,0.15)' : roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
+            color: u.approved === false ? 'var(--accent2)' : roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
           }}>
-            {u.role === 'admin' ? 'Admin' : roleColor ? ROLE_LABELS[u.role] : u.active !== false ? 'Attivo' : 'Disattivato'}
+            {u.approved === false ? 'In attesa' : u.role === 'admin' ? 'Admin' : roleColor ? ROLE_LABELS[u.role] : u.active !== false ? 'Attivo' : 'Disattivato'}
           </span>
           <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
         </div>
@@ -427,6 +454,15 @@ export default function AdminUsers() {
       </div>
 
       <div style={{ padding:'16px 0 0' }}>
+        {pending.length > 0 && (
+          <>
+            <p style={{ padding:'0 16px 10px', color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>In attesa di approvazione</p>
+            <div style={{ background:'var(--card)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
+              {pending.map(u => <UserRow key={u.id} u={u} />)}
+            </div>
+          </>
+        )}
+
         {admins.length > 0 && (
           <>
             <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>Amministratori</p>
@@ -574,24 +610,32 @@ export default function AdminUsers() {
                   {showDetail.avatar || (showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
                 </div>
                 <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
-                <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>@{showDetail.username}</p>
+                {showDetail.username && (
+                  <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>@{showDetail.username}</p>
+                )}
 
                 {showDetail.email && (
                   <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{showDetail.email}</p>
                 )}
-                <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:10 }}>
+                <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:10, flexWrap:'wrap' }}>
                   <span className="badge" style={{
                     background: ROLE_COLORS[showDetail.role]?.bg || 'rgba(79,195,247,0.15)',
                     color: ROLE_COLORS[showDetail.role]?.color || 'var(--blue)', fontSize:13, padding:'5px 14px'
                   }}>
                     {ROLE_LABELS[showDetail.role] || 'Magazziniere'}
                   </span>
-                  <span className="badge" style={{
-                    background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
-                    color: showDetail.active !== false ? 'var(--green)' : 'var(--text2)', fontSize:13, padding:'5px 14px'
-                  }}>
-                    {showDetail.active !== false ? '● Attivo' : '○ Disattivato'}
-                  </span>
+                  {showDetail.approved === false ? (
+                    <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:13, padding:'5px 14px' }}>
+                      ⏳ In attesa di approvazione
+                    </span>
+                  ) : (
+                    <span className="badge" style={{
+                      background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
+                      color: showDetail.active !== false ? 'var(--green)' : 'var(--text2)', fontSize:13, padding:'5px 14px'
+                    }}>
+                      {showDetail.active !== false ? '● Attivo' : '○ Disattivato'}
+                    </span>
+                  )}
                 </div>
               </div>
             ) : (
@@ -605,6 +649,17 @@ export default function AdminUsers() {
                   <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 14px', marginBottom:16, display:'flex', justifyContent:'space-between' }}>
                     <span style={{ color:'var(--text2)', fontSize:13 }}>Account creato il</span>
                     <span style={{ fontSize:13, fontWeight:600 }}>{new Date(showDetail.createdAt).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+                  </div>
+                )}
+
+                {showDetail.approved === false && (
+                  <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                    <button onClick={approveUser} className="btn btn-primary" style={{ flex:1 }}>
+                      <Check size={16} /> Approva
+                    </button>
+                    <button onClick={rejectUser} className="btn btn-secondary" style={{ flex:1, color:'var(--red)' }}>
+                      Rifiuta
+                    </button>
                   </div>
                 )}
 

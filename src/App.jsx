@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
 import { useState, useEffect, useRef } from 'react'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
+import PendingApproval from './pages/PendingApproval'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
 import Events from './pages/Events'
@@ -61,6 +63,18 @@ function PrivateRoutes({ toggleTheme, theme }) {
 
   if (!user) return <Navigate to="/login" replace />
 
+  // Profilo mancante (utente Auth orfano, senza doc in profiles) — mai deve
+  // ricadere sul ramo admin di default: mostra errore invece di dare accesso.
+  if (!profile) return <PendingApproval reason="unknown" />
+
+  // In attesa di approvazione (self-signup "unisciti a squadra") o account
+  // disattivato da un admin — bloccato prima di qualunque route applicativa.
+  if (profile.approved === false) return <PendingApproval reason="pending" />
+  if (profile.active === false)   return <PendingApproval reason="inactive" />
+
+  const KNOWN_ROLES = ['admin', 'worker', 'organizzatore-brasserie', 'organizzatore-evento']
+  if (!KNOWN_ROLES.includes(profile.role)) return <PendingApproval reason="unknown" />
+
   // Worker view
   if (profile?.role === 'worker') {
     return (
@@ -105,7 +119,8 @@ function PrivateRoutes({ toggleTheme, theme }) {
     )
   }
 
-  // Admin view
+  // Admin view — unico ramo rimasto: role è garantito 'admin' dal controllo
+  // KNOWN_ROLES sopra (nessun fallback implicito su ruoli sconosciuti).
   return (
     <>
       <AnimatedPage>
@@ -148,6 +163,7 @@ export default function App() {
           <PageTransition />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
           </Routes>
         </BrowserRouter>

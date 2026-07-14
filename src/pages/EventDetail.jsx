@@ -48,7 +48,7 @@ const ICONS = {
 
 export default function EventDetail() {
   const { id } = useParams()
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [event, setEvent] = useState(null)
@@ -117,8 +117,8 @@ export default function EventDetail() {
   // Se questa data corrisponde a una settimana Brasserie configurata da un organizzatore,
   // mostra la card di verifica contenuti in cima alla lista di carico
   useEffect(() => {
-    if (!event?.date) { setBrasserieWeek(null); return }
-    const q = query(collection(db, 'brasserieWeeks'), where('date', '==', event.date))
+    if (!event?.date || !teamId) { setBrasserieWeek(null); return }
+    const q = query(collection(db, 'brasserieWeeks'), where('teamId', '==', teamId), where('date', '==', event.date))
     return onSnapshot(q, snap => {
       if (snap.empty) { setBrasserieWeek(null); return }
       // Se per la stessa data esistono più documenti (es. residui di test con schema id vecchio),
@@ -127,7 +127,7 @@ export default function EventDetail() {
       docs.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0))
       setBrasserieWeek(docs[0])
     })
-  }, [event?.date])
+  }, [event?.date, teamId])
 
   // Contenuti caricati da un organizzatore evento (generico) collegato a questo evento per id reale
   useEffect(() => {
@@ -151,37 +151,33 @@ export default function EventDetail() {
   }, [event?.date, event?.dateEnd, organizerContent, id])
 
   useEffect(() => {
-    const q = query(collection(db, 'profiles'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'profiles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => {
       setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
     })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    return onSnapshot(collection(db, 'unavailability'), snap => {
+    if (!teamId) return
+    return onSnapshot(query(collection(db, 'unavailability'), where('teamId', '==', teamId)), snap => {
       setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    // Items are under the admin's user collection - we need a shared items collection too
-    // For now fetch from all users (admin creates items under shared 'items' collection)
-    const fetchItems = async () => {
-      const q = query(collection(db, 'items'), orderBy('name'))
-      const snap = await getDocs(q)
-      setAllItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    }
-    fetchItems()
+    if (!teamId) return
     // Listen for real time updates
-    const q = query(collection(db, 'items'), orderBy('name'))
+    const q = query(collection(db, 'items'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setAllItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   // Template disponibili (per applicarli a un evento già esistente)
   useEffect(() => {
-    const q = query(collection(db, 'templates'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'templates'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   const applyTemplate = async (template) => {
     const items = (template.components || []).map(c => ({
@@ -196,7 +192,7 @@ export default function EventDetail() {
   useEffect(() => {
     if (!showAddItem) { setSuggestionMaps(null); return }
     setLoadingSuggestions(true)
-    getDocs(query(collection(db, 'events'), orderBy('date', 'desc')))
+    getDocs(query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date', 'desc')))
       .then(snap => {
         const freq = {}, cooc = {}
         snap.docs

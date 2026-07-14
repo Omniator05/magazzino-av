@@ -15,6 +15,7 @@ export function usernameToEmail(username) {
 export function AuthProvider({ children }) {
   const [user, setUser]             = useState(null)
   const [profile, setProfile]       = useState(null)
+  const [team, setTeam]             = useState(null)
   const [loading, setLoading]       = useState(true)
   const [loginName, setLoginName]   = useState('')   // nome da mostrare nell'overlay
   const [showOverlay, setShowOverlay] = useState(false)
@@ -39,6 +40,13 @@ export function AuthProvider({ children }) {
           setProfile(profileData)
           if (isColdStart && profileData.name) setLoginName(profileData.name.split(' ')[0])
 
+          if (profileData.teamId) {
+            const teamSnap = await getDoc(doc(db, 'teams', profileData.teamId))
+            setTeam(teamSnap.exists() ? { id: teamSnap.id, ...teamSnap.data() } : null)
+          } else {
+            setTeam(null)
+          }
+
           // Applica pendingPassword se presente (impostata dall'admin)
           if (profileData.pendingPassword) {
             try {
@@ -54,10 +62,12 @@ export function AuthProvider({ children }) {
           }
         } else {
           setProfile(null)
+          setTeam(null)
         }
       } else {
         setUser(null)
         setProfile(null)
+        setTeam(null)
       }
       setLoading(false)
     })
@@ -123,6 +133,10 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading, login, logout, updateProfileData,
+      teamId: profile?.teamId || null,
+      team,
+      isApproved: profile?.approved !== false,
+      isActive:   profile?.active !== false,
       isAdmin:  profile?.role === 'admin',
       isWorker: profile?.role === 'worker',
       isBrasserieOrganizer: profile?.role === 'organizzatore-brasserie',

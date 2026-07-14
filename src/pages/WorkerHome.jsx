@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import { Unload, Recurring, Pin, Box } from '../components/Icon'
@@ -16,7 +16,7 @@ const greeting = () => {
 }
 
 export default function WorkerHome() {
-  const { profile, logout } = useAuth()
+  const { profile, logout, teamId } = useAuth()
   const [events, setEvents] = useState([])
   const [weather, setWeather] = useState(() => {
     try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
@@ -25,11 +25,12 @@ export default function WorkerHome() {
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
       setEvents(snap.docs.map(d => ({ id:d.id, ...d.data() })))
     })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')

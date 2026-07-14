@@ -11,7 +11,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
-import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 function addDays(dateStr, days) {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + days)
@@ -127,7 +127,7 @@ const IconCalendarSm = () => (
 )
 
 export default function Events() {
-  const { user } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
@@ -167,14 +167,16 @@ export default function Events() {
   }, [navState])
 
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('date'))
+    if (!teamId) return
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => { setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false) })
-  }, [])
+  }, [teamId])
 
   useEffect(() => {
-    const q = query(collection(db, 'templates'), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'templates'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [])
+  }, [teamId])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -283,6 +285,7 @@ export default function Events() {
           name: form.name.trim(), location: form.location.trim(),
           notes: form.notes.trim(), dateEnd: form.dateEnd || null,
           items: pendingTemplateItems || [],
+          teamId,
           createdAt: serverTimestamp(), createdBy: user.uid,
           recurrence: form.recurrence, seriesId,
           type: form.type || 'event',

@@ -137,7 +137,7 @@ export default function WorkerScanner() {
     // Trova l'articolo nella lista dell'evento tramite codice
     // Prima cerca in Firestore per trovare l'id dell'articolo dal codice
     const { collection, query, where, getDocs } = await import('firebase/firestore')
-    const q = query(collection(db, 'items'), where('code', '==', normalized))
+    const q = query(collection(db, 'items'), where('teamId', '==', profile.teamId), where('code', '==', normalized))
     const itemSnap = await getDocs(q)
 
     if (itemSnap.empty) {
