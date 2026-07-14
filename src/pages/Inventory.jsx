@@ -224,8 +224,14 @@ export default function Inventory() {
 
     const zip = new JSZip()
     for (const item of itemsWithCodes) {
-      const png = await renderLabelPNG({ name: item.name, location: item.location, code: item.code })
-      zip.file(labelFilename(item.name, item.code), png.split(',')[1], { base64: true })
+      const totalUnits = item.totalQty || 1
+      const unitCodes = totalUnits > 1
+        ? Array.from({ length: totalUnits }, (_, i) => generateUnitCode(item.code, i + 1))
+        : [item.code]
+      for (const code of unitCodes) {
+        const png = await renderLabelPNG({ name: item.name, location: item.location, code })
+        zip.file(labelFilename(item.name, code), png.split(',')[1], { base64: true })
+      }
     }
     const blob = await zip.generateAsync({ type: 'blob' })
     downloadDataUrl(URL.createObjectURL(blob), 'etichette-magazzino.zip')

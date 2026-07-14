@@ -3,12 +3,14 @@ import { generateQRDataURL, qrPayloadForCode } from './generateCode'
 // Dimensioni richieste dal software della stampante termica: un'immagine
 // già pronta a questa risoluzione, niente dialogo di stampa del browser
 // (che dipende da formato pagina/margini e non è affidabile per etichette).
-const LABEL_W = 680
-const LABEL_H = 180
+// L'etichetta fisica è 60×38mm: 10px/mm mantiene esattamente quel rapporto,
+// altrimenti l'app di stampa la importa storta rispetto alla cornice.
+const LABEL_W = 600
+const LABEL_H = 380
 const PAD = 16
 // Disegniamo tutto a risoluzione doppia e poi rimpiccioliamo al formato
 // finale: il downscale con smoothing dà bordi di testo e QR molto più nitidi
-// di un disegno diretto a 680×180 (che risulta "morbido"/poco definito).
+// di un disegno diretto a 600×380 (che risulta "morbido"/poco definito).
 const SS = 2
 
 function loadImage(src) {
@@ -92,7 +94,7 @@ export async function renderLabelPNG({ name, location, code }) {
   ctx.font = `800 ${nameSize}px ${FAMILY}`
   let nameLineHeight = Math.round(nameSize * 1.15)
   const nameFits = ctx.measureText(name).width <= textW
-  const nameLines = nameFits ? [name] : wrapLines(ctx, name, textW, 2)
+  const nameLines = nameFits ? [name] : wrapLines(ctx, name, textW, 3)
 
   let locLines = [], locSize = 0, locLineHeight = 0
   if (location) {
@@ -100,7 +102,7 @@ export async function renderLabelPNG({ name, location, code }) {
     locSize = fitFontSize(ctx, locText, textW, FAMILY, 700, 30 * SS, 16 * SS)
     ctx.font = `700 ${locSize}px ${FAMILY}`
     locLineHeight = Math.round(locSize * 1.2)
-    locLines = ctx.measureText(locText).width <= textW ? [locText] : wrapLines(ctx, locText, textW, 1)
+    locLines = ctx.measureText(locText).width <= textW ? [locText] : wrapLines(ctx, locText, textW, 2)
   }
 
   let codeSize = fitFontSize(ctx, code, textW, 'monospace', 600, 24 * SS, 15 * SS)
@@ -116,6 +118,7 @@ export async function renderLabelPNG({ name, location, code }) {
     nameLines.length * nameLineHeight +
     (locLines.length ? gap + locLines.length * locLineHeight : 0) +
     gap + codeLineHeight
+  let blockHeight = naturalHeight
   if (naturalHeight > qrSize) {
     const scale = qrSize / naturalHeight
     nameSize = Math.round(nameSize * scale)
@@ -125,12 +128,12 @@ export async function renderLabelPNG({ name, location, code }) {
     codeSize = Math.round(codeSize * scale)
     codeLineHeight = Math.round(codeLineHeight * scale)
     gap = Math.round(gap * scale)
+    blockHeight = qrSize
   }
 
-  // Il blocco di testo parte dallo stesso margine del QR (pad), non centrato
-  // verticalmente: così il margine superiore è sempre identico su entrambi i
-  // lati, invece di variare a seconda di quanto testo c'è (es. senza posizione).
-  let y = pad
+  // Blocco di testo centrato verticalmente sull'altezza del QR, invece di
+  // partire sempre dal margine superiore.
+  let y = pad + Math.round((qrSize - blockHeight) / 2)
 
   ctx.font = `800 ${nameSize}px ${FAMILY}`
   drawLines(ctx, nameLines, textX, y, nameLineHeight)
