@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { Pin, Check, Warn } from '../components/Icon'
+import { parseScannedCode } from '../utils/generateCode'
 
 export default function Scanner() {
   const navigate = useNavigate()
@@ -13,12 +14,12 @@ export default function Scanner() {
   const [manualCode, setManualCode] = useState('')
   const html5QrCodeRef = useRef(null)
 
-  const lookupCode = async code => {
-    const normalized = code.trim().toUpperCase()
-    const q = query(collection(db, 'items'), where('code', '==', normalized))
+  const lookupCode = async raw => {
+    const { baseCode } = parseScannedCode(raw)
+    const q = query(collection(db, 'items'), where('code', '==', baseCode))
     const snap = await getDocs(q)
     if (!snap.empty) return { found: true, item: { id: snap.docs[0].id, ...snap.docs[0].data() } }
-    return { found: false, code: normalized }
+    return { found: false, code: baseCode }
   }
 
   const [scanToast, setScanToast] = useState(null)
@@ -42,8 +43,11 @@ export default function Scanner() {
       await html5QrCodeRef.current.start(
         { facingMode: 'environment' },
         {
-          fps: 15,
-          qrbox: { width: 280, height: 160 },
+          fps: 20,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85)
+            return { width: size, height: size }
+          },
           videoConstraints: {
             facingMode: 'environment',
             width: { ideal: 1920 },

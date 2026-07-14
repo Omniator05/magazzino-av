@@ -15,6 +15,91 @@ import {
   reauthenticateWithCredential
 } from 'firebase/auth'
 
+const WEEKDAY_NAMES = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
+const EMPTY_ORG_CONFIG = { eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' }
+
+// Campi di configurazione evento per il ruolo Organizzatore — condivisi tra
+// il form di creazione account e il pannello di modifica di un utente esistente.
+function OrgConfigFields({ orgConfig, setOrgConfig, newCustomDate, setNewCustomDate, addCustomDate, removeCustomDate }) {
+  return (
+    <>
+      <div className="form-group">
+        <label>Nome evento</label>
+        <input value={orgConfig.eventName} onChange={e => setOrgConfig(c => ({ ...c, eventName:e.target.value }))} placeholder="es. Brasserie" />
+      </div>
+      <div className="form-group">
+        <label>Frequenza</label>
+        <select value={orgConfig.frequency} onChange={e => setOrgConfig(c => ({ ...c, frequency:e.target.value }))}>
+          <option value="weekly">Settimanale</option>
+          <option value="monthly">Mensile</option>
+          <option value="custom">Date singole</option>
+        </select>
+      </div>
+
+      {orgConfig.frequency === 'weekly' && (
+        <div className="form-group">
+          <label>Giorno della settimana</label>
+          <select value={orgConfig.weekday} onChange={e => setOrgConfig(c => ({ ...c, weekday:Number(e.target.value) }))}>
+            {WEEKDAY_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
+          </select>
+        </div>
+      )}
+
+      {orgConfig.frequency === 'monthly' && (
+        <div className="form-group">
+          <label>Giorno del mese</label>
+          <input type="number" min="1" max="31" value={orgConfig.monthDay} onChange={e => setOrgConfig(c => ({ ...c, monthDay:Number(e.target.value) }))} />
+        </div>
+      )}
+
+      {orgConfig.frequency === 'custom' && (
+        <div className="form-group">
+          <label>Date specifiche</label>
+          <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+            <input type="date" value={newCustomDate} onChange={e => setNewCustomDate(e.target.value)} style={{ flex:1 }} />
+            <button onClick={addCustomDate} className="btn btn-secondary" style={{ flexShrink:0 }}>+ Aggiungi</button>
+          </div>
+          {orgConfig.customDates.map(d => (
+            <div key={d} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'7px 10px', marginBottom:5 }}>
+              <span style={{ fontSize:13 }}>{new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+              <button onClick={() => removeCustomDate(d)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700 }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {orgConfig.frequency !== 'custom' && (
+        <div className="form-group" style={{ marginBottom:0 }}>
+          <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale, lascia vuoto per nessuna scadenza)</span></label>
+          <input type="date" value={orgConfig.endDate} onChange={e => setOrgConfig(c => ({ ...c, endDate:e.target.value }))} />
+        </div>
+      )}
+    </>
+  )
+}
+
+// Selettore evento per il ruolo Organizzatore evento (generico) — l'organizzatore
+// carica i propri contenuti (video, pptx, sfondo di riserva) per un evento specifico
+// già presente in calendario, invece di avere una programmazione ricorrente come Brasserie.
+function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
+  return (
+    <div className="form-group" style={{ marginBottom:0 }}>
+      <label>Evento collegato</label>
+      <select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)}>
+        <option value="">— Seleziona un evento —</option>
+        {events.map(ev => (
+          <option key={ev.id} value={ev.id}>
+            {ev.name} — {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}
+          </option>
+        ))}
+      </select>
+      {events.length === 0 && (
+        <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>Nessun evento futuro in calendario — creane uno prima da Eventi.</p>
+      )}
+    </div>
+  )
+}
+
 export default function AdminUsers() {
   const { user, profile, logout } = useAuth()
   const confirm = useConfirm()
@@ -36,12 +121,25 @@ export default function AdminUsers() {
   const [toast, setToast]             = useState('')
   const [detailUnavail, setDetailUnavail] = useState([])
   const [roleMenuOpen, setRoleMenuOpen] = useState(false)
-  const [orgConfig, setOrgConfig]     = useState({ eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' })
+  const [orgConfig, setOrgConfig]     = useState(EMPTY_ORG_CONFIG)
   const [newCustomDate, setNewCustomDate] = useState('')
+  const [events, setEvents]           = useState([])
+  const [assignedEventId, setAssignedEventId] = useState('')
 
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
     return onSnapshot(q, snap => setUsers(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
+  }, [])
+
+  // Eventi da oggi in poi, per il selettore dell'Organizzatore evento
+  useEffect(() => {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const q = query(collection(db, 'events'), orderBy('date'))
+    return onSnapshot(q, snap => setEvents(
+      snap.docs
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(e => (e.dateEnd || e.date) >= todayStr)
+    ))
   }, [])
 
   useEffect(() => {
@@ -57,6 +155,12 @@ export default function AdminUsers() {
   const createAccount = async () => {
     if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
       setError('Compila tutti i campi. Password minimo 6 caratteri.'); return
+    }
+    if (form.role === 'organizzatore-brasserie' && !orgConfig.eventName.trim()) {
+      setError('Inserisci il nome dell\'evento per l\'organizzatore.'); return
+    }
+    if (form.role === 'organizzatore-evento' && !assignedEventId) {
+      setError('Seleziona l\'evento collegato all\'organizzatore.'); return
     }
     const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
     if (users.some(u => u.username === username)) {
@@ -83,6 +187,12 @@ export default function AdminUsers() {
         active:        true,
         createdAt:     new Date().toISOString(),
         createdBy:     user.uid,
+        ...(form.role === 'organizzatore-brasserie'
+          ? { organizerConfig: { ...orgConfig, eventName: orgConfig.eventName.trim() } }
+          : {}),
+        ...(form.role === 'organizzatore-evento'
+          ? { assignedEventId }
+          : {}),
       })
 
       // Firebase ci ha switchato all'utente appena creato → rientra come admin
@@ -96,6 +206,8 @@ export default function AdminUsers() {
       }
 
       setForm({ name:'', username:'', password:'', email:'', role:'worker' })
+      setOrgConfig(EMPTY_ORG_CONFIG)
+      setAssignedEventId('')
       setShowCreate(false)
     } catch(e) {
       const msgs = {
@@ -122,7 +234,7 @@ export default function AdminUsers() {
   }
 
   // ── Cambia ruolo (Admin / Magazziniere / Organizzatore) ──
-  const ROLE_LABELS = { admin: 'Amministratore', worker: 'Magazziniere', 'organizzatore-brasserie': 'Organizzatore' }
+  const ROLE_LABELS = { admin: 'Amministratore', worker: 'Magazziniere', 'organizzatore-brasserie': 'Organizzatore Brasserie', 'organizzatore-evento': 'Organizzatore evento' }
   const changeRole = async (newRole) => {
     if (newRole === showDetail.role) return
     if (!(await confirm({
@@ -138,7 +250,6 @@ export default function AdminUsers() {
   }
 
   // ── Configurazione evento organizzatore (nome + frequenza) ──────
-  const WEEKDAY_NAMES = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
   const saveOrgConfig = async () => {
     if (!orgConfig.eventName.trim()) { setDetailMsg({ text:'Inserisci il nome dell\'evento.', type:'error' }); return }
     const cleaned = { ...orgConfig, eventName: orgConfig.eventName.trim() }
@@ -154,6 +265,15 @@ export default function AdminUsers() {
   }
   const removeCustomDate = (d) => {
     setOrgConfig(c => ({ ...c, customDates: c.customDates.filter(x => x !== d) }))
+  }
+
+  // ── Evento collegato (Organizzatore evento) ─────────────────────
+  const saveAssignedEvent = async () => {
+    if (!assignedEventId) { setDetailMsg({ text:'Seleziona un evento.', type:'error' }); return }
+    await updateDoc(doc(db, 'profiles', showDetail.id), { assignedEventId })
+    setShowDetail(d => ({ ...d, assignedEventId }))
+    clearDetailMsg()
+    showToast('✓ Evento collegato salvato')
   }
 
   // ── Rimuovi indisponibilità ────────────────────────────────────
@@ -250,11 +370,12 @@ export default function AdminUsers() {
 
   const workers   = users.filter(u => u.role === 'worker')
   const admins    = users.filter(u => u.role === 'admin')
-  const organizers = users.filter(u => u.role === 'organizzatore-brasserie')
+  const organizers = users.filter(u => u.role === 'organizzatore-brasserie' || u.role === 'organizzatore-evento')
 
   const ROLE_COLORS = {
     admin: { bg:'rgba(233,69,96,0.15)', color:'var(--accent)' },
     'organizzatore-brasserie': { bg:'rgba(155,89,224,0.15)', color:'#9b59e0' },
+    'organizzatore-evento': { bg:'rgba(22,160,133,0.15)', color:'#16a085' },
   }
 
   const UserRow = ({ u }) => {
@@ -262,7 +383,8 @@ export default function AdminUsers() {
     return (
       <div className="item-row" onClick={() => {
         setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setAdminPw(''); setRoleMenuOpen(false)
-        setOrgConfig(u.organizerConfig || { eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' })
+        setOrgConfig(u.organizerConfig || EMPTY_ORG_CONFIG)
+        setAssignedEventId(u.assignedEventId || '')
       }} style={{ cursor:'pointer' }}>
         <div className="item-icon" style={{
           background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
@@ -280,7 +402,7 @@ export default function AdminUsers() {
             background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
             color: roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
           }}>
-            {u.role === 'admin' ? 'Admin' : u.role === 'organizzatore-brasserie' ? 'Organizzatore' : u.active !== false ? 'Attivo' : 'Disattivato'}
+            {u.role === 'admin' ? 'Admin' : roleColor ? ROLE_LABELS[u.role] : u.active !== false ? 'Attivo' : 'Disattivato'}
           </span>
           <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
         </div>
@@ -300,7 +422,7 @@ export default function AdminUsers() {
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>Utenti</h1><p>{users.length} account totali</p></div>
-          <button onClick={() => { setShowCreate(true); setError('') }} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Nuovo</button>
+          <button onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Nuovo</button>
         </div>
       </div>
 
@@ -386,9 +508,29 @@ export default function AdminUsers() {
               <label>Ruolo</label>
               <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
                 <option value="worker">Magazziniere</option>
-                <option value="organizzatore-brasserie">Organizzatore</option>
+                <option value="organizzatore-brasserie">Organizzatore Brasserie</option>
+                <option value="organizzatore-evento">Organizzatore evento</option>
               </select>
             </div>
+
+            {form.role === 'organizzatore-brasserie' && (
+              <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Configurazione evento</p>
+                <OrgConfigFields
+                  orgConfig={orgConfig} setOrgConfig={setOrgConfig}
+                  newCustomDate={newCustomDate} setNewCustomDate={setNewCustomDate}
+                  addCustomDate={addCustomDate} removeCustomDate={removeCustomDate}
+                />
+              </div>
+            )}
+
+            {form.role === 'organizzatore-evento' && (
+              <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Evento organizzato</p>
+                <EventOrganizerFields events={events} assignedEventId={assignedEventId} setAssignedEventId={setAssignedEventId} />
+              </div>
+            )}
+
             <div className="form-group" style={{ marginBottom:6 }}>
               <label>Password * <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(min. 6 caratteri)</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
@@ -439,10 +581,10 @@ export default function AdminUsers() {
                 )}
                 <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:10 }}>
                   <span className="badge" style={{
-                    background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.role === 'organizzatore-brasserie' ? 'rgba(155,89,224,0.15)' : 'rgba(79,195,247,0.15)',
-                    color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.role === 'organizzatore-brasserie' ? '#9b59e0' : 'var(--blue)', fontSize:13, padding:'5px 14px'
+                    background: ROLE_COLORS[showDetail.role]?.bg || 'rgba(79,195,247,0.15)',
+                    color: ROLE_COLORS[showDetail.role]?.color || 'var(--blue)', fontSize:13, padding:'5px 14px'
                   }}>
-                    {showDetail.role === 'admin' ? 'Amministratore' : showDetail.role === 'organizzatore-brasserie' ? 'Organizzatore' : 'Magazziniere'}
+                    {ROLE_LABELS[showDetail.role] || 'Magazziniere'}
                   </span>
                   <span className="badge" style={{
                     background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
@@ -532,7 +674,8 @@ export default function AdminUsers() {
                         {[
                           { key:'worker', label:'Magazziniere' },
                           { key:'admin', label:'Admin' },
-                          { key:'organizzatore-brasserie', label:'Organizzatore' },
+                          { key:'organizzatore-brasserie', label:'Organizzatore Brasserie' },
+                          { key:'organizzatore-evento', label:'Organizzatore evento' },
                         ].map(r => (
                           <button key={r.key} onClick={() => changeRole(r.key)} className="btn-no-anim" style={{
                             width:'100%', textAlign:'left', padding:'11px 14px', fontSize:14, fontWeight:600,
@@ -551,59 +694,21 @@ export default function AdminUsers() {
                 {showDetail.role === 'organizzatore-brasserie' && (
                   <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
                     <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Configurazione evento</p>
-                    <div className="form-group">
-                      <label>Nome evento</label>
-                      <input value={orgConfig.eventName} onChange={e => setOrgConfig(c => ({ ...c, eventName:e.target.value }))} placeholder="es. Brasserie" />
-                    </div>
-                    <div className="form-group">
-                      <label>Frequenza</label>
-                      <select value={orgConfig.frequency} onChange={e => setOrgConfig(c => ({ ...c, frequency:e.target.value }))}>
-                        <option value="weekly">Settimanale</option>
-                        <option value="monthly">Mensile</option>
-                        <option value="custom">Date singole</option>
-                      </select>
-                    </div>
-
-                    {orgConfig.frequency === 'weekly' && (
-                      <div className="form-group">
-                        <label>Giorno della settimana</label>
-                        <select value={orgConfig.weekday} onChange={e => setOrgConfig(c => ({ ...c, weekday:Number(e.target.value) }))}>
-                          {WEEKDAY_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
-                        </select>
-                      </div>
-                    )}
-
-                    {orgConfig.frequency === 'monthly' && (
-                      <div className="form-group">
-                        <label>Giorno del mese</label>
-                        <input type="number" min="1" max="31" value={orgConfig.monthDay} onChange={e => setOrgConfig(c => ({ ...c, monthDay:Number(e.target.value) }))} />
-                      </div>
-                    )}
-
-                    {orgConfig.frequency === 'custom' && (
-                      <div className="form-group">
-                        <label>Date specifiche</label>
-                        <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-                          <input type="date" value={newCustomDate} onChange={e => setNewCustomDate(e.target.value)} style={{ flex:1 }} />
-                          <button onClick={addCustomDate} className="btn btn-secondary" style={{ flexShrink:0 }}>+ Aggiungi</button>
-                        </div>
-                        {orgConfig.customDates.map(d => (
-                          <div key={d} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'7px 10px', marginBottom:5 }}>
-                            <span style={{ fontSize:13 }}>{new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
-                            <button onClick={() => removeCustomDate(d)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700 }}>✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {orgConfig.frequency !== 'custom' && (
-                      <div className="form-group" style={{ marginBottom:0 }}>
-                        <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale, lascia vuoto per nessuna scadenza)</span></label>
-                        <input type="date" value={orgConfig.endDate} onChange={e => setOrgConfig(c => ({ ...c, endDate:e.target.value }))} />
-                      </div>
-                    )}
-
+                    <OrgConfigFields
+                      orgConfig={orgConfig} setOrgConfig={setOrgConfig}
+                      newCustomDate={newCustomDate} setNewCustomDate={setNewCustomDate}
+                      addCustomDate={addCustomDate} removeCustomDate={removeCustomDate}
+                    />
                     <button onClick={saveOrgConfig} className="btn btn-primary btn-full" style={{ marginTop:12 }}>Salva configurazione evento</button>
+                  </div>
+                )}
+
+                {/* Sotto-menu: evento collegato (solo per il ruolo Organizzatore evento) */}
+                {showDetail.role === 'organizzatore-evento' && (
+                  <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Evento organizzato</p>
+                    <EventOrganizerFields events={events} assignedEventId={assignedEventId} setAssignedEventId={setAssignedEventId} />
+                    <button onClick={saveAssignedEvent} className="btn btn-primary btn-full" style={{ marginTop:12 }}>Salva evento collegato</button>
                   </div>
                 )}
 

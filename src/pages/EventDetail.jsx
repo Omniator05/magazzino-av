@@ -4,12 +4,21 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc } from 'firebase/firestore'
+import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import { Warn } from '../components/Icon'
 import JSZip from 'jszip'
+
+// Passata questa finestra di grazia dalla data dell'evento, i contenuti caricati
+// dall'organizzatore vengono eliminati da Storage per non far crescere lo spazio occupato.
+// A differenza della grafica "Next" di Brasserie (pulita lato organizzatore), qui il controllo
+// è lato admin: un organizzatore di un evento one-off probabilmente non riapre più l'app dopo
+// l'evento, quindi il trigger va agganciato a una pagina che l'admin visita regolarmente.
+const ORGANIZER_CONTENT_RETENTION_DAYS = 7
+const ORGANIZER_CATEGORY_LABELS = { video: 'Video', pptx: 'Presentazione (PPTX)', tappo: 'Sfondo di riserva' }
 
 function slugifyName(s) {
   const normalized = (s || 'file').toLowerCase().trim().normalize('NFD')
@@ -46,6 +55,7 @@ export default function EventDetail() {
   const today = new Date().toISOString().split('T')[0]
   const [allItems, setAllItems] = useState([])
   const [brasserieWeek, setBrasserieWeek] = useState(null)
+  const [organizerContent, setOrganizerContent] = useState(null)
   const [zipping, setZipping] = useState(false)
   const [zipError, setZipError] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
@@ -118,6 +128,27 @@ export default function EventDetail() {
       setBrasserieWeek(docs[0])
     })
   }, [event?.date])
+
+  // Contenuti caricati da un organizzatore evento (generico) collegato a questo evento per id reale
+  useEffect(() => {
+    if (!id) { setOrganizerContent(null); return }
+    return onSnapshot(doc(db, 'eventOrganizerContent', id), snap => {
+      setOrganizerContent(snap.exists() ? snap.data() : null)
+    })
+  }, [id])
+
+  // Pulizia contenuti organizzatore scaduti (evento passato da più di ORGANIZER_CONTENT_RETENTION_DAYS giorni)
+  useEffect(() => {
+    if (!event?.date || !organizerContent?.items?.length) return
+    const eventEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - ORGANIZER_CONTENT_RETENTION_DAYS)
+    const cutoffYMD = cutoff.toISOString().slice(0, 10)
+    if (eventEnd >= cutoffYMD) return
+    Promise.all(organizerContent.items.map(i => deleteEventContentFile(i.storagePath)))
+      .then(() => updateDoc(doc(db, 'eventOrganizerContent', id), { items: [] }))
+      .catch(() => {})
+  }, [event?.date, event?.dateEnd, organizerContent, id])
 
   useEffect(() => {
     const q = query(collection(db, 'profiles'), orderBy('name'))
@@ -842,6 +873,22 @@ export default function EventDetail() {
           {zipError && (
             <p style={{ color:'var(--red)', fontSize:12, marginTop:8, lineHeight:1.5 }}>{zipError}</p>
           )}
+        </div>
+      )}
+
+      {/* Contenuti organizzatore evento (generico) — collegato per id reale, non per data */}
+      {organizerContent?.items?.length > 0 && (
+        <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid rgba(22,160,133,0.3)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
+          <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Contenuti organizzatore</p>
+          {organizerContent.items.map(item => (
+            <div key={item.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg3)', borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+              <div style={{ minWidth:0, marginRight:10 }}>
+                <p style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.fileName}</p>
+                <p style={{ fontSize:11, color:'var(--text2)', marginTop:1 }}>{ORGANIZER_CATEGORY_LABELS[item.category] || item.category}</p>
+              </div>
+              <a href={item.url} download={item.fileName} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:12, flexShrink:0 }}>Scarica</a>
+            </div>
+          ))}
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'
+import { parseScannedCode } from '../utils/generateCode'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -43,6 +44,7 @@ export default function WorkerScanner() {
   const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
   const [showAllReturnedPopup, setShowAllReturnedPopup] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
+  const [showEventNotes, setShowEventNotes] = useState(false)
   const prevLoadedRef = useRef(0)
   const prevReturnedRef = useRef(0)
 
@@ -115,7 +117,7 @@ export default function WorkerScanner() {
   }, [id])
 
   const processCode = async (code) => {
-    const normalized = code.trim().toUpperCase()
+    const { baseCode: normalized } = parseScannedCode(code)
 
     // Ignora lo stesso codice scansionato entro 3 secondi (evita doppi)
     const now = Date.now()
@@ -248,8 +250,11 @@ export default function WorkerScanner() {
       await html5QrRef.current.start(
         { facingMode: 'environment' },
         {
-          fps: 15,
-          qrbox: { width: 280, height: 160 }, // rettangolo ottimale per barcode
+          fps: 20,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85)
+            return { width: size, height: size }
+          },
           videoConstraints: {
             facingMode: 'environment',
             width: { ideal: 1920 },
@@ -494,8 +499,36 @@ export default function WorkerScanner() {
             </div>
           </label>
         </div>
-        <h1 style={{ fontSize:18, fontWeight:800, marginTop:10, letterSpacing:'-0.3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</h1>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
+          <h1 style={{ fontSize:18, fontWeight:800, letterSpacing:'-0.3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</h1>
+          {event.notes && (
+            <button
+              onClick={() => setShowEventNotes(v => !v)}
+              style={{
+                flexShrink:0, width:22, height:22, borderRadius:'50%',
+                background: showEventNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)',
+                border:'1px solid rgba(79,195,247,0.35)',
+                color: showEventNotes ? 'white' : 'var(--blue)',
+                fontWeight:900, fontSize:12,
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}
+            >
+              {showEventNotes ? '✕' : 'i'}
+            </button>
+          )}
+        </div>
         {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
+        {showEventNotes && event.notes && (
+          <div style={{
+            marginTop:10, padding:'12px 14px',
+            background:'rgba(79,195,247,0.07)',
+            border:'1px solid rgba(79,195,247,0.2)',
+            borderRadius:10,
+            maxHeight:160, overflowY:'auto',
+          }}>
+            <p style={{ color:'var(--text)', fontSize:14, lineHeight:1.7, whiteSpace:'pre-wrap' }}>{event.notes}</p>
+          </div>
+        )}
       </div>
 
       {/* - Camera / Scanner - */}

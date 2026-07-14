@@ -3,6 +3,7 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDocs } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { Pin, Cart, Box, Wrench, Warn, Check } from '../components/Icon'
+import { parseScannedCode } from '../utils/generateCode'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Kit','Altro']
 const ICONS = {
@@ -116,8 +117,11 @@ export default function WorkerInventory() {
       await html5QrRef.current.start(
         { facingMode: 'environment' },
         {
-          fps: 15,
-          qrbox: { width: 280, height: 160 },
+          fps: 20,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const size = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85)
+            return { width: size, height: size }
+          },
           videoConstraints: {
             facingMode: 'environment',
             width: { ideal: 1920 },
@@ -126,12 +130,12 @@ export default function WorkerInventory() {
           },
         },
         async decodedText => {
-          const normalized = decodedText.trim().toUpperCase()
-          const q = query(collection(db, 'items'), where('code', '==', normalized))
+          const { baseCode } = parseScannedCode(decodedText)
+          const q = query(collection(db, 'items'), where('code', '==', baseCode))
           const snap = await getDocs(q)
           if (snap.empty) {
             if (navigator.vibrate) navigator.vibrate([100, 50, 100])
-            setScanError(`Nessun oggetto trovato con codice "${normalized}"`)
+            setScanError(`Nessun oggetto trovato con codice "${baseCode}"`)
             return
           }
           const found = { id: snap.docs[0].id, ...snap.docs[0].data() }

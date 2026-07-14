@@ -104,7 +104,8 @@ export default function WorkerCalendar() {
     allEvents.forEach(e => {
       if (!e.date) return
       const assigned = isAssignedToMe(e)
-      if (e.date === dStr) {
+      const end = e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
+      if (dStr >= e.date && dStr <= end) {
         items.push({ event: e, assigned, color: assigned ? 'var(--accent)' : 'var(--blue)' })
       }
       if (e.phases) {

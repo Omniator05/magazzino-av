@@ -19,6 +19,7 @@ import WorkerInventory from './pages/WorkerInventory'
 import WorkerCalendar from './pages/WorkerCalendar'
 import Profile from './pages/Profile'
 import Brasserie from './pages/Brasserie'
+import EventOrganizerHome from './pages/EventOrganizerHome'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
@@ -86,6 +87,18 @@ function PrivateRoutes({ toggleTheme, theme }) {
       <AnimatedPage>
         <Routes>
           <Route path="/" element={<Brasserie />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AnimatedPage>
+    )
+  }
+
+  // Organizzatore evento (generico, un evento specifico) — accesso solo alla propria sezione, nessuna tab bar
+  if (profile?.role === 'organizzatore-evento') {
+    return (
+      <AnimatedPage>
+        <Routes>
+          <Route path="/" element={<EventOrganizerHome />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatedPage>

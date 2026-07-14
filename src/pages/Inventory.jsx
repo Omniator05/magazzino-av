@@ -4,12 +4,14 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore'
-import { generateItemCode, generateQRDataURL, generateBarcodeSVG } from '../utils/generateCode'
+import { generateItemCode, generateQRDataURL, generateBarcodeSVG, generateUnitCode, qrPayloadForCode } from '../utils/generateCode'
+import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
+import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { Pin, Cart, Box, Kit, Save, Wrench } from '../components/Icon'
 
-const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Altro']
+const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Altro']
 const KIT_CATEGORIES = CATEGORIES
 // Ordine di visualizzazione nella lista raggruppata
 const CATEGORY_ORDER = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Altro']
@@ -80,13 +82,14 @@ export default function Inventory() {
   const [showDetailEvents, setShowDetailEvents] = useState(false)
   const [qrUrl, setQrUrl] = useState(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [showPrintPopup, setShowPrintPopup] = useState(false)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
   const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
   const kitDrag     = useModalDrag(() => setShowKitModal(false))
-  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail)
+  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup)
   // Kit form: nome + componenti
 
   // Items in shared global collection so workers can read them
@@ -187,182 +190,45 @@ export default function Inventory() {
   const openDetail = async item => {
     setShowDetail(item); setQrUrl(null)
     const code = item.code || generateItemCode(item.id)
-    const url = await generateQRDataURL(code)
+    const url = await generateQRDataURL(qrPayloadForCode(code))
     setQrUrl(url)
     setTimeout(() => generateBarcodeSVG(code, 'barcode-svg'), 100)
   }
 
-  const printCode = () => {
+  // Etichette come immagine PNG 680×180 pronta per il software della stampante
+  // termica — niente dialogo di stampa del browser, che dipende da formato
+  // pagina/margini ed è inaffidabile per etichette di quella dimensione.
+  const printCode = async () => {
     const code = showDetail.code || generateItemCode(showDetail.id)
-    const w = window.open('', '_blank')
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>Etichetta</title>
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: Arial, sans-serif; background:#fff; }
-        .label {
-          width: 60mm;
-          height: 38mm;
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: 0.2mm;
-          padding: 1.3mm 2mm;
-          border: 0.3mm solid #ccc;
-          page-break-inside: avoid;
-          overflow: hidden;
-          color: #000;
-        }
-        .qr {
-          width: 35mm;
-          height: 35mm;
-          flex-shrink: 0;
-          image-rendering: pixelated;
-        }
-        .info {
-          flex: 1;
-          min-width: 0;
-          text-align: left;
-        }
-        .name {
-          font-size: 9.5pt;
-          font-weight: 800;
-          line-height: 1.15;
-          word-break: break-word;
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          color: #000;
-        }
-        .loc {
-          font-size: 8.5pt;
-          font-weight: 800;
-          color: #000;
-          line-height: 1.15;
-          word-break: break-word;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          margin-top: 1.2mm;
-        }
-        .code {
-          font-size: 6pt;
-          font-weight: 600;
-          color: #000;
-          letter-spacing: 0.5px;
-          margin-top: 1.2mm;
-        }
-        @media print {
-          body { margin: 0; }
-          .label { border-color: transparent; }
-          @page { margin: 3mm; size: 60mm 38mm; }
-        }
-      </style>
-    </head><body>
-      <div class="label">
-        <img src="${qrUrl}" class="qr" />
-        <div class="info">
-          <div class="name">${showDetail.name}</div>
-          ${showDetail.location ? `<div class="loc">📌 ${showDetail.location}</div>` : ''}
-          <div class="code">${code}</div>
-        </div>
-      </div>
-      <script>window.onload=()=>window.print()</script>
-    </body></html>`)
-    w.document.close()
+    const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code })
+    downloadDataUrl(png, labelFilename(showDetail.name, code))
+  }
+
+  const printUnitLabels = async () => {
+    const baseCode = showDetail.code || generateItemCode(showDetail.id)
+    const totalUnits = showDetail.totalQty || 1
+    const unitCodes = Array.from({ length: totalUnits }, (_, i) => generateUnitCode(baseCode, i + 1))
+
+    const zip = new JSZip()
+    for (const code of unitCodes) {
+      const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code })
+      zip.file(labelFilename(showDetail.name, code), png.split(',')[1], { base64: true })
+    }
+    const blob = await zip.generateAsync({ type: 'blob' })
+    downloadDataUrl(URL.createObjectURL(blob), `etichette-${labelFilename(showDetail.name, baseCode).replace('.png', '')}.zip`)
   }
 
   const printAllLabels = async () => {
     if (items.length === 0) return
-    // Genera tutti i QR in parallelo
     const itemsWithCodes = items.map(i => ({ ...i, code: i.code || generateItemCode(i.id) }))
-    const qrUrls = await Promise.all(itemsWithCodes.map(i => generateQRDataURL(i.code)))
 
-    // Etichetta 60×38mm orizzontale → QR grande a sx, nome e posizione ben leggibili a dx, tutto in nero
-    const labelHTML = itemsWithCodes.map((item, idx) => `
-      <div class="label">
-        <img src="${qrUrls[idx]}" class="qr" />
-        <div class="info">
-          <div class="name">${item.name}</div>
-          ${item.location ? `<div class="loc">📌 ${item.location}</div>` : ''}
-          <div class="code">${item.code}</div>
-        </div>
-      </div>
-    `).join('')
-
-    const w = window.open('', '_blank')
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>Etichette magazzino</title>
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: Arial, sans-serif; background:#fff; }
-        .label {
-          width: 60mm;
-          height: 38mm;
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          gap: 0.2mm;
-          padding: 1.3mm 2mm;
-          border: 0.3mm solid #ccc;
-          page-break-inside: avoid;
-          overflow: hidden;
-          color: #000;
-        }
-        .qr {
-          width: 35mm;
-          height: 35mm;
-          flex-shrink: 0;
-          image-rendering: pixelated;
-        }
-        .info {
-          flex: 1;
-          min-width: 0;
-          text-align: left;
-        }
-        .name {
-          font-size: 9.5pt;
-          font-weight: 800;
-          line-height: 1.15;
-          word-break: break-word;
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          color: #000;
-        }
-        .loc {
-          font-size: 8.5pt;
-          font-weight: 800;
-          color: #000;
-          line-height: 1.15;
-          word-break: break-word;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          margin-top: 1.2mm;
-        }
-        .code {
-          font-size: 6pt;
-          font-weight: 600;
-          color: #000;
-          letter-spacing: 0.5px;
-          margin-top: 1.2mm;
-        }
-        @media print {
-          body { margin: 0; }
-          .label { border-color: transparent; }
-          @page { margin: 3mm; size: 60mm 38mm; }
-        }
-      </style>
-    </head><body>
-      ${labelHTML}
-      <script>window.onload = () => window.print()</script>
-    </body></html>`)
-    w.document.close()
+    const zip = new JSZip()
+    for (const item of itemsWithCodes) {
+      const png = await renderLabelPNG({ name: item.name, location: item.location, code: item.code })
+      zip.file(labelFilename(item.name, item.code), png.split(',')[1], { base64: true })
+    }
+    const blob = await zip.generateAsync({ type: 'blob' })
+    downloadDataUrl(URL.createObjectURL(blob), 'etichette-magazzino.zip')
   }
 
   const exportCSV = () => {
@@ -453,7 +319,7 @@ export default function Inventory() {
                       onClick={() => { setShowActionsMenu(false); printAllLabels() }}
                       style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10 }}
                     >
-                      <span>🖨</span> Stampa etichette
+                      <span>⬇</span> Scarica etichette (ZIP)
                     </button>
                   </div>
                 </>
@@ -695,7 +561,7 @@ export default function Inventory() {
                     <svg id="barcode-svg"></svg>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                    <button onClick={printCode} className="btn btn-secondary">🖨 Stampa</button>
+                    <button onClick={() => setShowPrintPopup(true)} className="btn btn-secondary">⬇ Scarica etichetta</button>
                     <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
                   </div>
                   {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
@@ -808,6 +674,44 @@ export default function Inventory() {
                 </div>
 
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup scelta stampa: una etichetta o tutte le unità — volutamente
+          leggero (niente bottom-sheet/drag), solo un riquadro centrato fisso */}
+      {showPrintPopup && showDetail && (
+        <div
+          onClick={() => setShowPrintPopup(false)}
+          style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position:'relative', width:'100%', maxWidth:300, background:'var(--card)', borderRadius:16, padding:20, boxShadow:'0 12px 40px rgba(0,0,0,0.3)' }}
+          >
+            <button
+              onClick={() => setShowPrintPopup(false)}
+              style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center' }}
+            >
+              ✕
+            </button>
+            <h2 style={{ marginBottom:16, fontSize:17 }}>Scarica etichetta</h2>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <button
+                onClick={() => { printCode(); setShowPrintPopup(false) }}
+                className="btn btn-secondary"
+              >
+                Una etichetta
+              </button>
+              {(showDetail.totalQty || 1) > 1 && (
+                <button
+                  onClick={() => { printUnitLabels(); setShowPrintPopup(false) }}
+                  className="btn btn-secondary"
+                >
+                  Tutte le unità (ZIP, {showDetail.totalQty})
+                </button>
+              )}
             </div>
           </div>
         </div>

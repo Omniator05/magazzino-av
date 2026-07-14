@@ -51,7 +51,7 @@ export default function TabBar() {
 
   return (
     <nav style={{
-      position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 40px)',
+      position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 44px)',
       transform:'translateX(-50%)', zIndex:100,
     }}>
       <div className="ftabs" style={{ '--active-index': activeIndex }}>
@@ -79,7 +79,7 @@ export default function TabBar() {
 
       <style>{`
         .ftabs {
-          --tab-w: 54px; --tab-h: 46px; --tab-pad: 7px; --tab-gap: 5px;
+          --tab-w: 62px; --tab-h: 54px; --tab-pad: 8px; --tab-gap: 6px;
           position: relative; display: flex; gap: var(--tab-gap); padding: var(--tab-pad); border-radius: 99px;
           background: rgba(255,255,255,0.35);
           border: 1px solid rgba(255,255,255,0.40);
@@ -113,11 +113,11 @@ export default function TabBar() {
             box-shadow: none; transform: none; filter: none;
           }
         }
-        .ftab-icon svg { width: 25px; height: 25px; display: block; }
+        .ftab-icon svg { width: 28px; height: 28px; display: block; }
         .ftab-badge {
-          position: absolute; top: 3px; right: 4px;
+          position: absolute; top: 4px; right: 5px;
           background: var(--accent); color: #fff; border-radius: 11px;
-          font-size: 11px; font-weight: 800; min-width: 19px; height: 19px;
+          font-size: 11px; font-weight: 800; min-width: 20px; height: 20px;
           display: flex; align-items: center; justify-content: center;
           padding: 0 4px; line-height: 1;
         }
