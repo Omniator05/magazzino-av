@@ -278,7 +278,7 @@ export default function EventDetail() {
     // senza copiare lo stato di carico/rientro che è specifico di ogni occorrenza
     if (event.seriesId) {
       const { collection: col, query: q, where, getDocs: gd } = await import('firebase/firestore')
-      const seriesSnap = await gd(q(col(db, 'events'), where('seriesId', '==', event.seriesId)))
+      const seriesSnap = await gd(q(col(db, 'events'), where('teamId', '==', event.teamId), where('seriesId', '==', event.seriesId)))
       const itemsTemplate = items.map(({ loaded, returned, mancante, pronto, ...rest }) => ({
         ...rest, loaded: false, returned: false, mancante: false, pronto: false
       }))
@@ -913,7 +913,7 @@ export default function EventDetail() {
         onClick={openAddModal}
         aria-label="Aggiungi articoli"
         style={{
-          position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 110px)', right:20, zIndex:50,
+          position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
           background:'var(--accent)', color:'white',
           display:'flex', alignItems:'center', justifyContent:'center',

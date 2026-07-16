@@ -51,7 +51,15 @@ service cloud.firestore {
     // tasks, templates, unavailability, brasserieWeeks, brasserieArtists,
     // googleCalendarEvents, eventOrganizerContent.
     match /{collection}/{docId} {
-      allow read, update, delete: if collection != 'profiles' && collection != 'teams'
+      // get() su un documento che non esiste ancora (es. eventOrganizerContent
+      // prima che un organizzatore carichi contenuti, brasserieWeeks per una
+      // settimana mai salvata) ha resource == null: leggere resource.data in
+      // quel caso genera un errore di valutazione, non un false — va gestito
+      // esplicitamente, altrimenti anche i listener su documenti legittimamente
+      // assenti falliscono con permission-denied invece di restituire "non esiste".
+      allow get: if collection != 'profiles' && collection != 'teams'
+        && (resource == null || isApprovedMember(resource.data.teamId));
+      allow list, update, delete: if collection != 'profiles' && collection != 'teams'
         && isApprovedMember(resource.data.teamId);
       allow create: if collection != 'profiles' && collection != 'teams'
         && isApprovedMember(request.resource.data.teamId);

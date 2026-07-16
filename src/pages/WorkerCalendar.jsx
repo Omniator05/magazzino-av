@@ -208,7 +208,7 @@ export default function WorkerCalendar() {
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={startReportMode}
                 style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
-                🚫 Assenza
+                🚫 Segna assenza
               </button>
               <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
             </div>

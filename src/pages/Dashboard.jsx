@@ -189,9 +189,9 @@ export default function Dashboard({ toggleTheme, theme }) {
 
         {/* Nuvole (giorno o coperto) */}
         {(_isDay || _wCond === 'overcast') && _wCond !== 'rain' && _wCond !== 'storm' && _wCond !== 'snow' && _wCond !== 'fog' && [
-          { l:'-12%', t:'22%', w:88, h:26, op:0.09, dur:'28s', d:'0s' },
-          { l:'35%',  t:'55%', w:68, h:20, op:0.07, dur:'40s', d:'-15s' },
-          { l:'62%',  t:'8%',  w:54, h:18, op:0.08, dur:'33s', d:'-8s' },
+          { l:'-18%', t:'20%', w:150, h:44, op:0.09, dur:'70s', d:'0s' },
+          { l:'40%',  t:'55%', w:120, h:36, op:0.07, dur:'85s', d:'-30s' },
+          { l:'68%',  t:'6%',  w:96,  h:32, op:0.08, dur:'62s', d:'-16s' },
         ].map((c,i) => (
           <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
             left:c.l, top:c.t, width:c.w, height:c.h, borderRadius:'50%',
