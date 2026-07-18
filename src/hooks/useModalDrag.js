@@ -19,6 +19,13 @@ import { useRef, useState, useCallback, useEffect } from 'react'
  *   Sotto la soglia, modal e sfondo tornano morbidamente alla posizione iniziale.
  * - `guard` (opzionale): funzione che ritorna `false` per BLOCCARE la chiusura
  *   (es. mostrare una conferma se ci sono modifiche non salvate). Vale per ✕, ESC e drag.
+ * - `isOpen` (opzionale, 4° argomento): se una pagina usa più useModalDrag con
+ *   `onSubmit` contemporaneamente (uno per modal), il listener Enter di OGNI
+ *   istanza resta attivo su `document` anche a modal chiuso — premendo Enter
+ *   in un modal scatterebbe anche l'onSubmit degli altri. Passa lo stato che
+ *   controlla la visibilità del modal (es. `showCreate`) per disattivarlo
+ *   quando non è quello aperto. Se omesso, il comportamento è invariato
+ *   (sempre attivo) — sicuro quando la pagina ha un solo useModalDrag con onSubmit.
  */
 const HANDLE_ZONE_PX = 44
 const FADE_PROGRESS_FRACTION = 0.92  // l'overlay raggiunge opacità 0 solo quasi a fine trascinamento
@@ -27,7 +34,7 @@ const OVERLAY_SNAP_BACK_TRANSITION = 'opacity 0.25s ease'
 const DISMISS_TRANSITION = 'transform 0.22s cubic-bezier(0.32,0.72,0,1)'
 const OVERLAY_DISMISS_TRANSITION = 'opacity 0.22s ease'
 
-export function useModalDrag(onClose, guard, onSubmit) {
+export function useModalDrag(onClose, guard, onSubmit, isOpen) {
   const startY     = useRef(null)
   const isDragging = useRef(false)
   const canDrag    = useRef(false)  // deciso a inizio gesto: true solo se si parte dalla maniglia
@@ -40,6 +47,8 @@ export function useModalDrag(onClose, guard, onSubmit) {
   useEffect(() => { guardRef.current = guard }, [guard])
   const onSubmitRef = useRef(onSubmit)
   useEffect(() => { onSubmitRef.current = onSubmit }, [onSubmit])
+  const isOpenRef = useRef(isOpen)
+  useEffect(() => { isOpenRef.current = isOpen }, [isOpen])
 
   // true se è permesso chiudere (guard assente o ritorna truthy)
   const allowClose = () => !guardRef.current || guardRef.current() !== false
@@ -56,6 +65,7 @@ export function useModalDrag(onClose, guard, onSubmit) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (isOpenRef.current === false) return
       if (e.key === 'Escape') { animatedClose(); return }
       if (e.key === 'Enter' && onSubmitRef.current && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault()

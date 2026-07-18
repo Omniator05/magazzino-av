@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { Pin, Check, Warn } from '../components/Icon'
 import { parseScannedCode } from '../utils/generateCode'
+import BackHomeButton from '../components/BackHomeButton'
 
 export default function Scanner() {
   const navigate = useNavigate()
@@ -121,7 +122,10 @@ export default function Scanner() {
         </div>
       )}
       <div className="page-header">
-        <h1>Scanner QR/Barcode</h1>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
+          <BackHomeButton />
+          <h1>Scanner QR/Barcode</h1>
+        </div>
         <p>Identifica un articolo dal codice</p>
       </div>
 

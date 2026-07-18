@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
 import EditButton from '../components/EditButton'
+import DeleteButton from '../components/DeleteButton'
 import { Pin, User, List, Wrench, Check } from '../components/Icon'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -10,6 +11,7 @@ import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
+import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
 
 const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
 const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -56,6 +58,13 @@ export default function Calendar() {
   const [unavailability, setUnavailability] = useState([])
   const [workers, setWorkers] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
+
+  // Modalità "Assegna personale" — vista alternativa alla griglia, lista degli
+  // eventi del mese con i worker assegnati sempre visibili.
+  const [mode, setMode] = useState('grid') // 'grid' | 'assign'
+  const [selectedWorkerId, setSelectedWorkerId] = useState(null) // tap-tap mobile
+  const [dragOverEventId, setDragOverEventId] = useState(null)   // feedback drag desktop
+  const [showPastAssign, setShowPastAssign] = useState(false)    // includi eventi già passati
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
@@ -124,6 +133,12 @@ export default function Calendar() {
     } finally { setSaving(false) }
   }
 
+  const deleteEvent = async (e, ev) => {
+    e.stopPropagation()
+    if (!(await confirm({ title: 'Elimina evento', message: `Eliminare "${ev.name}"? L'operazione non può essere annullata.`, confirmLabel: 'Elimina', danger: true }))) return
+    await deleteDoc(doc(db, 'events', ev.id))
+  }
+
   const createEvent = async () => {
     if (!editForm.name.trim() || !editForm.date) return
     setCreating(true)
@@ -142,15 +157,34 @@ export default function Calendar() {
     } finally { setCreating(false) }
   }
 
-  const editDrag = useModalDrag(() => setEditingEvent(null), undefined, saveEdit)
-  const createDrag = useModalDrag(() => setShowCreate(false), undefined, createEvent)
-  const absenceDrag = useModalDrag(() => setShowAbsenceModal(false), undefined, addAbsence)
+  const editDrag = useModalDrag(() => setEditingEvent(null), undefined, saveEdit, !!editingEvent)
+  const createDrag = useModalDrag(() => setShowCreate(false), undefined, createEvent, showCreate)
+  const absenceDrag = useModalDrag(() => setShowAbsenceModal(false), undefined, addAbsence, showAbsenceModal)
 
   useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
 
   const removeAbsence = async (id) => {
     if (!(await confirm({ title: 'Rimuovi assenza', message: 'Rimuovere questa assenza?', confirmLabel: 'Rimuovi', danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
+  }
+
+  // Assegnazione worker → evento, usata sia dal drag desktop sia dal tap-tap
+  // mobile sia dalla ✕ sui chip già assegnati (rimozione, mai conferma).
+  const handleAssign = async (ev, workerId) => {
+    if (!workerId) return
+    const alreadyAssigned = (ev.assignedWorkers || []).includes(workerId)
+    if (!alreadyAssigned && isWorkerUnavailable(workerId, ev, unavailability)) {
+      const w = workers.find(x => x.id === workerId)
+      const ok = await confirm({
+        title: 'Worker non disponibile',
+        message: `${w?.name || 'Questo worker'} risulta assente in questa data. Assegnarlo comunque a "${ev.name}"?`,
+        confirmLabel: 'Assegna comunque',
+        danger: true,
+      })
+      if (!ok) return
+    }
+    await toggleWorkerAssignment(doc(db, 'events', ev.id), ev, workerId)
+    setSelectedWorkerId(null)
   }
 
   const PHASE_FORM_CONFIG = [
@@ -197,6 +231,22 @@ export default function Calendar() {
   }, [teamId])
 
   const cells = getMonthGrid(cursor.year, cursor.month)
+
+  // Eventi del mese in vista (per la modalità "Assegna personale"), con
+  // overlap multi-giorno — un evento appare una sola volta anche se lungo.
+  // Di default nasconde i già passati (si assegna personale a ciò che deve
+  // ancora succedere), con un toggle per farli ricomparire.
+  const monthStart = toDateStr(new Date(cursor.year, cursor.month, 1))
+  const monthEnd = toDateStr(new Date(cursor.year, cursor.month + 1, 0))
+  const monthEvents = events
+    .filter(ev => {
+      if (!ev.date) return false
+      const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
+      if (end < monthStart || ev.date > monthEnd) return false
+      if (!showPastAssign && end < todayStr) return false
+      return true
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   // Raggruppa eventi per data — tutti i giorni tra inizio e fine
   const eventsByDate = {}
@@ -269,31 +319,47 @@ export default function Calendar() {
             <p>{events.length} eventi totali</p>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <button onClick={startReportMode}
-              style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
-              🚫 Segna assenza
+            <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
+              style={{
+                background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
+                border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
+                color: reportMode ? 'var(--accent)' : 'var(--text2)',
+                borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
+              }}>
+              Segna assenza
             </button>
             <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
           </div>
         </div>
 
+        {/* Toggle griglia / assegna personale */}
+        <div style={{ display:'flex', gap:3, marginTop:22, background:'var(--card2)', borderRadius:10, padding:3, width:'fit-content', margin:'22px auto 0' }}>
+          <button onClick={() => setMode('grid')} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'grid' ? 'var(--accent)' : 'transparent', color: mode === 'grid' ? 'white' : 'var(--text2)' }}>
+            Calendario
+          </button>
+          <button onClick={() => setMode('assign')} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
+            Assegna personale
+          </button>
+        </div>
+
         {/* Navigazione mese */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:14 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
           <button onClick={goPrevMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
           <h2 style={{ fontSize:17, fontWeight:800 }}>{MONTHS[cursor.month]} {cursor.year}</h2>
           <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
 
-        {reportMode && (
+        {mode === 'grid' && reportMode && (
           <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
             <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4 }}>
-              🚫 {!rangeStart ? 'Tocca il primo giorno della tua assenza' : 'Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
+              {!rangeStart ? 'Tocca il primo giorno della tua assenza' : 'Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
             </p>
-            <button onClick={cancelReportMode} style={{ color:'var(--text2)', fontSize:13, fontWeight:700, flexShrink:0 }}>Annulla</button>
+            <button onClick={cancelReportMode} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'6px 12px', fontSize:13, fontWeight:700, flexShrink:0 }}>Annulla</button>
           </div>
         )}
       </div>
 
+      {mode === 'grid' && (
       <div style={{ padding:'0 16px 16px' }}>
         {/* Header giorni settimana */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:6 }}>
@@ -310,11 +376,11 @@ export default function Calendar() {
             const dayGoogleEvents = googleEventsByDate[dStr] || []
             const dayAbsences = absencesOnDate(dStr)
             const hasMyAbsence = dayAbsences.some(a => a.workerId === user?.uid)
-            const hasOtherAbsences = dayAbsences.some(a => a.workerId !== user?.uid)
             const isToday = dStr === todayStr
             const isPast = dStr < todayStr
             const isSelected = dStr === selectedDate
             const isRangeStart = reportMode && dStr === rangeStart
+            const otherAbsences = dayAbsences.filter(a => a.workerId !== user?.uid)
 
             return (
               <button
@@ -322,16 +388,16 @@ export default function Calendar() {
                 onClick={() => handleDayTap(dStr)}
                 style={{
                   position:'relative',
-                  minHeight:52,
+                  minHeight:70,
                   borderRadius:10,
-                  padding:'5px 3px',
+                  padding:'5px 3px 4px',
                   background: isSelected ? 'rgba(216,56,63,0.10)' : isRangeStart ? 'rgba(216,56,63,0.12)' : cell.current ? 'var(--card)' : 'transparent',
                   border: isSelected ? '1.5px solid var(--accent)' : isRangeStart ? '1.5px solid var(--accent)' : isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)',
                   opacity: cell.current ? (isPast ? 0.5 : 1) : 0.3,
                   display:'flex',
                   flexDirection:'column',
                   alignItems:'center',
-                  gap:4,
+                  gap:2,
                   overflow:'hidden',
                   cursor:'pointer',
                 }}
@@ -342,42 +408,48 @@ export default function Calendar() {
                 }}>
                   {cell.day}
                 </span>
-                {/* Puntini: eventi + fasi + assenze altrui + eventi Google Calendar */}
-                {(dayEvents.length > 0 || (phasesByDate[dStr]?.length > 0) || hasOtherAbsences || dayGoogleEvents.length > 0) && (
-                  <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
-                    {dayGoogleEvents.length > 0 && (
-                      <span style={{
-                        width:7, height:7, borderRadius:2, flexShrink:0,
-                        background:'#4285F4',
-                        opacity: isPast ? 0.55 : 1,
-                      }} />
+                {/* Assenze personale (diverse dalla mia), in rosso al posto del vecchio triangolino */}
+                {otherAbsences.length > 0 && (
+                  <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
+                    <span style={{ fontSize:8, fontWeight:800, lineHeight:1.2, color:'var(--red)', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      Assenza - {otherAbsences[0].workerName}
+                    </span>
+                    {otherAbsences.length > 1 && (
+                      <span style={{ fontSize:8, fontWeight:700, color:'var(--red)' }}>+{otherAbsences.length - 1} altri</span>
                     )}
-                    {dayEvents.slice(0, 3).map(ev => {
+                  </div>
+                )}
+                {/* Nomi evento (fino a 2 righe, troncati) invece dei puntini */}
+                {dayEvents.length > 0 && (
+                  <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
+                    {dayEvents.slice(0, 2).map(ev => {
                       const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
+                      const dotColor = ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)'
                       return (
                         <span key={ev.id} style={{
-                          width:7, height:7, borderRadius:'50%', flexShrink:0,
-                          background: ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)',
-                          opacity: isPast ? 0.55 : 1,
-                        }} />
+                          display:'flex', alignItems:'center', gap:3,
+                          fontSize:8.5, fontWeight:700, lineHeight:1.2, color:'var(--text)',
+                          maxWidth:'100%', opacity: isPast ? 0.55 : 1,
+                        }}>
+                          <span style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:dotColor }} />
+                          <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</span>
+                        </span>
                       )
                     })}
-                    {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
-                      <span key={`ph${i}`} style={{
-                        width:7, height:7, borderRadius:'50%', flexShrink:0,
-                        background: p.color,
-                        opacity: isPast ? 0.55 : 1,
-                      }} />
-                    ))}
-                    {hasOtherAbsences && (
-                      <span style={{
-                        width:0, height:0, flexShrink:0,
-                        borderLeft:'4px solid transparent',
-                        borderRight:'4px solid transparent',
-                        borderBottom:'7px solid var(--text3)',
-                        opacity: isPast ? 0.55 : 1,
-                      }} />
+                    {dayEvents.length > 2 && (
+                      <span style={{ fontSize:8, fontWeight:700, color:'var(--text3)' }}>+{dayEvents.length - 2}</span>
                     )}
+                  </div>
+                )}
+                {/* Puntini secondari: fasi + eventi Google Calendar */}
+                {((phasesByDate[dStr]?.length > 0) || dayGoogleEvents.length > 0) && (
+                  <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', marginTop:'auto' }}>
+                    {dayGoogleEvents.length > 0 && (
+                      <span style={{ width:6, height:6, borderRadius:2, flexShrink:0, background:'#4285F4', opacity: isPast ? 0.55 : 1 }} />
+                    )}
+                    {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
+                      <span key={`ph${i}`} style={{ width:6, height:6, borderRadius:'50%', flexShrink:0, background: p.color, opacity: isPast ? 0.55 : 1 }} />
+                    ))}
                   </div>
                 )}
                 {/* Striscia solo per la mia assenza */}
@@ -395,10 +467,6 @@ export default function Calendar() {
 
         {/* Legenda */}
         <div style={{ display:'flex', gap:12, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--blue)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>{isWorker ? 'Eventi' : 'Eventi'}</span>
-          </div>
           {isWorker && (
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
@@ -421,19 +489,12 @@ export default function Calendar() {
             <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>La mia assenza</span>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:0, height:0, borderLeft:'4px solid transparent', borderRight:'4px solid transparent', borderBottom:'7px solid var(--text3)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Assenze personale</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:2, background:'#4285F4', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Da Google Calendar</span>
-          </div>
         </div>
       </div>
+      )}
 
       {/* Pannello giorno selezionato — qui il testo è leggibile per intero */}
-      {selectedDate && (
+      {mode === 'grid' && selectedDate && (
         <div style={{ padding:'0 16px 24px' }}>
           <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
             {selectedDateObj.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
@@ -471,7 +532,10 @@ export default function Calendar() {
                           </div>
                         )}
                       </div>
-                      <EditButton onClick={e => openEdit(e, ev)} size={32} />
+                      <div style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
+                        <EditButton onClick={e => openEdit(e, ev)} size={32} />
+                        <DeleteButton onClick={e => deleteEvent(e, ev)} size={32} />
+                      </div>
                     </div>
                   </div>
                 )
@@ -537,7 +601,96 @@ export default function Calendar() {
         </div>
       )}
 
-      {/* FAB nuovo evento */}
+      {/* Vista "Assegna personale" — striscia worker draggable/tap + lista eventi del mese come drop target */}
+      {mode === 'assign' && (
+        <>
+          <div style={{ padding:'14px 16px 4px' }}>
+            <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
+              Worker {selectedWorkerId ? '— tocca un evento qui sotto per assegnare' : ''}
+            </p>
+            <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:8, WebkitOverflowScrolling:'touch' }}>
+              {workers.filter(w => w.active !== false).length === 0 && (
+                <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>Nessun worker attivo.</p>
+              )}
+              {workers.filter(w => w.active !== false).map(w => {
+                const isSelected = selectedWorkerId === w.id
+                return (
+                  <button key={w.id}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('text/plain', w.id)}
+                    onClick={() => setSelectedWorkerId(id => id === w.id ? null : w.id)}
+                    style={{
+                      flexShrink:0, display:'flex', alignItems:'center', gap:6,
+                      padding:'8px 14px', borderRadius:20,
+                      background: isSelected ? 'rgba(216,56,63,0.12)' : 'var(--card)',
+                      border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
+                      boxShadow: isSelected ? '0 0 0 3px rgba(216,56,63,0.15)' : 'none',
+                      fontSize:13, fontWeight:700, color: isSelected ? 'var(--accent)' : 'var(--text)',
+                      cursor:'grab', whiteSpace:'nowrap',
+                    }}
+                  >
+                    👷 {w.name || 'Senza nome'}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div style={{ padding:'8px 16px 24px' }}>
+            <button onClick={() => setShowPastAssign(v => !v)}
+              style={{ background: showPastAssign ? 'var(--card2)' : 'transparent', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:700, marginBottom:10 }}>
+              {showPastAssign ? '✓ ' : ''}Vedi passati
+            </button>
+            {monthEvents.length === 0 ? (
+              <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'20px 0', textAlign:'center' }}>
+                Nessun evento{showPastAssign ? '' : ' futuro'} in {MONTHS[cursor.month]}.
+              </p>
+            ) : monthEvents.map(ev => {
+              const assigned = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)).filter(Boolean)
+              const isDragOver = dragOverEventId === ev.id
+              return (
+                <div key={ev.id}
+                  onDragOver={e => e.preventDefault()}
+                  onDragEnter={e => { e.preventDefault(); setDragOverEventId(ev.id) }}
+                  onDragLeave={() => setDragOverEventId(id => id === ev.id ? null : id)}
+                  onDrop={e => { e.preventDefault(); setDragOverEventId(null); handleAssign(ev, e.dataTransfer.getData('text/plain')) }}
+                  onClick={() => { if (selectedWorkerId) handleAssign(ev, selectedWorkerId) }}
+                  style={{
+                    background: isDragOver ? 'rgba(216,56,63,0.06)' : 'var(--card)',
+                    border: isDragOver ? '2px dashed var(--accent)' : '1px solid var(--border)',
+                    borderRadius:14, padding:'13px 14px', marginBottom:8,
+                    cursor: selectedWorkerId ? 'pointer' : 'default',
+                    transition:'background 0.15s, border-color 0.15s',
+                  }}
+                >
+                  <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', display:'flex', alignItems:'center', gap:6 }}>
+                    {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
+                  </p>
+                  <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
+                    {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}
+                    {ev.dateEnd && ev.dateEnd !== ev.date ? ` → ${new Date(ev.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}` : ''}
+                  </p>
+                  <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:8 }}>
+                    {assigned.length === 0 && <span style={{ fontSize:12, color:'var(--text3)', fontStyle:'italic' }}>Nessuno assegnato</span>}
+                    {assigned.map(w => {
+                      const unavail = isWorkerUnavailable(w.id, ev, unavailability)
+                      return (
+                        <span key={w.id} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
+                          {unavail ? '⚠️' : '👷'} {w.name || 'Senza nome'}
+                          <button onClick={e => { e.stopPropagation(); handleAssign(ev, w.id) }} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* FAB nuovo evento — solo in vista griglia, in "Assegna personale" lascia spazio alla lista */}
+      {mode === 'grid' && (
       <button
         onClick={() => {
           setEditForm({ name:'', date: selectedDate || todayStr, dateEnd:'', location:'', notes:'', phases:{} })
@@ -556,6 +709,7 @@ export default function Calendar() {
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
+      )}
 
       {/* Modal segnala assenza */}
       {showAbsenceModal && (

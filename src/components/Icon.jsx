@@ -57,6 +57,9 @@ export const User = ({ size }) => (
 export const LogOut = ({ size }) => (
   <svg {...base(size)}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
 )
+export const Truck = ({ size }) => (
+  <svg {...base(size)}><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8Z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+)
 
 /* Pallino colorato pieno (sostituisce 🟠🔴🟢🔵): passa `color` */
 export const Dot = ({ size = 9, color = 'currentColor', glow = false }) => (

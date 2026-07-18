@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
 import { List } from '../components/Icon'
+import BackHomeButton from '../components/BackHomeButton'
 
 const ICONS = {
   'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️','Corrente':'⚡',
@@ -95,14 +96,15 @@ export default function Templates() {
     <div className="page">
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <BackHomeButton />
             <h1>Template</h1>
-            <p>{templates.length} template salvati</p>
           </div>
           <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
             + Template
           </button>
         </div>
+        <p style={{ marginTop:4 }}>{templates.length} template salvati</p>
       </div>
 
       <div style={{ padding:'16px 0' }}>

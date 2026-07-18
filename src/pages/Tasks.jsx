@@ -3,6 +3,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import DeleteButton from '../components/DeleteButton'
+import BackHomeButton from '../components/BackHomeButton'
 import { Dot, Check, User } from '../components/Icon'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
@@ -108,14 +109,15 @@ export default function Tasks() {
     <div className="page">
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <BackHomeButton />
             <h1>Task</h1>
-            <p>{openTasks.length} da fare{doneTasks.length > 0 ? ` · ${doneTasks.length} completate` : ''}</p>
           </div>
           <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
             + Task
           </button>
         </div>
+        <p style={{ marginTop:4 }}>{openTasks.length} da fare{doneTasks.length > 0 ? ` · ${doneTasks.length} completate` : ''}</p>
       </div>
 
       <div style={{ padding:'16px 0' }}>

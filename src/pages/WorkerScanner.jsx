@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, getDoc, collection, query, where, orderBy } from 'firebase/firestore'
 import { parseScannedCode } from '../utils/generateCode'
 
 const ICONS = {
@@ -32,6 +32,7 @@ export default function WorkerScanner() {
   // Se arriviamo da /events/:id/scan (admin) torniamo all'evento, altrimenti alla home worker
   const backPath = location.pathname.endsWith('/scan') ? `/events/${id}` : '/'
   const [event, setEvent] = useState(null)
+  const [vehicles, setVehicles] = useState([])
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
   const [manualCode, setManualCode] = useState('')
@@ -115,6 +116,13 @@ export default function WorkerScanner() {
       if (snap.exists()) setEvent({ id: snap.id, ...snap.data() })
     })
   }, [id])
+
+  // Solo visualizzazione (badge): quale furgone va caricato/rientrato per ogni oggetto
+  useEffect(() => {
+    if (!profile?.teamId) return
+    const q = query(collection(db, 'vehicles'), where('teamId', '==', profile.teamId), orderBy('name'))
+    return onSnapshot(q, snap => setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [profile?.teamId])
 
   const processCode = async (code) => {
     const { baseCode: normalized } = parseScannedCode(code)
@@ -658,7 +666,10 @@ export default function WorkerScanner() {
                   const WS_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
                   const wsCatGrouped = {}
                   items.forEach(item => {
-                    const cat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+                    // Categorie "orfane" (rinominate nel magazzino dopo l'aggiunta
+                    // all'evento) finiscono in Altro invece di sparire dalla lista.
+                    const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+                    const cat = WS_ORDER.includes(rawCat) ? rawCat : 'Altro'
                     if (!wsCatGrouped[cat]) wsCatGrouped[cat] = []
                     wsCatGrouped[cat].push(item)
                   })
@@ -686,6 +697,7 @@ export default function WorkerScanner() {
                 <div key={item.id} ref={mode === 'load' && !item.loaded && item.id === firstUnloadedId ? firstUnloadedRef : null}>
                 <ChecklistRow item={{
                   ...item,
+                  _vehicle: vehicles.find(v => v.id === item.vehicleId) || null,
                   _onToggleLoaded: async (itemId) => {
                     const snap = await getDoc(eventRef)
                     if (!snap.exists()) return
@@ -872,6 +884,7 @@ function ChecklistRow({ item }) {
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
             {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
+            {item._vehicle && <span style={{ background:`${item._vehicle.color || 'var(--blue)'}22`, color: item._vehicle.color || 'var(--blue)', border:`1px solid ${item._vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{item._vehicle.emoji || '🚐'} {item._vehicle.name}</span>}
             {hasInfo && (
               <button onClick={() => setShowInfo(s => !s)}
                 style={{

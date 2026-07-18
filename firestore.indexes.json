@@ -37,6 +37,10 @@
     { "collectionGroup": "profiles", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "teamId", "order": "ASCENDING" },
       { "fieldPath": "name", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "vehicles", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "teamId", "order": "ASCENDING" },
+      { "fieldPath": "name", "order": "ASCENDING" }
     ]}
   ],
   "fieldOverrides": []

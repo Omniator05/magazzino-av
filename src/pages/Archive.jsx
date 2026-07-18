@@ -22,6 +22,13 @@ export default function Archive() {
   const [hasMore, setHasMore]         = useState(true)
   const [copying, setCopying]         = useState(null)
   const [copied, setCopied]           = useState(null)
+  const [expanded, setExpanded]       = useState(new Set())
+
+  const toggleExpanded = (id) => setExpanded(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -126,6 +133,7 @@ export default function Archive() {
               const returned = items.filter(i => i.returned).length
               const isCopied  = copied === event.id
               const isCopying = copying === event.id
+              const isExpanded = expanded.has(event.id)
 
               return (
                 <div key={event.id} style={{ margin:'0 16px 12px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
@@ -163,15 +171,18 @@ export default function Archive() {
                       <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
                         <p style={{ color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:6 }}>Lista carico</p>
                         <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                          {items.slice(0, 8).map((item, i) => (
+                          {items.slice(0, isExpanded ? items.length : 8).map((item, i) => (
                             <span key={i} style={{ background:'var(--card2)', borderRadius:6, padding:'2px 8px', fontSize:12, color:'var(--text2)' }}>
                               {item.name}{item.qty > 1 ? ` ×${item.qty}` : ''}
                             </span>
                           ))}
                           {items.length > 8 && (
-                            <span style={{ background:'var(--card2)', borderRadius:6, padding:'2px 8px', fontSize:12, color:'var(--text2)' }}>
-                              +{items.length - 8} altri
-                            </span>
+                            <button
+                              onClick={() => toggleExpanded(event.id)}
+                              style={{ background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:6, padding:'2px 8px', fontSize:12, fontWeight:700, color:'var(--blue)' }}
+                            >
+                              {isExpanded ? 'Mostra meno' : `+${items.length - 8} altri`}
+                            </button>
                           )}
                         </div>
                       </div>

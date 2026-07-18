@@ -11,6 +11,7 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import Scanner from './pages/Scanner'
 import AdminUsers from './pages/AdminUsers'
+import Vehicles from './pages/Vehicles'
 import Archive from './pages/Archive'
 import Tasks from './pages/Tasks'
 import Templates from './pages/Templates'
@@ -134,6 +135,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/events/:id/scan" element={<WorkerScanner />} />
           <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/vehicles" element={<Vehicles />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/profile" element={<Profile />} />

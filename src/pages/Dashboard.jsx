@@ -52,6 +52,12 @@ const IconCart = () => (
     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
   </svg>
 )
+const IconTruck = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8Z"/>
+    <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+  </svg>
+)
 
 export default function Dashboard({ toggleTheme, theme }) {
   const { profile, logout, teamId } = useAuth()
@@ -116,6 +122,14 @@ export default function Dashboard({ toggleTheme, theme }) {
       color: '#15803d',       /* green */
       bg:    '#dcfce7',
       path:  '/templates',
+      badge: null,
+    },
+    {
+      label: 'Furgoni',
+      icon:  <IconTruck />,
+      color: '#c2410c',       /* orange */
+      bg:    '#ffedd5',
+      path:  '/vehicles',
       badge: null,
     },
   ]
@@ -341,7 +355,7 @@ export default function Dashboard({ toggleTheme, theme }) {
         <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:12, marginTop:20 }}>
           Strumenti
         </p>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10, marginBottom:32 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, marginBottom:32 }}>
           {tools.map(t => (
             <button
               key={t.path}

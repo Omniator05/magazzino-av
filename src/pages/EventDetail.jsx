@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
+import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -100,6 +101,7 @@ export default function EventDetail() {
   const itemEditDrag = useModalDrag(() => setEditItem(null), undefined, () => editItem && saveItemEdit(editItem))
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [workers, setWorkers] = useState([])
+  const [vehicles, setVehicles] = useState([])
   const [unavailability, setUnavailability] = useState([])
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
@@ -156,6 +158,15 @@ export default function EventDetail() {
     return onSnapshot(q, snap => {
       setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
     })
+  }, [teamId])
+
+  // Niente filtro active lato Firestore: un furgone disattivato deve poter
+  // essere ancora risolto per nome sulle righe evento che lo referenziano già
+  // (il filtro "solo attivi" per le nuove assegnazioni è lato client, vedi select).
+  useEffect(() => {
+    if (!teamId) return
+    const q = query(collection(db, 'vehicles'), where('teamId', '==', teamId), orderBy('name'))
+    return onSnapshot(q, snap => setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [teamId])
 
   useEffect(() => {
@@ -289,17 +300,11 @@ export default function EventDetail() {
     }
   }
 
-  const toggleWorkerAssignment = async (workerId) => {
-    const current = event.assignedWorkers || []
-    const updated = current.includes(workerId)
-      ? current.filter(wid => wid !== workerId)
-      : [...current, workerId]
-    await updateDoc(eventRef, { assignedWorkers: updated })
-  }
-
-  const isWorkerUnavailable = (workerId) => {
-    if (!event?.date) return false
-    return unavailability.some(u => u.workerId === workerId && event.date >= u.startDate && event.date <= u.endDate)
+  // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
+  // non stato di avanzamento: passa da updateEventItems per propagarsi alla serie.
+  const setItemVehicle = async (itemId, vehicleId) => {
+    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, vehicleId: vehicleId || null })
+    await updateEventItems(updated)
   }
 
   const toggleLoaded = async itemId => {
@@ -649,7 +654,12 @@ export default function EventDetail() {
   const CAT_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
   const catGrouped = {}
   eventItems.forEach(item => {
-    const cat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+    // Categorie "orfane" finiscono in Altro invece di sparire: un articolo può
+    // avere qui la categoria congelata al momento dell'aggiunta all'evento,
+    // che non esiste più tra quelle attuali se nel frattempo è stata rinominata
+    // nel magazzino (es. vecchia migrazione categorie) — il dato non va perso.
+    const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+    const cat = CAT_ORDER.includes(rawCat) ? rawCat : 'Altro'
     if (!catGrouped[cat]) catGrouped[cat] = []
     catGrouped[cat].push(item)
   })
@@ -666,7 +676,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} />
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} vehicles={vehicles} onSetVehicle={setItemVehicle} />
       ))}
     </div>
   ))
@@ -725,11 +735,11 @@ export default function EventDetail() {
               {(event.assignedWorkers || []).map(wid => {
                 const w = workers.find(x => x.id === wid)
                 if (!w) return null
-                const unavail = isWorkerUnavailable(wid)
+                const unavail = isWorkerUnavailable(wid, event, unavailability)
                 return (
                   <span key={wid} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
                     {unavail ? '⚠️' : '👷'} {w.name}
-                    <button onClick={() => toggleWorkerAssignment(wid)} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                    <button onClick={() => toggleWorkerAssignment(eventRef, event, wid)} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                   </span>
                 )
               })}
@@ -1159,11 +1169,11 @@ export default function EventDetail() {
               <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'50dvh', overflowY:'auto' }}>
                 {workers.map(w => {
                   const isAssigned = (event.assignedWorkers || []).includes(w.id)
-                  const unavail = isWorkerUnavailable(w.id)
+                  const unavail = isWorkerUnavailable(w.id, event, unavailability)
                   return (
                     <button
                       key={w.id}
-                      onClick={() => toggleWorkerAssignment(w.id)}
+                      onClick={() => toggleWorkerAssignment(eventRef, event, w.id)}
                       style={{
                         display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12,
                         background: isAssigned ? 'rgba(79,195,247,0.10)' : 'var(--card2)',
@@ -1320,9 +1330,15 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto }) {
+function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto, vehicles, onSetVehicle }) {
   const [location, setLocation] = useState(item.location || null)
   const [warehouseNotes, setWarehouseNotes] = useState(null)
+  const vehicle = vehicles.find(v => v.id === item.vehicleId)
+  // Elenco selezionabile: solo furgoni attivi, più quello attualmente
+  // assegnato anche se disattivato (per non "perdere" la selezione corrente).
+  const vehicleOptions = vehicle && vehicle.active === false
+    ? [...vehicles.filter(v => v.active !== false), vehicle]
+    : vehicles.filter(v => v.active !== false)
 
   useEffect(() => {
     getDoc(doc(db, 'items', item.id)).then(snap => {
@@ -1353,6 +1369,9 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
             {item.pronto && !item.loaded && (
               <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>
             )}
+            {vehicle && (
+              <span style={{ background:`${vehicle.color || 'var(--blue)'}22`, color: vehicle.color || 'var(--blue)', border:`1px solid ${vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicle.emoji || '🚐'} {vehicle.name}</span>
+            )}
           </div>
           <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
           {item.eventNote ? (
@@ -1371,6 +1390,16 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
         </div>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
+          <select
+            value={item.vehicleId || ''}
+            onChange={e => onSetVehicle(item.id, e.target.value)}
+            style={{ fontSize:11, fontWeight:700, borderRadius:8, padding:'4px 6px', border:'1.5px solid var(--border)', background:'var(--card2)', color: vehicle ? (vehicle.color || 'var(--text2)') : 'var(--text3)', maxWidth:120 }}
+          >
+            <option value="">— Furgone —</option>
+            {vehicleOptions.map(v => (
+              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? ' (disattivato)' : ''}</option>
+            ))}
+          </select>
           {!item.loaded ? (
             <div style={{ display:'flex', gap:5, alignItems:'center' }}>
               <button
