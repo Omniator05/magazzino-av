@@ -131,6 +131,15 @@ select option { background: var(--bg2); }
   animation: slowToSmoothFade 0.7s cubic-bezier(0.83, 0, 0.17, 1);
 }
 
+/* Pagine tipo "form" (es. Profilo): su desktop restano larghe quanto un mobile,
+   centrate, invece di stirarsi bordo a bordo dello schermo. */
+@media (min-width: 700px) {
+  .page-narrow {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+
 /* ── Tab bar ──────────────────────────────────── */
 .tab-bar {
   position: fixed;

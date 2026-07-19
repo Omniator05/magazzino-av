@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { auth } from '../firebase'
 import { reauthenticateWithCredential, EmailAuthProvider, updatePassword as fbUpdatePassword } from 'firebase/auth'
@@ -30,8 +31,10 @@ const IconCheck = () => (
 )
 
 export default function Profile() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { profile, user, updateProfileData } = useAuth()
+  const [savingLang, setSavingLang] = useState(false)
 
   const [name, setName]           = useState(profile?.name || '')
   const [savingName, setSavingName] = useState(false)
@@ -50,7 +53,7 @@ export default function Profile() {
 
   const avatar  = profile?.avatar || null
   const initial = (profile?.name || profile?.username || '?').charAt(0).toUpperCase()
-  const role    = profile?.role === 'admin' ? 'Amministratore' : 'Magazziniere'
+  const role    = profile?.role === 'admin' ? t('profile.roleAdmin') : t('profile.roleWorker')
 
   const saveName = async () => {
     if (!name.trim() || name.trim() === profile?.name) return
@@ -74,9 +77,9 @@ export default function Profile() {
 
   const changePassword = async () => {
     setPwdError('')
-    if (!currentPwd)       { setPwdError('Inserisci la password attuale'); return }
-    if (newPwd.length < 6) { setPwdError('La nuova password deve avere almeno 6 caratteri'); return }
-    if (newPwd !== confirmPwd) { setPwdError('Le password non coincidono'); return }
+    if (!currentPwd)       { setPwdError(t('profile.errorCurrentPassword')); return }
+    if (newPwd.length < 6) { setPwdError(t('profile.errorPasswordLength')); return }
+    if (newPwd !== confirmPwd) { setPwdError(t('profile.errorPasswordMismatch')); return }
 
     setSavingPwd(true)
     try {
@@ -91,20 +94,28 @@ export default function Profile() {
       setTimeout(() => setPwdOk(false), 3000)
     } catch(e) {
       if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
-        setPwdError('Password attuale non corretta')
+        setPwdError(t('profile.errorWrongPassword'))
       } else {
-        setPwdError('Errore: riprova tra qualche istante')
+        setPwdError(t('profile.errorGeneric'))
       }
     } finally { setSavingPwd(false) }
   }
 
+  const selectLanguage = async (lang) => {
+    if (lang === (profile?.language || 'it')) return
+    setSavingLang(true)
+    try {
+      await updateProfileData({ language: lang })
+    } finally { setSavingLang(false) }
+  }
+
   return (
-    <div className="page" style={{ paddingBottom: 110 }}>
+    <div className="page page-narrow" style={{ paddingBottom: 110 }}>
 
       {/* Header */}
       <div style={{ padding: 'calc(env(safe-area-inset-top) + 16px) 16px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'var(--card2)', color: 'var(--text2)', borderRadius: 10, padding: '8px 14px', fontSize: 14 }}>← Indietro</button>
-        <h1 style={{ fontSize: 20, fontWeight: 800 }}>Profilo</h1>
+        <button onClick={() => navigate(-1)} style={{ background: 'var(--card2)', color: 'var(--text2)', borderRadius: 10, padding: '8px 14px', fontSize: 14 }}>← {t('common.back')}</button>
+        <h1 style={{ fontSize: 20, fontWeight: 800 }}>{t('profile.title')}</h1>
       </div>
 
       {/* Avatar centrato */}
@@ -148,13 +159,13 @@ export default function Profile() {
       </div>
 
       {/* Sezione: Informazioni */}
-      <Section label="Informazioni">
+      <Section label={t('profile.sectionInfo')}>
         <div className="form-group" style={{ marginBottom: 12 }}>
-          <label>Nome visualizzato</label>
+          <label>{t('profile.displayName')}</label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Il tuo nome"
+            placeholder={t('profile.namePlaceholder')}
             onKeyDown={e => e.key === 'Enter' && saveName()}
           />
         </div>
@@ -165,24 +176,48 @@ export default function Profile() {
           style={{ opacity: (savingName || !name.trim() || name.trim() === profile?.name) ? 0.45 : 1 }}
         >
           {nameOk
-            ? <><IconCheck /> Salvato!</>
-            : savingName ? 'Salvataggio...' : 'Salva nome'}
+            ? <><IconCheck /> {t('profile.saved')}</>
+            : savingName ? t('profile.saving') : t('profile.saveName')}
         </button>
       </Section>
 
+      {/* Sezione: Lingua */}
+      <Section label={t('profile.sectionLanguage')}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[
+            { code: 'it', label: t('profile.languageItalian') },
+            { code: 'en', label: t('profile.languageEnglish') },
+          ].map(l => (
+            <button
+              key={l.code}
+              onClick={() => selectLanguage(l.code)}
+              disabled={savingLang}
+              style={{
+                flex: 1, padding: '10px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                background: (profile?.language || 'it') === l.code ? 'rgba(230,57,70,0.10)' : 'var(--card2)',
+                border: (profile?.language || 'it') === l.code ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                color: (profile?.language || 'it') === l.code ? 'var(--accent)' : 'var(--text2)',
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </Section>
+
       {/* Sezione: Sicurezza */}
-      <Section label="Sicurezza">
+      <Section label={t('profile.sectionSecurity')}>
         <div className="form-group">
-          <label>Password attuale</label>
+          <label>{t('profile.currentPassword')}</label>
           <input type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="••••••••" />
         </div>
         <div className="form-group">
-          <label>Nuova password</label>
-          <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder="Minimo 6 caratteri" />
+          <label>{t('profile.newPassword')}</label>
+          <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder={t('profile.newPasswordPlaceholder')} />
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Conferma nuova password</label>
-          <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder="Ripeti la password" />
+          <label>{t('profile.confirmPassword')}</label>
+          <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder={t('profile.confirmPasswordPlaceholder')} />
         </div>
         {pwdError && (
           <p style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600, marginTop: 10, lineHeight: 1.4 }}>{pwdError}</p>
@@ -194,8 +229,8 @@ export default function Profile() {
           style={{ marginTop: 14, opacity: (savingPwd || !currentPwd || !newPwd || !confirmPwd) ? 0.45 : 1 }}
         >
           {pwdOk
-            ? <><IconCheck /> Password cambiata!</>
-            : savingPwd ? 'Cambio in corso...' : 'Cambia password'}
+            ? <><IconCheck /> {t('profile.passwordChanged')}</>
+            : savingPwd ? t('profile.changingPassword') : t('profile.changePassword')}
         </button>
       </Section>
 
@@ -204,7 +239,7 @@ export default function Profile() {
         <div className={`modal-overlay${emojiDrag.closing ? ' closing' : ''}`} onClick={emojiDrag.onOverlayClick}>
           <div className={`modal${emojiDrag.jiggling ? ' modal-jiggle' : ''}${emojiDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...emojiDrag.props}>
             <button className="close-btn" onClick={emojiDrag.close}>✕</button>
-            <h2>Scegli avatar</h2>
+            <h2>{t('profile.chooseAvatar')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: avatar ? 14 : 0 }}>
               {AVATARS.map(em => (
                 <button
@@ -226,7 +261,7 @@ export default function Profile() {
                 onClick={removeEmoji}
                 style={{ width: '100%', marginTop: 4, padding: '10px', borderRadius: 10, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text2)', fontSize: 13, fontWeight: 600 }}
               >
-                Rimuovi — usa iniziale del nome
+                {t('profile.removeAvatar')}
               </button>
             )}
           </div>

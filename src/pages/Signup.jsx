@@ -1,17 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { auth, db } from '../firebase'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore'
 import AuthShell from '../components/AuthShell'
 
-const ERROR_MSGS = {
-  'auth/email-already-in-use': 'Questa email è già registrata',
-  'auth/weak-password':        'Password troppo corta (min. 6 caratteri)',
-  'auth/invalid-email':        'Email non valida',
-}
-
 export default function Signup() {
+  const { t } = useTranslation()
   const [step, setStep] = useState('choice') // 'choice' | 'create' | 'join'
   const navigate = useNavigate()
 
@@ -22,20 +18,21 @@ export default function Signup() {
       {step === 'join'    && <JoinTeamStep onBack={() => setStep('choice')} onDone={() => navigate('/')} />}
 
       <p style={{ textAlign:'center', color:'rgba(255,255,255,0.2)', fontSize:12, marginTop:20, letterSpacing:'0.2px' }}>
-        Hai già un account? <Link to="/login" style={{ color:'rgba(255,255,255,0.5)', fontWeight:600 }}>Accedi</Link>
+        {t('signup.alreadyHaveAccount')} <Link to="/login" style={{ color:'rgba(255,255,255,0.5)', fontWeight:600 }}>{t('signup.signIn')}</Link>
       </p>
     </AuthShell>
   )
 }
 
 function ChoiceStep({ onChoose }) {
+  const { t } = useTranslation()
   return (
     <div className="auth-card">
       <h2 style={{ fontSize:22, fontWeight:700, color:'white', marginBottom:6, letterSpacing:'-0.3px' }}>
-        Crea account
+        {t('signup.createAccountTitle')}
       </h2>
       <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', marginBottom:26 }}>
-        Come vuoi iniziare?
+        {t('signup.howToStart')}
       </p>
 
       <button
@@ -43,8 +40,8 @@ function ChoiceStep({ onChoose }) {
         style={{ marginBottom:12, textAlign:'left' }}
         onClick={() => onChoose('create')}
       >
-        <div style={{ fontSize:15, fontWeight:700 }}>Crea una nuova squadra</div>
-        <div style={{ fontSize:12, fontWeight:500, opacity:0.85, marginTop:2 }}>Diventi admin, magazzino ed eventi da zero</div>
+        <div style={{ fontSize:15, fontWeight:700 }}>{t('signup.createTeamOption')}</div>
+        <div style={{ fontSize:12, fontWeight:500, opacity:0.85, marginTop:2 }}>{t('signup.createTeamOptionDesc')}</div>
       </button>
 
       <button
@@ -52,14 +49,15 @@ function ChoiceStep({ onChoose }) {
         style={{ textAlign:'left' }}
         onClick={() => onChoose('join')}
       >
-        <div style={{ fontSize:15, fontWeight:700, color:'white' }}>Aggiungiti a una squadra esistente</div>
-        <div style={{ fontSize:12, fontWeight:500, color:'rgba(255,255,255,0.45)', marginTop:2 }}>Richiede l'approvazione dell'admin della squadra</div>
+        <div style={{ fontSize:15, fontWeight:700, color:'white' }}>{t('signup.joinTeamOption')}</div>
+        <div style={{ fontSize:12, fontWeight:500, color:'rgba(255,255,255,0.45)', marginTop:2 }}>{t('signup.joinTeamOptionDesc')}</div>
       </button>
     </div>
   )
 }
 
 function useSignupForm() {
+  const { t } = useTranslation()
   const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -67,9 +65,9 @@ function useSignupForm() {
   const [loading, setLoading]   = useState(false)
 
   const validateCommon = () => {
-    if (!name.trim()) return 'Inserisci il tuo nome.'
-    if (!email.trim()) return 'Inserisci la tua email.'
-    if (password.length < 6) return 'Password minimo 6 caratteri.'
+    if (!name.trim()) return t('signup.errorNameRequired')
+    if (!email.trim()) return t('signup.errorEmailRequired')
+    if (password.length < 6) return t('signup.errorPasswordLength')
     return ''
   }
 
@@ -77,6 +75,12 @@ function useSignupForm() {
 }
 
 function CreateTeamStep({ onBack, onDone }) {
+  const { t } = useTranslation()
+  const ERROR_MSGS = {
+    'auth/email-already-in-use': t('signup.errorEmailInUse'),
+    'auth/weak-password':        t('signup.errorWeakPassword'),
+    'auth/invalid-email':        t('signup.errorInvalidEmail'),
+  }
   const f = useSignupForm()
   const [companyName, setCompanyName] = useState('')
 
@@ -84,7 +88,7 @@ function CreateTeamStep({ onBack, onDone }) {
     e.preventDefault()
     const commonErr = f.validateCommon()
     if (commonErr) { f.setError(commonErr); return }
-    if (!companyName.trim()) { f.setError('Inserisci il nome della tua azienda.'); return }
+    if (!companyName.trim()) { f.setError(t('signup.errorCompanyNameRequired')); return }
 
     f.setError(''); f.setLoading(true)
     const nameLower = companyName.trim().toLowerCase()
@@ -95,7 +99,7 @@ function CreateTeamStep({ onBack, onDone }) {
       const dupQ = query(collection(db, 'teams'), where('nameLower', '==', nameLower))
       const dupSnap = await getDocs(dupQ)
       if (!dupSnap.empty) {
-        f.setError('Esiste già una squadra con questo nome azienda. Prova ad aggiungerti a quella esistente.')
+        f.setError(t('signup.errorCompanyExists'))
         f.setLoading(false)
         return
       }
@@ -121,7 +125,7 @@ function CreateTeamStep({ onBack, onDone }) {
 
       onDone()
     } catch (err) {
-      f.setError(ERROR_MSGS[err.code] || 'Registrazione non riuscita')
+      f.setError(ERROR_MSGS[err.code] || t('signup.errorSignupFailed'))
       f.setLoading(false)
     }
   }
@@ -131,29 +135,29 @@ function CreateTeamStep({ onBack, onDone }) {
       <div className="auth-card">
         <BackButton onClick={onBack} />
         <h2 style={{ fontSize:22, fontWeight:700, color:'white', marginBottom:6, letterSpacing:'-0.3px' }}>
-          Nuova squadra
+          {t('signup.newTeamTitle')}
         </h2>
         <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', marginBottom:22 }}>
-          Sarai l'amministratore di una squadra vuota
+          {t('signup.newTeamDesc')}
         </p>
 
         <ErrorBox error={f.error} />
 
-        <Field label="Nome azienda">
-          <input className="auth-input" type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="es. The Service Group" required />
+        <Field label={t('signup.companyNameLabel')}>
+          <input className="auth-input" type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder={t('signup.companyNamePlaceholder')} required />
         </Field>
-        <Field label="Il tuo nome">
-          <input className="auth-input" type="text" value={f.name} onChange={e => f.setName(e.target.value)} placeholder="Mario Rossi" required />
+        <Field label={t('signup.yourNameLabel')}>
+          <input className="auth-input" type="text" value={f.name} onChange={e => f.setName(e.target.value)} placeholder={t('signup.yourNamePlaceholder')} required />
         </Field>
-        <Field label="Email">
-          <input className="auth-input" type="email" value={f.email} onChange={e => f.setEmail(e.target.value)} placeholder="mario@azienda.it" required autoComplete="email" />
+        <Field label={t('signup.emailLabel')}>
+          <input className="auth-input" type="email" value={f.email} onChange={e => f.setEmail(e.target.value)} placeholder={t('signup.emailPlaceholder')} required autoComplete="email" />
         </Field>
-        <Field label="Password" marginBottom={28}>
+        <Field label={t('signup.passwordLabel')} marginBottom={28}>
           <input className="auth-input" type="password" value={f.password} onChange={e => f.setPassword(e.target.value)} placeholder="••••••••" required autoComplete="new-password" />
         </Field>
 
         <button className="auth-btn" type="submit" disabled={f.loading}>
-          {f.loading ? 'Creazione in corso…' : 'Crea squadra →'}
+          {f.loading ? t('signup.creatingTeam') : t('signup.createTeam')}
         </button>
       </div>
     </form>
@@ -161,6 +165,12 @@ function CreateTeamStep({ onBack, onDone }) {
 }
 
 function JoinTeamStep({ onBack, onDone }) {
+  const { t } = useTranslation()
+  const ERROR_MSGS = {
+    'auth/email-already-in-use': t('signup.errorEmailInUse'),
+    'auth/weak-password':        t('signup.errorWeakPassword'),
+    'auth/invalid-email':        t('signup.errorInvalidEmail'),
+  }
   const f = useSignupForm()
   const [search, setSearch]     = useState('')
   const [results, setResults]   = useState([])
@@ -178,7 +188,7 @@ function JoinTeamStep({ onBack, onDone }) {
         const q = query(
           collection(db, 'teams'),
           where('nameLower', '>=', term),
-          where('nameLower', '<=', term + ''),
+          where('nameLower', '<=', term + ''),
         )
         const snap = await getDocs(q)
         setResults(snap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -193,7 +203,7 @@ function JoinTeamStep({ onBack, onDone }) {
     e.preventDefault()
     const commonErr = f.validateCommon()
     if (commonErr) { f.setError(commonErr); return }
-    if (!selected) { f.setError('Seleziona la tua squadra dall\'elenco.'); return }
+    if (!selected) { f.setError(t('signup.errorSelectTeam')); return }
 
     f.setError(''); f.setLoading(true)
     try {
@@ -211,7 +221,7 @@ function JoinTeamStep({ onBack, onDone }) {
 
       onDone()
     } catch (err) {
-      f.setError(ERROR_MSGS[err.code] || 'Registrazione non riuscita')
+      f.setError(ERROR_MSGS[err.code] || t('signup.errorSignupFailed'))
       f.setLoading(false)
     }
   }
@@ -221,28 +231,28 @@ function JoinTeamStep({ onBack, onDone }) {
       <div className="auth-card">
         <BackButton onClick={onBack} />
         <h2 style={{ fontSize:22, fontWeight:700, color:'white', marginBottom:6, letterSpacing:'-0.3px' }}>
-          Unisciti a una squadra
+          {t('signup.joinTeamTitle')}
         </h2>
         <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', marginBottom:22 }}>
-          L'admin della squadra dovrà approvare la richiesta
+          {t('signup.joinTeamDesc')}
         </p>
 
         <ErrorBox error={f.error} />
 
-        <Field label="Nome azienda">
+        <Field label={t('signup.companyNameLabel')}>
           <input
             className="auth-input"
             type="text"
             value={search}
             onChange={e => { setSearch(e.target.value); setSelected(null) }}
-            placeholder="Cerca la tua azienda…"
+            placeholder={t('signup.searchCompanyPlaceholder')}
             autoComplete="off"
           />
           {search.trim() && !selected && (
             <div style={{ marginTop:8, border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, overflow:'hidden' }}>
-              {searching && <div style={{ padding:'10px 14px', fontSize:13, color:'rgba(255,255,255,0.4)' }}>Cerco…</div>}
+              {searching && <div style={{ padding:'10px 14px', fontSize:13, color:'rgba(255,255,255,0.4)' }}>{t('signup.searching')}</div>}
               {!searching && results.length === 0 && (
-                <div style={{ padding:'10px 14px', fontSize:13, color:'rgba(255,255,255,0.4)' }}>Nessuna squadra trovata</div>
+                <div style={{ padding:'10px 14px', fontSize:13, color:'rgba(255,255,255,0.4)' }}>{t('signup.noTeamsFound')}</div>
               )}
               {!searching && results.map(team => (
                 <button
@@ -257,21 +267,21 @@ function JoinTeamStep({ onBack, onDone }) {
             </div>
           )}
           {selected && (
-            <div style={{ marginTop:8, fontSize:12, color:'rgba(167,199,87,0.9)' }}>✓ Squadra selezionata: {selected.name}</div>
+            <div style={{ marginTop:8, fontSize:12, color:'rgba(167,199,87,0.9)' }}>{t('signup.teamSelected', { name: selected.name })}</div>
           )}
         </Field>
-        <Field label="Il tuo nome">
-          <input className="auth-input" type="text" value={f.name} onChange={e => f.setName(e.target.value)} placeholder="Mario Rossi" required />
+        <Field label={t('signup.yourNameLabel')}>
+          <input className="auth-input" type="text" value={f.name} onChange={e => f.setName(e.target.value)} placeholder={t('signup.yourNamePlaceholder')} required />
         </Field>
-        <Field label="Email">
-          <input className="auth-input" type="email" value={f.email} onChange={e => f.setEmail(e.target.value)} placeholder="mario@azienda.it" required autoComplete="email" />
+        <Field label={t('signup.emailLabel')}>
+          <input className="auth-input" type="email" value={f.email} onChange={e => f.setEmail(e.target.value)} placeholder={t('signup.emailPlaceholder')} required autoComplete="email" />
         </Field>
-        <Field label="Password" marginBottom={28}>
+        <Field label={t('signup.passwordLabel')} marginBottom={28}>
           <input className="auth-input" type="password" value={f.password} onChange={e => f.setPassword(e.target.value)} placeholder="••••••••" required autoComplete="new-password" />
         </Field>
 
         <button className="auth-btn" type="submit" disabled={f.loading}>
-          {f.loading ? 'Invio richiesta…' : 'Richiedi accesso →'}
+          {f.loading ? t('signup.sendingRequest') : t('signup.requestAccess')}
         </button>
       </div>
     </form>
@@ -279,13 +289,14 @@ function JoinTeamStep({ onBack, onDone }) {
 }
 
 function BackButton({ onClick }) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
       onClick={onClick}
       style={{ background:'transparent', border:'none', color:'rgba(255,255,255,0.4)', fontSize:13, padding:0, marginBottom:16, cursor:'pointer' }}
     >
-      ← Indietro
+      ← {t('common.back')}
     </button>
   )
 }

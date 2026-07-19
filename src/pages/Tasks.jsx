@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
@@ -10,12 +11,13 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 
 const PRIORITY_COLORS = {
-  alta:   { bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.35)', color:'var(--red)',     dot:'#f87171', label:'Alta' },
-  media:  { bg:'rgba(245,166,35,0.12)',  border:'rgba(245,166,35,0.35)',  color:'var(--accent2)', dot:'#f5a623', label:'Media' },
-  bassa:  { bg:'rgba(52,211,153,0.12)',  border:'rgba(52,211,153,0.35)',  color:'var(--green)',   dot:'#34d399', label:'Bassa' },
+  alta:   { bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.35)', color:'var(--red)',     dot:'#f87171', labelKey:'tasks.priorityHigh' },
+  media:  { bg:'rgba(245,166,35,0.12)',  border:'rgba(245,166,35,0.35)',  color:'var(--accent2)', dot:'#f5a623', labelKey:'tasks.priorityMedium' },
+  bassa:  { bg:'rgba(52,211,153,0.12)',  border:'rgba(52,211,153,0.35)',  color:'var(--green)',   dot:'#34d399', labelKey:'tasks.priorityLow' },
 }
 
 export default function Tasks() {
+  const { t } = useTranslation()
   const { user, profile, teamId } = useAuth()
   const confirm = useConfirm()
   const [tasks, setTasks]       = useState([])
@@ -63,7 +65,7 @@ export default function Tasks() {
 
   const myTasks = isAdmin
     ? tasks
-    : tasks.filter(t => t.assignee === 'all' || t.assignee === user.uid || t.createdBy === user.uid)
+    : tasks.filter(task => task.assignee === 'all' || task.assignee === user.uid || task.createdBy === user.uid)
 
   const openTasks = myTasks.filter(t => !t.done)
   const doneTasks = myTasks.filter(t => t.done)
@@ -80,7 +82,7 @@ export default function Tasks() {
       done: false,
       createdAt: serverTimestamp(),
       createdBy: user.uid,
-      createdByName: profile?.name || profile?.username || 'Magazziniere',
+      createdByName: profile?.name || profile?.username || t('tasks.defaultCreatorName'),
     })
     setForm({ title:'', notes:'', priority:'media', assignee:'all' })
     setShowModal(false)
@@ -95,14 +97,14 @@ export default function Tasks() {
   }
 
   const deleteTask = async (id) => {
-    if (!(await confirm({ title: 'Elimina task', message: 'Eliminare questa task?', confirmLabel: 'Elimina', danger: true }))) return
+    if (!(await confirm({ title: t('tasks.confirmDeleteTitle'), message: t('tasks.confirmDeleteMessage'), confirmLabel: t('tasks.confirmDeleteLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'tasks', id))
   }
 
   const assigneeName = (assignee) => {
-    if (assignee === 'all') return 'Tutti'
+    if (assignee === 'all') return t('tasks.allAssignee')
     const u = users.find(u => u.id === assignee)
-    return u?.name || u?.username || 'Sconosciuto'
+    return u?.name || u?.username || t('common.unknown')
   }
 
   return (
@@ -111,13 +113,13 @@ export default function Tasks() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <BackHomeButton />
-            <h1>Task</h1>
+            <h1>{t('tasks.title')}</h1>
           </div>
           <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
-            + Task
+            {t('tasks.newButton')}
           </button>
         </div>
-        <p style={{ marginTop:4 }}>{openTasks.length} da fare{doneTasks.length > 0 ? ` · ${doneTasks.length} completate` : ''}</p>
+        <p style={{ marginTop:4 }}>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
       </div>
 
       <div style={{ padding:'16px 0' }}>
@@ -126,8 +128,8 @@ export default function Tasks() {
         {openTasks.length === 0 && doneTasks.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Check size={40} /></p>
-            <h3>Nessuna task</h3>
-            <p>{isAdmin ? 'Crea la prima task per i magazzinieri' : 'Non hai task assegnate'}</p>
+            <h3>{t('tasks.emptyTitle')}</h3>
+            <p>{isAdmin ? t('tasks.emptyDescAdmin') : t('tasks.emptyDescWorker')}</p>
           </div>
         ) : (
           <>
@@ -147,7 +149,7 @@ export default function Tasks() {
             {doneTasks.length > 0 && (
               <details open style={{ marginTop:8 }}>
                 <summary style={{ padding:'10px 16px', color:'var(--text2)', fontSize:13, fontWeight:600, cursor:'pointer', listStyle:'none', display:'flex', alignItems:'center', gap:6 }}>
-                  <span>▾</span> {doneTasks.length} completate
+                  <span>▾</span> {t('tasks.doneCount', { count: doneTasks.length })}
                 </summary>
                 <div style={{ opacity:0.6 }}>
                   {doneTasks.map(task => (
@@ -169,27 +171,27 @@ export default function Tasks() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal" style={{ position:'relative' }} {...taskDrag}>
             <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
-            <h2>{isAdmin ? 'Nuova task' : '+ Aggiungi task'}</h2>
+            <h2>{isAdmin ? t('tasks.newTaskTitle') : t('tasks.addTaskTitle')}</h2>
             {!isAdmin && (
               <p style={{ color:'var(--text2)', fontSize:13, marginBottom:14, lineHeight:1.5 }}>
-                La task sarà assegnata a te e visibile anche all'admin.
+                {t('tasks.workerHint')}
               </p>
             )}
 
             <div className="form-group">
-              <label>Descrizione *</label>
+              <label>{t('tasks.descriptionLabel')}</label>
               <input value={form.title} onChange={e => setForm({...form, title:e.target.value})}
-                placeholder="es. Pulizia filtri Pointe, Controllo cavi..." autoFocus />
+                placeholder={t('tasks.descriptionPlaceholder')} autoFocus />
             </div>
 
             <div className="form-group">
-              <label>Note (opzionale)</label>
+              <label>{t('tasks.notesOptional')}</label>
               <textarea value={form.notes} onChange={e => setForm({...form, notes:e.target.value})}
-                placeholder="Dettagli aggiuntivi..." rows={2} />
+                placeholder={t('tasks.notesPlaceholder')} rows={2} />
             </div>
 
             <div className="form-group">
-              <label>Priorità</label>
+              <label>{t('tasks.priorityLabel')}</label>
               <div style={{ display:'flex', gap:8 }}>
                 {Object.entries(PRIORITY_COLORS).map(([key, val]) => (
                   <button key={key} onClick={() => setForm({...form, priority:key})}
@@ -198,7 +200,7 @@ export default function Tasks() {
                       background: form.priority === key ? val.bg : 'var(--card2)',
                       color: form.priority === key ? val.color : 'var(--text2)',
                       display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                    <Dot size={8} color={val.dot} /> {val.label}
+                    <Dot size={8} color={val.dot} /> {t(val.labelKey)}
                   </button>
                 ))}
               </div>
@@ -207,9 +209,9 @@ export default function Tasks() {
             {/* Solo admin può scegliere a chi assegnare */}
             {isAdmin && (
               <div className="form-group">
-                <label>Assegna a</label>
+                <label>{t('tasks.assignToLabel')}</label>
                 <select value={form.assignee} onChange={e => setForm({...form, assignee:e.target.value})}>
-                  <option value="all">Tutti i magazzinieri</option>
+                  <option value="all">{t('tasks.allWorkers')}</option>
                   {users.filter(u => u.role === 'worker').map(u => (
                     <option key={u.id} value={u.id}>{u.name || u.username}</option>
                   ))}
@@ -219,7 +221,7 @@ export default function Tasks() {
 
             <button onClick={createTask} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={!form.title.trim()}>
-              <Check size={16} /> {isAdmin ? 'Crea task' : 'Aggiungi task'}
+              <Check size={16} /> {isAdmin ? t('tasks.createTask') : t('tasks.addTask')}
             </button>
           </div>
         </div>
@@ -229,6 +231,7 @@ export default function Tasks() {
 }
 
 function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
+  const { t } = useTranslation()
   const p = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.media
 
   return (
@@ -249,7 +252,7 @@ function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             {!task.done && (
               <span style={{ background:p.bg, color:p.color, border:`1px solid ${p.border}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:5 }}>
-                <Dot size={7} color={p.dot} /> {p.label}
+                <Dot size={7} color={p.dot} /> {t(p.labelKey)}
               </span>
             )}
             <span style={{ color:'var(--text2)', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
@@ -257,7 +260,7 @@ function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
             </span>
             {task.createdByName && isAdmin && task.assignee === task.createdBy && (
               <span style={{ background:'rgba(79,195,247,0.1)', color:'var(--blue)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:6, padding:'1px 7px', fontSize:11, fontWeight:600 }}>
-                📝 da {task.createdByName}
+                {t('tasks.createdBy', { name: task.createdByName })}
               </span>
             )}
           </div>

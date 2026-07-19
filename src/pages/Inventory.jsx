@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateQRDataURL, generateBarcodeSVG, generateUnitCode, qrPayloadForCode } from '../utils/generateCode'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
+import { formatDate } from '../utils/formatDate'
 import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { Pin, Cart, Box, Kit, Save, Wrench } from '../components/Icon'
 
-const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Altro']
+const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const KIT_CATEGORIES = CATEGORIES
 // Ordine di visualizzazione nella lista raggruppata
-const CATEGORY_ORDER = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Altro']
-const MAIN_CATS = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili']
+const CATEGORY_ORDER = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
+const MAIN_CATS = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti']
 const ICONS = {
   'Audio':       '🔊',
   'Video':       '📺',
@@ -24,6 +26,11 @@ const ICONS = {
   'Corrente':    '⚡',
   'Effetti':     '🎉',
   'Consumabili': '🪣',
+  'Microfoni':   '🎤',
+  'Traduzione':  '🌐',
+  'Connettività':'📶',
+  'Comunicazione':'📡',
+  'Strumenti':   '🎸',
   'Kit':         '🧰',
   'Altro':       '📦',
 }
@@ -61,6 +68,7 @@ const CATEGORY_MIGRATION = {
 }
 
 export default function Inventory() {
+  const { t, i18n } = useTranslation()
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
@@ -160,7 +168,7 @@ export default function Inventory() {
     const qty = parseInt(form.qty) || 1
     if (!selected) {
       const dup = items.find(i => i.name.trim().toLowerCase() === form.name.trim().toLowerCase())
-      if (dup && !(await confirm({ title: 'Articolo duplicato', message: `Esiste già "${dup.name}". Aggiungi comunque?`, confirmLabel: 'Aggiungi' }))) return
+      if (dup && !(await confirm({ title: t('inventory.confirmDuplicateTitle'), message: t('inventory.confirmDuplicateMessage', { name: dup.name }), confirmLabel: t('inventory.confirmDuplicateLabel') }))) return
     }
     if (selected) {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
@@ -183,7 +191,7 @@ export default function Inventory() {
   }
 
   const deleteItem = async id => {
-    if (await confirm({ title: 'Elimina articolo', message: 'Eliminare questo articolo dal magazzino?', confirmLabel: 'Elimina', danger: true })) {
+    if (await confirm({ title: t('inventory.confirmDeleteItemTitle'), message: t('inventory.confirmDeleteItemMessage'), confirmLabel: t('inventory.confirmDeleteItemLabel'), danger: true })) {
       await deleteDoc(doc(db, 'items', id))
       setShowDetail(null)
     }
@@ -241,7 +249,7 @@ export default function Inventory() {
 
   const exportCSV = () => {
     if (items.length === 0) return
-    const headers = ['Nome', 'Categoria', 'Marca', 'Modello', 'Quantità totale', 'Disponibili', 'Posizione', 'Kit', 'Pezzi per baule', 'Codice', 'Note']
+    const headers = [t('inventory.csv.name'), t('inventory.csv.category'), t('inventory.csv.brand'), t('inventory.csv.model'), t('inventory.csv.totalQty'), t('inventory.csv.available'), t('inventory.csv.location'), t('inventory.csv.kit'), t('inventory.csv.piecesPerCase'), t('inventory.csv.code'), t('inventory.csv.notes')]
     const rows = items.map(i => [
       i.name || '',
       i.category || '',
@@ -250,7 +258,7 @@ export default function Inventory() {
       i.totalQty ?? '',
       i.availableQty ?? '',
       i.location || '',
-      i.isKit ? 'Sì' : 'No',
+      i.isKit ? t('inventory.csv.yes') : t('inventory.csv.no'),
       i.isKit && i.kitSize ? i.kitSize : '',
       i.code || '',
       (i.notes || '').replace(/,/g, ';'),
@@ -295,7 +303,7 @@ export default function Inventory() {
     <div className="page">
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div><h1>Magazzino</h1><p>{items.length} articoli</p></div>
+          <div><h1>{t('inventory.title')}</h1><p>{t('inventory.itemsCount', { count: items.length })}</p></div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             {/* Menu azioni — 3 puntini */}
             <div style={{ position:'relative' }}>
@@ -321,36 +329,36 @@ export default function Inventory() {
                       onClick={() => { setShowActionsMenu(false); exportCSV() }}
                       style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid var(--border)' }}
                     >
-                      <span>📤</span> Esporta CSV
+                      <span>📤</span> {t('inventory.exportCsv')}
                     </button>
                     <button
                       onClick={() => { setShowActionsMenu(false); printAllLabels() }}
                       style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10 }}
                     >
-                      <span>⬇</span> Scarica etichette (ZIP)
+                      <span>⬇</span> {t('inventory.downloadLabelsZip')}
                     </button>
                   </div>
                 </>
               )}
             </div>
-            <button onClick={() => setShowAddMenu(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Aggiungi</button>
+            <button onClick={() => setShowAddMenu(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>{t('inventory.addButton')}</button>
           </div>
         </div>
       </div>
 
       <div className="search-bar" style={{ position:'relative' }}>
         <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, categoria, marca..." />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} />
       </div>
 
       {/* Filtri rapidi - scrollabili orizzontalmente */}
       <div style={{ overflowX:'auto', background:'var(--bg2)', borderBottom:'1px solid var(--border)', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
         <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
-          { key:'all',    label:'Tutti', count: items.length },
-          { key:'out',     label:'Fuori',         count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
-          { key:'broken',  label:'Rotti',         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
-          { key:'reorder', label:'Da riordinare', count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
+          { key:'all',    label:t('inventory.filterAll'), count: items.length },
+          { key:'out',     label:t('inventory.filterOut'),         count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
+          { key:'broken',  label:t('inventory.filterBroken'),         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'reorder', label:t('inventory.filterReorder'), count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
           <button key={f.key} onClick={() => setActiveFilter(f.key)}
             style={{
@@ -373,7 +381,7 @@ export default function Inventory() {
 
       {filtered.length === 0
         ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
-            <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>Nessun articolo</h3><p>Aggiungi il primo articolo al magazzino</p></div>
+            <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p></div>
           </div>
         : groupedFiltered.map(({ cat, catItems }) => (
           <div key={cat} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
@@ -410,14 +418,14 @@ export default function Inventory() {
                   {item.brokenQty > 0 && (
                     <div style={{ marginTop:4 }}>
                       <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
-                        <Wrench size={11} /> {item.brokenQty} rott{item.brokenQty === 1 ? 'o' : 'i'}
+                        <Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}
                       </span>
                     </div>
                   )}
                   {item.category === 'Consumabili' && item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock && (
                     <div style={{ marginTop:4 }}>
                       <span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
-                        <Cart size={11} /> da riordinare
+                        <Cart size={11} /> {t('inventory.toReorder')}
                       </span>
                     </div>
                   )}
@@ -434,19 +442,19 @@ export default function Inventory() {
         <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
           <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
             <button className="close-btn" onClick={myDrag.close}>✕</button>
-            <h2>{selected ? 'Modifica articolo' : 'Nuovo articolo'}</h2>
-            <div className="form-group"><label>Nome *</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Cassa EV ZLX-12P" /></div>
-            <div className="form-group"><label>Categoria</label>
+            <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
+            <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
+            <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
               <select value={form.category} onChange={e => setForm({...form,category:e.target.value})}>
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div className="form-group"><label>Marca</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder="es. EV" /></div>
-              <div className="form-group"><label>Modello</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder="es. ZLX-12P" /></div>
+              <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
+              <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div className="form-group"><label>Quantità totale</label>
+              <div className="form-group"><label>{t('inventory.totalQtyLabel')}</label>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})}
                     style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
@@ -459,7 +467,7 @@ export default function Inventory() {
               </div>
               <div className="form-group">
                 <label style={{ color: form.brokenQty > 0 ? 'var(--red)' : undefined }}>
-                  Rotti {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
+                  {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
                 </label>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})}
@@ -474,18 +482,18 @@ export default function Inventory() {
             </div>
             {form.brokenQty > 0 && (
               <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:8, padding:'8px 12px', marginBottom:4, fontSize:13, color:'var(--red)', display:'flex', alignItems:'center', gap:6 }}>
-                <Wrench size={14} /> {form.qty - form.brokenQty} disponibili · {form.brokenQty} fuori uso
+                <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
               </div>
             )}
-            <div className="form-group"><label>Posizione in magazzino</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Scaffale A3, Ripiano 2 sx, Fondo sala..." /></div>
+            <div className="form-group"><label>{t('inventory.locationLabel')}</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('inventory.locationPlaceholder')} /></div>
 
 
-            <div className="form-group"><label>Note</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
+            <div className="form-group"><label>{t('inventory.notesLabel')}</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
 
             {/* Soglia scorta minima — solo per Consumabili */}
             {form.category === 'Consumabili' && (
               <div className="form-group">
-                <label>Soglia scorta minima</label>
+                <label>{t('inventory.minStockLabel')}</label>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
                     <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})}
@@ -497,12 +505,12 @@ export default function Inventory() {
                       style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                   </div>
                 </div>
-                {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>Avviso quando disponibili scendono sotto {form.minStock} pezzi</p>}
+                {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock })}</p>}
               </div>
             )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
-              {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>Elimina</button>}
-              <button onClick={saveItem} className="btn btn-primary" style={{ flex:2, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}><Save size={16} /> Salva</button>
+              {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
+              <button onClick={saveItem} className="btn btn-primary" style={{ flex:2, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}><Save size={16} /> {t('inventory.save')}</button>
             </div>
           </div>
         </div>
@@ -534,7 +542,7 @@ export default function Inventory() {
                     style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor:'pointer' }}
                   >
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                      <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
+                      <span style={{ color:'var(--text2)', fontSize:14 }}>{t('inventory.detailAvailable')}</span>
                       <span style={{ fontWeight:800, fontSize:18 }}>
                         {showDetail.category === 'Consumabili'
                           ? (showDetail.availableQty ?? showDetail.totalQty)
@@ -550,27 +558,27 @@ export default function Inventory() {
                       )}
                     </div>
                     <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
-                      <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} disponibili</span>
+                      <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} {t('inventory.available')}</span>
                       {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
-                        <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} fuori</span>
+                        <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} {t('inventory.out')}</span>
                       )}
                       {showDetail.brokenQty > 0 && (
-                        <span style={{ fontSize:12, color:'var(--red)' }}>● {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}</span>
+                        <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: showDetail.brokenQty })}</span>
                       )}
                     </div>
                     <p style={{ fontSize:11, color:'var(--accent)', marginTop:8, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
-                      🔍 Tocca per vedere l'oggetto dove si trova
+                      🔍 {t('inventory.detailTapToSeeLocation')}
                       <span style={{ marginLeft:'auto' }}>→</span>
                     </p>
                   </div>
                   <div className="code-preview" style={{ marginBottom:14 }}>
-                    {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>Generazione...</p></div>}
+                    {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>{t('inventory.generating')}</p></div>}
                     <p style={{ color:'#333', fontFamily:'monospace', fontWeight:700, fontSize:16 }}>{showDetail.code || generateItemCode(showDetail.id)}</p>
                     <svg id="barcode-svg"></svg>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                    <button onClick={() => setShowPrintPopup(true)} className="btn btn-secondary">⬇ Scarica etichetta</button>
-                    <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ Modifica</button>
+                    <button onClick={() => setShowPrintPopup(true)} className="btn btn-secondary">⬇ {t('inventory.downloadLabel')}</button>
+                    <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ {t('inventory.edit')}</button>
                   </div>
                   {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
                   {(showDetail.brokenQty||0) > 0 && (
@@ -585,7 +593,7 @@ export default function Inventory() {
                       }}
                       style={{ width:'100%', marginTop:10, background:'rgba(248,113,113,0.15)', border:'1px solid rgba(248,113,113,0.4)', color:'var(--red)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
                     >
-                      <Wrench size={15} /> {showDetail.brokenQty} rott{showDetail.brokenQty === 1 ? 'o' : 'i'}
+                      <Wrench size={15} /> {t('inventory.brokenCount', { count: showDetail.brokenQty })}
                     </button>
                   )}
                   {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
@@ -598,7 +606,7 @@ export default function Inventory() {
                       }}
                       style={{ width:'100%', marginTop:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
                     >
-                      Ripristina giacenza ({(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} risultano fuori)
+                      {t('inventory.restoreStock', { count: (showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0) })}
                     </button>
                   )}
                   {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
@@ -606,7 +614,7 @@ export default function Inventory() {
                     <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
                       <span style={{ color:'var(--blue)' }}><Pin size={17} /></span>
                       <div>
-                        <p style={{ color:'var(--text2)', fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>Posizione magazzino</p>
+                        <p style={{ color:'var(--text2)', fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>{t('inventory.warehousePosition')}</p>
                         <p style={{ color:'var(--blue)', fontWeight:700, fontSize:15, marginTop:2 }}>{showDetail.location}</p>
                       </div>
                     </div>
@@ -620,18 +628,18 @@ export default function Inventory() {
                     className="btn-no-anim"
                     style={{ display:'flex', alignItems:'center', gap:6, background:'transparent', color:'var(--text2)', fontWeight:700, fontSize:14, marginBottom:16 }}
                   >
-                    ← Indietro
+                    ← {t('common.back')}
                   </button>
-                  <h2 style={{ marginBottom:4 }}>Dove si trova</h2>
+                  <h2 style={{ marginBottom:4 }}>{t('inventory.whereItIs')}</h2>
                   <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{showDetail.name}</p>
 
                   {detailEvents.length === 0 && detailEventHistory.length === 0 && (
-                    <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>Nessuno storico disponibile per questo oggetto.</p>
+                    <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>{t('inventory.noHistoryAvailable')}</p>
                   )}
 
                   {detailEvents.length > 0 && (
                     <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
-                      <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Attualmente fuori</p>
+                      <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.currentlyOut')}</p>
                       {detailEvents.map(ev => (
                         <button
                           key={ev.id}
@@ -641,7 +649,7 @@ export default function Inventory() {
                           <div style={{ flex:1, minWidth:0 }}>
                             <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
                             <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                              {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
+                              {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
                               {ev.location ? ` · ${ev.location}` : ''}
                             </p>
                           </div>
@@ -653,7 +661,7 @@ export default function Inventory() {
 
                   {detailEventHistory.length > 0 && (
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                      <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Storico (ultimi {detailEventHistory.length} event{detailEventHistory.length === 1 ? 'o' : 'i'})</p>
+                      <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.history', { count: detailEventHistory.length })}</p>
                       {detailEventHistory.map(ev => {
                         const itm = (ev.items || []).find(i => i.id === showDetail.id || i.itemRef === showDetail.id)
                         const stillOut = itm?.loaded && !itm?.returned
@@ -666,12 +674,12 @@ export default function Inventory() {
                             <div style={{ flex:1, minWidth:0 }}>
                               <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
                               <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                                {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
+                                {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
                                 {ev.location ? ` · ${ev.location}` : ''}
                               </p>
                             </div>
                             {stillOut && (
-                              <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>fuori</span>
+                              <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>{t('inventory.out')}</span>
                             )}
                             <span style={{ color:'var(--text2)' }}>→</span>
                           </button>
@@ -704,20 +712,20 @@ export default function Inventory() {
             >
               ✕
             </button>
-            <h2 style={{ marginBottom:16, fontSize:17 }}>Scarica etichetta</h2>
+            <h2 style={{ marginBottom:16, fontSize:17 }}>{t('inventory.downloadLabel')}</h2>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               <button
                 onClick={() => { printCode(); setShowPrintPopup(false) }}
                 className="btn btn-secondary"
               >
-                Una etichetta
+                {t('inventory.printOneLabel')}
               </button>
               {(showDetail.totalQty || 1) > 1 && (
                 <button
                   onClick={() => { printUnitLabels(); setShowPrintPopup(false) }}
                   className="btn btn-secondary"
                 >
-                  Tutte le unità (ZIP, {showDetail.totalQty})
+                  {t('inventory.printAllUnits', { count: showDetail.totalQty })}
                 </button>
               )}
             </div>
@@ -730,19 +738,19 @@ export default function Inventory() {
         <div className={`modal-overlay${addMenuDrag.closing ? ' closing' : ''}`} onClick={addMenuDrag.onOverlayClick}>
           <div className={`modal${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
             <button className="close-btn" onClick={addMenuDrag.close}>✕</button>
-            <h2>Cosa vuoi aggiungere?</h2>
+            <h2>{t('inventory.addMenuTitle')}</h2>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
               <button onClick={() => { setShowAddMenu(false); openAdd() }}
                 style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
                 <span style={{ color:'var(--text)' }}><Box size={34} /></span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>Nuovo oggetto</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un singolo articolo</span>
+                <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>{t('inventory.newItemOption')}</span>
+                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newItemOptionDesc')}</span>
               </button>
               <button onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',qty:1,category:'Altro'}); setKitComponents([]); setKitSearch(''); setShowKitModal(true) }}
                 style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
                 <span style={{ color:'var(--accent2)' }}><Kit size={34} /></span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>Nuovo kit</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>Un baule con componenti</span>
+                <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>{t('inventory.newKitOption')}</span>
+                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newKitOptionDesc')}</span>
               </button>
             </div>
           </div>
@@ -756,14 +764,14 @@ export default function Inventory() {
           <div className={`modal${kitEditDrag.jiggling ? ' modal-jiggle' : ''}${kitEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={kitEditDrag.close}>✕</button>
-              <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> Modifica kit</h2>
-              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
-              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino" style={{ fontSize:13, marginBottom:10 }} />
+              <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.editKitTitle')}</h2>
+              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholder')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
+              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholder')} style={{ fontSize:13, marginBottom:10 }} />
               <select value={kitForm.category||'Altro'} onChange={e => setKitForm({...kitForm,category:e.target.value})} style={{ fontSize:13, fontWeight:600, marginBottom:10 }}>
                 {KIT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>Quanti kit uguali?</p>
+                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <button type="button" onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                   <input type="number" min="1" value={kitForm.qty} onChange={e => setKitForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))} style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }} />
@@ -773,7 +781,7 @@ export default function Inventory() {
             </div>
             {kitEditComponents.length > 0 && (
               <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
-                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>Componenti ({kitEditComponents.length})</p>
+                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.componentsCount', { count: kitEditComponents.length })}</p>
                 {kitEditComponents.map(comp => (
                   <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                     <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{comp.name}</span>
@@ -788,7 +796,7 @@ export default function Inventory() {
               </div>
             )}
             <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder="Aggiungi componente..." style={{ fontSize:13 }} />
+              <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder={t('inventory.addComponentPlaceholder')} style={{ fontSize:13 }} />
             </div>
             <div style={{ overflowY:'auto', flex:1 }}>
               {items
@@ -799,7 +807,7 @@ export default function Inventory() {
                     <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12 }}>{item.availableQty??item.totalQty} disp.</p>
+                      <p style={{ color:'var(--text2)', fontSize:12 }}>{t('inventory.availableShort', { count: item.availableQty??item.totalQty })}</p>
                     </div>
                     <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
                   </div>
@@ -809,14 +817,14 @@ export default function Inventory() {
             <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)', display:'flex', gap:10 }}>
               <button
                 onClick={async () => {
-                  if (!(await confirm({ title: 'Elimina kit', message: `Eliminare "${editingKit.name}"?`, confirmLabel: 'Elimina', danger: true }))) return
+                  if (!(await confirm({ title: t('inventory.deleteKit'), message: t('inventory.confirmDeleteKitMessage', { name: editingKit.name }), confirmLabel: t('inventory.delete'), danger: true }))) return
                   await deleteDoc(doc(db, 'items', editingKit.id))
                   setShowKitEditModal(false)
                   setShowDetail(null)
                 }}
                 className="btn btn-red"
                 style={{ flex:1 }}>
-                Elimina
+                {t('inventory.delete')}
               </button>
               <button
                 onClick={async () => {
@@ -838,7 +846,7 @@ export default function Inventory() {
                 className="btn btn-primary"
                 disabled={!kitForm.name.trim() || kitEditComponents.length === 0}
                 style={{ flex:2, opacity: !kitForm.name.trim() || kitEditComponents.length === 0 ? 0.4 : 1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                <Save size={16} /> Salva modifiche
+                <Save size={16} /> {t('inventory.saveChanges')}
               </button>
             </div>
           </div>
@@ -850,14 +858,14 @@ export default function Inventory() {
           <div className={`modal${kitDrag.jiggling ? ' modal-jiggle' : ''}${kitDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={kitDrag.close}>✕</button>
-              <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> Nuovo kit</h2>
-              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder="Nome kit (es. Baule Tornado)" style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
-              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder="Posizione in magazzino (opzionale)" style={{ fontSize:13, marginBottom:10 }} />
+              <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.newKitTitle')}</h2>
+              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholderNew')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
+              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholderNew')} style={{ fontSize:13, marginBottom:10 }} />
               <select value={kitForm.category} onChange={e => setKitForm({...kitForm,category:e.target.value})} style={{ marginBottom:10, fontSize:13, fontWeight:600 }}>
                 {KIT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>Quanti kit uguali?</p>
+                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <button onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                   <input type="number" min="1" value={kitForm.qty} onChange={e => setKitForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))} style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }} />
@@ -867,7 +875,7 @@ export default function Inventory() {
             </div>
             {kitComponents.length > 0 && (
               <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
-                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>Contenuto kit</p>
+                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.kitContents')}</p>
                 {kitComponents.map(comp => (
                   <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                     <span style={{ flex:1, fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
@@ -882,7 +890,7 @@ export default function Inventory() {
               </div>
             )}
             <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <input value={kitSearch} onChange={e => setKitSearch(e.target.value)} placeholder="Cerca oggetto da aggiungere..." style={{ fontSize:13 }} />
+              <input value={kitSearch} onChange={e => setKitSearch(e.target.value)} placeholder={t('inventory.searchItemToAdd')} style={{ fontSize:13 }} />
             </div>
             <div style={{ overflowY:'auto', flex:1 }}>
               {items.filter(i => !i.isBundle && !kitComponents.some(c => c.itemId===i.id)).filter(i => !kitSearch || i.name?.toLowerCase().includes(kitSearch.toLowerCase())).map(item => (
@@ -914,7 +922,7 @@ export default function Inventory() {
                 className="btn btn-primary btn-full"
                 disabled={!kitForm.name.trim() || kitComponents.length === 0}
                 style={{ opacity: !kitForm.name.trim() || kitComponents.length === 0 ? 0.4 : 1 }}>
-                Crea {kitForm.qty > 1 ? `${kitForm.qty}x ` : ''}kit con {kitComponents.length} componenti
+                {t('inventory.createKit', { prefix: kitForm.qty > 1 ? `${kitForm.qty}x ` : '', count: kitComponents.length })}
               </button>
             </div>
           </div>

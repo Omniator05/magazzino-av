@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import AuthShell from '../components/AuthShell'
 
 export default function Login() {
+  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]   = useState('')
@@ -19,12 +21,12 @@ export default function Login() {
       navigate('/')
     } catch (err) {
       const msgs = {
-        'auth/user-not-found':      'Nome utente non trovato',
-        'auth/wrong-password':      'Password errata',
-        'auth/invalid-credential':  'Nome utente o password errati',
-        'auth/too-many-requests':   'Troppi tentativi, riprova tra qualche minuto',
+        'auth/user-not-found':      t('login.errorUserNotFound'),
+        'auth/wrong-password':      t('login.errorWrongPassword'),
+        'auth/invalid-credential':  t('login.errorInvalidCredential'),
+        'auth/too-many-requests':   t('login.errorTooManyRequests'),
       }
-      setError(msgs[err.code] || 'Accesso non riuscito')
+      setError(msgs[err.code] || t('login.errorGeneric'))
     } finally { setLoading(false) }
   }
 
@@ -33,10 +35,10 @@ export default function Login() {
       <form onSubmit={handleSubmit}>
         <div className="auth-card">
           <h2 style={{ fontSize:22, fontWeight:700, color:'white', marginBottom:6, letterSpacing:'-0.3px' }}>
-            Bentornato
+            {t('login.title')}
           </h2>
           <p style={{ fontSize:13, color:'rgba(255,255,255,0.35)', marginBottom:28 }}>
-            Accedi al gestionale
+            {t('login.subtitle')}
           </p>
 
           {error && (
@@ -51,14 +53,14 @@ export default function Login() {
 
           <div style={{ marginBottom:16 }}>
             <label style={{ display:'block', fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.4)', letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>
-              Nome utente o email
+              {t('login.usernameLabel')}
             </label>
             <input
               className="auth-input"
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
-              placeholder="es. marco.bianchi"
+              placeholder={t('login.usernamePlaceholder')}
               required
               autoCapitalize="none"
               autoCorrect="off"
@@ -68,7 +70,7 @@ export default function Login() {
 
           <div style={{ marginBottom:28 }}>
             <label style={{ display:'block', fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.4)', letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>
-              Password
+              {t('login.passwordLabel')}
             </label>
             <input
               className="auth-input"
@@ -82,13 +84,13 @@ export default function Login() {
           </div>
 
           <button className="auth-btn" type="submit" disabled={loading}>
-            {loading ? 'Accesso in corso…' : 'Entra →'}
+            {loading ? t('login.signingIn') : t('login.signIn')}
           </button>
         </div>
       </form>
 
       <p style={{ textAlign:'center', color:'rgba(255,255,255,0.2)', fontSize:12, marginTop:20, letterSpacing:'0.2px' }}>
-        Non hai un account? <Link to="/signup" style={{ color:'rgba(255,255,255,0.5)', fontWeight:600 }}>Registrati</Link>
+        {t('login.noAccount')} <Link to="/signup" style={{ color:'rgba(255,255,255,0.5)', fontWeight:600 }}>{t('login.signUp')}</Link>
       </p>
     </AuthShell>
   )

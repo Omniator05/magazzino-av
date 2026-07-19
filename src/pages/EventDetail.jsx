@@ -1,6 +1,7 @@
 import { useModalDrag } from '../hooks/useModalDrag'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc } from 'firebase/firestore'
@@ -11,6 +12,7 @@ import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import { Warn } from '../components/Icon'
+import { formatDate } from '../utils/formatDate'
 import JSZip from 'jszip'
 
 // Passata questa finestra di grazia dalla data dell'evento, i contenuti caricati
@@ -36,6 +38,11 @@ const ICONS = {
   'Corrente': '⚡',
   'Effetti':  '🎉',
   'Consumabili': '🪣',
+  'Microfoni':   '🎤',
+  'Traduzione':  '🌐',
+  'Connettività':'📶',
+  'Comunicazione':'📡',
+  'Strumenti':   '🎸',
   'Kit':      '🧰',
   'Altro':    '📦',
   // legacy
@@ -48,6 +55,7 @@ const ICONS = {
 }
 
 export default function EventDetail() {
+  const { t, i18n } = useTranslation()
   const { id } = useParams()
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
@@ -89,6 +97,11 @@ export default function EventDetail() {
   const templatePickerDrag = useModalDrag(() => setShowTemplatePicker(false))
   const [search, setSearch] = useState('')
   const [showEventNotes, setShowEventNotes] = useState(false)
+  // Assegnazione furgone in blocco — evita di dover aprire il menu su ogni riga
+  // quando si vuole assegnare lo stesso furgone a più oggetti già in lista.
+  const [bulkVehicleMode, setBulkVehicleMode] = useState(false)
+  const [bulkSelectedIds, setBulkSelectedIds] = useState(new Set())
+  const [bulkVehicleId, setBulkVehicleId] = useState('')
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const saveItemEdit = async ({ id, qty, eventNote, mancante }) => {
@@ -102,6 +115,8 @@ export default function EventDetail() {
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [workers, setWorkers] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [itemDetails, setItemDetails] = useState({}) // id/itemRef → { location, notes } dal catalogo
+  const resolvedItemDetailIdsRef = useRef(new Set())
   const [unavailability, setUnavailability] = useState([])
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
@@ -223,9 +238,32 @@ export default function EventDetail() {
       })
   }, [showAddItem])
 
+  // Posizione/note live dal catalogo, recuperate in BLOCCO per tutti gli
+  // oggetti della lista (non riga per riga): risolvendo tutte insieme invece
+  // che una alla volta con tempi scaglionati, la lista non "cresce" pezzo per
+  // pezzo sotto il dito mentre l'utente sta per toccare un bottone.
+  useEffect(() => {
+    const items = event?.items || []
+    const idsToFetch = [...new Set(items.filter(i => !i.isExtra).map(i => i.itemRef || i.id))]
+      .filter(itemId => !resolvedItemDetailIdsRef.current.has(itemId))
+    if (idsToFetch.length === 0) return
+    idsToFetch.forEach(itemId => resolvedItemDetailIdsRef.current.add(itemId))
+    Promise.all(idsToFetch.map(itemId =>
+      getDoc(doc(db, 'items', itemId)).then(snap => [itemId, snap.exists() ? snap.data() : null])
+    )).then(results => {
+      setItemDetails(prev => {
+        const next = { ...prev }
+        results.forEach(([itemId, data]) => {
+          next[itemId] = { location: data?.location || null, notes: data?.notes || null }
+        })
+        return next
+      })
+    })
+  }, [event])
+
   if (!event) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}>
-      <p style={{ color:'var(--text2)' }}>Caricamento...</p>
+      <p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p>
     </div>
   )
 
@@ -305,6 +343,30 @@ export default function EventDetail() {
   const setItemVehicle = async (itemId, vehicleId) => {
     const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, vehicleId: vehicleId || null })
     await updateEventItems(updated)
+  }
+
+  const toggleBulkSelect = (itemId) => {
+    setBulkSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(itemId) ? next.delete(itemId) : next.add(itemId)
+      return next
+    })
+  }
+
+  const exitBulkVehicleMode = () => {
+    setBulkVehicleMode(false)
+    setBulkSelectedIds(new Set())
+    setBulkVehicleId('')
+  }
+
+  // Applica un furgone a tutti gli oggetti selezionati in un'unica scrittura,
+  // invece di un giro di select per ciascuna riga.
+  const applyBulkVehicle = async () => {
+    if (bulkSelectedIds.size === 0 || !bulkVehicleId) return
+    const vehicleId = bulkVehicleId === '__none__' ? null : bulkVehicleId
+    const updated = eventItems.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId } : i)
+    await updateEventItems(updated)
+    exitBulkVehicleMode()
   }
 
   const toggleLoaded = async itemId => {
@@ -477,11 +539,11 @@ export default function EventDetail() {
         })
       }
     }
-    await updateEventItems(updated)
     setCart([])
     setSearch('')
     setAddAsMancante(false)
     setShowAddItem(false)
+    await updateEventItems(updated)
   }
 
   const openAddModal = () => {
@@ -502,7 +564,7 @@ export default function EventDetail() {
   const removeFromEvent = async itemId => {
     const item = eventItems.find(i => i.id === itemId)
     if (item.loaded && !item.returned) {
-      if (!(await confirm({ title: 'Articolo ancora fuori', message: 'Questo articolo risulta ancora fuori. Rimuoverlo dalla lista?', confirmLabel: 'Rimuovi', danger: true }))) return
+      if (!(await confirm({ title: t('eventDetail.confirmStillOutTitle'), message: t('eventDetail.confirmStillOutMessage'), confirmLabel: t('eventDetail.confirmStillOutLabel'), danger: true }))) return
       // Ripristina disponibilità
       try {
         const itemRef = doc(db, 'items', item.itemRef || itemId)
@@ -517,7 +579,13 @@ export default function EventDetail() {
     await updateEventItems(eventItems.filter(i => i.id !== itemId))
   }
 
-  const notInCart = allItems.filter(i => !cart.some(c => c.id === i.id) && !eventItems.some(e => (e.itemRef || e.id) === i.id))
+  // Con "segna come mancanti" attivo, un articolo già in lista deve restare
+  // selezionabile — è esattamente il caso d'uso: te ne serve ancora, quindi
+  // vuoi aggiungerne una seconda riga segnata mancante (gestito da confirmCart).
+  const notInCart = allItems.filter(i =>
+    !cart.some(c => c.id === i.id) &&
+    (addAsMancante || !eventItems.some(e => (e.itemRef || e.id) === i.id))
+  )
   const filtered = notInCart.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
     i.category?.toLowerCase().includes(search.toLowerCase()) ||
@@ -650,8 +718,8 @@ export default function EventDetail() {
     setTimeout(() => win.print(), 250)
   }
 
-  const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Kit:'🧰', Extra:'✨', Altro:'📦' }
-  const CAT_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+  const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
+  const CAT_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
   const catGrouped = {}
   eventItems.forEach(item => {
     // Categorie "orfane" finiscono in Altro invece di sparire: un articolo può
@@ -676,7 +744,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} vehicles={vehicles} onSetVehicle={setItemVehicle} />
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} />
       ))}
     </div>
   ))
@@ -685,19 +753,19 @@ export default function EventDetail() {
     <div className="page">
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-          <button onClick={() => navigate(-1)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← Indietro</button>
+          <button onClick={() => navigate(-1)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← {t('common.back')}</button>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={exportPDF}
               style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.2)', color:'var(--accent)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-              PDF
+              {t('eventDetail.pdf')}
             </button>
           <button
             onClick={() => navigate(`/events/${id}/scan`)}
             style={{ background:'linear-gradient(135deg,rgba(79,195,247,0.2),rgba(79,195,247,0.08))', border:'1px solid rgba(79,195,247,0.35)', color:'var(--blue)', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
-            Inizia a caricare
+            {t('eventDetail.startLoading')}
           </button>
           </div>
         </div>
@@ -717,14 +785,14 @@ export default function EventDetail() {
             {event.phases && ['montaggio','smontaggio'].some(k => event.phases[k]) && (
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
                 {[
-                  { key:'montaggio',  label:'Montaggio',  color:'#2563eb', bg:'#dbeafe' },
-                  { key:'smontaggio', label:'Smontaggio', color:'#ea580c', bg:'#ffedd5' },
+                  { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
+                  { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
                 ].filter(p => event.phases[p.key]).map(p => {
                   const isToday = event.phases[p.key] === today
                   return (
                     <span key={p.key} style={{ display:'inline-flex', alignItems:'center', gap:5, background: isToday ? p.color : p.bg, color: isToday ? 'white' : p.color, borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:800, border: isToday ? 'none' : `1px solid ${p.color}33` }}>
-                      {p.label} · {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})}
-                      {isToday && ' · OGGI'}
+                      {p.label} · {formatDate(event.phases[p.key]+'T12:00:00', {weekday:'short',day:'numeric',month:'short'}, i18n.language)}
+                      {isToday && ` · ${t('calendar.today').toUpperCase()}`}
                     </span>
                   )
                 })}
@@ -747,7 +815,7 @@ export default function EventDetail() {
                 onClick={() => setShowAssignModal(true)}
                 style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--card2)', border:'1px dashed var(--border)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--text2)' }}
               >
-                + Assegna
+                {t('eventDetail.assign')}
               </button>
             </div>
           </div>
@@ -784,17 +852,17 @@ export default function EventDetail() {
 
       {event.fromArchive && (
         <div style={{ padding:'10px 16px', background:'rgba(79,195,247,0.08)', borderBottom:'1px solid rgba(79,195,247,0.2)' }}>
-          <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700 }}>📋 Creato da template — ricordati di aggiornare la data tramite il tasto ✏️ nella pagina eventi.</p>
+          <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700 }}>{t('eventDetail.createdFromTemplate')}</p>
         </div>
       )}
       <div style={{ padding:'16px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px' }}>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>🚛 Caricato</p>
+            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>{t('eventDetail.loadedStat')}</p>
             <p style={{ fontWeight:800, fontSize:22, color: total > 0 && loaded === total ? 'var(--green)' : 'var(--accent2)' }}>{loaded}<span style={{ color:'var(--text2)', fontSize:14, fontWeight:400 }}>/{total}</span></p>
           </div>
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px' }}>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>🏠 Rientrato</p>
+            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>{t('eventDetail.returnedStat')}</p>
             <p style={{ fontWeight:800, fontSize:22, color: total > 0 && returned === total ? 'var(--green)' : 'var(--text2)' }}>{returned}<span style={{ color:'var(--text2)', fontSize:14, fontWeight:400 }}>/{total}</span></p>
           </div>
         </div>
@@ -803,11 +871,11 @@ export default function EventDetail() {
             <div style={{ background: returned === total ? 'var(--green)' : 'var(--accent2)', height:'100%', borderRadius:4, width:`${(Math.max(loaded,returned)/total)*100}%`, transition:'width 0.4s ease' }} />
           </div>
         )}
-        {returned === total && total > 0 && <p style={{ color:'var(--green)', fontSize:13, marginTop:8, fontWeight:700 }}>✅ Tutto rientrato! Evento chiuso.</p>}
+        {returned === total && total > 0 && <p style={{ color:'var(--green)', fontSize:13, marginTop:8, fontWeight:700 }}>{t('eventDetail.allReturned')}</p>}
         {mancanti > 0 && (
           <div style={{ marginTop:10, padding:'8px 12px', background:'rgba(234,88,12,0.08)', border:'1px solid rgba(234,88,12,0.25)', borderRadius:10, display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ fontSize:16 }}>⚠️</span>
-            <p style={{ color:'#ea580c', fontSize:13, fontWeight:700 }}>{mancanti} articol{mancanti===1?'o':'i'} mancant{mancanti===1?'e':'i'} — da reperire o aggiungere</p>
+            <p style={{ color:'#ea580c', fontSize:13, fontWeight:700 }}>{t('eventDetail.missingItems', { count: mancanti })}</p>
           </div>
         )}
 
@@ -815,7 +883,7 @@ export default function EventDetail() {
         {event.type === 'installation' && (
           <button
             onClick={async () => {
-              if (!(await confirm({ title: 'Chiudi installazione', message: 'Chiudere l\'installazione e ripristinare la giacenza di tutti gli articoli?', confirmLabel: 'Chiudi e ripristina' }))) return
+              if (!(await confirm({ title: t('eventDetail.confirmCloseInstallationTitle'), message: t('eventDetail.confirmCloseInstallationMessage'), confirmLabel: t('eventDetail.confirmCloseInstallationLabel') }))) return
               for (const item of eventItems) {
                 if (item.loaded && !item.returned && !item.isExtra) {
                   try {
@@ -838,7 +906,7 @@ export default function EventDetail() {
               display:'flex', alignItems:'center', justifyContent:'center', gap:8
             }}
           >
-            ✅ Chiudi installazione e ripristina giacenza
+            {t('eventDetail.closeInstallation')}
           </button>
         )}
       </div>
@@ -847,34 +915,34 @@ export default function EventDetail() {
       {brasserieWeek && (
         <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid rgba(155,89,224,0.3)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-            <p style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:6 }}>🍺 Contenuti Brasserie</p>
+            <p style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:6 }}>{t('eventDetail.brasserieContent')}</p>
             <span className="badge" style={{
               background: brasserieWeek.status === 'published' ? 'rgba(105,240,174,0.15)' : 'rgba(245,166,35,0.15)',
               color: brasserieWeek.status === 'published' ? 'var(--green)' : 'var(--accent2)',
             }}>
-              {brasserieWeek.status === 'published' ? '● Pubblicata' : '○ Bozza'}
+              {brasserieWeek.status === 'published' ? t('eventDetail.published') : t('eventDetail.draft')}
             </span>
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:12 }}>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text2)' }}>Artisti</span>
+              <span style={{ color:'var(--text2)' }}>{t('eventDetail.artists')}</span>
               <span style={{ fontWeight:700, color: brasserieArtistiFilled === brasserieArtistiSlots.length && brasserieArtistiSlots.length > 0 ? 'var(--green)' : 'var(--text)' }}>{brasserieArtistiFilled}/{brasserieArtistiSlots.length}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text2)' }}>Bancarella cibo</span>
+              <span style={{ color:'var(--text2)' }}>{t('eventDetail.foodStand')}</span>
               <span style={{ fontWeight:700, color: brasserieFood?.logoUrl ? 'var(--green)' : 'var(--red)' }}>{brasserieFood?.logoUrl ? '✓' : '✗'}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text2)' }}>DJ pre-serata</span>
+              <span style={{ color:'var(--text2)' }}>{t('eventDetail.preShowDj')}</span>
               <span style={{ fontWeight:700, color: brasserieDj?.logoUrl ? 'var(--green)' : 'var(--red)' }}>{brasserieDj?.logoUrl ? '✓' : '✗'}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text2)' }}>Grafica Next</span>
+              <span style={{ color:'var(--text2)' }}>{t('eventDetail.nextGraphic')}</span>
               <span style={{ fontWeight:700, color: brasserieNext?.url ? 'var(--green)' : 'var(--red)' }}>{brasserieNext?.url ? '✓' : '✗'}</span>
             </div>
           </div>
           <button onClick={downloadBrasserieZip} disabled={zipping} className="btn btn-secondary btn-full" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-            {zipping ? 'Preparazione ZIP...' : '⬇ Scarica ZIP loghi'}
+            {zipping ? t('eventDetail.preparingZip') : t('eventDetail.downloadLogosZip')}
           </button>
           {zipError && (
             <p style={{ color:'var(--red)', fontSize:12, marginTop:8, lineHeight:1.5 }}>{zipError}</p>
@@ -885,17 +953,58 @@ export default function EventDetail() {
       {/* Contenuti organizzatore evento (generico) — collegato per id reale, non per data */}
       {organizerContent?.items?.length > 0 && (
         <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid rgba(22,160,133,0.3)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-          <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Contenuti organizzatore</p>
+          <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>{t('eventDetail.organizerContent')}</p>
           {organizerContent.items.map(item => (
             <div key={item.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--bg3)', borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
               <div style={{ minWidth:0, marginRight:10 }}>
                 <p style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.fileName}</p>
                 <p style={{ fontSize:11, color:'var(--text2)', marginTop:1 }}>{ORGANIZER_CATEGORY_LABELS[item.category] || item.category}</p>
               </div>
-              <a href={item.url} download={item.fileName} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:12, flexShrink:0 }}>Scarica</a>
+              <a href={item.url} download={item.fileName} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:12, flexShrink:0 }}>{t('eventDetail.download')}</a>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Assegnazione furgone in blocco */}
+      {eventItems.length > 0 && vehicles.length > 0 && (
+        bulkVehicleMode ? (
+          <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1.5px solid var(--accent)', borderRadius:'var(--radius)', padding:'12px 14px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+              <p style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</p>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => setBulkSelectedIds(new Set(eventItems.map(i => i.id)))} style={{ background:'transparent', color:'var(--blue)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectAll')}</button>
+                <button onClick={() => setBulkSelectedIds(new Set())} style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectNone')}</button>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <select
+                value={bulkVehicleId}
+                onChange={e => setBulkVehicleId(e.target.value)}
+                style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
+              >
+                <option value="">{t('eventDetail.chooseVehicle')}</option>
+                {vehicles.filter(v => v.active !== false).map(v => (
+                  <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}</option>
+                ))}
+                <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
+              </select>
+              <button onClick={applyBulkVehicle} disabled={bulkSelectedIds.size === 0 || !bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: (bulkSelectedIds.size === 0 || !bulkVehicleId) ? 0.5 : 1 }}>
+                {t('eventDetail.apply')}
+              </button>
+            </div>
+            <button onClick={exitBulkVehicleMode} style={{ marginTop:10, width:'100%', background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px', fontSize:12, fontWeight:700 }}>{t('common.cancel')}</button>
+          </div>
+        ) : (
+          <div style={{ margin:'12px 16px 0', display:'flex', justifyContent:'flex-end' }}>
+            <button
+              onClick={() => setBulkVehicleMode(true)}
+              style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
+            >
+              {t('eventDetail.assignVehicleToMultiple')}
+            </button>
+          </div>
+        )
       )}
 
       {/* Lista articoli */}
@@ -903,14 +1012,14 @@ export default function EventDetail() {
         {eventItems.length === 0
           ? <div className="empty-state" style={{ padding:'40px 20px' }}>
               <p style={{ fontSize:32 }}>📋</p>
-              <h3>Lista vuota</h3>
-              <p>Tocca il <strong style={{ color:'var(--accent)' }}>+</strong> in basso a destra per aggiungere articoli</p>
+              <h3>{t('eventDetail.emptyListTitle')}</h3>
+              <p>{t('eventDetail.emptyListDescBefore')} <strong style={{ color:'var(--accent)' }}>+</strong> {t('eventDetail.emptyListDescAfter')}</p>
               {templates.length > 0 && (
                 <button
                   onClick={() => setShowTemplatePicker(true)}
                   style={{ marginTop:14, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px solid rgba(90,82,201,0.35)', color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
                 >
-                  📋 Usa un template
+                  {t('eventDetail.useTemplate')}
                 </button>
               )}
             </div>
@@ -921,7 +1030,7 @@ export default function EventDetail() {
       {/* FAB aggiungi articoli */}
       <button
         onClick={openAddModal}
-        aria-label="Aggiungi articoli"
+        aria-label={t('eventDetail.addItemsAriaLabel')}
         style={{
           position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
@@ -942,13 +1051,13 @@ export default function EventDetail() {
             <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(234,88,12,0.12)', color:'#ea580c' }}>
               <Warn size={26} />
             </div>
-            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>Scartare la selezione?</h3>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{t('eventDetail.discardTitle')}</h3>
             <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
-              Hai {cart.length} articol{cart.length === 1 ? 'o' : 'i'} selezionat{cart.length === 1 ? 'o' : 'i'} non ancora aggiunti alla lista.
+              {t('eventDetail.discardMessage', { count: cart.length })}
             </p>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
-              <button onClick={() => setShowDiscardCart(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none' }}>Continua</button>
-              <button onClick={() => { setShowDiscardCart(false); setCart([]); setShowAddItem(false) }} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#ea580c', color:'#fff', border:'none' }}>Esci</button>
+              <button onClick={() => setShowDiscardCart(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none' }}>{t('eventDetail.continue')}</button>
+              <button onClick={() => { setShowDiscardCart(false); setCart([]); setShowAddItem(false) }} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#ea580c', color:'#fff', border:'none' }}>{t('eventDetail.exit')}</button>
             </div>
           </div>
         </div>
@@ -961,7 +1070,7 @@ export default function EventDetail() {
             {/* Header fisso */}
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                <h2 style={{ margin:0, fontSize:18 }}>Aggiungi alla lista</h2>
+                <h2 style={{ margin:0, fontSize:18 }}>{t('eventDetail.addToListTitle')}</h2>
                 <button className="close-btn" onClick={addItemDrag.close}>✕</button>
               </div>
               {/* Barra di ricerca */}
@@ -969,7 +1078,7 @@ export default function EventDetail() {
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Cerca per nome, categoria, marca..."
+                  placeholder={t('inventory.searchPlaceholder')}
                   style={{ paddingLeft:36 }}
                 />
                 <svg style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16">
@@ -990,7 +1099,7 @@ export default function EventDetail() {
                 }}
               >
                 <span style={{ fontSize:13, fontWeight:700, color: addAsMancante ? '#ea580c' : 'var(--text2)' }}>
-                  ⚠️ Segna come mancanti
+                  {t('eventDetail.markAsMissing')}
                 </span>
                 <span style={{ width:36, height:20, borderRadius:10, background: addAsMancante ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: addAsMancante ? 'flex-end' : 'flex-start' }}>
                   <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
@@ -1002,7 +1111,7 @@ export default function EventDetail() {
                 onClick={() => setShowExtraModal(true)}
                 style={{ marginTop:8, width:'100%', padding:'9px 14px', borderRadius:10, background:'#111827', border:'none', color:'#fff', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}
               >
-                + Aggiungi articolo extra
+                {t('eventDetail.addExtraItem')}
               </button>
             </div>
 
@@ -1010,7 +1119,7 @@ export default function EventDetail() {
             {cart.length > 0 && (
               <div style={{ background:'rgba(105,240,174,0.06)', borderBottom:'1px solid rgba(105,240,174,0.2)', padding:'10px 0 10px 16px', flexShrink:0 }}>
                 <p style={{ color:'var(--green)', fontWeight:700, fontSize:12, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8, paddingRight:16 }}>
-                  Selezionati · {cart.length} articol{cart.length === 1 ? 'o' : 'i'}
+                  {t('eventDetail.selectedCount', { count: cart.length })}
                 </p>
                 <div style={{ display:'flex', flexWrap:'nowrap', gap:6, overflowX:'auto', paddingRight:16, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
                   {cart.map(c => (
@@ -1031,10 +1140,10 @@ export default function EventDetail() {
               {!search && (loadingSuggestions || suggestions.length > 0) && (
                 <div style={{ borderBottom:'1px solid var(--border)' }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', padding:'12px 16px 6px' }}>
-                    ✨ Suggeriti per questo evento
+                    {t('eventDetail.suggestedForEvent')}
                   </p>
                   {loadingSuggestions
-                    ? <p style={{ fontSize:13, color:'var(--text2)', padding:'8px 16px 14px' }}>Analisi eventi passati...</p>
+                    ? <p style={{ fontSize:13, color:'var(--text2)', padding:'8px 16px 14px' }}>{t('eventDetail.analyzingPastEvents')}</p>
                     : suggestions.map(item => (
                       <AddItemRow
                         key={`sug_${item.id}`}
@@ -1053,13 +1162,13 @@ export default function EventDetail() {
               {/* Lista completa */}
               {!search && filteredForList.length > 0 && (
                 <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', padding:'12px 16px 6px' }}>
-                  Tutti gli articoli
+                  {t('eventDetail.allItems')}
                 </p>
               )}
               {filteredForList.length === 0 && search
-                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>Nessun risultato per "{search}"</p>
+                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>{t('eventDetail.noResultsFor', { search })}</p>
                 : filteredForList.length === 0 && !search && suggestions.length === 0
-                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>Tutti gli articoli sono già in lista</p>
+                ? <p style={{ color:'var(--text2)', textAlign:'center', padding:'30px 20px' }}>{t('eventDetail.allItemsAlreadyInList')}</p>
                 : filteredForList.map(item => (
                   <AddItemRow
                     key={item.id}
@@ -1083,8 +1192,8 @@ export default function EventDetail() {
                 style={{ opacity: cart.length === 0 ? 0.4 : 1, fontSize:16, padding:'14px' }}
               >
                 {cart.length === 0
-                  ? 'Seleziona articoli dalla lista ↑'
-                  : `✅ Aggiungi ${cart.length} articol${cart.length === 1 ? 'o' : 'i'} alla lista`
+                  ? t('eventDetail.selectItemsPrompt')
+                  : t('eventDetail.confirmAddItems', { count: cart.length })
                 }
               </button>
             </div>
@@ -1097,14 +1206,14 @@ export default function EventDetail() {
         <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick} style={{ zIndex: 300 }}>
           <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}${extraDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
             <button className="close-btn" onClick={extraDrag.close}>✕</button>
-            <h2>+ Oggetto extra</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza in magazzino — usalo per noleggi, adattatori dell'ultimo minuto, ecc.</p>
+            <h2>{t('eventDetail.extraItemTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.extraItemDesc')}</p>
             <div className="form-group">
-              <label>Nome *</label>
-              <input value={extraForm.name} onChange={e => setExtraForm({...extraForm, name:e.target.value})} placeholder="es. Faro a noleggio, Adattatore HDMI..." autoFocus />
+              <label>{t('eventDetail.nameLabel')}</label>
+              <input value={extraForm.name} onChange={e => setExtraForm({...extraForm, name:e.target.value})} placeholder={t('eventDetail.extraNamePlaceholder')} autoFocus />
             </div>
             <div className="form-group">
-              <label>Quantità</label>
+              <label>{t('eventDetail.quantityLabel')}</label>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <button onClick={() => setExtraForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
                   style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
@@ -1116,12 +1225,12 @@ export default function EventDetail() {
               </div>
             </div>
             <div className="form-group">
-              <label>Note (opzionale)</label>
-              <input value={extraForm.notes} onChange={e => setExtraForm({...extraForm, notes:e.target.value})} placeholder="es. Da restituire entro le 20:00" />
+              <label>{t('eventDetail.notesOptional')}</label>
+              <input value={extraForm.notes} onChange={e => setExtraForm({...extraForm, notes:e.target.value})} placeholder={t('eventDetail.extraNotesPlaceholder')} />
             </div>
             <button onClick={addExtraItem} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!extraForm.name.trim()}>
-              ✅ Aggiungi alla lista
+              {t('eventDetail.confirmAddToList')}
             </button>
           </div>
         </div>
@@ -1132,22 +1241,22 @@ export default function EventDetail() {
         <div className={`modal-overlay${templatePickerDrag.closing ? ' closing' : ''}`} onClick={templatePickerDrag.onOverlayClick}>
           <div className={`modal${templatePickerDrag.jiggling ? ' modal-jiggle' : ''}${templatePickerDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templatePickerDrag.props}>
             <button className="close-btn" onClick={templatePickerDrag.close}>✕</button>
-            <h2>📋 Usa un template</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Carica la lista articoli da un template salvato. Potrai comunque modificarla dopo.</p>
+            <h2>{t('eventDetail.useTemplateTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.useTemplateDesc')}</p>
             <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'55dvh', overflowY:'auto' }}>
-              {templates.map(t => {
-                const count = (t.components || []).length
+              {templates.map(tpl => {
+                const count = (tpl.components || []).length
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => applyTemplate(t)}
+                    key={tpl.id}
+                    onClick={() => applyTemplate(tpl)}
                     style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left' }}
                   >
                     <div style={{ minWidth:0 }}>
-                      <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:13 }}>{count} articol{count === 1 ? 'o' : 'i'}</p>
+                      <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tpl.name}</p>
+                      <p style={{ color:'var(--text2)', fontSize:13 }}>{t('eventDetail.templateItemCount', { count })}</p>
                     </div>
-                    <span style={{ flexShrink:0, color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:3 }}>Usa →</span>
+                    <span style={{ flexShrink:0, color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:3 }}>{t('eventDetail.useTemplateAction')}</span>
                   </button>
                 )
               })}
@@ -1161,10 +1270,10 @@ export default function EventDetail() {
         <div className={`modal-overlay${assignDrag.closing ? ' closing' : ''}`} onClick={assignDrag.onOverlayClick}>
           <div className={`modal${assignDrag.jiggling ? ' modal-jiggle' : ''}${assignDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...assignDrag.props}>
             <button className="close-btn" onClick={assignDrag.close}>✕</button>
-            <h2>👷 Assegna magazzinieri</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Seleziona chi deve occuparsi di questo evento. Puoi assegnarne più di uno.</p>
+            <h2>{t('eventDetail.assignWorkersTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.assignWorkersDesc')}</p>
             {workers.length === 0 ? (
-              <p style={{ color:'var(--text2)', fontSize:13, fontStyle:'italic', textAlign:'center', padding:'20px 0' }}>Nessun magazziniere registrato.</p>
+              <p style={{ color:'var(--text2)', fontSize:13, fontStyle:'italic', textAlign:'center', padding:'20px 0' }}>{t('eventDetail.noWorkersRegistered')}</p>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'50dvh', overflowY:'auto' }}>
                 {workers.map(w => {
@@ -1184,7 +1293,7 @@ export default function EventDetail() {
                       <span style={{ fontSize:22 }}>👷</span>
                       <span style={{ flex:1, minWidth:0 }}>
                         <span style={{ display:'block', fontWeight:700, fontSize:14, color:'var(--text)' }}>{w.name}</span>
-                        {unavail && <span style={{ display:'block', fontSize:11, color:'var(--red)', fontWeight:700, marginTop:1 }}>⚠️ Non disponibile in questa data</span>}
+                        {unavail && <span style={{ display:'block', fontSize:11, color:'var(--red)', fontWeight:700, marginTop:1 }}>{t('eventDetail.workerUnavailable')}</span>}
                       </span>
                       <span style={{
                         width:22, height:22, borderRadius:'50%', flexShrink:0,
@@ -1201,7 +1310,7 @@ export default function EventDetail() {
               </div>
             )}
             <button onClick={() => setShowAssignModal(false)} className="btn btn-primary btn-full" style={{ marginTop:16 }}>
-              Fatto
+              {t('eventDetail.done')}
             </button>
           </div>
         </div>
@@ -1212,11 +1321,11 @@ export default function EventDetail() {
         <div className={`modal-overlay${itemEditDrag.closing ? ' closing' : ''}`} onClick={itemEditDrag.onOverlayClick}>
           <div className={`modal${itemEditDrag.jiggling ? ' modal-jiggle' : ''}${itemEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...itemEditDrag.props}>
             <button className="close-btn" onClick={itemEditDrag.close}>✕</button>
-            <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4 }}>Modifica oggetto</p>
+            <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4 }}>{t('eventDetail.editItemTitle')}</p>
             <h2 style={{ fontSize:18, fontWeight:800, marginBottom:20 }}>{editItem.name}</h2>
 
             <div className="form-group">
-              <label>Quantità</label>
+              <label>{t('eventDetail.quantityLabel')}</label>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <button
                   onClick={() => setEditItem(ei => ({ ...ei, qty: Math.max(1, ei.qty - 1) }))}
@@ -1229,11 +1338,11 @@ export default function EventDetail() {
             </div>
 
             <div className="form-group">
-              <label>Nota per questo evento</label>
+              <label>{t('eventDetail.eventNoteLabel')}</label>
               <input
                 value={editItem.eventNote || ''}
                 onChange={e => setEditItem(ei => ({ ...ei, eventNote: e.target.value }))}
-                placeholder="es. Portare cavo di ricambio, controllare connettori..."
+                placeholder={t('eventDetail.eventNotePlaceholder')}
               />
             </div>
 
@@ -1245,7 +1354,7 @@ export default function EventDetail() {
                 border: editItem.mancante ? '1.5px solid rgba(234,88,12,0.35)' : '1.5px solid var(--border)',
               }}
             >
-              <span style={{ fontSize:13, fontWeight:700, color: editItem.mancante ? '#ea580c' : 'var(--text2)' }}>⚠️ Articolo mancante</span>
+              <span style={{ fontSize:13, fontWeight:700, color: editItem.mancante ? '#ea580c' : 'var(--text2)' }}>{t('eventDetail.missingItem')}</span>
               <span style={{ width:36, height:20, borderRadius:10, background: editItem.mancante ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: editItem.mancante ? 'flex-end' : 'flex-start' }}>
                 <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
               </span>
@@ -1255,13 +1364,13 @@ export default function EventDetail() {
               onClick={() => saveItemEdit(editItem)}
               className="btn btn-primary btn-full"
               style={{ marginTop:8 }}>
-              Salva
+              {t('eventDetail.save')}
             </button>
 
             <button
               onClick={async () => { setEditItem(null); await removeFromEvent(editItem.id) }}
               style={{ width:'100%', marginTop:10, padding:'12px', borderRadius:10, background:'rgba(248,113,113,0.10)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', fontWeight:700, fontSize:14 }}>
-              Rimuovi dalla lista
+              {t('eventDetail.removeFromList')}
             </button>
           </div>
         </div>
@@ -1271,6 +1380,7 @@ export default function EventDetail() {
 }
 
 function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
+  const { t } = useTranslation()
   const [qty, setQty] = useState(cartQty || 1)
   const max = item.availableQty ?? item.totalQty ?? 1
 
@@ -1289,16 +1399,17 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
           <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
           {item.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
           {item.isBundle && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>🧰 BUNDLE</span>}
-          {alreadyInList && !inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>⚠️ Già in lista — verrà aggiunta come mancante</span>}
-          {alreadyInList && inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>⚠️ Riga mancante separata</span>}
+          {alreadyInList && !inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>{t('eventDetail.alreadyInListWillBeMissing')}</span>}
+          {alreadyInList && inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>{t('eventDetail.alreadyInListSeparateRow')}</span>}
         </div>
         <p style={{ color:'var(--text2)', fontSize:12 }}>
           {[item.brand, item.model].filter(Boolean).join(' ')}
+          {' '}
           {item.isBundle && item.components
-            ? ` · ${item.components.length} componenti`
+            ? t('eventDetail.componentsCount', { count: item.components.length })
             : item.isKit && item.kitSize
-            ? ` · ${item.availableQty ?? item.totalQty} bauli disp. (${(item.availableQty ?? item.totalQty) * item.kitSize} pz)`
-            : ` · ${item.availableQty ?? item.totalQty} disp.`}
+            ? t('eventDetail.kitsAvailable', { count: item.availableQty ?? item.totalQty, pieces: (item.availableQty ?? item.totalQty) * item.kitSize })
+            : t('eventDetail.availableShort', { count: item.availableQty ?? item.totalQty })}
         </p>
         {item.location && (
           <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'2px 8px' }}>
@@ -1330,9 +1441,8 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto, vehicles, onSetVehicle }) {
-  const [location, setLocation] = useState(item.location || null)
-  const [warehouseNotes, setWarehouseNotes] = useState(null)
+function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle }) {
+  const { t } = useTranslation()
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
   // Elenco selezionabile: solo furgoni attivi, più quello attualmente
   // assegnato anche se disattivato (per non "perdere" la selezione corrente).
@@ -1340,21 +1450,22 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
     ? [...vehicles.filter(v => v.active !== false), vehicle]
     : vehicles.filter(v => v.active !== false)
 
-  useEffect(() => {
-    getDoc(doc(db, 'items', item.id)).then(snap => {
-      if (snap.exists()) {
-        setLocation(snap.data().location || null)
-        setWarehouseNotes(snap.data().notes || null)
-      }
-    }).catch(() => {})
-  }, [item.id])
-
   return (
-    <div style={{ borderBottom:'1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
+    <div style={{ borderBottom:'1px solid var(--border)', background: bulkSelected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: bulkSelected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
       <div
         style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
-        onClick={() => onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false })}
+        onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false })}
       >
+        {bulkMode && (
+          <div style={{
+            width:22, height:22, borderRadius:6, flexShrink:0,
+            border: `2px solid ${bulkSelected ? 'var(--accent)' : 'var(--border)'}`,
+            background: bulkSelected ? 'var(--accent)' : 'transparent',
+            display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:14, fontWeight:900,
+          }}>
+            {bulkSelected ? '✓' : ''}
+          </div>
+        )}
         <div style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:0, opacity: item.loaded ? 0.45 : 1, transition:'opacity 0.3s' }}>
         <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
         <div style={{ flex:1, minWidth:0 }}>
@@ -1373,7 +1484,7 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
               <span style={{ background:`${vehicle.color || 'var(--blue)'}22`, color: vehicle.color || 'var(--blue)', border:`1px solid ${vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicle.emoji || '🚐'} {vehicle.name}</span>
             )}
           </div>
-          <p style={{ color:'var(--text2)', fontSize:13 }}>qty: {item.qty || 1}</p>
+          <p style={{ color:'var(--text2)', fontSize:13 }}>{t('eventDetail.qty', { count: item.qty || 1 })}</p>
           {item.eventNote ? (
             <p style={{ color:'var(--accent2)', fontSize:12, marginTop:3, fontStyle:'italic' }}>📝 {item.eventNote}</p>
           ) : warehouseNotes ? (
@@ -1385,19 +1496,20 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
               <span style={{ color:'var(--blue)', fontSize:12, fontWeight:700 }}>{location}</span>
             </div>
           ) : (
-            <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>Posizione non specificata</p>
+            <p style={{ color:'var(--text3)', fontSize:11, marginTop:4, fontStyle:'italic' }}>{t('eventDetail.positionNotSpecified')}</p>
           )}
         </div>
         </div>
+        {!bulkMode && (
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
           <select
             value={item.vehicleId || ''}
             onChange={e => onSetVehicle(item.id, e.target.value)}
             style={{ fontSize:11, fontWeight:700, borderRadius:8, padding:'4px 6px', border:'1.5px solid var(--border)', background:'var(--card2)', color: vehicle ? (vehicle.color || 'var(--text2)') : 'var(--text3)', maxWidth:120 }}
           >
-            <option value="">— Furgone —</option>
+            <option value="">{t('eventDetail.vehicleSelectPlaceholder')}</option>
             {vehicleOptions.map(v => (
-              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? ' (disattivato)' : ''}</option>
+              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}</option>
             ))}
           </select>
           {!item.loaded ? (
@@ -1410,7 +1522,7 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
                   border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
                   borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700,
                 }}>
-                {item.pronto ? '✓ Pronto' : 'Pronto'}
+                {item.pronto ? t('eventDetail.readyDone') : t('eventDetail.ready')}
               </button>
               <button onClick={() => onToggleLoaded(item.id)}
                 style={{
@@ -1419,20 +1531,21 @@ function EventItemRow({ item, onToggleLoaded, onToggleReturned, onRemove, onEdit
                   border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
                   borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center',
                 }}>
-                ○ Da caricare
+                {t('eventDetail.toLoad')}
               </button>
             </div>
           ) : (
             <button onClick={() => onToggleLoaded(item.id)}
               style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-              🚛 Caricato
+              {t('eventDetail.loadedButton')}
             </button>
           )}
           <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
             style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
-            {item.returned ? '✅ Rientrato' : '○ Da rientrare'}
+            {item.returned ? t('eventDetail.returnedButton') : t('eventDetail.toReturn')}
           </button>
         </div>
+        )}
       </div>
     </div>
   )

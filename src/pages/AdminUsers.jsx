@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
+import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -15,30 +17,34 @@ import {
   reauthenticateWithCredential
 } from 'firebase/auth'
 
-const WEEKDAY_NAMES = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato']
 const EMPTY_ORG_CONFIG = { eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' }
 
 // Campi di configurazione evento per il ruolo Organizzatore — condivisi tra
 // il form di creazione account e il pannello di modifica di un utente esistente.
 function OrgConfigFields({ orgConfig, setOrgConfig, newCustomDate, setNewCustomDate, addCustomDate, removeCustomDate }) {
+  const { t, i18n } = useTranslation()
+  const WEEKDAY_NAMES = [
+    t('adminUsers.weekdaySunday'), t('adminUsers.weekdayMonday'), t('adminUsers.weekdayTuesday'),
+    t('adminUsers.weekdayWednesday'), t('adminUsers.weekdayThursday'), t('adminUsers.weekdayFriday'), t('adminUsers.weekdaySaturday'),
+  ]
   return (
     <>
       <div className="form-group">
-        <label>Nome evento</label>
-        <input value={orgConfig.eventName} onChange={e => setOrgConfig(c => ({ ...c, eventName:e.target.value }))} placeholder="es. Brasserie" />
+        <label>{t('adminUsers.eventNameLabel')}</label>
+        <input value={orgConfig.eventName} onChange={e => setOrgConfig(c => ({ ...c, eventName:e.target.value }))} placeholder={t('adminUsers.eventNamePlaceholder')} />
       </div>
       <div className="form-group">
-        <label>Frequenza</label>
+        <label>{t('adminUsers.frequencyLabel')}</label>
         <select value={orgConfig.frequency} onChange={e => setOrgConfig(c => ({ ...c, frequency:e.target.value }))}>
-          <option value="weekly">Settimanale</option>
-          <option value="monthly">Mensile</option>
-          <option value="custom">Date singole</option>
+          <option value="weekly">{t('adminUsers.frequencyWeekly')}</option>
+          <option value="monthly">{t('adminUsers.frequencyMonthly')}</option>
+          <option value="custom">{t('adminUsers.frequencyCustom')}</option>
         </select>
       </div>
 
       {orgConfig.frequency === 'weekly' && (
         <div className="form-group">
-          <label>Giorno della settimana</label>
+          <label>{t('adminUsers.weekdayLabel')}</label>
           <select value={orgConfig.weekday} onChange={e => setOrgConfig(c => ({ ...c, weekday:Number(e.target.value) }))}>
             {WEEKDAY_NAMES.map((n, i) => <option key={i} value={i}>{n}</option>)}
           </select>
@@ -47,21 +53,21 @@ function OrgConfigFields({ orgConfig, setOrgConfig, newCustomDate, setNewCustomD
 
       {orgConfig.frequency === 'monthly' && (
         <div className="form-group">
-          <label>Giorno del mese</label>
+          <label>{t('adminUsers.monthDayLabel')}</label>
           <input type="number" min="1" max="31" value={orgConfig.monthDay} onChange={e => setOrgConfig(c => ({ ...c, monthDay:Number(e.target.value) }))} />
         </div>
       )}
 
       {orgConfig.frequency === 'custom' && (
         <div className="form-group">
-          <label>Date specifiche</label>
+          <label>{t('adminUsers.specificDatesLabel')}</label>
           <div style={{ display:'flex', gap:8, marginBottom:8 }}>
             <input type="date" value={newCustomDate} onChange={e => setNewCustomDate(e.target.value)} style={{ flex:1 }} />
-            <button onClick={addCustomDate} className="btn btn-secondary" style={{ flexShrink:0 }}>+ Aggiungi</button>
+            <button onClick={addCustomDate} className="btn btn-secondary" style={{ flexShrink:0 }}>{t('adminUsers.addDate')}</button>
           </div>
           {orgConfig.customDates.map(d => (
             <div key={d} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'7px 10px', marginBottom:5 }}>
-              <span style={{ fontSize:13 }}>{new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+              <span style={{ fontSize:13 }}>{formatDate(d + 'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)}</span>
               <button onClick={() => removeCustomDate(d)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700 }}>✕</button>
             </div>
           ))}
@@ -70,7 +76,7 @@ function OrgConfigFields({ orgConfig, setOrgConfig, newCustomDate, setNewCustomD
 
       {orgConfig.frequency !== 'custom' && (
         <div className="form-group" style={{ marginBottom:0 }}>
-          <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale, lascia vuoto per nessuna scadenza)</span></label>
+          <label>{t('calendar.endDateLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.endDateOptional')}</span></label>
           <input type="date" value={orgConfig.endDate} onChange={e => setOrgConfig(c => ({ ...c, endDate:e.target.value }))} />
         </div>
       )}
@@ -82,25 +88,27 @@ function OrgConfigFields({ orgConfig, setOrgConfig, newCustomDate, setNewCustomD
 // carica i propri contenuti (video, pptx, sfondo di riserva) per un evento specifico
 // già presente in calendario, invece di avere una programmazione ricorrente come Brasserie.
 function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
+  const { t, i18n } = useTranslation()
   return (
     <div className="form-group" style={{ marginBottom:0 }}>
-      <label>Evento collegato</label>
+      <label>{t('adminUsers.linkedEventLabel')}</label>
       <select value={assignedEventId} onChange={e => setAssignedEventId(e.target.value)}>
-        <option value="">— Seleziona un evento —</option>
+        <option value="">{t('adminUsers.selectEventPlaceholder')}</option>
         {events.map(ev => (
           <option key={ev.id} value={ev.id}>
-            {ev.name} — {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}
+            {ev.name} — {formatDate(ev.date + 'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)}
           </option>
         ))}
       </select>
       {events.length === 0 && (
-        <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>Nessun evento futuro in calendario — creane uno prima da Eventi.</p>
+        <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>{t('adminUsers.noFutureEvents')}</p>
       )}
     </div>
   )
 }
 
 export default function AdminUsers() {
+  const { t, i18n } = useTranslation()
   const { user, profile, logout } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
@@ -156,17 +164,17 @@ export default function AdminUsers() {
   // ── Crea account ──────────────────────────────────────────────
   const createAccount = async () => {
     if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
-      setError('Compila tutti i campi. Password minimo 6 caratteri.'); return
+      setError(t('adminUsers.errorFillAllFields')); return
     }
     if (form.role === 'organizzatore-brasserie' && !orgConfig.eventName.trim()) {
-      setError('Inserisci il nome dell\'evento per l\'organizzatore.'); return
+      setError(t('adminUsers.errorOrgEventName')); return
     }
     if (form.role === 'organizzatore-evento' && !assignedEventId) {
-      setError('Seleziona l\'evento collegato all\'organizzatore.'); return
+      setError(t('adminUsers.errorOrgLinkedEvent')); return
     }
     const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
     if (users.some(u => u.username === username)) {
-      setError('Nome utente già in uso.'); return
+      setError(t('adminUsers.errorUsernameTaken')); return
     }
     setLoading(true); setError('')
 
@@ -202,10 +210,10 @@ export default function AdminUsers() {
       // Firebase ci ha switchato all'utente appena creato → rientra come admin
       if (adminPassword) {
         await signInWithEmailAndPassword(auth, adminEmail, adminPassword)
-        showToast(`Account creato per ${form.name}!`)
+        showToast(t('adminUsers.accountCreatedFor', { name: form.name }))
       } else {
         // Non abbiamo la password admin in sessione → avvisa e forza logout
-        showToast(`Account creato! Dovrai riaccedere come admin.`)
+        showToast(t('adminUsers.accountCreatedReauth'))
         setTimeout(() => logout(), 2500)
       }
 
@@ -215,8 +223,8 @@ export default function AdminUsers() {
       setShowCreate(false)
     } catch(e) {
       const msgs = {
-        'auth/email-already-in-use': 'Nome utente già registrato nel sistema',
-        'auth/weak-password':        'Password troppo corta (min. 6 caratteri)',
+        'auth/email-already-in-use': t('adminUsers.errorEmailInUse'),
+        'auth/weak-password':        t('adminUsers.errorWeakPassword'),
       }
       setError(msgs[e.code] || e.message)
     } finally { setLoading(false) }
@@ -227,62 +235,62 @@ export default function AdminUsers() {
     await updateDoc(doc(db, 'profiles', showDetail.id), { approved: true })
     setShowDetail(d => ({ ...d, approved: true }))
     clearDetailMsg()
-    showToast(`✓ ${showDetail.name} è stato approvato`)
+    showToast(t('adminUsers.approvedToast', { name: showDetail.name }))
   }
 
   // ── Rifiuta richiesta di adesione ──────────────────────────────
   const rejectUser = async () => {
     if (!(await confirm({
-      title: 'Rifiuta richiesta',
-      message: `Rifiutare ed eliminare la richiesta di ${showDetail.name}?`,
-      confirmLabel: 'Rifiuta',
+      title: t('adminUsers.confirmRejectTitle'),
+      message: t('adminUsers.confirmRejectMessage', { name: showDetail.name }),
+      confirmLabel: t('adminUsers.confirmRejectLabel'),
       danger: true,
     }))) return
     const name = showDetail.name
     await deleteDoc(doc(db, 'profiles', showDetail.id))
     setShowDetail(null)
-    showToast(`Richiesta di ${name} rifiutata.`)
+    showToast(t('adminUsers.rejectedToast', { name }))
   }
 
   // ── Attiva / disattiva ────────────────────────────────────────
   const toggleActive = async () => {
     const isActive = showDetail.active !== false
     if (!(await confirm({
-      title: isActive ? 'Disattiva account' : 'Riattiva account',
-      message: `Vuoi ${isActive ? 'disattivare' : 'riattivare'} l'account di ${showDetail.name}?`,
-      confirmLabel: isActive ? 'Disattiva' : 'Riattiva',
+      title: isActive ? t('adminUsers.confirmDeactivateTitle') : t('adminUsers.confirmReactivateTitle'),
+      message: t('adminUsers.confirmToggleActiveMessage', { action: isActive ? t('adminUsers.deactivateAction') : t('adminUsers.reactivateAction'), name: showDetail.name }),
+      confirmLabel: isActive ? t('adminUsers.confirmDeactivateLabel') : t('adminUsers.confirmReactivateLabel'),
       danger: isActive,
     }))) return
     await updateDoc(doc(db, 'profiles', showDetail.id), { active: !isActive })
     setShowDetail(d => ({ ...d, active: !isActive }))
     clearDetailMsg()
-    showToast(isActive ? '✓ Accesso disattivato' : '✓ Accesso riattivato')
+    showToast(isActive ? t('adminUsers.accessDeactivatedToast') : t('adminUsers.accessReactivatedToast'))
   }
 
   // ── Cambia ruolo (Admin / Magazziniere / Organizzatore) ──
-  const ROLE_LABELS = { admin: 'Amministratore', worker: 'Magazziniere', 'organizzatore-brasserie': 'Organizzatore Brasserie', 'organizzatore-evento': 'Organizzatore evento' }
+  const ROLE_LABELS = { admin: t('profile.roleAdmin'), worker: t('adminUsers.roleMagazziniere'), 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieOption'), 'organizzatore-evento': t('adminUsers.roleOrgEventOption') }
   const changeRole = async (newRole) => {
     if (newRole === showDetail.role) return
     if (!(await confirm({
-      title: 'Cambia ruolo',
-      message: `Vuoi rendere ${showDetail.name} ${ROLE_LABELS[newRole]}?`,
-      confirmLabel: 'Conferma',
+      title: t('adminUsers.confirmChangeRoleTitle'),
+      message: t('adminUsers.confirmChangeRoleMessage', { name: showDetail.name, role: ROLE_LABELS[newRole] }),
+      confirmLabel: t('adminUsers.confirmChangeRoleLabel'),
     }))) return
     await updateDoc(doc(db, 'profiles', showDetail.id), { role: newRole })
     setShowDetail(d => ({ ...d, role: newRole }))
     clearDetailMsg()
     setRoleMenuOpen(false)
-    showToast(`✓ ${showDetail.name} è ora ${ROLE_LABELS[newRole]}`)
+    showToast(t('adminUsers.roleChangedToast', { name: showDetail.name, role: ROLE_LABELS[newRole] }))
   }
 
   // ── Configurazione evento organizzatore (nome + frequenza) ──────
   const saveOrgConfig = async () => {
-    if (!orgConfig.eventName.trim()) { setDetailMsg({ text:'Inserisci il nome dell\'evento.', type:'error' }); return }
+    if (!orgConfig.eventName.trim()) { setDetailMsg({ text:t('adminUsers.errorOrgEventNameShort'), type:'error' }); return }
     const cleaned = { ...orgConfig, eventName: orgConfig.eventName.trim() }
     await updateDoc(doc(db, 'profiles', showDetail.id), { organizerConfig: cleaned })
     setShowDetail(d => ({ ...d, organizerConfig: cleaned }))
     clearDetailMsg()
-    showToast('✓ Configurazione evento salvata')
+    showToast(t('adminUsers.eventConfigSavedToast'))
   }
   const addCustomDate = () => {
     if (!newCustomDate || orgConfig.customDates.includes(newCustomDate)) return
@@ -295,16 +303,16 @@ export default function AdminUsers() {
 
   // ── Evento collegato (Organizzatore evento) ─────────────────────
   const saveAssignedEvent = async () => {
-    if (!assignedEventId) { setDetailMsg({ text:'Seleziona un evento.', type:'error' }); return }
+    if (!assignedEventId) { setDetailMsg({ text:t('adminUsers.errorSelectEvent'), type:'error' }); return }
     await updateDoc(doc(db, 'profiles', showDetail.id), { assignedEventId })
     setShowDetail(d => ({ ...d, assignedEventId }))
     clearDetailMsg()
-    showToast('✓ Evento collegato salvato')
+    showToast(t('adminUsers.linkedEventSavedToast'))
   }
 
   // ── Rimuovi indisponibilità ────────────────────────────────────
   const removeUnavailability = async (id) => {
-    if (!(await confirm({ title: 'Rimuovi indisponibilità', message: 'Rimuovere questo periodo di indisponibilità?', confirmLabel: 'Rimuovi', danger: true }))) return
+    if (!(await confirm({ title: t('adminUsers.confirmRemoveUnavailTitle'), message: t('adminUsers.confirmRemoveUnavailMessage'), confirmLabel: t('adminUsers.confirmRemoveUnavailLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
@@ -312,8 +320,8 @@ export default function AdminUsers() {
   // Strategia: riloghiamo temporaneamente come l'utente target,
   // aggiorniamo la password, poi riloghiamo come admin.
   const changePassword = async () => {
-    if (newPw.length < 6) { setDetailMsg({ text:'Password minimo 6 caratteri.', type:'error' }); return }
-    if (!adminPw) { setDetailMsg({ text:'Inserisci la tua password admin per confermare.', type:'error' }); return }
+    if (newPw.length < 6) { setDetailMsg({ text:t('adminUsers.errorPasswordLength'), type:'error' }); return }
+    if (!adminPw) { setDetailMsg({ text:t('adminUsers.errorAdminPasswordRequired'), type:'error' }); return }
 
     setLoading(true); clearDetailMsg()
     const adminEmail = auth.currentUser.email
@@ -342,9 +350,9 @@ export default function AdminUsers() {
         })
         clearDetailMsg()
         setNewPw(''); setAdminPw('')
-        showToast(`✓ Nuova password salvata, verrà applicata al prossimo accesso di ${showDetail.name}`)
+        showToast(t('adminUsers.passwordPendingToast', { name: showDetail.name }))
       } catch(e) {
-        setDetailMsg({ text: 'Password admin non corretta o errore di connessione.', type:'error' })
+        setDetailMsg({ text: t('adminUsers.errorWrongAdminPassword'), type:'error' })
       } finally { setLoading(false) }
       return
     }
@@ -354,16 +362,16 @@ export default function AdminUsers() {
     clearDetailMsg()
     setNewPw(''); setAdminPw('')
     setLoading(false)
-    showToast(`✓ Password di ${showDetail.name} aggiornata`)
+    showToast(t('adminUsers.passwordUpdatedToast', { name: showDetail.name }))
   }
 
   // ── Modifica username ─────────────────────────────────────────
   const saveUsername = async () => {
     const cleaned = newUsername.toLowerCase().trim().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')
-    if (!cleaned) { setDetailMsg({ text:'Il nome utente non può essere vuoto.', type:'error' }); return }
+    if (!cleaned) { setDetailMsg({ text:t('adminUsers.errorUsernameEmpty'), type:'error' }); return }
     if (cleaned === showDetail.username) return
     if (users.some(u => u.username === cleaned && u.id !== showDetail.id)) {
-      setDetailMsg({ text:'Nome utente già in uso da un altro account.', type:'error' }); return
+      setDetailMsg({ text:t('adminUsers.errorUsernameTakenOther'), type:'error' }); return
     }
     const newInternalEmail = usernameToEmail(cleaned)
     // Aggiorna solo il profilo Firestore — l'email Firebase Auth rimane quella vecchia
@@ -375,15 +383,15 @@ export default function AdminUsers() {
     })
     setShowDetail(d => ({ ...d, username: cleaned, internalEmail: newInternalEmail }))
     clearDetailMsg()
-    showToast(`✓ Nome utente aggiornato a @${cleaned}`)
+    showToast(t('adminUsers.usernameUpdatedToast', { username: cleaned }))
   }
 
   // ── Elimina account ───────────────────────────────────────────
   const deleteAccount = async () => {
     if (!(await confirm({
-      title: 'Elimina account',
-      message: `Eliminare definitivamente l'account di ${showDetail.name}?\nQuesta azione non può essere annullata.`,
-      confirmLabel: 'Elimina',
+      title: t('adminUsers.confirmDeleteAccountTitle'),
+      message: t('adminUsers.confirmDeleteAccountMessage', { name: showDetail.name }),
+      confirmLabel: t('adminUsers.confirmDeleteAccountLabel'),
       danger: true,
     }))) return
     const name = showDetail.name
@@ -391,7 +399,7 @@ export default function AdminUsers() {
     // Il record Firebase Auth rimane ma senza profilo l'utente non accede all'app.
     // Per rimuoverlo del tutto serve Firebase Console → Authentication → elimina utente.
     setShowDetail(null)
-    showToast(`Account di ${name} eliminato.`)
+    showToast(t('adminUsers.accountDeletedToast', { name }))
   }
 
   const pending   = users.filter(u => u.approved === false)
@@ -429,7 +437,7 @@ export default function AdminUsers() {
             background: u.approved === false ? 'rgba(245,166,35,0.15)' : roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
             color: u.approved === false ? 'var(--accent2)' : roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
           }}>
-            {u.approved === false ? 'In attesa' : u.role === 'admin' ? 'Admin' : roleColor ? ROLE_LABELS[u.role] : u.active !== false ? 'Attivo' : 'Disattivato'}
+            {u.approved === false ? t('adminUsers.waitingBadge') : u.role === 'admin' ? t('adminUsers.adminBadge') : roleColor ? ROLE_LABELS[u.role] : u.active !== false ? t('adminUsers.activeBadge') : t('adminUsers.deactivatedBadge')}
           </span>
           <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
         </div>
@@ -448,15 +456,15 @@ export default function AdminUsers() {
 
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div><h1>Utenti</h1><p>{users.length} account totali</p></div>
-          <button onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>+ Nuovo</button>
+          <div><h1>{t('adminUsers.title')}</h1><p>{t('adminUsers.totalAccounts', { count: users.length })}</p></div>
+          <button onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>{t('adminUsers.newButton')}</button>
         </div>
       </div>
 
       <div style={{ padding:'16px 0 0' }}>
         {pending.length > 0 && (
           <>
-            <p style={{ padding:'0 16px 10px', color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>In attesa di approvazione</p>
+            <p style={{ padding:'0 16px 10px', color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.pendingApprovalSection')}</p>
             <div style={{ background:'var(--card)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
               {pending.map(u => <UserRow key={u.id} u={u} />)}
             </div>
@@ -465,20 +473,20 @@ export default function AdminUsers() {
 
         {admins.length > 0 && (
           <>
-            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>Amministratori</p>
+            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.administratorsSection')}</p>
             <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
               {admins.map(u => <UserRow key={u.id} u={u} />)}
             </div>
           </>
         )}
 
-        <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>Magazzinieri</p>
+        <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.workersSection')}</p>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
           {workers.length === 0
             ? <div className="empty-state" style={{ padding:'30px' }}>
                 <p style={{ color:'var(--text3)', marginBottom:4 }}><User size={34} /></p>
-                <h3>Nessun magazziniere</h3>
-                <p>Crea il primo account con il tasto + in alto</p>
+                <h3>{t('adminUsers.noWorkersTitle')}</h3>
+                <p>{t('adminUsers.noWorkersDesc')}</p>
               </div>
             : workers.map(u => <UserRow key={u.id} u={u} />)
           }
@@ -486,7 +494,7 @@ export default function AdminUsers() {
 
         {organizers.length > 0 && (
           <>
-            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>Organizzatori</p>
+            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.organizersSection')}</p>
             <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
               {organizers.map(u => <UserRow key={u.id} u={u} />)}
             </div>
@@ -494,8 +502,8 @@ export default function AdminUsers() {
         )}
 
         <div style={{ margin:'16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
-          <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>Come funziona il login</p>
-          <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>I magazzinieri accedono con il loro <strong style={{ color:'var(--text)' }}>nome utente</strong> (es. <code>marco.bianchi</code>) o con la loro <strong style={{ color:'var(--text)' }}>email</strong> se inserita, più la password impostata da te.</p>
+          <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>{t('adminUsers.howLoginWorksTitle')}</p>
+          <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
         </div>
       </div>
 
@@ -504,7 +512,7 @@ export default function AdminUsers() {
         <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
           <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
             <button className="close-btn" onClick={createDrag.close}>✕</button>
-            <h2>Nuovo account</h2>
+            <h2>{t('adminUsers.newAccountTitle')}</h2>
 
             {error && (
               <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', color:'var(--red)', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13 }}>
@@ -513,45 +521,45 @@ export default function AdminUsers() {
             )}
 
             <div className="form-group">
-              <label>Nome completo *</label>
-              <input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder="es. Marco Bianchi" />
+              <label>{t('adminUsers.fullNameLabel')}</label>
+              <input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('adminUsers.fullNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Nome utente * <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(per il login)</span></label>
+              <label>{t('adminUsers.usernameLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.usernameHint')}</span></label>
               <input
                 value={form.username}
                 onChange={e => setForm({...form, username: e.target.value.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')})}
-                placeholder="es. marco.bianchi"
+                placeholder={t('adminUsers.usernamePlaceholder')}
                 autoCapitalize="none" autoCorrect="off"
               />
               {form.username && (
                 <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>
-                  Accederà con: <strong style={{ color:'var(--blue)', fontFamily:'monospace' }}>{form.username}</strong>
+                  {t('adminUsers.willLoginWith')} <strong style={{ color:'var(--blue)', fontFamily:'monospace' }}>{form.username}</strong>
                 </p>
               )}
             </div>
             <div className="form-group">
-              <label>Email <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — per accedere anche con email)</span></label>
+              <label>{t('adminUsers.emailLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.emailHint')}</span></label>
               <input
                 type="email"
                 value={form.email}
                 onChange={e => setForm({...form, email: e.target.value})}
-                placeholder="es. marco@email.com"
+                placeholder={t('adminUsers.emailPlaceholder')}
                 autoCapitalize="none"
               />
             </div>
             <div className="form-group">
-              <label>Ruolo</label>
+              <label>{t('adminUsers.roleLabel')}</label>
               <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
-                <option value="worker">Magazziniere</option>
-                <option value="organizzatore-brasserie">Organizzatore Brasserie</option>
-                <option value="organizzatore-evento">Organizzatore evento</option>
+                <option value="worker">{t('adminUsers.roleWorkerOption')}</option>
+                <option value="organizzatore-brasserie">{t('adminUsers.roleOrgBrasserieOption')}</option>
+                <option value="organizzatore-evento">{t('adminUsers.roleOrgEventOption')}</option>
               </select>
             </div>
 
             {form.role === 'organizzatore-brasserie' && (
               <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Configurazione evento</p>
+                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.eventConfigTitle')}</p>
                 <OrgConfigFields
                   orgConfig={orgConfig} setOrgConfig={setOrgConfig}
                   newCustomDate={newCustomDate} setNewCustomDate={setNewCustomDate}
@@ -562,24 +570,24 @@ export default function AdminUsers() {
 
             {form.role === 'organizzatore-evento' && (
               <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Evento organizzato</p>
+                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.organizedEventTitle')}</p>
                 <EventOrganizerFields events={events} assignedEventId={assignedEventId} setAssignedEventId={setAssignedEventId} />
               </div>
             )}
 
             <div className="form-group" style={{ marginBottom:6 }}>
-              <label>Password * <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(min. 6 caratteri)</span></label>
+              <label>{t('adminUsers.passwordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.passwordHint')}</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
             </div>
 
             <div style={{ background:'rgba(79,195,247,0.06)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 12px', marginBottom:16 }}>
               <p style={{ color:'var(--blue)', fontSize:12, lineHeight:1.6 }}>
-                Il magazziniere accede con <strong>nome utente</strong> o <strong>email</strong> (se inserita) e la password. Dopo la creazione potresti dover riaccedere come admin.
+                {t('adminUsers.createAccountNote')}
               </p>
             </div>
 
             <button onClick={createAccount} className="btn btn-primary btn-full" disabled={loading} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {loading ? 'Creazione in corso...' : <><Check size={16} /> Crea account</>}
+              {loading ? t('adminUsers.creatingAccount') : <><Check size={16} /> {t('adminUsers.createAccount')}</>}
             </button>
           </div>
         </div>
@@ -593,7 +601,7 @@ export default function AdminUsers() {
 
             {editMode && (
               <button onClick={() => setEditMode(false)} className="btn-no-anim" style={{ background:'transparent', display:'flex', alignItems:'center', gap:6, color:'var(--text2)', fontWeight:700, fontSize:14, marginBottom:14 }}>
-                ← Indietro
+                ← {t('common.back')}
               </button>
             )}
 
@@ -622,18 +630,18 @@ export default function AdminUsers() {
                     background: ROLE_COLORS[showDetail.role]?.bg || 'rgba(79,195,247,0.15)',
                     color: ROLE_COLORS[showDetail.role]?.color || 'var(--blue)', fontSize:13, padding:'5px 14px'
                   }}>
-                    {ROLE_LABELS[showDetail.role] || 'Magazziniere'}
+                    {ROLE_LABELS[showDetail.role] || t('adminUsers.roleMagazziniere')}
                   </span>
                   {showDetail.approved === false ? (
                     <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:13, padding:'5px 14px' }}>
-                      ⏳ In attesa di approvazione
+                      ⏳ {t('adminUsers.pendingApprovalSection')}
                     </span>
                   ) : (
                     <span className="badge" style={{
                       background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
                       color: showDetail.active !== false ? 'var(--green)' : 'var(--text2)', fontSize:13, padding:'5px 14px'
                     }}>
-                      {showDetail.active !== false ? '● Attivo' : '○ Disattivato'}
+                      {showDetail.active !== false ? t('vehicles.active') : t('vehicles.deactivated')}
                     </span>
                   )}
                 </div>
@@ -647,18 +655,18 @@ export default function AdminUsers() {
                 {/* Info creazione */}
                 {showDetail.createdAt && (
                   <div style={{ background:'var(--bg3)', borderRadius:8, padding:'10px 14px', marginBottom:16, display:'flex', justifyContent:'space-between' }}>
-                    <span style={{ color:'var(--text2)', fontSize:13 }}>Account creato il</span>
-                    <span style={{ fontSize:13, fontWeight:600 }}>{new Date(showDetail.createdAt).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })}</span>
+                    <span style={{ color:'var(--text2)', fontSize:13 }}>{t('adminUsers.accountCreatedOn')}</span>
+                    <span style={{ fontSize:13, fontWeight:600 }}>{formatDate(showDetail.createdAt, { day:'numeric', month:'long', year:'numeric' }, i18n.language)}</span>
                   </div>
                 )}
 
                 {showDetail.approved === false && (
                   <div style={{ display:'flex', gap:8, marginBottom:10 }}>
                     <button onClick={approveUser} className="btn btn-primary" style={{ flex:1 }}>
-                      <Check size={16} /> Approva
+                      <Check size={16} /> {t('adminUsers.approve')}
                     </button>
                     <button onClick={rejectUser} className="btn btn-secondary" style={{ flex:1, color:'var(--red)' }}>
-                      Rifiuta
+                      {t('adminUsers.reject')}
                     </button>
                   </div>
                 )}
@@ -668,7 +676,7 @@ export default function AdminUsers() {
                   className="btn btn-secondary btn-full"
                   style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
                 >
-                  <Edit size={16} /> Modifica
+                  <Edit size={16} /> {t('adminUsers.edit')}
                 </button>
               </>
             ) : (
@@ -687,7 +695,7 @@ export default function AdminUsers() {
 
                 {/* Nome utente */}
                 <div className="form-group">
-                  <label>Nome utente</label>
+                  <label>{t('adminUsers.changeUsernameLabel')}</label>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                     <span style={{ color:'var(--text2)', fontFamily:'monospace', fontSize:15 }}>@</span>
                     <input
@@ -696,30 +704,30 @@ export default function AdminUsers() {
                       style={{ fontFamily:'monospace', flex:1 }}
                       onKeyDown={e => { if (e.key === 'Enter') saveUsername() }}
                     />
-                    <button onClick={saveUsername} className="btn btn-secondary" style={{ padding:'9px 16px', flexShrink:0 }}>Salva</button>
+                    <button onClick={saveUsername} className="btn btn-secondary" style={{ padding:'9px 16px', flexShrink:0 }}>{t('adminUsers.save')}</button>
                   </div>
                 </div>
 
                 {/* Cambio password — sempre aperta */}
                 <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                  <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Cambia password</p>
+                  <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.changePasswordTitle')}</p>
                   <div className="form-group">
-                    <label>Nuova password</label>
-                    <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Minimo 6 caratteri" />
+                    <label>{t('adminUsers.newPasswordLabel')}</label>
+                    <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder={t('adminUsers.newPasswordPlaceholder')} />
                   </div>
                   <div className="form-group" style={{ marginBottom:10 }}>
-                    <label>Tua password admin <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(per confermare)</span></label>
-                    <input type="password" value={adminPw} onChange={e => setAdminPw(e.target.value)} placeholder="La tua password attuale" />
+                    <label>{t('adminUsers.yourAdminPasswordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.yourAdminPasswordHint')}</span></label>
+                    <input type="password" value={adminPw} onChange={e => setAdminPw(e.target.value)} placeholder={t('adminUsers.yourAdminPasswordPlaceholder')} />
                   </div>
                   <button onClick={changePassword} className="btn btn-secondary" style={{ width:'100%', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }} disabled={loading}>
-                    {loading ? 'Salvataggio...' : <><Save size={16} /> Salva nuova password</>}
+                    {loading ? t('common.saving') : <><Save size={16} /> {t('adminUsers.saveNewPassword')}</>}
                   </button>
                 </div>
 
                 {/* Cambio ruolo — menu ad hamburger */}
                 {showDetail.id !== user.uid && (
                   <div style={{ marginBottom:16, position:'relative' }}>
-                    <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Ruolo</p>
+                    <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('adminUsers.roleSectionTitle')}</p>
                     <button onClick={() => setRoleMenuOpen(o => !o)} className="btn btn-secondary" style={{ width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <span style={{ display:'flex', alignItems:'center', gap:9 }}>☰ {ROLE_LABELS[showDetail.role]}</span>
                       <span style={{ fontSize:12 }}>{roleMenuOpen ? '▲' : '▼'}</span>
@@ -727,10 +735,10 @@ export default function AdminUsers() {
                     {roleMenuOpen && (
                       <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,0.16)', zIndex:20, overflow:'hidden' }}>
                         {[
-                          { key:'worker', label:'Magazziniere' },
-                          { key:'admin', label:'Admin' },
-                          { key:'organizzatore-brasserie', label:'Organizzatore Brasserie' },
-                          { key:'organizzatore-evento', label:'Organizzatore evento' },
+                          { key:'worker', label:t('adminUsers.roleMagazziniere') },
+                          { key:'admin', label:t('adminUsers.roleAdminOption') },
+                          { key:'organizzatore-brasserie', label:t('adminUsers.roleOrgBrasserieOption') },
+                          { key:'organizzatore-evento', label:t('adminUsers.roleOrgEventOption') },
                         ].map(r => (
                           <button key={r.key} onClick={() => changeRole(r.key)} className="btn-no-anim" style={{
                             width:'100%', textAlign:'left', padding:'11px 14px', fontSize:14, fontWeight:600,
@@ -748,41 +756,41 @@ export default function AdminUsers() {
                 {/* Sotto-menu: configurazione evento (solo per il ruolo Organizzatore) */}
                 {showDetail.role === 'organizzatore-brasserie' && (
                   <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                    <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Configurazione evento</p>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.eventConfigTitle')}</p>
                     <OrgConfigFields
                       orgConfig={orgConfig} setOrgConfig={setOrgConfig}
                       newCustomDate={newCustomDate} setNewCustomDate={setNewCustomDate}
                       addCustomDate={addCustomDate} removeCustomDate={removeCustomDate}
                     />
-                    <button onClick={saveOrgConfig} className="btn btn-primary btn-full" style={{ marginTop:12 }}>Salva configurazione evento</button>
+                    <button onClick={saveOrgConfig} className="btn btn-primary btn-full" style={{ marginTop:12 }}>{t('adminUsers.eventConfigSaveButton')}</button>
                   </div>
                 )}
 
                 {/* Sotto-menu: evento collegato (solo per il ruolo Organizzatore evento) */}
                 {showDetail.role === 'organizzatore-evento' && (
                   <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                    <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>Evento organizzato</p>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.organizedEventTitle')}</p>
                     <EventOrganizerFields events={events} assignedEventId={assignedEventId} setAssignedEventId={setAssignedEventId} />
-                    <button onClick={saveAssignedEvent} className="btn btn-primary btn-full" style={{ marginTop:12 }}>Salva evento collegato</button>
+                    <button onClick={saveAssignedEvent} className="btn btn-primary btn-full" style={{ marginTop:12 }}>{t('adminUsers.organizedEventSaveButton')}</button>
                   </div>
                 )}
 
                 {/* Indisponibilità (solo worker) */}
                 {showDetail.role === 'worker' && detailUnavail.length > 0 && (
                   <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                    <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>Indisponibilità segnalate</p>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>{t('adminUsers.reportedUnavailabilityTitle')}</p>
                     {[...detailUnavail].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(u => (
                       <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
                         <div>
                           <p style={{ fontWeight:700, fontSize:13 }}>
                             {u.startDate === u.endDate
-                              ? new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
-                              : `${new Date(u.startDate).toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate).toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
+                              ? formatDate(u.startDate, { day:'numeric', month:'long', year:'numeric' }, i18n.language)
+                              : `${formatDate(u.startDate, { day:'numeric', month:'short' }, i18n.language)} → ${formatDate(u.endDate, { day:'numeric', month:'short', year:'numeric' }, i18n.language)}`
                             }
                           </p>
                           {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
                         </div>
-                        <button onClick={() => removeUnavailability(u.id)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700, flexShrink:0 }}>Rimuovi</button>
+                        <button onClick={() => removeUnavailability(u.id)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700, flexShrink:0 }}>{t('common.remove')}</button>
                       </div>
                     ))}
                   </div>
@@ -796,7 +804,7 @@ export default function AdminUsers() {
                     borderRadius:10, padding:'12px', fontWeight:700, fontSize:13,
                     display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7
                   }}>
-                    {showDetail.active !== false ? <><Warn size={15} /> Disattiva accesso</> : <><Check size={15} /> Riattiva accesso</>}
+                    {showDetail.active !== false ? <><Warn size={15} /> {t('adminUsers.deactivateAccess')}</> : <><Check size={15} /> {t('adminUsers.reactivateAccess')}</>}
                   </button>
                   {showDetail.id !== user.uid && (
                     <button onClick={deleteAccount} style={{
@@ -804,7 +812,7 @@ export default function AdminUsers() {
                       borderRadius:10, padding:'12px', fontWeight:700, fontSize:13,
                       display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7
                     }}>
-                      <Trash size={15} /> Elimina account
+                      <Trash size={15} /> {t('adminUsers.deleteAccount')}
                     </button>
                   )}
                 </div>

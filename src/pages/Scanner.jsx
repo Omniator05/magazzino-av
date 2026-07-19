@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, where, getDocs } from 'firebase/firestore'
@@ -8,6 +9,7 @@ import { parseScannedCode } from '../utils/generateCode'
 import BackHomeButton from '../components/BackHomeButton'
 
 export default function Scanner() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { teamId } = useAuth()
   const [scanning, setScanning] = useState(false)
@@ -76,7 +78,7 @@ export default function Scanner() {
       )
     } catch(e) {
       setScanning(false)
-      setError('Camera non accessibile. Verifica i permessi.')
+      setError(t('scanner.cameraError'))
     }
   }
 
@@ -102,7 +104,7 @@ export default function Scanner() {
           }}>
             <div style={{ marginBottom:12, display:'flex', justifyContent:'center', color: scanToast.found ? 'var(--green)' : 'var(--red)' }}>{scanToast.found ? <Check size={48} /> : <Warn size={48} />}</div>
             <p style={{ fontWeight:800, fontSize:20, color: scanToast.found ? 'var(--green)' : 'var(--red)', marginBottom:6 }}>
-              {scanToast.found ? 'Trovato!' : 'Non trovato'}
+              {scanToast.found ? t('scanner.found') : t('scanner.notFound')}
             </p>
             {scanToast.found ? (
               <>
@@ -116,7 +118,7 @@ export default function Scanner() {
                 )}
               </>
             ) : (
-              <p style={{ color:'var(--text2)', fontSize:13 }}>Codice: {scanToast.code}</p>
+              <p style={{ color:'var(--text2)', fontSize:13 }}>{t('scanner.code', { code: scanToast.code })}</p>
             )}
           </div>
         </div>
@@ -124,9 +126,9 @@ export default function Scanner() {
       <div className="page-header">
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
           <BackHomeButton />
-          <h1>Scanner QR/Barcode</h1>
+          <h1>{t('scanner.title')}</h1>
         </div>
-        <p>Identifica un articolo dal codice</p>
+        <p>{t('scanner.subtitle')}</p>
       </div>
 
       <div style={{ padding:'20px 16px' }}>
@@ -134,7 +136,7 @@ export default function Scanner() {
           {!scanning ? (
             <div style={{ padding:'16px' }}>
               <p style={{ color:'var(--text2)', marginBottom:14, fontSize:14, textAlign:'center' }}>
-                Scansiona il QR o il codice a barre di un articolo per aprirne subito la scheda nel magazzino
+                {t('scanner.scanPrompt')}
               </p>
               <button onClick={startScanner} style={{
                 width:'100%', padding:'40px 16px', borderRadius:14,
@@ -142,16 +144,16 @@ export default function Scanner() {
                 display:'flex', flexDirection:'column', alignItems:'center', gap:10,
               }}>
                 <span style={{ fontSize:36 }}>📷</span>
-                <span style={{ fontWeight:800, fontSize:16, color:'var(--text)' }}>Avvia fotocamera</span>
-                <span style={{ fontSize:12, color:'var(--text2)' }}>Inquadra il QR o il codice a barre</span>
+                <span style={{ fontWeight:800, fontSize:16, color:'var(--text)' }}>{t('scanner.startCamera')}</span>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>{t('scanner.aimCode')}</span>
               </button>
             </div>
           ) : (
             <div style={{ position:'relative' }}>
               <div id="qr-reader" style={{ width:'100%' }} />
-              <button onClick={stopScanner} style={{ position:'absolute', top:12, right:12, background:'rgba(0,0,0,0.7)', color:'white', borderRadius:20, padding:'8px 16px', fontSize:13, fontWeight:600 }}>✕ Stop</button>
+              <button onClick={stopScanner} style={{ position:'absolute', top:12, right:12, background:'rgba(0,0,0,0.7)', color:'white', borderRadius:20, padding:'8px 16px', fontSize:13, fontWeight:600 }}>{t('scanner.stop')}</button>
               <div style={{ padding:'12px 16px', background:'rgba(233,69,96,0.1)', borderTop:'1px solid rgba(233,69,96,0.2)' }}>
-                <p style={{ color:'var(--accent)', fontSize:13, textAlign:'center', fontWeight:600 }}>📡 Scansione in corso...</p>
+                <p style={{ color:'var(--accent)', fontSize:13, textAlign:'center', fontWeight:600 }}>{t('scanner.scanningInProgress')}</p>
               </div>
             </div>
           )}
@@ -164,25 +166,25 @@ export default function Scanner() {
             <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:'var(--radius)', padding:'16px' }}>
               <div style={{ textAlign:'center', padding:'10px' }}>
                 <p style={{ fontSize:32, marginBottom:8 }}>❓</p>
-                <p style={{ fontWeight:700, color:'var(--red)' }}>Articolo non trovato</p>
-                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>Codice: <code>{result.code}</code></p>
+                <p style={{ fontWeight:700, color:'var(--red)' }}>{t('scanner.itemNotFound')}</p>
+                <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>{t('scanner.codeLabel')} <code>{result.code}</code></p>
               </div>
             </div>
           </div>
         )}
 
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'16px' }}>
-          <p style={{ fontWeight:700, marginBottom:12, fontSize:15 }}>Inserimento manuale</p>
+          <p style={{ fontWeight:700, marginBottom:12, fontSize:15 }}>{t('scanner.manualEntry')}</p>
           <div style={{ display:'flex', gap:10 }}>
-            <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder="Codice articolo (es. WAV-ABC12345)"
+            <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder={t('scanner.manualCodePlaceholder')}
               onKeyDown={async e => { if (e.key === 'Enter') { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) } }}
               style={{ fontFamily:'monospace' }} />
-            <button onClick={async () => { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 16px' }}>Cerca</button>
+            <button onClick={async () => { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 16px' }}>{t('scanner.search')}</button>
           </div>
         </div>
 
         {result && (
-          <button onClick={() => { setResult(null); setError(null) }} className="btn btn-secondary btn-full" style={{ marginTop:12 }}>🔄 Nuova scansione</button>
+          <button onClick={() => { setResult(null); setError(null) }} className="btn btn-secondary btn-full" style={{ marginTop:12 }}>{t('scanner.newScan')}</button>
         )}
       </div>
     </div>

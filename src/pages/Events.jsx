@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { formatDate } from '../utils/formatDate'
 import DeleteButton from '../components/DeleteButton'
 import DateBadge from '../components/DateBadge'
 import EditButton from '../components/EditButton'
@@ -47,20 +49,7 @@ function generateDates(startDate, recurrence, endDate) {
   return dates
 }
 
-const RECURRENCE_OPTIONS = [
-  { value:'never',   label:'Mai' },
-  { value:'daily',   label:'Ogni giorno' },
-  { value:'weekly',  label:'Ogni settimana' },
-  { value:'monthly', label:'Ogni mese' },
-  { value:'yearly',  label:'Ogni anno' },
-]
-
 const EVENT_CAP = 5
-
-const PHASE_CONFIG = [
-  { key:'montaggio',  label:'Montaggio',  color:'#2563eb', bg:'#dbeafe' },
-  { key:'smontaggio', label:'Smontaggio', color:'#ea580c', bg:'#ffedd5' },
-]
 
 /* ── Inline SVG icons (coerenti con Dashboard.jsx, no emoji) ──────────────── */
 const IconAlertDot = () => (
@@ -127,8 +116,20 @@ const IconCalendarSm = () => (
 )
 
 export default function Events() {
+  const { t, i18n } = useTranslation()
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
+  const RECURRENCE_OPTIONS = [
+    { value:'never',   label:t('events.recurrenceNever') },
+    { value:'daily',   label:t('events.recurrenceDaily') },
+    { value:'weekly',  label:t('events.recurrenceWeekly') },
+    { value:'monthly', label:t('events.recurrenceMonthly') },
+    { value:'yearly',  label:t('events.recurrenceYearly') },
+  ]
+  const PHASE_CONFIG = [
+    { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
+    { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
+  ]
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -307,10 +308,10 @@ export default function Events() {
   const deleteEvent = async (e, event) => {
     e.stopPropagation()
     if (event.seriesId) {
-      if (await confirm({ title: 'Elimina evento', message: 'Elimina SOLO questo evento della serie?', confirmLabel: 'Elimina', danger: true }))
+      if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteSeriesMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))
         await deleteDoc(doc(db, 'events', event.id))
     } else {
-      if (await confirm({ title: 'Elimina evento', message: 'Eliminare questo evento?', confirmLabel: 'Elimina', danger: true }))
+      if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))
         await deleteDoc(doc(db, 'events', event.id))
     }
   }
@@ -325,12 +326,12 @@ export default function Events() {
     const isPast   = evEnd < today
     const daScaricare = isPast && items.some(i => i.loaded && !i.returned)
 
-    let statusColor = 'var(--dash-muted)', statusText = 'Lista vuota'
+    let statusColor = 'var(--dash-muted)', statusText = t('events.statusEmptyList')
     if (total > 0) {
-      if (returned === total)    { statusColor = '#15803d'; statusText = 'Tutto rientrato' }
-      else if (loaded === total) { statusColor = '#b45309'; statusText = `In evento · ${returned}/${total} rientrati` }
-      else if (loaded > 0)       { statusColor = '#b45309'; statusText = `Carico · ${loaded}/${total}` }
-      else                       { statusColor = 'var(--dash-muted)'; statusText = `${total} in lista` }
+      if (returned === total)    { statusColor = '#15803d'; statusText = t('events.statusAllReturned') }
+      else if (loaded === total) { statusColor = '#b45309'; statusText = t('events.statusInEventReturned', { returned, total }) }
+      else if (loaded > 0)       { statusColor = '#b45309'; statusText = t('events.statusLoading', { loaded, total }) }
+      else                       { statusColor = 'var(--dash-muted)'; statusText = t('events.statusInList', { count: total }) }
     }
 
     const iconGradient = daScaricare
@@ -342,9 +343,9 @@ export default function Events() {
       : '#a8dadc'
 
     const cardBorder = isToday ? 'rgba(220,38,38,0.4)' : daScaricare ? 'rgba(234,88,12,0.4)' : 'var(--dash-card-border)'
-    const dateStr = event.date ? new Date(event.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}) : ''
+    const dateStr = event.date ? formatDate(event.date+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
     const dateEndStr = event.dateEnd && event.dateEnd !== event.date
-      ? ' — ' + new Date(event.dateEnd+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})
+      ? ' — ' + formatDate(event.dateEnd+'T12:00:00', {day:'numeric',month:'short'}, i18n.language)
       : ''
 
     return (
@@ -358,7 +359,7 @@ export default function Events() {
           <div style={{ width:52, height:52, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
             <span style={{ fontSize:20, fontWeight:800 }}>{event.date ? new Date(event.date+'T12:00:00').getDate() : '?'}</span>
             <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
-              {event.date ? new Date(event.date+'T12:00:00').toLocaleDateString('it-IT',{month:'short'}) : ''}
+              {event.date ? formatDate(event.date+'T12:00:00', {month:'short'}, i18n.language) : ''}
             </span>
           </div>
           {event.seriesId && (
@@ -377,14 +378,14 @@ export default function Events() {
           </div>
           <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
             {(daScaricare || isToday) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
-            {daScaricare ? `${total-returned} da rientrare` : isToday ? `OGGI · ${statusText.toLowerCase()}` : statusText}
+            {daScaricare ? t('events.daScaricareCount', { count: total-returned }) : isToday ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
           </p>
           {(event.location || (event.phases && PHASE_CONFIG.some(p => event.phases[p.key]))) && (
             <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, flexWrap:'wrap' }}>
               {event.location && <span style={{ fontSize:11, color:'var(--dash-muted)', display:'inline-flex', alignItems:'center', gap:4 }}><Pin size={12} /> {event.location}</span>}
               {event.phases && PHASE_CONFIG.filter(p => event.phases[p.key]).map(p => (
                 <span key={p.key} style={{ background:p.bg, color:p.color, borderRadius:5, padding:'1px 6px', fontSize:10, fontWeight:700 }}>
-                  {p.label} {new Date(event.phases[p.key]+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})}
+                  {p.label} {formatDate(event.phases[p.key]+'T12:00:00', {day:'numeric',month:'short'}, i18n.language)}
                 </span>
               ))}
             </div>
@@ -414,7 +415,7 @@ export default function Events() {
   }
 
   const closeInstallation = async (installation) => {
-    if (!(await confirm({ title: 'Chiudi installazione', message: `Chiudere l'installazione "${installation.name}" e ripristinare la giacenza di tutti gli articoli?`, confirmLabel: 'Chiudi e ripristina' }))) return
+    if (!(await confirm({ title: t('eventDetail.confirmCloseInstallationTitle'), message: t('events.confirmCloseInstallMessage', { name: installation.name }), confirmLabel: t('eventDetail.confirmCloseInstallationLabel') }))) return
     const items = installation.items || []
     for (const item of items) {
       if (item.loaded && !item.returned && !item.isExtra) {
@@ -449,7 +450,7 @@ export default function Events() {
         {isExpired && (
           <div style={{ background:'rgba(220,38,38,0.12)', padding:'5px 16px', borderBottom:'1px solid rgba(220,38,38,0.2)', display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ color:'#dc2626' }}><IconAlertDot /></span>
-            <p style={{ color:'#dc2626', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.06em' }}>Scaduta — segna come chiusa</p>
+            <p style={{ color:'#dc2626', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.06em' }}>{t('events.expiredBadge')}</p>
           </div>
         )}
         <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
@@ -457,11 +458,11 @@ export default function Events() {
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:3 }}>
               <h3 style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:15, fontWeight:700, color:'var(--dash-title)' }}>{inst.name}</h3>
-              <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>Install.</span>
+              <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
             </div>
             <DateBadge dateStr={inst.date} dateEndStr={inst.endDate} location={inst.location} today={today} />
             <p style={{ color: loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)', fontSize:12, fontWeight:600, marginTop:4 }}>
-              {total === 0 ? 'Lista vuota' : loaded === 0 ? `${total} in lista` : `${loaded}/${total} installati`}
+              {total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })}
             </p>
           </div>
           <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
@@ -479,7 +480,7 @@ export default function Events() {
               fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:8
             }}
           >
-            <IconCheckSm /> Chiudi installazione e ripristina giacenza
+            <IconCheckSm /> {t('events.closeInstallationBtn')}
           </button>
         </div>
       </div>
@@ -490,21 +491,21 @@ export default function Events() {
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
       <div style={{ padding:'56px 22px 18px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
         <div>
-          <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1 }}>Eventi</h1>
-          <p style={{ fontSize:13, color:'var(--dash-muted)', fontWeight:500, marginTop:3 }}>{upcomingSingle.length + pinnedRecurring.length} prossimi</p>
+          <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1 }}>{t('events.title')}</h1>
+          <p style={{ fontSize:13, color:'var(--dash-muted)', fontWeight:500, marginTop:3 }}>{t('events.upcomingCount', { count: upcomingSingle.length + pinnedRecurring.length })}</p>
         </div>
         <div style={{ display:'flex', gap:8, paddingTop:4 }}>
           <button onClick={() => navigate('/archive')} style={{
             background:'var(--dash-pill-bg)', border:'1px solid var(--dash-pill-border)', color:'var(--dash-muted)',
             borderRadius:50, padding:'8px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6,
           }}>
-            <IconArchive /> Archivio
+            <IconArchive /> {t('events.archive')}
           </button>
           <button onClick={() => setShowTemplateMenu(true)} style={{
             background:'var(--accent)', color:'white', border:'none',
             borderRadius:50, padding:'8px 16px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6,
           }}>
-            <IconPlus /> Evento
+            <IconPlus /> {t('events.newEventButton')}
           </button>
         </div>
       </div>
@@ -513,7 +514,7 @@ export default function Events() {
       <div style={{ padding:'0 16px 12px' }}>
         <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
           <svg style={{ position:'absolute', left:14 }} viewBox="0 0 24 24" fill="var(--dash-muted)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca evento per nome o location..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('events.searchPlaceholder')}
             style={{ width:'100%', padding:'12px 14px 12px 40px', borderRadius:14, border:'1.5px solid var(--dash-card-border)', background:'var(--dash-card)', color:'var(--dash-title)', fontSize:14 }} />
         </div>
       </div>
@@ -525,9 +526,9 @@ export default function Events() {
           <EventListSkeleton count={6} />
         ) : search.trim() ? (
           <>
-            <p style={{ padding:'0 16px 12px', color:'var(--dash-muted)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em' }}>Risultati ({searchResults.length})</p>
+            <p style={{ padding:'0 16px 12px', color:'var(--dash-muted)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.resultsCount', { count: searchResults.length })}</p>
             {searchResults.length === 0
-              ? <p style={{ padding:'20px 16px', color:'var(--dash-muted)', textAlign:'center' }}>Nessun evento trovato per "{search}"</p>
+              ? <p style={{ padding:'20px 16px', color:'var(--dash-muted)', textAlign:'center' }}>{t('events.noResultsFor', { search })}</p>
               : searchResults.map(ev => <EventCard key={ev.id} event={ev} />)
             }
           </>
@@ -539,7 +540,7 @@ export default function Events() {
                 <button onClick={() => toggle('unload')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#ea580c', display:'flex' }}><IconChevronSection open={openSections.unload} /></span>
-                  <span className="section-label" style={{ color:'#ea580c', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>Da scaricare</span>
+                  <span className="section-label" style={{ color:'#ea580c', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.toUnload')}</span>
                   <span style={{ background:'#fed7aa', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#9a3412' }}>{daScaricareSingle.length}</span>
                 </button>
                 {openSections.unload && daScaricareSingle.map(ev => <EventCard key={ev.id} event={ev} />)}
@@ -552,7 +553,7 @@ export default function Events() {
                 <button onClick={() => toggle('recurring')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#1d6fce', display:'flex' }}><IconChevronSection open={openSections.recurring} /></span>
-                  <span className="section-label" style={{ color:'#1d6fce', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>Ricorrenti</span>
+                  <span className="section-label" style={{ color:'#1d6fce', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.recurring')}</span>
                   <span style={{ background:'#dbeafe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#1e3a5f' }}>{pinnedRecurring.length}</span>
                 </button>
                 {openSections.recurring && pinnedRecurring.map(ev => <EventCard key={ev.id} event={ev} />)}
@@ -565,7 +566,7 @@ export default function Events() {
                 <button onClick={() => toggle('upcoming')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'var(--dash-muted)', display:'flex' }}><IconChevronSection open={openSections.upcoming} /></span>
-                  <span className="section-label" style={{ color:'var(--dash-muted)', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>Prossimi</span>
+                  <span className="section-label" style={{ color:'var(--dash-muted)', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.upcoming')}</span>
                   <span style={{ background:'var(--dash-pill-bg)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--dash-muted)' }}>{upcomingSingle.length}</span>
                 </button>
                 {openSections.upcoming && (
@@ -575,7 +576,7 @@ export default function Events() {
                       <div style={{ padding:'4px 16px 8px' }}>
                         <button onClick={() => setVisibleCount(c => c + EVENT_CAP)}
                           style={{ width:'100%', padding:'12px', borderRadius:14, background:'var(--dash-pill-bg)', border:'1.5px solid var(--dash-pill-border)', color:'var(--dash-muted)', fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                          <IconPlus /> {hiddenCount} altri eventi
+                          <IconPlus /> {t('events.moreEvents', { count: hiddenCount })}
                         </button>
                       </div>
                     )}
@@ -590,7 +591,7 @@ export default function Events() {
                 <button onClick={() => toggle('installations')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#5b4fcf', display:'flex' }}><IconChevronSection open={openSections.installations} /></span>
-                  <span className="section-label" style={{ color:'#5b4fcf', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>Installazioni</span>
+                  <span className="section-label" style={{ color:'#5b4fcf', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.installations')}</span>
                   <span style={{ background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installations.length}</span>
                 </button>
                 {openSections.installations && installations.map(inst => <InstallationCard key={inst.id} event={inst} />)}
@@ -600,8 +601,8 @@ export default function Events() {
             {events.length === 0 && (
               <div style={{ textAlign:'center', padding:'60px 24px' }}>
                 <span style={{ color:'var(--dash-muted)' }}><svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg></span>
-                <h3 style={{ fontSize:17, fontWeight:700, color:'var(--dash-title)', marginTop:14 }}>Nessun evento</h3>
-                <p style={{ color:'var(--dash-muted)', fontSize:13, marginTop:4 }}>Crea il primo evento per gestire i carichi</p>
+                <h3 style={{ fontSize:17, fontWeight:700, color:'var(--dash-title)', marginTop:14 }}>{t('workerHome.emptyTitle')}</h3>
+                <p style={{ color:'var(--dash-muted)', fontSize:13, marginTop:4 }}>{t('events.emptyDesc')}</p>
               </div>
             )}
           </>
@@ -613,36 +614,36 @@ export default function Events() {
         <div className={`modal-overlay${templateDrag.closing ? ' closing' : ''}`} onClick={templateDrag.onOverlayClick}>
           <div className={`modal${templateDrag.jiggling ? ' modal-jiggle' : ''}${templateDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templateDrag.props}>
             <button className="close-btn" onClick={templateDrag.close}>✕</button>
-            <h2>Nuovo evento</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>Vuoi partire da un template o creare un evento vuoto?</p>
+            <h2>{t('calendar.newEventTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{t('events.newEventModalDesc')}</p>
 
             {/* Evento vuoto */}
             <button onClick={() => { setShowTemplateMenu(false); openNew() }}
               style={{ width:'100%', padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'2px solid var(--border)', color:'var(--text)', fontWeight:600, fontSize:15, textAlign:'left', marginBottom:12, display:'flex', alignItems:'center', gap:12 }}>
               <span style={{ color:'#6b7280', flexShrink:0 }}><IconDoc /></span>
               <div>
-                <p style={{ fontWeight:700 }}>Evento vuoto</p>
-                <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>Compila la lista di carico manualmente</p>
+                <p style={{ fontWeight:700 }}>{t('events.blankEvent')}</p>
+                <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>{t('events.blankEventDesc')}</p>
               </div>
             </button>
 
             {/* Template */}
             {templates.length === 0 ? (
               <div style={{ padding:'16px', background:'var(--card2)', borderRadius:10, textAlign:'center' }}>
-                <p style={{ color:'var(--text2)', fontSize:13 }}>Nessun template — creane uno dalla tab Template</p>
+                <p style={{ color:'var(--text2)', fontSize:13 }}>{t('events.noTemplates')}</p>
               </div>
             ) : (
               <>
-                <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Usa template</p>
-                {templates.map(t => (
-                  <button key={t.id} onClick={() => createFromTemplate(t)}
+                <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('archive.useTemplate')}</p>
+                {templates.map(tpl => (
+                  <button key={tpl.id} onClick={() => createFromTemplate(tpl)}
                     style={{ width:'100%', padding:'12px 16px', borderRadius:12, background:'rgba(79,195,247,0.07)', border:'1px solid rgba(79,195,247,0.25)', color:'var(--text)', fontWeight:600, fontSize:14, textAlign:'left', marginBottom:8, display:'flex', alignItems:'center', gap:12 }}>
                     <span style={{ color:'var(--blue)', flexShrink:0 }}><IconList /></span>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:700 }}>{t.name}</p>
+                      <p style={{ fontWeight:700 }}>{tpl.name}</p>
                       <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>
-                        {(t.components||[]).length} articoli
-                        {t.notes ? ` · ${t.notes}` : ''}
+                        {t('events.itemsCount', { count: (tpl.components||[]).length })}
+                        {tpl.notes ? ` · ${tpl.notes}` : ''}
                       </p>
                     </div>
                     <span style={{ color:'var(--blue)' }}><IconChevronSm /></span>
@@ -658,7 +659,7 @@ export default function Events() {
         <div className={`modal-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={eventDrag.onOverlayClick}>
           <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
             <button className="close-btn" onClick={eventDrag.close}>✕</button>
-            <h2>{editing ? 'Modifica evento' : pendingTemplateItems ? 'Nuovo evento da template' : 'Nuovo evento'}</h2>
+            <h2>{editing ? t('calendar.editEventTitle') : pendingTemplateItems ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
 
             {/* Toggle tipo: Evento / Installazione */}
             {!editing && !pendingTemplateItems && (
@@ -670,7 +671,7 @@ export default function Events() {
                     color: form.type !== 'installation' ? 'var(--text)' : 'var(--text2)',
                     boxShadow: form.type !== 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
                     border: 'none', transition:'all 0.15s'
-                  }}><IconCalendarSm /> Evento</button>
+                  }}><IconCalendarSm /> {t('events.typeEvent')}</button>
                 <button
                   onClick={() => setForm(f => ({...f, type:'installation', recurrence:'never', endDate:''}))}
                   style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
@@ -679,32 +680,32 @@ export default function Events() {
                     boxShadow: form.type === 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
                     border: form.type === 'installation' ? '1px solid #ddd6fe' : '1px solid transparent',
                     transition:'all 0.15s'
-                  }}><IconWrench /> Installazione</button>
+                  }}><IconWrench /> {t('events.typeInstallation')}</button>
               </div>
             )}
             {pendingTemplateItems && (
               <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'8px 12px', marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ color:'var(--blue)' }}><IconCheckSm /></span>
                 <p style={{ color:'var(--blue)', fontSize:13, fontWeight:600 }}>
-                  Lista carico pronta ({pendingTemplateItems.length} articoli) — compila i dettagli evento
+                  {t('events.readyListMsg', { count: pendingTemplateItems.length })}
                 </p>
               </div>
             )}
             <div className="form-group">
-              <label>Nome evento *</label>
-              <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder="es. Matrimonio Rossi" />
+              <label>{t('calendar.eventNameLabel')}</label>
+              <input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Data inizio *</label>
+              <label>{t('calendar.startDateLabel')}</label>
               <DateField value={form.date} onChange={v => setForm({...form,date:v})} />
             </div>
             <div className="form-group">
-              <label>Data fine {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — fine contratto prevista)</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale — evento multi-giorno)</span>}</label>
-              <DateField value={form.dateEnd} min={form.date} clearable onChange={v => setForm({...form, dateEnd:v})} placeholder="Nessuna" />
+              <label>{t('calendar.endDateLabel')} {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintInstallation')}</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintEvent')}</span>}</label>
+              <DateField value={form.dateEnd} min={form.date} clearable onChange={v => setForm({...form, dateEnd:v})} placeholder={t('common.noneOption')} />
             </div>
             {form.type !== 'installation' && (
               <div className="form-group">
-                <label style={{ marginBottom:8, display:'block' }}>Fasi evento <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+                <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
                 {PHASE_CONFIG.map(p => (
                   <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                     <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
@@ -717,33 +718,36 @@ export default function Events() {
               </div>
             )}
             <div className="form-group">
-              <label>Location</label>
-              <input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder="es. Villa Belvedere, Verona" />
+              <label>{t('calendar.locationLabel')}</label>
+              <input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('calendar.locationPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Note</label>
-              <textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder="Dettagli evento..." rows={2} />
+              <label>{t('calendar.notesLabel')}</label>
+              <textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
             </div>
             {!editing && form.type !== 'installation' && (
               <>
                 <div className="form-group">
-                  <label style={{ display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> Ripeti</label>
+                  <label style={{ display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.repeatLabel')}</label>
                   <select value={form.recurrence} onChange={e => setForm({...form, recurrence:e.target.value, endDate:''})}>
                     {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 {form.recurrence !== 'never' && (
                   <div className="form-group">
-                    <label>Fine ripetizione</label>
+                    <label>{t('events.repeatEndLabel')}</label>
                     <DateField value={form.endDate} min={form.date || today}
                       onChange={v => setForm({...form, endDate:v})} />
                   </div>
                 )}
                 {futureDates.length > 0 && (
                   <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 14px', marginBottom:16 }}>
-                    <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {futureDates.length + 1} eventi totali</p>
+                    <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.totalEventsCount', { count: futureDates.length + 1 })}</p>
                     <p style={{ color:'var(--text2)', fontSize:12, marginTop:3 }}>
-                      Dal {new Date(form.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})} al {new Date(futureDates.at(-1)+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})}
+                      {t('workerCalendar.dateRange', {
+                        start: formatDate(form.date+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language),
+                        end: formatDate(futureDates.at(-1)+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language),
+                      })}
                     </p>
                   </div>
                 )}
@@ -751,11 +755,11 @@ export default function Events() {
             )}
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>
-              {saving ? 'Salvataggio...'
-                : editing ? 'Salva modifiche'
-                : pendingTemplateItems ? 'Crea evento e vai alla lista carico'
-                : futureDates.length > 0 ? `Crea ${futureDates.length + 1} eventi`
-                : 'Crea evento'}
+              {saving ? t('common.saving')
+                : editing ? t('calendar.saveChanges')
+                : pendingTemplateItems ? t('events.createFromTemplateAndGo')
+                : futureDates.length > 0 ? t('events.createMultiple', { count: futureDates.length + 1 })
+                : t('calendar.createEvent')}
             </button>
           </div>
         </div>

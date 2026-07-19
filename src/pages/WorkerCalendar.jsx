@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
+import { formatDate, capitalize } from '../utils/formatDate'
 
-const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+// Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
+const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
+function getWeekdayLabels(lang) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(WEEKDAY_ANCHOR)
+    d.setDate(WEEKDAY_ANCHOR.getDate() + i)
+    return formatDate(d, { weekday: 'narrow' }, lang)
+  })
+}
 
 function getMonthGrid(year, month) {
   const firstDay = new Date(year, month, 1)
@@ -36,11 +45,13 @@ function toDateStr(d) {
 }
 
 export default function WorkerCalendar() {
+  const { t, i18n } = useTranslation()
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const today = new Date()
   const todayStr = toDateStr(today)
+  const WEEKDAYS = getWeekdayLabels(i18n.language)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [allEvents, setAllEvents] = useState([])
   const [googleEvents, setGoogleEvents] = useState([])
@@ -94,8 +105,8 @@ export default function WorkerCalendar() {
   const isUnavailable = (dStr) => unavailability.some(u => dStr >= u.startDate && dStr <= u.endDate)
 
   const PHASE_META = {
-    montaggio:  { color: '#2563eb', label: 'Montaggio' },
-    smontaggio: { color: '#ea580c', label: 'Smontaggio' },
+    montaggio:  { color: '#2563eb', label: t('calendar.legendAssembly') },
+    smontaggio: { color: '#ea580c', label: t('calendar.legendDisassembly') },
   }
 
   // Tutti gli "elementi" che toccano un giorno: l'evento (data inizio) + le fasi
@@ -178,7 +189,7 @@ export default function WorkerCalendar() {
   }
 
   const removeUnavailability = async (id) => {
-    if (!(await confirm({ title: 'Rimuovi indisponibilità', message: 'Rimuovere questo periodo di indisponibilità?', confirmLabel: 'Rimuovi', danger: true }))) return
+    if (!(await confirm({ title: t('workerCalendar.confirmRemoveTitle'), message: t('workerCalendar.confirmRemoveMessage'), confirmLabel: t('workerCalendar.confirmRemoveLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
@@ -201,23 +212,23 @@ export default function WorkerCalendar() {
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <h1>Il mio calendario</h1>
-            <p>{allEvents.filter(isAssignedToMe).length} eventi assegnati a te</p>
+            <h1>{t('workerCalendar.title')}</h1>
+            <p>{t('workerCalendar.assignedCount', { count: allEvents.filter(isAssignedToMe).length })}</p>
           </div>
           {!reportMode && (
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={startReportMode}
                 style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
-                🚫 Segna assenza
+                {t('workerCalendar.reportAbsence')}
               </button>
-              <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
+              <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
             </div>
           )}
         </div>
 
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:14 }}>
           <button onClick={goPrevMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
-          <h2 style={{ fontSize:17, fontWeight:800 }}>{MONTHS[cursor.month]} {cursor.year}</h2>
+          <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
           <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
 
@@ -225,9 +236,9 @@ export default function WorkerCalendar() {
         {reportMode && (
           <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
             <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4, display:'flex', alignItems:'center', gap:7 }}>
-              <Calendar size={15} /> {!rangeStart ? 'Tocca il primo giorno della tua assenza' : 'Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
+              <Calendar size={15} /> {!rangeStart ? t('calendar.tapFirstDay') : t('calendar.tapLastDay')}
             </p>
-            <button onClick={cancelReportMode} style={{ color:'var(--text2)', fontSize:13, fontWeight:700, flexShrink:0 }}>Annulla</button>
+            <button onClick={cancelReportMode} style={{ color:'var(--text2)', fontSize:13, fontWeight:700, flexShrink:0 }}>{t('common.cancel')}</button>
           </div>
         )}
       </div>
@@ -313,27 +324,27 @@ export default function WorkerCalendar() {
         <div style={{ display:'flex', gap:14, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--blue)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Eventi azienda</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('workerCalendar.legendCompanyEvents')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Assegnati a te</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('workerCalendar.legendAssignedToYou')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#2563eb', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Montaggio</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendAssembly')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#ea580c', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendDisassembly')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Non disponibile</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('workerCalendar.legendUnavailable')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:2, background:'#4285F4', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Da Google Calendar</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.fromGoogleCalendar')}</span>
           </div>
         </div>
       </div>
@@ -342,11 +353,11 @@ export default function WorkerCalendar() {
       {!reportMode && selectedDate && (
         <div style={{ padding:'8px 16px 16px' }}>
           <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
-            {selectedDateObj.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
-            {selectedDate === todayStr && ' · Oggi'}
+            {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
+            {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
           {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
-            <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>Nessun evento in questo giorno.</p>
+            <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
             selectedEvents.map(({ event: ev, assigned: mine, phases }) => (
                 <div
@@ -374,7 +385,7 @@ export default function WorkerCalendar() {
                         ))}
                       </div>
                     )}
-                    {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:4, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> Assegnato a te</p>}
+                    {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:4, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> {t('workerCalendar.assignedToYouInline')}</p>}
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
                 </div>
@@ -382,7 +393,7 @@ export default function WorkerCalendar() {
           )}
           {selectedGoogleEvents.length > 0 && (
             <div style={{ marginTop: selectedEvents.length > 0 ? 14 : 0 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Da Google Calendar</p>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('calendar.fromGoogleCalendar')}</p>
               {selectedGoogleEvents.map(ev => (
                 <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(66,133,244,0.06)', border:'1px solid rgba(66,133,244,0.22)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ width:9, height:9, borderRadius:2, flexShrink:0, background:'#4285F4' }} />
@@ -399,22 +410,22 @@ export default function WorkerCalendar() {
       {/* Lista indisponibilità */}
       {sortedUnavailability.length > 0 && (
         <div style={{ padding:'8px 16px 24px' }}>
-          <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Le mie indisponibilità</p>
+          <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>{t('workerCalendar.myUnavailability')}</p>
           {sortedUnavailability.map(u => (
             <div key={u.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
               <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
                   {u.startDate === u.endDate
-                    ? new Date(u.startDate+'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
-                    : `${new Date(u.startDate+'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short' })} → ${new Date(u.endDate+'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
+                    ? formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)
+                    : `${formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language)} → ${formatDate(u.endDate+'T12:00:00', { day:'numeric', month:'short', year:'numeric' }, i18n.language)}`
                   }
                 </p>
                 {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
               </div>
               <button onClick={() => removeUnavailability(u.id)}
                 style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-                Rimuovi
+                {t('common.remove')}
               </button>
             </div>
           ))}
@@ -426,19 +437,22 @@ export default function WorkerCalendar() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPendingRange(null)}>
           <div className="modal" style={{ position:'relative' }}>
             <button className="close-btn" onClick={() => setPendingRange(null)}>✕</button>
-            <h2>🚫 Segnala assenza</h2>
+            <h2>{t('calendar.absenceModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
               {pendingRange.start === pendingRange.end
-                ? new Date(pendingRange.start).toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
-                : `Dal ${new Date(pendingRange.start).toLocaleDateString('it-IT', { day:'numeric', month:'short' })} al ${new Date(pendingRange.end).toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' })}`
+                ? formatDate(pendingRange.start, { day:'numeric', month:'long', year:'numeric' }, i18n.language)
+                : t('workerCalendar.dateRange', {
+                    start: formatDate(pendingRange.start, { day:'numeric', month:'short' }, i18n.language),
+                    end: formatDate(pendingRange.end, { day:'numeric', month:'short', year:'numeric' }, i18n.language),
+                  })
               }
             </p>
             <div className="form-group">
-              <label>Motivo (opzionale)</label>
-              <input value={reasonInput} onChange={e => setReasonInput(e.target.value)} placeholder="es. Ferie, visita medica..." />
+              <label>{t('calendar.reason')} {t('common.optional')}</label>
+              <input value={reasonInput} onChange={e => setReasonInput(e.target.value)} placeholder={t('workerCalendar.reasonPlaceholder')} />
             </div>
             <button onClick={confirmUnavailability} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              <Check size={16} /> Confermo assenza
+              <Check size={16} /> {t('workerCalendar.confirmAbsence')}
             </button>
           </div>
         </div>

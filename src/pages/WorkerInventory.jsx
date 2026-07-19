@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDocs } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -15,6 +16,11 @@ const ICONS = {
   'Corrente': '⚡',
   'Effetti':  '🎉',
   'Consumabili': '🪣',
+  'Microfoni':   '🎤',
+  'Traduzione':  '🌐',
+  'Connettività':'📶',
+  'Comunicazione':'📡',
+  'Strumenti':   '🎸',
   'Kit':      '🧰',
   'Altro':    '📦',
   // legacy
@@ -27,6 +33,7 @@ const ICONS = {
 }
 
 export default function WorkerInventory() {
+  const { t } = useTranslation()
   const { teamId } = useAuth()
   const [items, setItems]   = useState([])
   const [search, setSearch] = useState('')
@@ -138,7 +145,7 @@ export default function WorkerInventory() {
           const snap = await getDocs(q)
           if (snap.empty) {
             if (navigator.vibrate) navigator.vibrate([100, 50, 100])
-            setScanError(`Nessun oggetto trovato con codice "${baseCode}"`)
+            setScanError(t('workerInventory.notFoundWithCode', { code: baseCode }))
             return
           }
           const found = { id: snap.docs[0].id, ...snap.docs[0].data() }
@@ -150,7 +157,7 @@ export default function WorkerInventory() {
       )
     } catch(e) {
       setScanning(false)
-      setScanError('Camera non accessibile. Verifica i permessi del browser.')
+      setScanError(t('workerInventory.cameraError'))
     }
   }
 
@@ -172,11 +179,11 @@ export default function WorkerInventory() {
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <h1>Magazzino</h1>
-            <p>{items.length} articoli</p>
+            <h1>{t('inventory.title')}</h1>
+            <p>{t('inventory.itemsCount', { count: items.length })}</p>
           </div>
           <button onClick={openScanner} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
-            📷 Scansiona
+            {t('workerInventory.scan')}
           </button>
         </div>
       </div>
@@ -184,17 +191,17 @@ export default function WorkerInventory() {
       {/* Barra ricerca */}
       <div className="search-bar" style={{ position:'relative' }}>
         <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome, categoria, marca..." />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} />
       </div>
 
       {/* Filtri - scrollabili */}
       <div style={{ overflowX:'auto', background:'var(--bg2)', borderBottom:'1px solid var(--border)', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
         <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
-          { key:'all',    label:'Tutti',      count: items.length },
-          { key:'out',     label:'Fuori',         count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
-          { key:'broken',  label:'Rotti',         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
-          { key:'reorder', label:'Da riordinare', count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
+          { key:'all',    label:t('inventory.filterAll'),      count: items.length },
+          { key:'out',     label:t('inventory.filterOut'),         count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
+          { key:'broken',  label:t('inventory.filterBroken'),         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          { key:'reorder', label:t('inventory.filterReorder'), count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)}
             style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
@@ -212,7 +219,7 @@ export default function WorkerInventory() {
       {/* Lista */}
       <div style={{ paddingBottom:8 }}>
         {filtered.length === 0
-          ? <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>Nessun articolo</h3></div>
+          ? <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('workerInventory.emptyTitle')}</h3></div>
           : filtered.map(item => {
             const avail = item.availableQty ?? item.totalQty
             const isBroken = (item.brokenQty || 0) > 0
@@ -229,10 +236,10 @@ export default function WorkerInventory() {
                   <span style={{ fontWeight:800, fontSize:15, color: avail === item.totalQty ? 'var(--green)' : avail === 0 ? 'var(--red)' : 'var(--accent2)' }}>
                     {avail}/{item.totalQty}
                   </span>
-                  {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Wrench size={11} /> {item.brokenQty} rott{item.brokenQty===1?'o':'i'}</span></div>}
-                  {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>fuori</span></div>}
+                  {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}</span></div>}
+                  {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>{t('inventory.out')}</span></div>}
                   {item.category === 'Consumabili' && item.minStock > 0 && avail <= item.minStock && (
-                    <div style={{ marginTop:4 }}><span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Cart size={11} /> da riordinare</span></div>
+                    <div style={{ marginTop:4 }}><span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Cart size={11} /> {t('inventory.toReorder')}</span></div>
                   )}
                   <p style={{ color:'var(--text2)', fontSize:11, marginTop:4 }}>{item.category}</p>
                 </div>
@@ -247,9 +254,9 @@ export default function WorkerInventory() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeScanner()}>
           <div className="modal" style={{ position:'relative' }}>
             <button className="close-btn" onClick={closeScanner}>✕</button>
-            <h2>📷 Scansiona oggetto</h2>
+            <h2>{t('workerInventory.scanModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>
-              Hai trovato un oggetto e non sai a cosa appartiene o dove va rimesso? Scansiona il suo QR o codice a barre.
+              {t('workerInventory.scanModalDesc')}
             </p>
 
             {/* qr-inventory SEMPRE nel DOM - Html5Qrcode ne ha bisogno al momento dell'init */}
@@ -262,8 +269,8 @@ export default function WorkerInventory() {
                 display:'flex', flexDirection:'column', alignItems:'center', gap:10,
               }}>
                 <span style={{ fontSize:36 }}>📷</span>
-                <span style={{ fontWeight:800, fontSize:16, color:'var(--text)' }}>Avvia fotocamera</span>
-                <span style={{ fontSize:12, color:'var(--text2)' }}>Inquadra il QR o il codice a barre</span>
+                <span style={{ fontWeight:800, fontSize:16, color:'var(--text)' }}>{t('scanner.startCamera')}</span>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>{t('scanner.aimCode')}</span>
               </button>
             )}
 
@@ -275,7 +282,7 @@ export default function WorkerInventory() {
 
             {scanning && (
               <button onClick={closeScanner} className="btn btn-secondary btn-full" style={{ marginTop:14 }}>
-                Annulla
+                {t('common.cancel')}
               </button>
             )}
           </div>
@@ -296,7 +303,7 @@ export default function WorkerInventory() {
             {/* Disponibilità */}
             <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                <span style={{ color:'var(--text2)', fontSize:14 }}>Disponibili</span>
+                <span style={{ color:'var(--text2)', fontSize:14 }}>{t('inventory.detailAvailable')}</span>
                 <span style={{ fontWeight:800, fontSize:18 }}>{detail.availableQty}/{detail.totalQty}</span>
               </div>
               <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
@@ -304,9 +311,9 @@ export default function WorkerInventory() {
                 {(detail.brokenQty||0) > 0 && <div style={{ background:'var(--red)', width:`${((detail.brokenQty||0)/(detail.totalQty||1))*100}%` }} />}
               </div>
               <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
-                <span style={{ fontSize:12, color:'var(--green)' }}>● {detail.availableQty} disponibili</span>
-                {((detail.totalQty||0)-(detail.availableQty||0)-(detail.brokenQty||0)) > 0 && <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(detail.totalQty||0)-(detail.availableQty||0)-(detail.brokenQty||0)} fuori</span>}
-                {(detail.brokenQty||0) > 0 && <span style={{ fontSize:12, color:'var(--red)' }}>● {detail.brokenQty} rott{detail.brokenQty===1?'o':'i'}</span>}
+                <span style={{ fontSize:12, color:'var(--green)' }}>● {detail.availableQty} {t('inventory.available')}</span>
+                {((detail.totalQty||0)-(detail.availableQty||0)-(detail.brokenQty||0)) > 0 && <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(detail.totalQty||0)-(detail.availableQty||0)-(detail.brokenQty||0)} {t('inventory.out')}</span>}
+                {(detail.brokenQty||0) > 0 && <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: detail.brokenQty })}</span>}
               </div>
             </div>
 
@@ -323,20 +330,20 @@ export default function WorkerInventory() {
               {/* Consumabili — aggiusta quantità */}
               {detail.category === 'Consumabili' && (
                 <div style={{ marginBottom:14 }}>
-                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>Quantità in magazzino</p>
+                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>{t('workerInventory.stockQuantityTitle')}</p>
                   <div style={{ display:'flex', alignItems:'center', gap:10, justifyContent:'center' }}>
                     <button onClick={() => adjustConsumable(detail, -1)} disabled={(detail.availableQty??detail.totalQty) <= 0}
                       style={{ width:48, height:48, borderRadius:12, background:'rgba(233,69,96,0.12)', border:'1px solid rgba(233,69,96,0.3)', color:'var(--accent)', fontSize:24, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, opacity:(detail.availableQty??detail.totalQty)<=0?0.35:1 }}>−</button>
                     <div style={{ textAlign:'center', minWidth:60 }}>
                       <p style={{ fontWeight:900, fontSize:32, color:'var(--text)', lineHeight:1 }}>{detail.availableQty ?? detail.totalQty}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>disponibili</p>
+                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>{t('workerInventory.available')}</p>
                     </div>
                     <button onClick={() => adjustConsumable(detail, 1)}
                       style={{ width:48, height:48, borderRadius:12, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', fontSize:24, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>
                   </div>
                   {detail.minStock > 0 && (detail.availableQty??detail.totalQty) <= detail.minStock && (
                     <div style={{ marginTop:10, background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:8, padding:'8px 12px', textAlign:'center' }}>
-                      <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}><Cart size={14} /> Scorta bassa — da riordinare</p>
+                      <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}><Cart size={14} /> {t('workerInventory.lowStock')}</p>
                     </div>
                   )}
                 </div>
@@ -345,19 +352,19 @@ export default function WorkerInventory() {
               {/* Segnala problema — nascosto per i consumabili */}
               {detail.category !== 'Consumabili' && (
                 <div>
-                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>Segnala problema</p>
+                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:12 }}>{t('workerInventory.reportProblem')}</p>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                     <button
                       onClick={() => markBroken(detail, 1)}
                       disabled={(detail.brokenQty||0) >= detail.totalQty}
                       style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.3)', color:'var(--red)', opacity:(detail.brokenQty||0)>=detail.totalQty?0.4:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                      <Wrench size={15} /> Segna rotto
+                      <Wrench size={15} /> {t('workerInventory.markBroken')}
                     </button>
                     <button
                       onClick={() => markBroken(detail, -1)}
                       disabled={(detail.brokenQty||0) === 0}
                       style={{ padding:'12px', borderRadius:10, fontWeight:700, fontSize:14, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', opacity:(detail.brokenQty||0)===0?0.4:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                      <Check size={15} /> Segna riparato
+                      <Check size={15} /> {t('workerInventory.markRepaired')}
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, deleteDoc, doc, serverTimestamp, where } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -11,6 +12,7 @@ import DeleteButton from '../components/DeleteButton'
 const PAGE_SIZE = 30
 
 export default function Archive() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
@@ -89,7 +91,7 @@ export default function Archive() {
   }
 
   const deleteArchiveEvent = async (event) => {
-    if (!(await confirm({ title: 'Elimina dall\'archivio', message: `Eliminare "${event.name}" dall'archivio?\nQuesta azione è irreversibile.`, confirmLabel: 'Elimina', danger: true }))) return
+    if (!(await confirm({ title: t('archive.confirmDeleteTitle'), message: t('archive.confirmDeleteMessage', { name: event.name }), confirmLabel: t('archive.confirmDeleteLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'events', event.id))
     setEvents(prev => prev.filter(e => e.id !== event.id))
   }
@@ -100,16 +102,16 @@ export default function Archive() {
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
           <button onClick={() => navigate('/events')}
             style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'6px 12px', fontSize:13 }}>
-            ← Indietro
+            ← {t('common.back')}
           </button>
-          <h1>Archivio eventi</h1>
+          <h1>{t('archive.title')}</h1>
         </div>
-        <p style={{ color:'var(--text2)', fontSize:14 }}>{events.length} eventi · premi "Usa template" per riutilizzare una lista</p>
+        <p style={{ color:'var(--text2)', fontSize:14 }}>{t('archive.subtitle', { count: events.length })}</p>
       </div>
 
       <div className="search-bar" style={{ position:'relative' }}>
         <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca per nome o location..." />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('archive.searchPlaceholder')} />
       </div>
 
       <div style={{ padding:'12px 0 0' }}>
@@ -117,13 +119,13 @@ export default function Archive() {
           <div style={{ padding:'40px', textAlign:'center', color:'var(--text2)' }}>
             <div style={{ width:32, height:32, border:'3px solid var(--border)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }} />
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-            <p>Caricamento archivio...</p>
+            <p>{t('archive.loadingArchive')}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="empty-state">
             <p style={{ fontSize:40 }}>📁</p>
-            <h3>{search ? 'Nessun risultato' : 'Nessun evento in archivio'}</h3>
-            <p>{search ? `Nessun evento per "${search}"` : 'Gli eventi appaiono qui dopo che tutti gli articoli sono rientrati'}</p>
+            <h3>{search ? t('archive.noResults') : t('archive.noArchivedEvents')}</h3>
+            <p>{search ? t('archive.noResultsFor', { search }) : t('archive.emptyDesc')}</p>
           </div>
         ) : (
           <>
@@ -146,7 +148,7 @@ export default function Archive() {
                         </p>
                         {total > 0 && (
                           <p style={{ color:'var(--text2)', fontSize:12, marginTop:4 }}>
-                            {total} articoli · {returned === total ? 'tutto rientrato' : `${returned}/${total} rientrati`}
+                            {t('archive.itemsCount', { count: total })} · {returned === total ? t('archive.allReturned') : t('archive.partialReturned', { returned, total })}
                           </p>
                         )}
                       </div>
@@ -161,7 +163,7 @@ export default function Archive() {
                             opacity: isCopying ? 0.6 : 1,
                             minWidth:110, textAlign:'center',
                           }}>
-                          {isCopied ? 'Creato!' : isCopying ? 'Copio...' : 'Usa template'}
+                          {isCopied ? t('archive.created') : isCopying ? t('archive.copying') : t('archive.useTemplate')}
                         </button>
                         <DeleteButton onClick={() => deleteArchiveEvent(event)} size={38} />
                       </div>
@@ -169,7 +171,7 @@ export default function Archive() {
 
                     {total > 0 && (
                       <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
-                        <p style={{ color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:6 }}>Lista carico</p>
+                        <p style={{ color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:6 }}>{t('archive.loadingListTitle')}</p>
                         <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                           {items.slice(0, isExpanded ? items.length : 8).map((item, i) => (
                             <span key={i} style={{ background:'var(--card2)', borderRadius:6, padding:'2px 8px', fontSize:12, color:'var(--text2)' }}>
@@ -181,7 +183,7 @@ export default function Archive() {
                               onClick={() => toggleExpanded(event.id)}
                               style={{ background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:6, padding:'2px 8px', fontSize:12, fontWeight:700, color:'var(--blue)' }}
                             >
-                              {isExpanded ? 'Mostra meno' : `+${items.length - 8} altri`}
+                              {isExpanded ? t('archive.showLess') : t('common.moreCount', { count: items.length - 8 })}
                             </button>
                           )}
                         </div>
@@ -196,7 +198,7 @@ export default function Archive() {
               <div style={{ padding:'8px 16px 16px' }}>
                 <button onClick={() => loadEvents(lastDoc)} disabled={loadingMore}
                   className="btn btn-secondary btn-full">
-                  {loadingMore ? '⏳ Caricamento...' : 'Carica altri eventi'}
+                  {loadingMore ? t('archive.loadingMore') : t('archive.loadMore')}
                 </button>
               </div>
             )}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, getDoc, collection, query, where, orderBy } from 'firebase/firestore'
@@ -13,6 +14,11 @@ const ICONS = {
   'Corrente': '⚡',
   'Effetti':  '🎉',
   'Consumabili': '🪣',
+  'Microfoni':   '🎤',
+  'Traduzione':  '🌐',
+  'Connettività':'📶',
+  'Comunicazione':'📡',
+  'Strumenti':   '🎸',
   'Kit':      '🧰',
   'Altro':    '📦',
   // legacy
@@ -25,6 +31,7 @@ const ICONS = {
 }
 
 export default function WorkerScanner() {
+  const { t } = useTranslation()
   const { id } = useParams()
   const { profile } = useAuth()
   const navigate = useNavigate()
@@ -33,6 +40,8 @@ export default function WorkerScanner() {
   const backPath = location.pathname.endsWith('/scan') ? `/events/${id}` : '/'
   const [event, setEvent] = useState(null)
   const [vehicles, setVehicles] = useState([])
+  const [itemDetails, setItemDetails] = useState({}) // id/itemRef → { location, notes, components } dal catalogo
+  const resolvedItemDetailIdsRef = useRef(new Set())
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
   const [manualCode, setManualCode] = useState('')
@@ -278,7 +287,7 @@ export default function WorkerScanner() {
       )
     } catch(e) {
       setScanning(false)
-      setError('Camera non accessibile. Verifica i permessi del browser.')
+      setError(t('workerInventory.cameraError'))
     }
   }
 
@@ -348,16 +357,43 @@ export default function WorkerScanner() {
 
   useEffect(() => () => { if (html5QrRef.current) { try { html5QrRef.current.stop() } catch(e) {} } }, [])
 
-  if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>Caricamento...</p></div>
+  // Posizione/note/componenti kit live dal catalogo, recuperate in BLOCCO per
+  // tutti gli oggetti della checklist (non riga per riga): risolvendo tutte
+  // insieme invece che una alla volta con tempi scaglionati, la checklist non
+  // "cresce" pezzo per pezzo sotto il dito mentre si sta per toccare un bottone.
+  useEffect(() => {
+    const list = event?.items || []
+    const idsToFetch = [...new Set(list.filter(i => !i.isExtra).map(i => i.itemRef || i.id))]
+      .filter(itemId => !resolvedItemDetailIdsRef.current.has(itemId))
+    if (idsToFetch.length === 0) return
+    idsToFetch.forEach(itemId => resolvedItemDetailIdsRef.current.add(itemId))
+    Promise.all(idsToFetch.map(itemId =>
+      getDoc(doc(db, 'items', itemId)).then(snap => [itemId, snap.exists() ? snap.data() : null])
+    )).then(results => {
+      setItemDetails(prev => {
+        const next = { ...prev }
+        results.forEach(([itemId, data]) => {
+          next[itemId] = {
+            location: data?.location || null,
+            notes: data?.notes || null,
+            components: data?.isBundle && data?.components?.length ? data.components : null,
+          }
+        })
+        return next
+      })
+    })
+  }, [event])
+
+  if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p></div>
 
   const scanResult = {
-    loaded:           { bg:'rgba(245,166,35,0.15)', border:'rgba(245,166,35,0.4)', color:'var(--accent2)', icon:'🚛', title:'Caricato!', msg: i => `${i?.name} segnato come caricato sul furgone` },
-    returned:         { bg:'rgba(105,240,174,0.15)', border:'rgba(105,240,174,0.4)', color:'var(--green)', icon:'✅', title:'Rientrato!', msg: i => `${i?.name} rientrato in magazzino` },
-    not_found:        { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'❓', title:'Non trovato', msg: i => `Codice ${lastScan?.code} non presente nel magazzino` },
-    not_in_list:      { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:'Non in lista', msg: i => `${i?.name} non è nella lista di questo evento` },
-    already_loaded:   { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:'Già caricato', msg: i => `${i?.name} era già segnato come caricato` },
-    already_returned: { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:'Già rientrato', msg: i => `${i?.name} era già segnato come rientrato` },
-    not_loaded:       { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:'Non caricato', msg: i => `${i?.name} non risulta ancora caricato` },
+    loaded:           { bg:'rgba(245,166,35,0.15)', border:'rgba(245,166,35,0.4)', color:'var(--accent2)', icon:'🚛', title:t('workerScanner.loadedTitle'), msg: i => t('workerScanner.loadedMsg', { name: i?.name }) },
+    returned:         { bg:'rgba(105,240,174,0.15)', border:'rgba(105,240,174,0.4)', color:'var(--green)', icon:'✅', title:t('workerScanner.returnedTitle'), msg: i => t('workerScanner.returnedMsg', { name: i?.name }) },
+    not_found:        { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'❓', title:t('workerScanner.notFoundTitle'), msg: i => t('workerScanner.notFoundMsg', { code: lastScan?.code }) },
+    not_in_list:      { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:t('workerScanner.notInListTitle'), msg: i => t('workerScanner.notInListMsg', { name: i?.name }) },
+    already_loaded:   { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:t('workerScanner.alreadyLoadedTitle'), msg: i => t('workerScanner.alreadyLoadedMsg', { name: i?.name }) },
+    already_returned: { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:t('workerScanner.alreadyReturnedTitle'), msg: i => t('workerScanner.alreadyReturnedMsg', { name: i?.name }) },
+    not_loaded:       { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:t('workerScanner.notLoadedTitle'), msg: i => t('workerScanner.notLoadedMsg', { name: i?.name }) },
   }
 
   return (
@@ -378,7 +414,7 @@ export default function WorkerScanner() {
             }}>
               <div style={{ fontSize:56, marginBottom:12 }}>{r.icon}</div>
               <p style={{ fontWeight:800, fontSize:22, color:r.color, marginBottom:8 }}>{r.title}</p>
-              <p style={{ color:'var(--text)', fontSize:16, lineHeight:1.4 }}>{scanToast.item?.name || `Codice: ${scanToast.code}`}</p>
+              <p style={{ color:'var(--text)', fontSize:16, lineHeight:1.4 }}>{scanToast.item?.name || t('scanner.code', { code: scanToast.code })}</p>
               {scanToast.location && (
                 <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:12, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'6px 16px' }}>
                   <span>📍</span>
@@ -486,10 +522,10 @@ export default function WorkerScanner() {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <button onClick={() => { stopScanner(); navigate(backPath) }}
             style={{ background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14, fontWeight:600 }}>
-            ← Indietro
+            ← {t('common.back')}
           </button>
           {/* Toggle carico/rientro */}
-          <label className="plane-switch" title={mode === 'load' ? 'Modalità: Carico' : 'Modalità: Rientro'}>
+          <label className="plane-switch" title={mode === 'load' ? t('workerScanner.modeLoadTitle') : t('workerScanner.modeReturnTitle')}>
             <input
               type="checkbox"
               checked={mode === 'return'}
@@ -590,9 +626,9 @@ export default function WorkerScanner() {
                 📷
               </div>
               <div>
-                <p style={{ fontWeight:800, fontSize:17, color:'var(--text)' }}>Avvia fotocamera</p>
+                <p style={{ fontWeight:800, fontSize:17, color:'var(--text)' }}>{t('scanner.startCamera')}</p>
                 <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>
-                  {mode === 'load' ? 'Scansiona per caricare sul furgone' : 'Scansiona per rientrare in magazzino'}
+                  {mode === 'load' ? t('workerScanner.loadHint') : t('workerScanner.returnHint')}
                 </p>
               </div>
             </button>
@@ -604,20 +640,20 @@ export default function WorkerScanner() {
         {/* Inserimento manuale - compatto e collassabile */}
         <details style={{ marginTop:12 }}>
           <summary style={{ color:'var(--text2)', fontSize:13, fontWeight:600, cursor:'pointer', userSelect:'none', padding:'8px 0' }}>
-            ⌨️ Inserisci codice manualmente
+            {t('workerScanner.manualEntryToggle')}
           </summary>
           <div style={{ display:'flex', gap:8, marginTop:8 }}>
             <input value={manualCode} onChange={e => setManualCode(e.target.value)}
-              placeholder="Codice articolo..." onKeyDown={e => { if (e.key === 'Enter') { processCode(manualCode); setManualCode('') } }}
+              placeholder={t('workerScanner.manualCodePlaceholder')} onKeyDown={e => { if (e.key === 'Enter') { processCode(manualCode); setManualCode('') } }}
               style={{ fontFamily:'monospace', fontSize:13 }} />
-            <button onClick={() => { processCode(manualCode); setManualCode('') }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 14px' }}>OK</button>
+            <button onClick={() => { processCode(manualCode); setManualCode('') }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 14px' }}>{t('workerScanner.ok')}</button>
           </div>
         </details>
 
         {/* Lista carico - compatta con categorie */}
         <div style={{ marginTop:14, marginBottom:16 }}>
           <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>
-            Lista carico · {items.filter(i=>i.returned).length}/{total} rientrati
+            {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
           </p>
 
           {/* Contatore mancanti al carico completo */}
@@ -643,8 +679,8 @@ export default function WorkerScanner() {
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
                   {loaded === total
-                    ? 'Tutto caricato!'
-                    : `${total - loaded} ${total - loaded === 1 ? 'oggetto manca' : 'oggetti mancano'} al carico`}
+                    ? t('workerScanner.allLoaded')
+                    : t('workerScanner.itemsMissing', { count: total - loaded })}
                 </p>
                 <div style={{ marginTop:5, height:4, borderRadius:4, background:'var(--border)', overflow:'hidden' }}>
                   <div style={{
@@ -653,17 +689,17 @@ export default function WorkerScanner() {
                     background: loaded === total ? 'var(--green)' : 'var(--accent)',
                   }} />
                 </div>
-                <p style={{ fontSize:11, color:'var(--text2)', marginTop:3 }}>{loaded} di {total} caricati</p>
+                <p style={{ fontSize:11, color:'var(--text2)', marginTop:3 }}>{t('workerScanner.loadedOfTotal', { loaded, total })}</p>
               </div>
             </div>
           )}
 
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             {items.length === 0
-              ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>Lista non ancora preparata dall'admin</p>
+              ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>{t('workerScanner.listNotPrepared')}</p>
               : (() => {
-                  const WS_CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Kit:'🧰', Extra:'✨', Altro:'📦' }
-                  const WS_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+                  const WS_CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
+                  const WS_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
                   const wsCatGrouped = {}
                   items.forEach(item => {
                     // Categorie "orfane" (rinominate nel magazzino dopo l'aggiunta
@@ -698,6 +734,7 @@ export default function WorkerScanner() {
                 <ChecklistRow item={{
                   ...item,
                   _vehicle: vehicles.find(v => v.id === item.vehicleId) || null,
+                  _details: itemDetails[item.itemRef || item.id] || null,
                   _onToggleLoaded: async (itemId) => {
                     const snap = await getDoc(eventRef)
                     if (!snap.exists()) return
@@ -751,7 +788,7 @@ export default function WorkerScanner() {
           {/* Bottone Extra sempre in fondo alla lista */}
           <button onClick={() => setShowExtraWorker(true)}
             style={{ width:'100%', marginTop:10, background:'rgba(245,166,35,0.10)', border:'1px solid rgba(245,166,35,0.35)', color:'var(--accent2)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}>
-            + Aggiungi oggetto extra
+            {t('workerScanner.addExtraItem')}
           </button>
         </div>
       </div>
@@ -762,17 +799,17 @@ export default function WorkerScanner() {
           <div className="modal" style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:64, marginBottom:12 }}>🎉</div>
-            <h2 style={{ fontSize:22, marginBottom:8 }}>Ottimo lavoro!</h2>
-            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24 }}>
-              Tutto caricato sul furgone.<br/>Per ora il tuo lavoro è finito — buon evento!
+            <h2 style={{ fontSize:22, marginBottom:8 }}>{t('workerScanner.allLoadedPopupTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24, whiteSpace:'pre-line' }}>
+              {t('workerScanner.allLoadedPopupDesc')}
             </p>
             <button onClick={() => { setShowAllLoadedPopup(false); navigate('/') }}
               className="btn btn-primary btn-full" style={{ fontSize:16, padding:'14px' }}>
-              🏠 Torna alla home
+              {t('workerScanner.goHome')}
             </button>
             <button onClick={() => setShowAllLoadedPopup(false)}
               style={{ marginTop:12, width:'100%', padding:'10px', background:'transparent', color:'var(--text2)', fontSize:14 }}>
-              Rimani qui
+              {t('workerScanner.stayHereLoaded')}
             </button>
           </div>
         </div>
@@ -784,20 +821,20 @@ export default function WorkerScanner() {
           <div className="modal" style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:64, marginBottom:12 }}>📦</div>
-            <h2 style={{ fontSize:22, marginBottom:8 }}>Furgone svuotato!</h2>
-            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24 }}>
-              Tutto rientrato in magazzino.<br/>Ottimo lavoro — il furgone è libero!
+            <h2 style={{ fontSize:22, marginBottom:8 }}>{t('workerScanner.allReturnedPopupTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24, whiteSpace:'pre-line' }}>
+              {t('workerScanner.allReturnedPopupDesc')}
             </p>
             <button onClick={() => {
                 setShowAllReturnedPopup(false)
                 navigate('/')
               }}
               className="btn btn-green btn-full" style={{ fontSize:16, padding:'14px' }}>
-              ✅ Fatto, torna alla home
+              {t('workerScanner.doneGoHome')}
             </button>
             <button onClick={() => setShowAllReturnedPopup(false)}
               style={{ marginTop:12, width:'100%', padding:'10px', background:'transparent', color:'var(--text2)', fontSize:14 }}>
-              Resta qui
+              {t('workerScanner.stayHereReturned')}
             </button>
           </div>
         </div>
@@ -808,14 +845,14 @@ export default function WorkerScanner() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraWorker(false)}>
           <div className="modal" style={{ position:'relative' }}>
             <button className="close-btn" onClick={() => setShowExtraWorker(false)}>✕</button>
-            <h2>+ Oggetto extra</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Non influisce sulla giacenza — per noleggi o oggetti dell'ultimo minuto.</p>
+            <h2>{t('eventDetail.extraItemTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('workerScanner.extraItemDesc')}</p>
             <div className="form-group">
-              <label>Nome *</label>
-              <input value={extraWorkerForm.name} onChange={e => setExtraWorkerForm(f => ({...f, name:e.target.value}))} placeholder="es. Faro a noleggio..." autoFocus />
+              <label>{t('eventDetail.nameLabel')}</label>
+              <input value={extraWorkerForm.name} onChange={e => setExtraWorkerForm(f => ({...f, name:e.target.value}))} placeholder={t('workerScanner.extraNamePlaceholder')} autoFocus />
             </div>
             <div className="form-group">
-              <label>Quantità</label>
+              <label>{t('eventDetail.quantityLabel')}</label>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <button onClick={() => setExtraWorkerForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
                   style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
@@ -839,7 +876,7 @@ export default function WorkerScanner() {
               }}
               className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!extraWorkerForm.name.trim()}>
-              ✅ Aggiungi alla lista
+              {t('eventDetail.confirmAddToList')}
             </button>
           </div>
         </div>
@@ -850,28 +887,19 @@ export default function WorkerScanner() {
 
 // Riga checklist con bottoni touch-friendly e note accessibili
 function ChecklistRow({ item }) {
-  const [location, setLocation]   = useState(item.location || null)
-  const [warehouseNotes, setWarehouseNotes] = useState(item.notes || null)
-  const [liveComponents, setLiveComponents] = useState(item.components || null)
+  const { t } = useTranslation()
   const [showInfo, setShowInfo]   = useState(false)
+  const location = item._details?.location || null
+  const warehouseNotes = item._details?.notes || null
+  // Auto-repair: se l'evento è stato salvato prima che i componenti fossero
+  // registrati sul kit, quelli live dal catalogo (risolti in blocco dal
+  // genitore) hanno priorità così la lista è sempre aggiornata.
+  const liveComponents = item._details?.components || item.components || null
   const isKit = item.isBundle || (liveComponents && liveComponents.length > 0)
   // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes
   const hasInfo = displayNote || isKit
-
-  useEffect(() => {
-    getDoc(doc(db, 'items', item.id)).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data()
-        setLocation(data.location || null)
-        setWarehouseNotes(data.notes || null)
-        // Auto-repair: se l'evento è stato salvato prima che i componenti fossero registrati
-        // sul kit, recuperali in tempo reale dal magazzino così la lista è sempre aggiornata
-        if (data.isBundle && data.components?.length) setLiveComponents(data.components)
-      }
-    }).catch(() => {})
-  }, [item.id])
 
   return (
     <>
@@ -905,7 +933,7 @@ function ChecklistRow({ item }) {
           </div>
           <div style={{ display:'inline-flex', alignItems:'baseline', gap:4, marginTop:4 }}>
             <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
-            <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>pz</span>
+            <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{t('workerScanner.piecesUnit')}</span>
           </div>
         </div>
         </div>
@@ -922,7 +950,7 @@ function ChecklistRow({ item }) {
                 }}
                 onClick={() => item._onTogglePronto && item._onTogglePronto(item.id)}
               >
-                {item.pronto ? '✓ Pronto' : 'Pronto'}
+                {item.pronto ? t('eventDetail.readyDone') : t('eventDetail.ready')}
               </button>
               <button
                 style={{ minWidth:70, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
@@ -933,7 +961,7 @@ function ChecklistRow({ item }) {
                 }}
                 onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
               >
-                ○ Carico
+                {t('workerScanner.toLoadShort')}
               </button>
             </div>
           ) : (
@@ -944,7 +972,7 @@ function ChecklistRow({ item }) {
               }}
               onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
             >
-              🚛 Carico
+              {t('workerScanner.loadedShort')}
             </button>
           )}
           <button
@@ -957,7 +985,7 @@ function ChecklistRow({ item }) {
             }}
             onClick={() => item._onToggleReturned && item._onToggleReturned(item.id)}
           >
-            {item.returned ? '✅ Rientro' : '○ Rientro'}
+            {item.returned ? t('workerScanner.returnedShort') : t('workerScanner.returnShort')}
           </button>
         </div>
       </div>
@@ -972,9 +1000,9 @@ function ChecklistRow({ item }) {
           )}
           {isKit && (
             <div style={{ background:'rgba(245,166,35,0.04)', padding:'10px 16px 12px' }}>
-              <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>🧰 Contenuto kit</p>
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('workerScanner.kitContents')}</p>
               {!(liveComponents?.length)
-                ? <p style={{ fontSize:13, color:'var(--text2)', fontStyle:'italic' }}>Nessun componente registrato</p>
+                ? <p style={{ fontSize:13, color:'var(--text2)', fontStyle:'italic' }}>{t('workerScanner.noComponentsRegistered')}</p>
                 : liveComponents.map((comp, i) => (
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 0', borderBottom: i < liveComponents.length-1 ? '1px solid var(--border)' : 'none' }}>
                     <span style={{ fontSize:12, fontWeight:800, color:'var(--accent2)', minWidth:30, background:'rgba(245,166,35,0.12)', borderRadius:6, padding:'1px 6px', textAlign:'center' }}>×{comp.qty}</span>

@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword
 } from 'firebase/auth'
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
+import i18n from '../i18n'
 
 const AuthContext = createContext(null)
 
@@ -73,6 +74,11 @@ export function AuthProvider({ children }) {
     })
     return unsub
   }, [])
+
+  // Applica la lingua salvata nel profilo (default italiano se non impostata)
+  useEffect(() => {
+    i18n.changeLanguage(profile?.language || 'it')
+  }, [profile?.language])
 
   const login = async (usernameOrEmail, password) => {
     const input = usernameOrEmail.trim()

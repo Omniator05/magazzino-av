@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -12,10 +13,13 @@ import BackHomeButton from '../components/BackHomeButton'
 
 const ICONS = {
   'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️','Corrente':'⚡',
-  'Effetti':'🎉','Consumabili':'🪣','Kit':'🧰','Altro':'📦',
+  'Effetti':'🎉','Consumabili':'🪣',
+  'Microfoni':'🎤','Traduzione':'🌐','Connettività':'📶','Comunicazione':'📡','Strumenti':'🎸',
+  'Kit':'🧰','Altro':'📦',
 }
 
 export default function Templates() {
+  const { t } = useTranslation()
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
@@ -49,10 +53,10 @@ export default function Templates() {
     setShowModal(true)
   }
 
-  const openEdit = (t) => {
-    setEditing(t)
-    setForm({ name:t.name, notes:t.notes||'' })
-    setComponents(t.components || [])
+  const openEdit = (tpl) => {
+    setEditing(tpl)
+    setForm({ name:tpl.name, notes:tpl.notes||'' })
+    setComponents(tpl.components || [])
     setSearch('')
     setShowModal(true)
   }
@@ -77,7 +81,7 @@ export default function Templates() {
   }
 
   const deleteTemplate = async (id) => {
-    if (!(await confirm({ title: 'Elimina template', message: 'Eliminare questo template?', confirmLabel: 'Elimina', danger: true }))) return
+    if (!(await confirm({ title: t('templates.confirmDeleteTitle'), message: t('templates.confirmDeleteMessage'), confirmLabel: t('templates.confirmDeleteLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'templates', id))
   }
 
@@ -98,45 +102,45 @@ export default function Templates() {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <BackHomeButton />
-            <h1>Template</h1>
+            <h1>{t('templates.title')}</h1>
           </div>
           <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
-            + Template
+            {t('templates.newButton')}
           </button>
         </div>
-        <p style={{ marginTop:4 }}>{templates.length} template salvati</p>
+        <p style={{ marginTop:4 }}>{t('templates.savedCount', { count: templates.length })}</p>
       </div>
 
       <div style={{ padding:'16px 0' }}>
         {templates.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><List size={40} /></p>
-            <h3>Nessun template</h3>
-            <p>Crea template per velocizzare la creazione degli eventi</p>
+            <h3>{t('templates.emptyTitle')}</h3>
+            <p>{t('templates.emptyDesc')}</p>
           </div>
-        ) : templates.map(t => (
-          <div key={t.id} style={{ margin:'0 16px 12px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+        ) : templates.map(tpl => (
+          <div key={tpl.id} style={{ margin:'0 16px 12px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             <div style={{ padding:'14px 16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontWeight:700, fontSize:16, marginBottom:4, display:'flex', alignItems:'center', gap:7 }}><List size={16} /> {t.name}</p>
-                  {t.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:8 }}>{t.notes}</p>}
+                  <p style={{ fontWeight:700, fontSize:16, marginBottom:4, display:'flex', alignItems:'center', gap:7 }}><List size={16} /> {tpl.name}</p>
+                  {tpl.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:8 }}>{tpl.notes}</p>}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                    {(t.components||[]).slice(0,6).map((c,i) => (
+                    {(tpl.components||[]).slice(0,6).map((c,i) => (
                       <span key={i} style={{ background:'var(--card2)', borderRadius:6, padding:'2px 8px', fontSize:12, color:'var(--text2)' }}>
                         {ICONS[c.category]||'📦'} {c.name}{c.qty > 1 ? ` ×${c.qty}` : ''}
                       </span>
                     ))}
-                    {(t.components||[]).length > 6 && (
+                    {(tpl.components||[]).length > 6 && (
                       <span style={{ background:'var(--card2)', borderRadius:6, padding:'2px 8px', fontSize:12, color:'var(--text2)' }}>
-                        +{t.components.length - 6} altri
+                        {t('common.moreCount', { count: tpl.components.length - 6 })}
                       </span>
                     )}
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <EditButton onClick={() => openEdit(t)} size={34} />
-                  <DeleteButton onClick={() => deleteTemplate(t.id)} size={34} />
+                  <EditButton onClick={() => openEdit(tpl)} size={34} />
+                  <DeleteButton onClick={() => deleteTemplate(tpl.id)} size={34} />
                 </div>
               </div>
             </div>
@@ -150,18 +154,18 @@ export default function Templates() {
             {/* Header */}
             <div style={{ padding:'20px 20px 14px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
-              <h2>{editing ? 'Modifica template' : 'Nuovo template'}</h2>
+              <h2>{editing ? t('templates.editTitle') : t('templates.newTitle')}</h2>
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})}
-                placeholder="Nome template (es. Evento Fiera Piccolo)" style={{ marginTop:10, fontWeight:600, fontSize:15 }} />
+                placeholder={t('templates.namePlaceholder')} style={{ marginTop:10, fontWeight:600, fontSize:15 }} />
               <input value={form.notes} onChange={e => setForm({...form, notes:e.target.value})}
-                placeholder="Note opzionali..." style={{ marginTop:8, fontSize:13 }} />
+                placeholder={t('templates.notesPlaceholder')} style={{ marginTop:8, fontSize:13 }} />
             </div>
 
             {/* Componenti selezionati */}
             {components.length > 0 && (
               <div style={{ borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', flexShrink:0 }}>
                 <p style={{ color:'var(--blue)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'10px 16px 6px' }}>
-                  Lista ({components.length} articoli)
+                  {t('templates.listCount', { count: components.length })}
                 </p>
                 <div style={{ overflowY:'auto', maxHeight:220, padding:'0 16px 10px' }}>
                 {components.map(c => (
@@ -189,7 +193,7 @@ export default function Templates() {
             <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, position:'relative' }}>
               <svg style={{ position:'absolute', left:26, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Cerca articolo da aggiungere..."
+                placeholder={t('templates.searchToAddPlaceholder')}
                 style={{ paddingLeft:32, fontSize:13 }} />
             </div>
 
@@ -200,7 +204,7 @@ export default function Templates() {
                   <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category]||'📦'}</span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-                    <p style={{ color:'var(--text2)', fontSize:12 }}>{item.category} · {item.availableQty ?? item.totalQty} disp.</p>
+                    <p style={{ color:'var(--text2)', fontSize:12 }}>{item.category} · {t('templates.availableShort', { count: item.availableQty ?? item.totalQty })}</p>
                   </div>
                   <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
                 </div>
@@ -212,7 +216,7 @@ export default function Templates() {
               <button onClick={save} className="btn btn-primary btn-full"
                 disabled={saving || !form.name.trim() || components.length === 0}
                 style={{ opacity: saving || !form.name.trim() || components.length === 0 ? 0.4 : 1 }}>
-                {saving ? 'Salvataggio...' : editing ? 'Salva modifiche' : `Crea template con ${components.length} articoli`}
+                {saving ? t('templates.saving') : editing ? t('templates.saveChanges') : t('templates.createTemplate', { count: components.length })}
               </button>
             </div>
           </div>

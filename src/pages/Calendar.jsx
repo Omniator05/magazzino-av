@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
 import EditButton from '../components/EditButton'
@@ -12,9 +13,17 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
+import { formatDate, capitalize } from '../utils/formatDate'
 
-const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+// Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
+const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
+function getWeekdayLabels(lang) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(WEEKDAY_ANCHOR)
+    d.setDate(WEEKDAY_ANCHOR.getDate() + i)
+    return formatDate(d, { weekday: 'narrow' }, lang)
+  })
+}
 
 // Restituisce le celle (con padding dal mese prec/succ) per la griglia del mese
 function getMonthGrid(year, month) {
@@ -47,9 +56,11 @@ function toDateStr(d) {
 }
 
 export default function Calendar() {
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user, isWorker, teamId } = useAuth()
   const confirm = useConfirm()
+  const WEEKDAYS = getWeekdayLabels(i18n.language)
   const today = new Date()
   const todayStr = toDateStr(today)
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
@@ -135,7 +146,7 @@ export default function Calendar() {
 
   const deleteEvent = async (e, ev) => {
     e.stopPropagation()
-    if (!(await confirm({ title: 'Elimina evento', message: `Eliminare "${ev.name}"? L'operazione non può essere annullata.`, confirmLabel: 'Elimina', danger: true }))) return
+    if (!(await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('calendar.confirmDeleteEventMessage', { name: ev.name }), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'events', ev.id))
   }
 
@@ -164,7 +175,7 @@ export default function Calendar() {
   useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
 
   const removeAbsence = async (id) => {
-    if (!(await confirm({ title: 'Rimuovi assenza', message: 'Rimuovere questa assenza?', confirmLabel: 'Rimuovi', danger: true }))) return
+    if (!(await confirm({ title: t('calendar.confirmRemoveAbsenceTitle'), message: t('calendar.confirmRemoveAbsenceMessage'), confirmLabel: t('calendar.confirmRemoveAbsenceLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
@@ -176,9 +187,9 @@ export default function Calendar() {
     if (!alreadyAssigned && isWorkerUnavailable(workerId, ev, unavailability)) {
       const w = workers.find(x => x.id === workerId)
       const ok = await confirm({
-        title: 'Worker non disponibile',
-        message: `${w?.name || 'Questo worker'} risulta assente in questa data. Assegnarlo comunque a "${ev.name}"?`,
-        confirmLabel: 'Assegna comunque',
+        title: t('calendar.confirmUnavailableTitle'),
+        message: t('calendar.confirmUnavailableMessage', { name: w?.name || t('calendar.thisWorker'), event: ev.name }),
+        confirmLabel: t('calendar.confirmUnavailableLabel'),
         danger: true,
       })
       if (!ok) return
@@ -188,8 +199,8 @@ export default function Calendar() {
   }
 
   const PHASE_FORM_CONFIG = [
-    { key:'montaggio',  label:'Montaggio',  color:'#2563eb', bg:'#dbeafe' },
-    { key:'smontaggio', label:'Smontaggio', color:'#ea580c', bg:'#ffedd5' },
+    { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
+    { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
   ]
 
   const openEdit = (e, ev) => {
@@ -265,8 +276,8 @@ export default function Calendar() {
 
   // Indice fasi: data → array di { event, key, color, label }
   const PHASE_META = {
-    montaggio:  { color:'#2563eb', label:'Montaggio' },
-    smontaggio: { color:'#ea580c', label:'Smontaggio' },
+    montaggio:  { color:'#2563eb', label:t('calendar.legendAssembly') },
+    smontaggio: { color:'#ea580c', label:t('calendar.legendDisassembly') },
   }
   const phasesByDate = {}
   events.forEach(e => {
@@ -300,7 +311,7 @@ export default function Calendar() {
 
   const absencesOnDate = (dStr) => unavailability
     .filter(u => dStr >= u.startDate && dStr <= u.endDate)
-    .map(u => ({ ...u, workerName: workers.find(w => w.id === u.workerId)?.name || 'Sconosciuto' }))
+    .map(u => ({ ...u, workerName: workers.find(w => w.id === u.workerId)?.name || t('common.unknown') }))
 
   const selectedEvents = eventsByDate[selectedDate] || []
   const selectedPhases = phasesByDate[selectedDate] || []
@@ -315,8 +326,8 @@ export default function Calendar() {
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <h1>Calendario</h1>
-            <p>{events.length} eventi totali</p>
+            <h1>{t('calendar.title')}</h1>
+            <p>{t('calendar.totalEvents', { count: events.length })}</p>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
@@ -326,35 +337,35 @@ export default function Calendar() {
                 color: reportMode ? 'var(--accent)' : 'var(--text2)',
                 borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
               }}>
-              Segna assenza
+              {t('calendar.reportAbsence')}
             </button>
-            <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>Oggi</button>
+            <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
           </div>
         </div>
 
         {/* Toggle griglia / assegna personale */}
         <div style={{ display:'flex', gap:3, marginTop:22, background:'var(--card2)', borderRadius:10, padding:3, width:'fit-content', margin:'22px auto 0' }}>
           <button onClick={() => setMode('grid')} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'grid' ? 'var(--accent)' : 'transparent', color: mode === 'grid' ? 'white' : 'var(--text2)' }}>
-            Calendario
+            {t('calendar.viewGrid')}
           </button>
           <button onClick={() => setMode('assign')} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
-            Assegna personale
+            {t('calendar.viewAssign')}
           </button>
         </div>
 
         {/* Navigazione mese */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
           <button onClick={goPrevMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
-          <h2 style={{ fontSize:17, fontWeight:800 }}>{MONTHS[cursor.month]} {cursor.year}</h2>
+          <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
           <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
 
         {mode === 'grid' && reportMode && (
           <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
             <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4 }}>
-              {!rangeStart ? 'Tocca il primo giorno della tua assenza' : 'Tocca l\'ultimo giorno (o lo stesso per un solo giorno)'}
+              {!rangeStart ? t('calendar.tapFirstDay') : t('calendar.tapLastDay')}
             </p>
-            <button onClick={cancelReportMode} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'6px 12px', fontSize:13, fontWeight:700, flexShrink:0 }}>Annulla</button>
+            <button onClick={cancelReportMode} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'6px 12px', fontSize:13, fontWeight:700, flexShrink:0 }}>{t('common.cancel')}</button>
           </div>
         )}
       </div>
@@ -412,10 +423,10 @@ export default function Calendar() {
                 {otherAbsences.length > 0 && (
                   <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
                     <span style={{ fontSize:8, fontWeight:800, lineHeight:1.2, color:'var(--red)', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      Assenza - {otherAbsences[0].workerName}
+                      {t('calendar.absencePrefix', { name: otherAbsences[0].workerName })}
                     </span>
                     {otherAbsences.length > 1 && (
-                      <span style={{ fontSize:8, fontWeight:700, color:'var(--red)' }}>+{otherAbsences.length - 1} altri</span>
+                      <span style={{ fontSize:8, fontWeight:700, color:'var(--red)' }}>{t('common.moreCount', { count: otherAbsences.length - 1 })}</span>
                     )}
                   </div>
                 )}
@@ -470,24 +481,24 @@ export default function Calendar() {
           {isWorker && (
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
-              <span style={{ fontSize:12, color:'var(--text2)' }}>Assegnato a me</span>
+              <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendAssignedToMe')}</span>
             </div>
           )}
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#7c6fcd', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Installazioni</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendInstallations')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#2563eb', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Montaggio</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendAssembly')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'#ea580c', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>Smontaggio</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendDisassembly')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>La mia assenza</span>
+            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendMyAbsence')}</span>
           </div>
         </div>
       </div>
@@ -497,11 +508,11 @@ export default function Calendar() {
       {mode === 'grid' && selectedDate && (
         <div style={{ padding:'0 16px 24px' }}>
           <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
-            {selectedDateObj.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })}
-            {selectedDate === todayStr && ' · Oggi'}
+            {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
+            {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
           {selectedEvents.length === 0 && selectedPhaseEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
-            <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>Nessun evento in questo giorno.</p>
+            <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
             <>
               {[...selectedEvents.map(ev => ({ ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), dotColor: ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' })),
@@ -546,7 +557,7 @@ export default function Calendar() {
           {/* Eventi importati da Google Calendar (sola lettura) */}
           {selectedGoogleEvents.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Da Google Calendar</p>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('calendar.fromGoogleCalendar')}</p>
               {selectedGoogleEvents.map(ev => (
                 <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(66,133,244,0.06)', border:'1px solid rgba(66,133,244,0.22)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ width:9, height:9, borderRadius:2, flexShrink:0, background:'#4285F4' }} />
@@ -561,14 +572,14 @@ export default function Calendar() {
           {/* Assenze worker in questo giorno */}
           {selectedAbsences.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>Assenti</p>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('calendar.absentSection')}</p>
               {selectedAbsences.map(a => (
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ flexShrink:0, color:'var(--text2)' }}><User size={18} /></span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>{a.workerName}</p>
                     <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
-                      {a.reason || 'Nessun motivo specificato'}
+                      {a.reason || t('calendar.noReasonSpecified')}
                     </p>
                   </div>
                 </div>
@@ -578,21 +589,21 @@ export default function Calendar() {
           {/* Le mie assenze */}
           {myAbsences.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><List size={13} /> Le mie assenze</p>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><List size={13} /> {t('calendar.myAbsences')}</p>
               {myAbsences.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
                       {a.startDate === a.endDate
-                        ? new Date(a.startDate+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})
-                        : `${new Date(a.startDate+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'})} → ${new Date(a.endDate+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})}`}
+                        ? formatDate(a.startDate+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language)
+                        : `${formatDate(a.startDate+'T12:00:00', {day:'numeric',month:'short'}, i18n.language)} → ${formatDate(a.endDate+'T12:00:00', {day:'numeric',month:'short',year:'numeric'}, i18n.language)}`}
                     </p>
                     {a.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{a.reason}</p>}
                   </div>
                   <button onClick={() => removeAbsence(a.id)}
                     style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700 }}>
-                    Rimuovi
+                    {t('common.remove')}
                   </button>
                 </div>
               ))}
@@ -606,11 +617,11 @@ export default function Calendar() {
         <>
           <div style={{ padding:'14px 16px 4px' }}>
             <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
-              Worker {selectedWorkerId ? '— tocca un evento qui sotto per assegnare' : ''}
+              {t('calendar.workersLabel')} {selectedWorkerId ? t('calendar.workersHint') : ''}
             </p>
             <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:8, WebkitOverflowScrolling:'touch' }}>
               {workers.filter(w => w.active !== false).length === 0 && (
-                <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>Nessun worker attivo.</p>
+                <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noActiveWorkers')}</p>
               )}
               {workers.filter(w => w.active !== false).map(w => {
                 const isSelected = selectedWorkerId === w.id
@@ -629,7 +640,7 @@ export default function Calendar() {
                       cursor:'grab', whiteSpace:'nowrap',
                     }}
                   >
-                    👷 {w.name || 'Senza nome'}
+                    👷 {w.name || t('common.noName')}
                   </button>
                 )
               })}
@@ -639,11 +650,11 @@ export default function Calendar() {
           <div style={{ padding:'8px 16px 24px' }}>
             <button onClick={() => setShowPastAssign(v => !v)}
               style={{ background: showPastAssign ? 'var(--card2)' : 'transparent', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:700, marginBottom:10 }}>
-              {showPastAssign ? '✓ ' : ''}Vedi passati
+              {showPastAssign ? '✓ ' : ''}{t('calendar.seePast')}
             </button>
             {monthEvents.length === 0 ? (
               <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'20px 0', textAlign:'center' }}>
-                Nessun evento{showPastAssign ? '' : ' futuro'} in {MONTHS[cursor.month]}.
+                {t(showPastAssign ? 'calendar.noEventsInMonth' : 'calendar.noFutureEventsInMonth', { month: capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language)) })}
               </p>
             ) : monthEvents.map(ev => {
               const assigned = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)).filter(Boolean)
@@ -667,16 +678,16 @@ export default function Calendar() {
                     {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                   </p>
                   <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
-                    {new Date(ev.date + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}
-                    {ev.dateEnd && ev.dateEnd !== ev.date ? ` → ${new Date(ev.dateEnd + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' })}` : ''}
+                    {formatDate(ev.date + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
+                    {ev.dateEnd && ev.dateEnd !== ev.date ? ` → ${formatDate(ev.dateEnd + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}` : ''}
                   </p>
                   <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:8 }}>
-                    {assigned.length === 0 && <span style={{ fontSize:12, color:'var(--text3)', fontStyle:'italic' }}>Nessuno assegnato</span>}
+                    {assigned.length === 0 && <span style={{ fontSize:12, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</span>}
                     {assigned.map(w => {
                       const unavail = isWorkerUnavailable(w.id, ev, unavailability)
                       return (
                         <span key={w.id} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
-                          {unavail ? '⚠️' : '👷'} {w.name || 'Senza nome'}
+                          {unavail ? '⚠️' : '👷'} {w.name || t('common.noName')}
                           <button onClick={e => { e.stopPropagation(); handleAssign(ev, w.id) }} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                         </span>
                       )
@@ -716,23 +727,23 @@ export default function Calendar() {
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
             <button className="close-btn" onClick={absenceDrag.close}>✕</button>
-            <h2>🚫 Segnala assenza</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>Indica i giorni in cui non sei disponibile. Apparirà nel calendario e negli avvisi di assegnazione evento.</p>
+            <h2>{t('calendar.absenceModalTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('calendar.absenceModalDesc')}</p>
             <div className="form-group">
-              <label>Primo giorno *</label>
+              <label>{t('calendar.firstDay')}</label>
               <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({...f, startDate:v, endDate: f.endDate < v ? v : f.endDate}))} />
             </div>
             <div className="form-group">
-              <label>Ultimo giorno <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(lascia vuoto se un solo giorno)</span></label>
-              <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder="Un solo giorno" onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
+              <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
+              <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder={t('calendar.singleDayPlaceholder')} onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
             </div>
             <div className="form-group">
-              <label>Motivo <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
-              <input value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({...f, reason:e.target.value}))} placeholder="es. Ferie, impegno personale..." />
+              <label>{t('calendar.reason')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({...f, reason:e.target.value}))} placeholder={t('calendar.reasonPlaceholder')} />
             </div>
             <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={savingAbsence || !absenceForm.startDate}>
-              {savingAbsence ? 'Salvataggio...' : <><Check size={16} /> Conferma assenza</>}
+              {savingAbsence ? t('common.saving') : <><Check size={16} /> {t('calendar.confirmAbsence')}</>}
             </button>
           </div>
         </div>
@@ -743,21 +754,21 @@ export default function Calendar() {
         <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
           <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
             <button className="close-btn" onClick={createDrag.close}>✕</button>
-            <h2>Nuovo evento</h2>
+            <h2>{t('calendar.newEventTitle')}</h2>
             <div className="form-group">
-              <label>Nome evento *</label>
-              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder="es. Matrimonio Rossi" />
+              <label>{t('calendar.eventNameLabel')}</label>
+              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Data inizio *</label>
+              <label>{t('calendar.startDateLabel')}</label>
               <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
             </div>
             <div className="form-group">
-              <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
-              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder="Nessuna" onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
+              <label>{t('calendar.endDateLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder={t('common.noneOption')} onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
             </div>
             <div className="form-group">
-              <label>Fasi <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              <label>{t('calendar.phasesLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
               {PHASE_FORM_CONFIG.map(p => (
                 <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                   <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
@@ -769,16 +780,16 @@ export default function Calendar() {
               ))}
             </div>
             <div className="form-group">
-              <label>Location</label>
-              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder="es. Villa Belvedere, Verona" />
+              <label>{t('calendar.locationLabel')}</label>
+              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Note</label>
+              <label>{t('calendar.notesLabel')}</label>
               <textarea value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
             </div>
             <button onClick={createEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={creating || !editForm.name?.trim() || !editForm.date}>
-              {creating ? 'Creazione...' : 'Crea evento'}
+              {creating ? t('calendar.creating') : t('calendar.createEvent')}
             </button>
           </div>
         </div>
@@ -789,21 +800,21 @@ export default function Calendar() {
         <div className={`modal-overlay${editDrag.closing ? ' closing' : ''}`} onClick={editDrag.onOverlayClick}>
           <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}${editDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...editDrag.props}>
             <button className="close-btn" onClick={editDrag.close}>✕</button>
-            <h2>Modifica evento</h2>
+            <h2>{t('calendar.editEventTitle')}</h2>
             <div className="form-group">
-              <label>Nome evento *</label>
-              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder="es. Matrimonio Rossi" />
+              <label>{t('calendar.eventNameLabel')}</label>
+              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Data inizio *</label>
+              <label>{t('calendar.startDateLabel')}</label>
               <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
             </div>
             <div className="form-group">
-              <label>Data fine <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
-              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder="Nessuna" onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
+              <label>{t('calendar.endDateLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder={t('common.noneOption')} onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
             </div>
             <div className="form-group">
-              <label>Fasi <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>(opzionale)</span></label>
+              <label>{t('calendar.phasesLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
               {PHASE_FORM_CONFIG.map(p => (
                 <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                   <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
@@ -815,16 +826,16 @@ export default function Calendar() {
               ))}
             </div>
             <div className="form-group">
-              <label>Location</label>
-              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder="es. Villa Belvedere, Verona" />
+              <label>{t('calendar.locationLabel')}</label>
+              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>Note</label>
+              <label>{t('calendar.notesLabel')}</label>
               <textarea value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
             </div>
             <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !editForm.name?.trim() || !editForm.date}>
-              {saving ? 'Salvataggio...' : 'Salva modifiche'}
+              {saving ? t('common.saving') : t('calendar.saveChanges')}
             </button>
           </div>
         </div>

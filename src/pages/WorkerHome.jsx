@@ -1,21 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import { Unload, Recurring, Pin, Box } from '../components/Icon'
+import { formatDate, capitalize } from '../utils/formatDate'
 
-const greeting = () => {
+const greetingKey = () => {
   const h = new Date().getHours()
-  if (h < 5)  return 'Buonanotte'
-  if (h < 12) return 'Buongiorno'
-  if (h < 18) return 'Buon pomeriggio'
-  return 'Buonasera'
+  if (h < 5)  return 'workerHome.greeting_night'
+  if (h < 12) return 'workerHome.greeting_morning'
+  if (h < 18) return 'workerHome.greeting_afternoon'
+  return 'workerHome.greeting_evening'
 }
 
 export default function WorkerHome() {
+  const { t, i18n } = useTranslation()
   const { profile, logout, teamId } = useAuth()
   const [events, setEvents] = useState([])
   const [weather, setWeather] = useState(() => {
@@ -91,9 +94,9 @@ export default function WorkerHome() {
   const singleEvents = events.filter(e => !e.seriesId)
   const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today)
 
-  const displayName = name || profile?.username || 'Magazziniere'
+  const displayName = name || profile?.username || t('workerHome.defaultName')
   const initial = displayName.charAt(0).toUpperCase()
-  const todayLabel = new Date().toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })
+  const todayLabel = formatDate(new Date(), { weekday:'long', day:'numeric', month:'long' }, i18n.language)
 
   // Posizione corpo celeste basata sull'orario
   const _now = new Date()
@@ -237,7 +240,7 @@ export default function WorkerHome() {
               {profile?.avatar || initial}
             </button>
             <div style={{ minWidth:0 }}>
-              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.8)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{greeting()},</p>
+              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.8)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{t(greetingKey())},</p>
               <h1 style={{ fontSize:28, fontWeight:800, color:'white', lineHeight:1.08, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{displayName}</h1>
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
             </div>
@@ -294,7 +297,7 @@ export default function WorkerHome() {
         {daScaricare.length > 0 && (
           <div id="sec-dascaricare" style={{ margin:'0 0 8px', scrollMarginTop:16 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px' }}>
-              <p style={{ color:'#ea580c', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Unload size={15} /> Da scaricare</p>
+              <p style={{ color:'#ea580c', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Unload size={15} /> {t('workerHome.toUnload')}</p>
               <div style={{ flex:1, height:1, background:'rgba(234,88,12,0.25)' }} />
             </div>
             {daScaricare.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} forceState="daScaricare" />)}
@@ -304,8 +307,8 @@ export default function WorkerHome() {
         {events.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={46} /></p>
-            <h3>Nessun evento</h3>
-            <p>Non ci sono eventi in programma</p>
+            <h3>{t('workerHome.emptyTitle')}</h3>
+            <p>{t('workerHome.emptyDesc')}</p>
           </div>
         ) : (
           <>
@@ -313,7 +316,7 @@ export default function WorkerHome() {
             {pinnedRecurring.length > 0 && (
               <>
                 <div id="sec-ricorrenti" style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px', marginTop:4, scrollMarginTop:16 }}>
-                  <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={15} /> Ricorrenti</p>
+                  <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={15} /> {t('workerHome.recurring')}</p>
                   <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
                 </div>
                 {pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} />)}
@@ -325,7 +328,7 @@ export default function WorkerHome() {
             {upcomingSingle.length > 0 && (
               <div id="sec-prossimi" style={{ scrollMarginTop:16 }}>
                 {pinnedRecurring.length > 0 && (
-                  <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'0 16px 8px' }}>Prossimi</p>
+                  <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'0 16px 8px' }}>{t('workerHome.upcoming')}</p>
                 )}
                 {upcomingSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} />)}
               </div>
@@ -338,6 +341,7 @@ export default function WorkerHome() {
 }
 
 function EventCard({ ev, today, navigate, forceState }) {
+  const { t, i18n } = useTranslation()
   const items    = ev.items || []
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
@@ -352,11 +356,11 @@ function EventCard({ ev, today, navigate, forceState }) {
   else if (total > 0)                   phase = 'ready'
 
   const phaseInfo = {
-    prep:    { color:'var(--text2)',   label:'Lista da preparare' },
-    ready:   { color:'var(--blue)',    label:`${total} articoli da caricare` },
-    partial: { color:'var(--accent2)', label:`${loaded}/${total} caricati` },
-    out:     { color:'#ea580c',        label:`In evento · ${returned}/${total} rientrati` },
-    done:    { color:'var(--green)',   label:'Tutto rientrato' },
+    prep:    { color:'var(--text2)',   label: t('workerHome.phasePrep') },
+    ready:   { color:'var(--blue)',    label: t('workerHome.phaseReady', { count: total }) },
+    partial: { color:'var(--accent2)', label: t('workerHome.phasePartial', { loaded, total }) },
+    out:     { color:'#ea580c',        label: t('workerHome.phaseOut', { returned, total }) },
+    done:    { color:'var(--green)',   label: t('workerHome.phaseDone') },
   }[phase]
 
   const iconGradient = daScaricare
@@ -368,7 +372,7 @@ function EventCard({ ev, today, navigate, forceState }) {
     : '#a8dadc'
 
   const cardBorder = daScaricare ? 'rgba(234,88,12,0.4)' : isToday ? 'rgba(220,38,38,0.4)' : 'var(--border)'
-  const dateStr = ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}) : ''
+  const dateStr = ev.date ? formatDate(ev.date+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
 
   return (
     <div onClick={() => navigate(`/events/${ev.id}`)}
@@ -382,7 +386,7 @@ function EventCard({ ev, today, navigate, forceState }) {
         <div style={{ width:50, height:50, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
           <span style={{ fontSize:18, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>
           <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
-            {ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{month:'short'}) : ''}
+            {ev.date ? formatDate(ev.date+'T12:00:00', {month:'short'}, i18n.language) : ''}
           </span>
         </div>
         {ev.seriesId && (
@@ -402,8 +406,8 @@ function EventCard({ ev, today, navigate, forceState }) {
           </p>
         </div>
         <p style={{ fontSize:12, fontWeight:600, color:'var(--text2)' }}>
-          {ev.date ? new Date(ev.date+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long', day:'numeric', month:'long'}) : ''}
-          {ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + new Date(ev.dateEnd+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric', month:'long'}) : ''}
+          {ev.date ? formatDate(ev.date+'T12:00:00', {weekday:'long', day:'numeric', month:'long'}, i18n.language) : ''}
+          {ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + formatDate(ev.dateEnd+'T12:00:00', {day:'numeric', month:'long'}, i18n.language) : ''}
         </p>
         {ev.location && <p style={{ fontSize:11, color:'var(--text2)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
       </div>
