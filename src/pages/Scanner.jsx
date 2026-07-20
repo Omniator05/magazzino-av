@@ -124,11 +124,11 @@ export default function Scanner() {
         </div>
       )}
       <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <BackHomeButton />
           <h1>{t('scanner.title')}</h1>
         </div>
-        <p>{t('scanner.subtitle')}</p>
+        <p style={{ marginTop:4, textAlign:'right' }}>{t('scanner.subtitle')}</p>
       </div>
 
       <div style={{ padding:'20px 16px' }}>
