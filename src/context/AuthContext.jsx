@@ -136,9 +136,17 @@ export function AuthProvider({ children }) {
     setProfile(prev => ({ ...prev, ...data }))
   }
 
+  // Il team non ha un listener realtime (solo getDoc al login) — dopo una
+  // scrittura (es. nuovo logo) aggiorna lo stato locale così si vede subito.
+  const updateTeamData = async (data) => {
+    if (!team?.id) return
+    await updateDoc(doc(db, 'teams', team.id), data)
+    setTeam(prev => ({ ...prev, ...data }))
+  }
+
   return (
     <AuthContext.Provider value={{
-      user, profile, loading, login, logout, updateProfileData,
+      user, profile, loading, login, logout, updateProfileData, updateTeamData,
       teamId: profile?.teamId || null,
       team,
       isApproved: profile?.approved !== false,

@@ -57,7 +57,7 @@ const ICONS = {
 export default function EventDetail() {
   const { t, i18n } = useTranslation()
   const { id } = useParams()
-  const { user, teamId } = useAuth()
+  const { user, teamId, team } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [event, setEvent] = useState(null)
@@ -592,23 +592,54 @@ export default function EventDetail() {
     i.brand?.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Suggerimenti intelligenti: frequenza + bonus co-occorrenza con articoli già in lista/carrello
+  // Suggerimenti intelligenti: frequenza + co-occorrenza con articoli già in
+  // lista/carrello, ma senza "impilare" doppioni della stessa categoria (es.
+  // riproporre un secondo sub solo perché il primo è già in lista) — un
+  // articolo la cui categoria è già coperta pesa molto meno, e la selezione
+  // finale privilegia la copertura di categorie ancora assenti (max 2 per
+  // categoria) invece del puro punteggio.
   const currentEventIds = new Set([
     ...eventItems.map(i => i.itemRef || i.id),
     ...cart.map(c => c.id),
   ])
+  const currentCategories = new Set(
+    [...eventItems, ...cart].map(i => i.category).filter(Boolean)
+  )
+  const MAX_SUGGESTIONS = 6
+  const MAX_PER_CATEGORY = 2
   const suggestions = suggestionMaps
-    ? notInCart
-        .map(item => {
-          const base = suggestionMaps.freq[item.id] || 0
-          let coocBonus = 0
-          currentEventIds.forEach(cid => { coocBonus += (suggestionMaps.cooc[cid]?.[item.id] || 0) })
-          return { item, score: base + coocBonus * 2 }
-        })
-        .filter(s => s.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 6)
-        .map(s => s.item)
+    ? (() => {
+        const scored = notInCart
+          .map(item => {
+            const base = suggestionMaps.freq[item.id] || 0
+            let coocBonus = 0
+            currentEventIds.forEach(cid => { coocBonus += (suggestionMaps.cooc[cid]?.[item.id] || 0) })
+            const categoryAlreadyCovered = item.category && currentCategories.has(item.category)
+            const score = base * 0.4 + coocBonus * 2 * (categoryAlreadyCovered ? 0.2 : 1)
+            return { item, score, category: item.category || 'Altro' }
+          })
+          .filter(s => s.score > 0)
+          .sort((a, b) => b.score - a.score)
+
+        const picked = []
+        const perCategoryCount = {}
+        for (const s of scored) {
+          if (picked.length >= MAX_SUGGESTIONS) break
+          const count = perCategoryCount[s.category] || 0
+          if (count >= MAX_PER_CATEGORY) continue
+          picked.push(s)
+          perCategoryCount[s.category] = count + 1
+        }
+        // Se il tetto per categoria lascia slot vuoti (poche categorie diverse
+        // disponibili), completa con i migliori rimasti ignorando il tetto
+        if (picked.length < MAX_SUGGESTIONS) {
+          for (const s of scored) {
+            if (picked.length >= MAX_SUGGESTIONS) break
+            if (!picked.includes(s)) picked.push(s)
+          }
+        }
+        return picked.map(s => s.item)
+      })()
     : []
   const suggestedIds = new Set(suggestions.map(s => s.id))
   // Nella lista principale (senza ricerca) nascondi gli articoli già mostrati nei suggerimenti
@@ -680,8 +711,8 @@ export default function EventDetail() {
       @page { margin: 16mm; }
     </style></head><body>
       <div class="head">
-        <img src="${origin}/logo.png" alt="The Service Group" onerror="this.style.display='none'" />
-        <div class="org"><div class="name">The Service Group</div><div class="sub">Gestione Magazzino</div></div>
+        <img src="${team?.logoUrl || origin + '/logo.png'}" alt="${esc(team?.name || 'The Service Group')}" onerror="this.style.display='none'" />
+        <div class="org"><div class="name">${esc(team?.name || 'The Service Group')}</div><div class="sub">Gestione Magazzino</div></div>
       </div>
 
       <div class="doctitle">Lista di Carico</div>
@@ -707,7 +738,7 @@ export default function EventDetail() {
 
       <div class="footer">
         <span>Documento generato il ${genDate}</span>
-        <span>The Service Group — Gestione Magazzino</span>
+        <span>${esc(team?.name || 'The Service Group')} — Gestione Magazzino</span>
       </div>
     </body></html>`
 

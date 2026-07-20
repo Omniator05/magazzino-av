@@ -5,11 +5,13 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, order
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useModalDrag } from '../hooks/useModalDrag'
 import { useNavigate } from 'react-router-dom'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
 import { List } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
+import FabButton from '../components/FabButton'
 
 const ICONS = {
   'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️','Corrente':'⚡',
@@ -80,6 +82,8 @@ export default function Templates() {
     } finally { setSaving(false) }
   }
 
+  const tplDrag = useModalDrag(() => setShowModal(false), undefined, save, showModal)
+
   const deleteTemplate = async (id) => {
     if (!(await confirm({ title: t('templates.confirmDeleteTitle'), message: t('templates.confirmDeleteMessage'), confirmLabel: t('templates.confirmDeleteLabel'), danger: true }))) return
     await deleteDoc(doc(db, 'templates', id))
@@ -99,16 +103,11 @@ export default function Templates() {
   return (
     <div className="page">
       <div className="page-header">
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <BackHomeButton />
-            <h1>{t('templates.title')}</h1>
-          </div>
-          <button onClick={openNew} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
-            {t('templates.newButton')}
-          </button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <BackHomeButton />
+          <h1>{t('templates.title')}</h1>
         </div>
-        <p style={{ marginTop:4 }}>{t('templates.savedCount', { count: templates.length })}</p>
+        <p style={{ marginTop:4, textAlign:'right' }}>{t('templates.savedCount', { count: templates.length })}</p>
       </div>
 
       <div style={{ padding:'16px 0' }}>
@@ -148,12 +147,14 @@ export default function Templates() {
         ))}
       </div>
 
+      <FabButton onClick={openNew} ariaLabel={t('templates.newButton')} />
+
       {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative', maxHeight:'calc(100dvh - 96px)', display:'flex', flexDirection:'column', padding:0, overflow:'hidden' }}>
+        <div className={`modal-overlay${tplDrag.closing ? ' closing' : ''}`} onClick={tplDrag.onOverlayClick}>
+          <div className={`modal${tplDrag.jiggling ? ' modal-jiggle' : ''}${tplDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'calc(100dvh - 96px)', display:'flex', flexDirection:'column', padding:0, overflow:'hidden' }} {...tplDrag.props}>
             {/* Header */}
             <div style={{ padding:'20px 20px 14px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
+              <button className="close-btn" onClick={tplDrag.close}>✕</button>
               <h2>{editing ? t('templates.editTitle') : t('templates.newTitle')}</h2>
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})}
                 placeholder={t('templates.namePlaceholder')} style={{ marginTop:10, fontWeight:600, fontSize:15 }} />

@@ -8,7 +8,7 @@ import { LogOut } from './Icon'
  * Mantiene lo stile passato via `style`/`className`; `name` per il messaggio d'addio.
  */
 export default function LogoutButton({ style, className, name }) {
-  const { logout } = useAuth()
+  const { logout, team } = useAuth()
   const [confirm, setConfirm] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const first = (name || '').split(' ')[0]
@@ -40,7 +40,7 @@ export default function LogoutButton({ style, className, name }) {
         <div className="lo-overlay">
           <div className="lo-orb lo-orb-a" />
           <div className="lo-orb lo-orb-b" />
-          <img src="/logo.png" alt="The Service Group" className="lo-logo" />
+          <img src={team?.logoUrl || '/logo.png'} alt={team?.name || 'The Service Group'} className="lo-logo" />
           <p className="lo-bye">A presto{first ? `, ${first}` : ''}!</p>
           <div className="lo-spinner" />
         </div>, document.body)}

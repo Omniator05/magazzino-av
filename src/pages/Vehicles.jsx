@@ -8,6 +8,7 @@ import { db } from '../firebase'
 import { collection, onSnapshot, doc, addDoc, updateDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { Check, Edit, Warn, Truck } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
+import FabButton from '../components/FabButton'
 
 const COLOR_PALETTE = ['#e63946', '#2563eb', '#16a085', '#9b59e0', '#ea580c', '#059669', '#4285F4', '#d4820a']
 const EMPTY_FORM = { name: '', color: COLOR_PALETTE[0], emoji: '', plate: '' }
@@ -134,14 +135,11 @@ export default function Vehicles() {
       )}
 
       <div className="page-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <BackHomeButton />
-            <h1>{t('vehicles.title')}</h1>
-          </div>
-          <button onClick={() => { setShowCreate(true); setError(''); setForm(EMPTY_FORM) }} className="btn btn-primary" style={{ padding: '10px 16px', fontSize: 14 }}>{t('vehicles.newButton')}</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <BackHomeButton />
+          <h1>{t('vehicles.title')}</h1>
         </div>
-        <p style={{ marginTop:4 }}>{t('vehicles.totalCount', { count: vehicles.length })}</p>
+        <p style={{ marginTop:4, textAlign:'right' }}>{t('vehicles.totalCount', { count: vehicles.length })}</p>
       </div>
 
       <div style={{ padding: '16px 0 0' }}>
@@ -165,6 +163,8 @@ export default function Vehicles() {
           </>
         )}
       </div>
+
+      <FabButton onClick={() => { setShowCreate(true); setError(''); setForm(EMPTY_FORM) }} ariaLabel={t('vehicles.newButton')} />
 
       {/* Modal crea furgone */}
       {showCreate && (

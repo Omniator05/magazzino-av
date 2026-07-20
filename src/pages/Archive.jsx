@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import DeleteButton from '../components/DeleteButton'
+import BackHomeButton from '../components/BackHomeButton'
 
 const PAGE_SIZE = 30
 
@@ -99,14 +100,11 @@ export default function Archive() {
   return (
     <div className="page">
       <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:4 }}>
-          <button onClick={() => navigate('/events')}
-            style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'6px 12px', fontSize:13 }}>
-            ← {t('common.back')}
-          </button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom:4 }}>
+          <BackHomeButton to="/events" />
           <h1>{t('archive.title')}</h1>
         </div>
-        <p style={{ color:'var(--text2)', fontSize:14 }}>{t('archive.subtitle', { count: events.length })}</p>
+        <p style={{ color:'var(--text2)', fontSize:14, textAlign:'right' }}>{t('archive.subtitle', { count: events.length })}</p>
       </div>
 
       <div className="search-bar" style={{ position:'relative' }}>

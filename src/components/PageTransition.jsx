@@ -45,7 +45,7 @@ function FlapName({ text, startDelay = 450 }) {
 }
 
 export default function PageTransition() {
-  const { loading, profile, showOverlay, setShowOverlay, loginName } = useAuth()
+  const { loading, profile, team, showOverlay, setShowOverlay, loginName } = useAuth()
   const [exiting, setExiting] = useState(false)
   const minReadyAt = useRef(0)
   const exitTimer  = useRef(null)
@@ -147,7 +147,7 @@ export default function PageTransition() {
           animation: 'ptLogoIn 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards',
         }}>
           <div style={{ display: 'inline-block', animation: 'ptGlow 3s ease-in-out infinite' }}>
-            <img src="/logo.png" alt="The Service Group" style={{ width: 260, maxWidth: '68vw', height: 'auto' }} />
+            <img src={team?.logoUrl || '/logo.png'} alt={team?.name || 'The Service Group'} style={{ width: 260, maxWidth: '68vw', height: 'auto' }} />
           </div>
           <p style={{
             color: 'rgba(255,255,255,0.25)', fontSize: 10,

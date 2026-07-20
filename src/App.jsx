@@ -20,7 +20,6 @@ import WorkerHome from './pages/WorkerHome'
 import WorkerScanner from './pages/WorkerScanner'
 import WorkerInventory from './pages/WorkerInventory'
 import WorkerCalendar from './pages/WorkerCalendar'
-import Profile from './pages/Profile'
 import Brasserie from './pages/Brasserie'
 import EventOrganizerHome from './pages/EventOrganizerHome'
 import TabBar from './components/TabBar'
@@ -87,7 +86,6 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
-            <Route path="/profile" element={<Profile />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AnimatedPage>
@@ -138,7 +136,6 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/vehicles" element={<Vehicles />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/templates" element={<Templates />} />
-          <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatedPage>

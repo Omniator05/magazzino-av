@@ -8,6 +8,7 @@ import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import { Pin } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
+import Profile from './Profile'
 
 const greetingKey = () => {
   const h = new Date().getHours()
@@ -65,6 +66,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
   const { profile, logout, teamId } = useAuth()
   const navigate = useNavigate()
+  const [showProfile, setShowProfile] = useState(false)
   const [items, setItems]   = useState([])
   const [tasks, setTasks]   = useState([])
   const [events, setEvents] = useState([])
@@ -267,7 +269,7 @@ export default function Dashboard({ toggleTheme, theme }) {
         {/* Riga principale */}
         <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
           <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
-            <button onClick={() => navigate('/profile')} style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
+            <button onClick={() => setShowProfile(true)} style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
               {profile?.avatar || name.charAt(0).toUpperCase()}
             </button>
             <div style={{ minWidth:0 }}>
@@ -535,6 +537,8 @@ export default function Dashboard({ toggleTheme, theme }) {
           .evt-card::before, .evt-card::after { animation:none!important }
         }
       `}</style>
+
+      {showProfile && <Profile onClose={() => setShowProfile(false)} />}
     </div>
   )
 }

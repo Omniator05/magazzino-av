@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import DeleteButton from '../components/DeleteButton'
 import BackHomeButton from '../components/BackHomeButton'
+import FabButton from '../components/FabButton'
 import { Dot, Check, User } from '../components/Icon'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
@@ -23,7 +24,6 @@ export default function Tasks() {
   const [tasks, setTasks]       = useState([])
   const [users, setUsers]       = useState([])
   const [showModal, setShowModal] = useState(false)
-  const taskDrag = useModalDrag(() => setShowModal(false))
   const [form, setForm]         = useState({ title:'', notes:'', priority:'media', assignee:'all' })
   const isAdmin = profile?.role === 'admin'
   useModalScrollLock(showModal)
@@ -88,6 +88,8 @@ export default function Tasks() {
     setShowModal(false)
   }
 
+  const taskDrag = useModalDrag(() => setShowModal(false), undefined, createTask, showModal)
+
   const toggleDone = async (task) => {
     await updateDoc(doc(db, 'tasks', task.id), {
       done: !task.done,
@@ -110,16 +112,11 @@ export default function Tasks() {
   return (
     <div className="page">
       <div className="page-header">
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <BackHomeButton />
-            <h1>{t('tasks.title')}</h1>
-          </div>
-          <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>
-            {t('tasks.newButton')}
-          </button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <BackHomeButton />
+          <h1>{t('tasks.title')}</h1>
         </div>
-        <p style={{ marginTop:4 }}>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
+        <p style={{ marginTop:4, textAlign:'right' }}>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
       </div>
 
       <div style={{ padding:'16px 0' }}>
@@ -166,11 +163,13 @@ export default function Tasks() {
         )}
       </div>
 
+      <FabButton onClick={() => setShowModal(true)} ariaLabel={t('tasks.newButton')} />
+
       {/* Modal crea task */}
       {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{ position:'relative' }} {...taskDrag}>
-            <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
+        <div className={`modal-overlay${taskDrag.closing ? ' closing' : ''}`} onClick={taskDrag.onOverlayClick}>
+          <div className={`modal${taskDrag.jiggling ? ' modal-jiggle' : ''}${taskDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...taskDrag.props}>
+            <button className="close-btn" onClick={taskDrag.close}>✕</button>
             <h2>{isAdmin ? t('tasks.newTaskTitle') : t('tasks.addTaskTitle')}</h2>
             {!isAdmin && (
               <p style={{ color:'var(--text2)', fontSize:13, marginBottom:14, lineHeight:1.5 }}>
