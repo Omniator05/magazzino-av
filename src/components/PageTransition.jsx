@@ -146,8 +146,8 @@ export default function PageTransition() {
           zIndex: 1, textAlign: 'center', marginBottom: 52,
           animation: 'ptLogoIn 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards',
         }}>
-          <div style={{ display: 'inline-block', animation: 'ptGlow 3s ease-in-out infinite' }}>
-            <img src={team?.logoUrl || '/logo.png'} alt={team?.name || 'The Service Group'} style={{ width: 260, maxWidth: '68vw', height: 'auto' }} />
+          <div style={{ display: 'inline-block', width: 260, maxWidth: '68vw', height: 146, animation: 'ptGlow 3s ease-in-out infinite' }}>
+            <img src={team?.logoUrl || '/logo.png'} alt={team?.name || 'The Service Group'} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <p style={{
             color: 'rgba(255,255,255,0.25)', fontSize: 10,

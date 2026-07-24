@@ -24,6 +24,7 @@ export default function Tasks() {
   const [tasks, setTasks]       = useState([])
   const [users, setUsers]       = useState([])
   const [showModal, setShowModal] = useState(false)
+  const [editingTask, setEditingTask] = useState(null)
   const [form, setForm]         = useState({ title:'', notes:'', priority:'media', assignee:'all' })
   const isAdmin = profile?.role === 'admin'
   useModalScrollLock(showModal)
@@ -70,25 +71,49 @@ export default function Tasks() {
   const openTasks = myTasks.filter(t => !t.done)
   const doneTasks = myTasks.filter(t => t.done)
 
-  const createTask = async () => {
-    if (!form.title.trim()) return
-    await addDoc(collection(db, 'tasks'), {
-      title: form.title.trim(),
-      notes: form.notes.trim(),
-      priority: form.priority,
-      teamId,
-      // Worker può solo assegnare a se stesso
-      assignee: isAdmin ? form.assignee : user.uid,
-      done: false,
-      createdAt: serverTimestamp(),
-      createdBy: user.uid,
-      createdByName: profile?.name || profile?.username || t('tasks.defaultCreatorName'),
-    })
+  const closeTaskModal = () => { setShowModal(false); setEditingTask(null) }
+
+  const openCreateTask = () => {
     setForm({ title:'', notes:'', priority:'media', assignee:'all' })
+    setEditingTask(null)
+    setShowModal(true)
+  }
+
+  const openEditTask = (task) => {
+    setForm({ title: task.title, notes: task.notes || '', priority: task.priority, assignee: task.assignee })
+    setEditingTask(task)
+    setShowModal(true)
+  }
+
+  const saveTask = async () => {
+    if (!form.title.trim()) return
+    if (editingTask) {
+      await updateDoc(doc(db, 'tasks', editingTask.id), {
+        title: form.title.trim(),
+        notes: form.notes.trim(),
+        priority: form.priority,
+        assignee: form.assignee,
+      })
+    } else {
+      await addDoc(collection(db, 'tasks'), {
+        title: form.title.trim(),
+        notes: form.notes.trim(),
+        priority: form.priority,
+        teamId,
+        assignee: form.assignee,
+        done: false,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+        createdByName: profile?.name || profile?.username || t('tasks.defaultCreatorName'),
+        createdByRole: profile?.role || 'worker',
+      })
+    }
+    setForm({ title:'', notes:'', priority:'media', assignee:'all' })
+    setEditingTask(null)
     setShowModal(false)
   }
 
-  const taskDrag = useModalDrag(() => setShowModal(false), undefined, createTask, showModal)
+  const taskDrag = useModalDrag(closeTaskModal, undefined, saveTask, showModal)
 
   const toggleDone = async (task) => {
     await updateDoc(doc(db, 'tasks', task.id), {
@@ -111,13 +136,20 @@ export default function Tasks() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-          <BackHomeButton />
-          <h1>{t('tasks.title')}</h1>
+      {isAdmin ? (
+        <div className="page-header">
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+            <BackHomeButton />
+            <h1>{t('tasks.title')}</h1>
+          </div>
+          <p style={{ marginTop:4, textAlign:'right' }}>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
         </div>
-        <p style={{ marginTop:4, textAlign:'right' }}>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
-      </div>
+      ) : (
+        <div className="page-header">
+          <h1>{t('tasks.title')}</h1>
+          <p>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
+        </div>
+      )}
 
       <div style={{ padding:'16px 0' }}>
 
@@ -134,8 +166,10 @@ export default function Tasks() {
               <div style={{ marginBottom:8 }}>
                 {openTasks.map(task => (
                   <TaskCard key={task.id} task={task} isAdmin={isAdmin}
+                    canEdit={isAdmin || task.createdBy === user.uid}
                     onToggle={() => toggleDone(task)}
                     onDelete={() => deleteTask(task.id)}
+                    onEdit={() => openEditTask(task)}
                     assigneeName={assigneeName(task.assignee)}
                   />
                 ))}
@@ -151,8 +185,10 @@ export default function Tasks() {
                 <div style={{ opacity:0.6 }}>
                   {doneTasks.map(task => (
                     <TaskCard key={task.id} task={task} isAdmin={isAdmin}
+                      canEdit={isAdmin || task.createdBy === user.uid}
                       onToggle={() => toggleDone(task)}
                       onDelete={() => deleteTask(task.id)}
+                      onEdit={() => openEditTask(task)}
                       assigneeName={assigneeName(task.assignee)}
                     />
                   ))}
@@ -163,19 +199,14 @@ export default function Tasks() {
         )}
       </div>
 
-      <FabButton onClick={() => setShowModal(true)} ariaLabel={t('tasks.newButton')} />
+      <FabButton onClick={openCreateTask} ariaLabel={t('tasks.newButton')} />
 
-      {/* Modal crea task */}
+      {/* Modal crea/modifica task */}
       {showModal && (
         <div className={`modal-overlay${taskDrag.closing ? ' closing' : ''}`} onClick={taskDrag.onOverlayClick}>
           <div className={`modal${taskDrag.jiggling ? ' modal-jiggle' : ''}${taskDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...taskDrag.props}>
             <button className="close-btn" onClick={taskDrag.close}>✕</button>
-            <h2>{isAdmin ? t('tasks.newTaskTitle') : t('tasks.addTaskTitle')}</h2>
-            {!isAdmin && (
-              <p style={{ color:'var(--text2)', fontSize:13, marginBottom:14, lineHeight:1.5 }}>
-                {t('tasks.workerHint')}
-              </p>
-            )}
+            <h2>{editingTask ? t('tasks.editTaskTitle') : (isAdmin ? t('tasks.newTaskTitle') : t('tasks.addTaskTitle'))}</h2>
 
             <div className="form-group">
               <label>{t('tasks.descriptionLabel')}</label>
@@ -205,8 +236,7 @@ export default function Tasks() {
               </div>
             </div>
 
-            {/* Solo admin può scegliere a chi assegnare */}
-            {isAdmin && (
+            {isAdmin ? (
               <div className="form-group">
                 <label>{t('tasks.assignToLabel')}</label>
                 <select value={form.assignee} onChange={e => setForm({...form, assignee:e.target.value})}>
@@ -216,11 +246,31 @@ export default function Tasks() {
                   ))}
                 </select>
               </div>
+            ) : (
+              <div className="form-group">
+                <label>{t('tasks.visibleToLabel')}</label>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button type="button" onClick={() => setForm({...form, assignee:'all'})}
+                    style={{ flex:1, padding:'9px 6px', borderRadius:10, fontSize:13, fontWeight:700,
+                      border: `2px solid ${form.assignee === 'all' ? 'var(--accent)' : 'var(--border)'}`,
+                      background: form.assignee === 'all' ? 'rgba(230,57,70,0.10)' : 'var(--card2)',
+                      color: form.assignee === 'all' ? 'var(--accent)' : 'var(--text2)' }}>
+                    {t('tasks.wholeTeam')}
+                  </button>
+                  <button type="button" onClick={() => setForm({...form, assignee:user.uid})}
+                    style={{ flex:1, padding:'9px 6px', borderRadius:10, fontSize:13, fontWeight:700,
+                      border: `2px solid ${form.assignee === user.uid ? 'var(--accent)' : 'var(--border)'}`,
+                      background: form.assignee === user.uid ? 'rgba(230,57,70,0.10)' : 'var(--card2)',
+                      color: form.assignee === user.uid ? 'var(--accent)' : 'var(--text2)' }}>
+                    {t('tasks.onlyMe')}
+                  </button>
+                </div>
+              </div>
             )}
 
-            <button onClick={createTask} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+            <button onClick={saveTask} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={!form.title.trim()}>
-              <Check size={16} /> {isAdmin ? t('tasks.createTask') : t('tasks.addTask')}
+              <Check size={16} /> {editingTask ? t('tasks.saveChanges') : (isAdmin ? t('tasks.createTask') : t('tasks.addTask'))}
             </button>
           </div>
         </div>
@@ -229,17 +279,19 @@ export default function Tasks() {
   )
 }
 
-function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
+function TaskCard({ task, isAdmin, canEdit, onToggle, onDelete, onEdit, assigneeName }) {
   const { t } = useTranslation()
   const p = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.media
 
   return (
-    <div style={{ margin:'0 16px 10px', background:'var(--card)', border:`1px solid ${task.done ? 'var(--border)' : p.border}`, borderRadius:'var(--radius)', overflow:'hidden' }}>
+    <div
+      onClick={canEdit ? onEdit : undefined}
+      style={{ margin:'0 16px 10px', background:'var(--card)', border:`1px solid ${task.done ? 'var(--border)' : p.border}`, borderRadius:'var(--radius)', overflow:'hidden', cursor: canEdit ? 'pointer' : 'default' }}>
       {/* Striscia priorità */}
       {!task.done && <div style={{ height:3, background:p.color, opacity:0.6 }} />}
       <div style={{ padding:'14px 16px', display:'flex', alignItems:'flex-start', gap:12 }}>
         {/* Checkbox */}
-        <button onClick={onToggle}
+        <button onClick={e => { e.stopPropagation(); onToggle() }}
           style={{ width:26, height:26, borderRadius:8, border:`2px solid ${task.done ? 'var(--green)' : p.color}`, background: task.done ? 'var(--green)' : 'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', marginTop:1 }}>
           {task.done && <svg viewBox="0 0 24 24" fill="white" width="14" height="14"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>}
         </button>
@@ -257,7 +309,7 @@ function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
             <span style={{ color:'var(--text2)', fontSize:12, display:'inline-flex', alignItems:'center', gap:4 }}>
               <User size={12} /> {assigneeName}
             </span>
-            {task.createdByName && isAdmin && task.assignee === task.createdBy && (
+            {task.createdByName && isAdmin && (task.createdByRole === 'worker' || task.assignee === task.createdBy) && (
               <span style={{ background:'rgba(79,195,247,0.1)', color:'var(--blue)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:6, padding:'1px 7px', fontSize:11, fontWeight:600 }}>
                 {t('tasks.createdBy', { name: task.createdByName })}
               </span>
@@ -265,7 +317,7 @@ function TaskCard({ task, isAdmin, onToggle, onDelete, assigneeName }) {
           </div>
         </div>
         {isAdmin && (
-          <DeleteButton onClick={onDelete} size={32} />
+          <DeleteButton onClick={e => { e.stopPropagation(); onDelete() }} size={32} />
         )}
       </div>
     </div>

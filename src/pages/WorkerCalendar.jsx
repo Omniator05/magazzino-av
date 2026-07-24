@@ -8,6 +8,8 @@ import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, where, 
 import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
+import { useModalDrag } from '../hooks/useModalDrag'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -63,6 +65,7 @@ export default function WorkerCalendar() {
   const [rangeStart, setRangeStart] = useState(null)
   const [pendingRange, setPendingRange] = useState(null)
   const [reasonInput, setReasonInput] = useState('')
+  useModalScrollLock(!!pendingRange)
 
   useEffect(() => {
     if (!teamId) return
@@ -187,6 +190,8 @@ export default function WorkerCalendar() {
     setReasonInput('')
     setSelectedDate(todayStr)
   }
+
+  const absenceDrag = useModalDrag(() => setPendingRange(null), undefined, confirmUnavailability, !!pendingRange)
 
   const removeUnavailability = async (id) => {
     if (!(await confirm({ title: t('workerCalendar.confirmRemoveTitle'), message: t('workerCalendar.confirmRemoveMessage'), confirmLabel: t('workerCalendar.confirmRemoveLabel'), danger: true }))) return
@@ -434,9 +439,9 @@ export default function WorkerCalendar() {
 
       {/* Modal conferma nuova indisponibilità */}
       {pendingRange && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPendingRange(null)}>
-          <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setPendingRange(null)}>✕</button>
+        <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
+          <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
+            <button className="close-btn" onClick={absenceDrag.close}>✕</button>
             <h2>{t('calendar.absenceModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
               {pendingRange.start === pendingRange.end

@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, getDoc, collection, query, where, orderBy } from 'firebase/firestore'
 import { parseScannedCode } from '../utils/generateCode'
+import { useModalDrag } from '../hooks/useModalDrag'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -57,6 +59,7 @@ export default function WorkerScanner() {
   const [showEventNotes, setShowEventNotes] = useState(false)
   const prevLoadedRef = useRef(0)
   const prevReturnedRef = useRef(0)
+  useModalScrollLock(showExtraWorker || showAllLoadedPopup || showAllReturnedPopup)
 
   const fireConfetti = () => {
     const duration = 4000
@@ -308,6 +311,20 @@ export default function WorkerScanner() {
 
   const firstUnloadedRef = useRef(null)
   const WS_ORDER_CONST = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+
+  const addExtraWorkerItem = async () => {
+    if (!extraWorkerForm.name.trim()) return
+    const eventSnap = await getDoc(eventRef)
+    if (!eventSnap.exists()) return
+    const currentItems = eventSnap.data().items || []
+    const extra = { id:`extra-${Date.now()}`, name:extraWorkerForm.name.trim(), qty:extraWorkerForm.qty, category:'Extra', isExtra:true, loaded:false, returned:false }
+    await updateDoc(eventRef, { items: [...currentItems, extra] })
+    setExtraWorkerForm({ name:'', qty:1 })
+    setShowExtraWorker(false)
+  }
+  const extraDrag       = useModalDrag(() => setShowExtraWorker(false), undefined, addExtraWorkerItem, showExtraWorker)
+  const allLoadedDrag   = useModalDrag(() => setShowAllLoadedPopup(false), undefined, undefined, showAllLoadedPopup)
+  const allReturnedDrag = useModalDrag(() => setShowAllReturnedPopup(false), undefined, undefined, showAllReturnedPopup)
   let firstUnloadedId = null
   for (const cat of WS_ORDER_CONST) {
     const catItems = items
@@ -795,9 +812,9 @@ export default function WorkerScanner() {
 
       {/* Popup tutto caricato */}
       {showAllLoadedPopup && (
-        <div className="modal-overlay" onClick={() => setShowAllLoadedPopup(false)}>
-          <div className="modal" style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }}
-            onClick={e => e.stopPropagation()}>
+        <div className={`modal-overlay${allLoadedDrag.closing ? ' closing' : ''}`} onClick={allLoadedDrag.onOverlayClick}>
+          <div className={`modal${allLoadedDrag.jiggling ? ' modal-jiggle' : ''}${allLoadedDrag.closing ? ' closing' : ''}`} style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }} {...allLoadedDrag.props}>
+            <button className="close-btn" onClick={allLoadedDrag.close}>✕</button>
             <div style={{ fontSize:64, marginBottom:12 }}>🎉</div>
             <h2 style={{ fontSize:22, marginBottom:8 }}>{t('workerScanner.allLoadedPopupTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24, whiteSpace:'pre-line' }}>
@@ -817,9 +834,9 @@ export default function WorkerScanner() {
 
       {/* Popup tutto scaricato */}
       {showAllReturnedPopup && (
-        <div className="modal-overlay" onClick={() => setShowAllReturnedPopup(false)}>
-          <div className="modal" style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }}
-            onClick={e => e.stopPropagation()}>
+        <div className={`modal-overlay${allReturnedDrag.closing ? ' closing' : ''}`} onClick={allReturnedDrag.onOverlayClick}>
+          <div className={`modal${allReturnedDrag.jiggling ? ' modal-jiggle' : ''}${allReturnedDrag.closing ? ' closing' : ''}`} style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }} {...allReturnedDrag.props}>
+            <button className="close-btn" onClick={allReturnedDrag.close}>✕</button>
             <div style={{ fontSize:64, marginBottom:12 }}>📦</div>
             <h2 style={{ fontSize:22, marginBottom:8 }}>{t('workerScanner.allReturnedPopupTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24, whiteSpace:'pre-line' }}>
@@ -842,9 +859,9 @@ export default function WorkerScanner() {
 
       {/* Modal extra worker */}
       {showExtraWorker && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowExtraWorker(false)}>
-          <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setShowExtraWorker(false)}>✕</button>
+        <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick}>
+          <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}${extraDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
+            <button className="close-btn" onClick={extraDrag.close}>✕</button>
             <h2>{t('eventDetail.extraItemTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('workerScanner.extraItemDesc')}</p>
             <div className="form-group">
@@ -864,16 +881,7 @@ export default function WorkerScanner() {
               </div>
             </div>
             <button
-              onClick={async () => {
-                if (!extraWorkerForm.name.trim()) return
-                const eventSnap = await getDoc(eventRef)
-                if (!eventSnap.exists()) return
-                const currentItems = eventSnap.data().items || []
-                const extra = { id:`extra-${Date.now()}`, name:extraWorkerForm.name.trim(), qty:extraWorkerForm.qty, category:'Extra', isExtra:true, loaded:false, returned:false }
-                await updateDoc(eventRef, { items: [...currentItems, extra] })
-                setExtraWorkerForm({ name:'', qty:1 })
-                setShowExtraWorker(false)
-              }}
+              onClick={addExtraWorkerItem}
               className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!extraWorkerForm.name.trim()}>
               {t('eventDetail.confirmAddToList')}

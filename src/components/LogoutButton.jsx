@@ -87,7 +87,7 @@ export default function LogoutButton({ style, className, name }) {
         .lo-orb { position: absolute; border-radius: 50%; pointer-events: none; }
         .lo-orb-a { top:-15%; left:-8%; width:60vmax; height:60vmax; background: radial-gradient(circle, rgba(230,57,70,.18) 0%, transparent 65%); animation: loOrbA 13s ease-in-out infinite; }
         .lo-orb-b { bottom:-18%; right:-10%; width:65vmax; height:65vmax; background: radial-gradient(circle, rgba(37,99,235,.12) 0%, transparent 65%); animation: loOrbB 17s ease-in-out infinite; }
-        .lo-logo { width: 220px; max-width: 60vw; height: auto; z-index: 1;
+        .lo-logo { width: 220px; max-width: 60vw; height: 124px; object-fit: contain; z-index: 1;
           filter: drop-shadow(0 0 26px rgba(230,57,70,0.35));
           animation: loPop 0.6s cubic-bezier(0.34,1.4,0.64,1) both;
         }

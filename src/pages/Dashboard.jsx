@@ -3,12 +3,27 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import { Pin } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import Profile from './Profile'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
+
+const RECAP_SEEN_KEY = 'weeklyRecapSeenWeek'
+const RECAP_TASK_DOT = { alta:'#f87171', media:'#f5a623', bassa:'#34d399' }
+
+// Lunedì e domenica della settimana di `d`, come stringhe YYYY-MM-DD
+function getWeekRange(d) {
+  const day = (d.getDay() + 6) % 7 // 0 = lunedì .. 6 = domenica
+  const monday = new Date(d)
+  monday.setDate(d.getDate() - day)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const toStr = x => x.toISOString().split('T')[0]
+  return { monday: toStr(monday), sunday: toStr(sunday) }
+}
 
 const greetingKey = () => {
   const h = new Date().getHours()
@@ -55,6 +70,13 @@ const IconCart = () => (
     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
   </svg>
 )
+const IconClipboard = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+    <line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="13" y2="15"/>
+  </svg>
+)
 const IconTruck = () => (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8Z"/>
@@ -64,7 +86,7 @@ const IconTruck = () => (
 
 export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
-  const { profile, logout, teamId } = useAuth()
+  const { profile, logout, teamId, showOverlay } = useAuth()
   const navigate = useNavigate()
   const [showProfile, setShowProfile] = useState(false)
   const [items, setItems]   = useState([])
@@ -73,6 +95,13 @@ export default function Dashboard({ toggleTheme, theme }) {
   const [weather, setWeather] = useState(() => {
     try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
   })
+  const [showRecapBanner, setShowRecapBanner] = useState(false)
+  const [showRecapModal, setShowRecapModal] = useState(false)
+  const [recapClosing, setRecapClosing] = useState(false)
+  const [recapWeek, setRecapWeek] = useState(null)
+  const [recapAbsences, setRecapAbsences] = useState([])
+  const [recapWorkers, setRecapWorkers] = useState([])
+  useModalScrollLock(showRecapModal || showRecapBanner)
 
   useEffect(() => {
     if (!teamId) return
@@ -81,6 +110,53 @@ export default function Dashboard({ toggleTheme, theme }) {
     const u3 = onSnapshot(query(collection(db, 'tasks'),  where('teamId','==',teamId)),                   s => setTasks(s.docs.map(d => ({ id:d.id,...d.data() }))))
     return () => { u1(); u2(); u3() }
   }, [teamId])
+
+  // Resoconto settimanale: solo il lunedì, una volta a settimana (per dispositivo).
+  // Aspetta che l'overlay di login/caricamento sia sparito, altrimenti il popup
+  // spunterebbe sopra l'animazione invece che dopo.
+  useEffect(() => {
+    if (!teamId || showOverlay) return
+    if (new Date().getDay() !== 1) return
+    const { monday, sunday } = getWeekRange(new Date())
+    if (localStorage.getItem(RECAP_SEEN_KEY) === monday) return
+    setRecapWeek({ monday, sunday })
+    setShowRecapBanner(true)
+    Promise.all([
+      getDocs(query(collection(db, 'unavailability'), where('teamId', '==', teamId))),
+      getDocs(query(collection(db, 'profiles'), where('teamId', '==', teamId))),
+    ]).then(([unavailSnap, profilesSnap]) => {
+      setRecapAbsences(unavailSnap.docs.map(d => ({ id:d.id, ...d.data() })))
+      setRecapWorkers(profilesSnap.docs.map(d => ({ id:d.id, ...d.data() })))
+    }).catch(() => {})
+  }, [teamId, showOverlay])
+
+  const skipRecap = () => {
+    if (recapWeek) localStorage.setItem(RECAP_SEEN_KEY, recapWeek.monday)
+    setShowRecapBanner(false)
+  }
+  const openRecap = () => {
+    if (recapWeek) localStorage.setItem(RECAP_SEEN_KEY, recapWeek.monday)
+    setShowRecapBanner(false)
+    setShowRecapModal(true)
+  }
+  const closeRecap = () => {
+    setRecapClosing(true)
+    setTimeout(() => { setShowRecapModal(false); setRecapClosing(false) }, 150)
+  }
+
+  useEffect(() => {
+    if (!showRecapBanner) return
+    const onKey = e => { if (e.key === 'Escape') skipRecap() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showRecapBanner])
+
+  useEffect(() => {
+    if (!showRecapModal) return
+    const onKey = e => { if (e.key === 'Escape') closeRecap() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showRecapModal])
 
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')
@@ -100,6 +176,16 @@ export default function Dashboard({ toggleTheme, theme }) {
   const reorderItems = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock)
   const openTasks    = tasks.filter(t => !t.done)
   const upcoming     = events.filter(e => e.date >= today).slice(0, 3)
+
+  const weekEvents = recapWeek
+    ? events.filter(e => e.date && e.date <= recapWeek.sunday && (e.dateEnd || e.date) >= recapWeek.monday)
+    : []
+  const weekAbsences = recapWeek
+    ? recapAbsences
+        .filter(u => u.startDate <= recapWeek.sunday && u.endDate >= recapWeek.monday)
+        .map(u => ({ ...u, workerName: recapWorkers.find(w => w.id === u.workerId)?.name || t('common.unknown') }))
+    : []
+  const recapSectionLabel = { fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }
 
   const todayLabel = formatDate(new Date(), { weekday:'long', day:'numeric', month:'long' }, i18n.language)
 
@@ -539,6 +625,128 @@ export default function Dashboard({ toggleTheme, theme }) {
       `}</style>
 
       {showProfile && <Profile onClose={() => setShowProfile(false)} />}
+
+      {/* Popup avviso resoconto pronto — stesso stile del popup di conferma (logout ecc.) */}
+      {showRecapBanner && (
+        <div
+          onClick={skipRecap}
+          style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, animation:'recapFadeIn 0.15s ease' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation:'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)' }}
+          >
+            <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(2,132,199,0.12)', color:'#0284c7' }}>
+              <IconClipboard />
+            </div>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{t('dashboard.weeklyRecapTitle')}</h3>
+            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>{t('dashboard.weeklyRecapPrompt')}</p>
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              <button onClick={skipRecap} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none', cursor:'pointer' }}>
+                {t('dashboard.weeklyRecapSkip')}
+              </button>
+              <button onClick={openRecap} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#0284c7', color:'#fff', border:'none', cursor:'pointer' }}>
+                {t('dashboard.weeklyRecapRead')}
+              </button>
+            </div>
+          </div>
+          <style>{`
+            @keyframes recapFadeIn  { from{opacity:0} to{opacity:1} }
+            @keyframes recapPopIn   { from{opacity:0; transform:translateY(12px) scale(0.96)} to{opacity:1; transform:translateY(0) scale(1)} }
+          `}</style>
+        </div>
+      )}
+
+      {/* Popup resoconto settimanale — stesso stile del popup di conferma (logout ecc.) */}
+      {showRecapModal && (
+        <div
+          onClick={closeRecap}
+          style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, animation: recapClosing ? 'recapFadeOut 0.15s ease forwards' : 'recapFadeIn 0.15s ease' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 22px', width:'100%', maxWidth:380, maxHeight:'82dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: recapClosing ? 'recapPopOut 0.15s ease forwards' : 'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)', position:'relative' }}
+          >
+            <button onClick={closeRecap} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'#f3f4f6', color:'#6b7280', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>✕</button>
+
+            <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(2,132,199,0.12)', color:'#0284c7' }}>
+              <IconClipboard />
+            </div>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 4px', letterSpacing:'-0.3px', textAlign:'center' }}>{t('dashboard.weeklyRecapTitle')}</h3>
+            {recapWeek && (
+              <p style={{ color:'#6b7280', fontSize:13, textAlign:'center', margin:'0 0 20px' }}>
+                {formatDate(recapWeek.monday+'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
+                {' — '}
+                {formatDate(recapWeek.sunday+'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
+              </p>
+            )}
+
+            <div style={{ textAlign:'left', marginBottom:18 }}>
+              <p style={recapSectionLabel}>{t('dashboard.weeklyRecapEvents', { count: weekEvents.length })}</p>
+              {weekEvents.length === 0 ? (
+                <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoEvents')}</p>
+              ) : (
+                weekEvents.map(ev => (
+                  <div key={ev.id} onClick={() => { setShowRecapModal(false); navigate(`/events/${ev.id}`) }}
+                    style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer' }}>
+                    <span style={{ fontSize:13.5, fontWeight:600, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</span>
+                    <span style={{ fontSize:12, color:'#6b7280', flexShrink:0 }}>{formatDate(ev.date+'T12:00:00', { weekday:'short', day:'numeric' }, i18n.language)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={{ textAlign:'left', marginBottom:18 }}>
+              <p style={recapSectionLabel}>{t('dashboard.weeklyRecapAbsences')}</p>
+              {weekAbsences.length === 0 ? (
+                <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoAbsences')}</p>
+              ) : (
+                weekAbsences.map(u => (
+                  <div key={u.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid #f0f0f0' }}>
+                    <span style={{ fontSize:13.5, fontWeight:600, color:'#111827' }}>{u.workerName}</span>
+                    <span style={{ fontSize:12, color:'#6b7280', flexShrink:0 }}>
+                      {formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language)}
+                      {u.endDate !== u.startDate ? ' — ' + formatDate(u.endDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language) : ''}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={{ textAlign:'left' }}>
+              <p style={recapSectionLabel}>{t('dashboard.weeklyRecapTasks', { count: openTasks.length })}</p>
+              {openTasks.length === 0 ? (
+                <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoTasks')}</p>
+              ) : (
+                <>
+                  {openTasks.slice(0, 5).map(task => (
+                    <div key={task.id} onClick={() => { setShowRecapModal(false); navigate('/tasks') }}
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer' }}>
+                      <span style={{ width:7, height:7, borderRadius:'50%', flexShrink:0, background: RECAP_TASK_DOT[task.priority] || RECAP_TASK_DOT.media }} />
+                      <span style={{ fontSize:13.5, fontWeight:600, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{task.title}</span>
+                    </div>
+                  ))}
+                  {openTasks.length > 5 && (
+                    <p onClick={() => { setShowRecapModal(false); navigate('/tasks') }} style={{ fontSize:12, fontWeight:700, color:'#0284c7', marginTop:8, cursor:'pointer' }}>
+                      {t('common.moreCount', { count: openTasks.length - 5 })}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          <style>{`
+            @keyframes recapFadeIn  { from{opacity:0} to{opacity:1} }
+            @keyframes recapFadeOut { from{opacity:1} to{opacity:0} }
+            @keyframes recapPopIn   { from{opacity:0; transform:translateY(12px) scale(0.96)} to{opacity:1; transform:translateY(0) scale(1)} }
+            @keyframes recapPopOut  { from{opacity:1; transform:scale(1)} to{opacity:0; transform:scale(0.97)} }
+          `}</style>
+        </div>
+      )}
     </div>
   )
 }
