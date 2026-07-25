@@ -26,7 +26,7 @@ export default function PendingApproval({ reason = 'unknown' }) {
   const { title, body } = CONTENT[reason] || CONTENT.unknown
 
   return (
-    <AuthShell>
+    <AuthShell heroTitle={t('pendingApproval.heroTitle')} heroText={t('pendingApproval.heroText')}>
       <div className="auth-card" style={{ textAlign:'center' }}>
         <div style={{ fontSize:38, marginBottom:14 }}>{reason === 'pending' ? '⏳' : '⚠️'}</div>
         <h2 style={{ fontSize:20, fontWeight:700, color:'white', marginBottom:10 }}>{title}</h2>

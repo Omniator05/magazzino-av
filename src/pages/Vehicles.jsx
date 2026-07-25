@@ -15,7 +15,7 @@ const EMPTY_FORM = { name: '', color: COLOR_PALETTE[0], emoji: '', plate: '' }
 
 export default function Vehicles() {
   const { t } = useTranslation()
-  const { user, profile } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const [vehicles, setVehicles] = useState([])
   const [showCreate, setShowCreate] = useState(false)
@@ -31,10 +31,10 @@ export default function Vehicles() {
   const [toast, setToast] = useState('')
 
   useEffect(() => {
-    if (!profile?.teamId) return
-    const q = query(collection(db, 'vehicles'), where('teamId', '==', profile.teamId), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'vehicles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [profile?.teamId])
+  }, [teamId])
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
@@ -47,7 +47,7 @@ export default function Vehicles() {
         color: form.color || null,
         emoji: form.emoji.trim() || null,
         plate: form.plate.trim() || null,
-        teamId: profile.teamId,
+        teamId,
         active: true,
         createdAt: serverTimestamp(),
         createdBy: user.uid,

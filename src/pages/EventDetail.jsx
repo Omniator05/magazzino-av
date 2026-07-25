@@ -711,8 +711,8 @@ export default function EventDetail() {
       @page { margin: 16mm; }
     </style></head><body>
       <div class="head">
-        <img src="${team?.logoUrl || origin + '/logo.png'}" alt="${esc(team?.name || 'The Service Group')}" onerror="this.style.display='none'" />
-        <div class="org"><div class="name">${esc(team?.name || 'The Service Group')}</div><div class="sub">Gestione Magazzino</div></div>
+        <img src="${team?.logoUrl || origin + '/logo-default.svg'}" alt="${esc(team?.name || 'Gestione Magazzino')}" onerror="this.style.display='none'" />
+        <div class="org"><div class="name">${esc(team?.name || 'Gestione Magazzino')}</div><div class="sub">Gestione Magazzino</div></div>
       </div>
 
       <div class="doctitle">Lista di Carico</div>
@@ -738,7 +738,7 @@ export default function EventDetail() {
 
       <div class="footer">
         <span>Documento generato il ${genDate}</span>
-        <span>${esc(team?.name || 'The Service Group')} — Gestione Magazzino</span>
+        <span>${esc(team?.name || 'Gestione Magazzino')} — Gestione Magazzino</span>
       </div>
     </body></html>`
 

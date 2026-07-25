@@ -6,9 +6,10 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
-import { Pin } from '../components/Icon'
+import { Pin, Gear } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import Profile from './Profile'
+import TutorialModal from '../components/TutorialModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const RECAP_SEEN_KEY = 'weeklyRecapSeenWeek'
@@ -355,8 +356,11 @@ export default function Dashboard({ toggleTheme, theme }) {
         {/* Riga principale */}
         <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
           <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
-            <button onClick={() => setShowProfile(true)} style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
+            <button onClick={() => setShowProfile(true)} aria-label={t('dashboard.openSettings')} style={{ position:'relative', flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
               {profile?.avatar || name.charAt(0).toUpperCase()}
+              <span style={{ position:'absolute', bottom:-4, right:-4, width:22, height:22, borderRadius:'50%', background:'var(--accent)', color:'white', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 6px rgba(0,0,0,0.35)' }}>
+                <Gear size={12} />
+              </span>
             </button>
             <div style={{ minWidth:0 }}>
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.78)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{t(greetingKey())}</p>
@@ -364,6 +368,19 @@ export default function Dashboard({ toggleTheme, theme }) {
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
             </div>
           </div>
+          {/* Pannello super admin — visibile solo col flag (mai per i clienti) */}
+          {profile?.superAdmin && (
+            <button onClick={() => navigate('/super')} aria-label="Super admin" style={{
+              flexShrink:0, width:38, height:38, borderRadius:12,
+              background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)',
+              color:'white', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer',
+            }}>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>
+                <line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="12" x2="9" y2="12.01"/><line x1="9" y1="15" x2="9" y2="15.01"/>
+              </svg>
+            </button>
+          )}
           <LogoutButton name={name} style={{
             flexShrink:0,
             background:'rgba(255,255,255,0.16)',
@@ -625,6 +642,8 @@ export default function Dashboard({ toggleTheme, theme }) {
       `}</style>
 
       {showProfile && <Profile onClose={() => setShowProfile(false)} />}
+
+      {!showOverlay && !showRecapBanner && !showRecapModal && <TutorialModal role="admin" />}
 
       {/* Popup avviso resoconto pronto — stesso stile del popup di conferma (logout ecc.) */}
       {showRecapBanner && (

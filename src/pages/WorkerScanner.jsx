@@ -35,7 +35,7 @@ const ICONS = {
 export default function WorkerScanner() {
   const { t } = useTranslation()
   const { id } = useParams()
-  const { profile } = useAuth()
+  const { profile, teamId } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   // Se arriviamo da /events/:id/scan (admin) torniamo all'evento, altrimenti alla home worker
@@ -131,10 +131,10 @@ export default function WorkerScanner() {
 
   // Solo visualizzazione (badge): quale furgone va caricato/rientrato per ogni oggetto
   useEffect(() => {
-    if (!profile?.teamId) return
-    const q = query(collection(db, 'vehicles'), where('teamId', '==', profile.teamId), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'vehicles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [profile?.teamId])
+  }, [teamId])
 
   const processCode = async (code) => {
     const { baseCode: normalized } = parseScannedCode(code)
@@ -157,7 +157,7 @@ export default function WorkerScanner() {
     // Trova l'articolo nella lista dell'evento tramite codice
     // Prima cerca in Firestore per trovare l'id dell'articolo dal codice
     const { collection, query, where, getDocs } = await import('firebase/firestore')
-    const q = query(collection(db, 'items'), where('teamId', '==', profile.teamId), where('code', '==', normalized))
+    const q = query(collection(db, 'items'), where('teamId', '==', teamId), where('code', '==', normalized))
     const itemSnap = await getDocs(q)
 
     if (itemSnap.empty) {

@@ -1,26 +1,34 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { auth, db } from '../firebase'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { db } from '../firebase'
+import { deleteUser } from 'firebase/auth'
 import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore'
-import AuthShell from '../components/AuthShell'
+import { useAuth } from '../context/AuthContext'
+import { createSignupUser } from '../utils/authCleanup'
 
-export default function Signup() {
+// Solo il flusso di registrazione: il guscio (sfondo + card divisa) è in
+// Auth.jsx, che tiene login e signup montati nella stessa card così il
+// pannello rosso può scivolare da un lato all'altro quando si cambia modalità.
+export default function SignupFlow({ onSwitch }) {
   const { t } = useTranslation()
   const [step, setStep] = useState('choice') // 'choice' | 'create' | 'join'
   const navigate = useNavigate()
 
   return (
-    <AuthShell>
+    <>
       {step === 'choice' && <ChoiceStep onChoose={setStep} />}
-      {step === 'create'  && <CreateTeamStep onBack={() => setStep('choice')} onDone={() => navigate('/')} />}
+      {step === 'create'  && <CreateTeamStep onBack={() => setStep('choice')} onDone={() => navigate('/welcome')} />}
       {step === 'join'    && <JoinTeamStep onBack={() => setStep('choice')} onDone={() => navigate('/')} />}
 
       <p style={{ textAlign:'center', color:'rgba(255,255,255,0.2)', fontSize:12, marginTop:20, letterSpacing:'0.2px' }}>
-        {t('signup.alreadyHaveAccount')} <Link to="/login" style={{ color:'rgba(255,255,255,0.5)', fontWeight:600 }}>{t('signup.signIn')}</Link>
+        {t('signup.alreadyHaveAccount')}{' '}
+        <button type="button" onClick={onSwitch}
+          style={{ background:'none', border:'none', padding:0, color:'rgba(255,255,255,0.5)', fontWeight:600, fontSize:12, cursor:'pointer', textDecoration:'underline' }}>
+          {t('signup.signIn')}
+        </button>
       </p>
-    </AuthShell>
+    </>
   )
 }
 
@@ -76,6 +84,7 @@ function useSignupForm() {
 
 function CreateTeamStep({ onBack, onDone }) {
   const { t } = useTranslation()
+  const { setSignupInProgress } = useAuth()
   const ERROR_MSGS = {
     'auth/email-already-in-use': t('signup.errorEmailInUse'),
     'auth/weak-password':        t('signup.errorWeakPassword'),
@@ -92,6 +101,7 @@ function CreateTeamStep({ onBack, onDone }) {
 
     f.setError(''); f.setLoading(true)
     const nameLower = companyName.trim().toLowerCase()
+    let cred = null
 
     try {
       // Blocca nomi azienda duplicati (case-insensitive) per evitare confusione
@@ -104,7 +114,10 @@ function CreateTeamStep({ onBack, onDone }) {
         return
       }
 
-      const cred = await createUserWithEmailAndPassword(auth, f.email.trim(), f.password)
+      // Da qui l'utente Auth esiste ma il profilo non ancora: il flag evita
+      // che App mostri "errore con questo account" durante la finestra.
+      setSignupInProgress(true)
+      cred = await createSignupUser(f.email.trim(), f.password)
 
       const teamRef = await addDoc(collection(db, 'teams'), {
         name: companyName.trim(),
@@ -125,8 +138,13 @@ function CreateTeamStep({ onBack, onDone }) {
 
       onDone()
     } catch (err) {
+      // L'utente Auth esiste ma il profilo/la squadra no: senza questo si
+      // creerebbe un nuovo account orfano identico a quelli ripuliti prima.
+      if (cred) await deleteUser(cred.user).catch(() => {})
       f.setError(ERROR_MSGS[err.code] || t('signup.errorSignupFailed'))
       f.setLoading(false)
+    } finally {
+      setSignupInProgress(false)
     }
   }
 
@@ -166,6 +184,7 @@ function CreateTeamStep({ onBack, onDone }) {
 
 function JoinTeamStep({ onBack, onDone }) {
   const { t } = useTranslation()
+  const { setSignupInProgress } = useAuth()
   const ERROR_MSGS = {
     'auth/email-already-in-use': t('signup.errorEmailInUse'),
     'auth/weak-password':        t('signup.errorWeakPassword'),
@@ -180,18 +199,19 @@ function JoinTeamStep({ onBack, onDone }) {
 
   useEffect(() => {
     clearTimeout(debounceRef.current)
-    const term = search.trim().toLowerCase()
+    // Confronto senza spazi: così "theservice" trova anche "The Service Group"
+    const term = search.trim().toLowerCase().replace(/\s+/g, '')
     if (!term) { setResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const q = query(
-          collection(db, 'teams'),
-          where('nameLower', '>=', term),
-          where('nameLower', '<=', term + ''),
-        )
-        const snap = await getDocs(q)
-        setResults(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        const snap = await getDocs(collection(db, 'teams'))
+        const matches = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(team => (team.nameLower || '').replace(/\s+/g, '').includes(term))
+        setResults(matches)
+      } catch {
+        setResults([])
       } finally {
         setSearching(false)
       }
@@ -206,8 +226,12 @@ function JoinTeamStep({ onBack, onDone }) {
     if (!selected) { f.setError(t('signup.errorSelectTeam')); return }
 
     f.setError(''); f.setLoading(true)
+    let cred = null
     try {
-      const cred = await createUserWithEmailAndPassword(auth, f.email.trim(), f.password)
+      // Vedi CreateTeamStep: evita il flash "errore con questo account"
+      // nella finestra tra creazione utente Auth e scrittura del profilo.
+      setSignupInProgress(true)
+      cred = await createSignupUser(f.email.trim(), f.password)
 
       await setDoc(doc(db, 'profiles', cred.user.uid), {
         name: f.name.trim(),
@@ -221,8 +245,11 @@ function JoinTeamStep({ onBack, onDone }) {
 
       onDone()
     } catch (err) {
+      if (cred) await deleteUser(cred.user).catch(() => {})
       f.setError(ERROR_MSGS[err.code] || t('signup.errorSignupFailed'))
       f.setLoading(false)
+    } finally {
+      setSignupInProgress(false)
     }
   }
 

@@ -110,7 +110,7 @@ function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
 
 export default function AdminUsers() {
   const { t, i18n } = useTranslation()
-  const { user, profile, team, updateTeamData, logout } = useAuth()
+  const { user, profile, team, teamId, updateTeamData, logout } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [users, setUsers]             = useState([])
@@ -138,32 +138,32 @@ export default function AdminUsers() {
   const [assignedEventId, setAssignedEventId] = useState('')
 
   useEffect(() => {
-    if (!profile?.teamId) return
-    const q = query(collection(db, 'profiles'), where('teamId', '==', profile.teamId), orderBy('name'))
+    if (!teamId) return
+    const q = query(collection(db, 'profiles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setUsers(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [profile?.teamId])
+  }, [teamId])
 
   // Eventi da oggi in poi, per il selettore dell'Organizzatore evento
   useEffect(() => {
-    if (!profile?.teamId) return
+    if (!teamId) return
     const todayStr = new Date().toISOString().slice(0, 10)
-    const q = query(collection(db, 'events'), where('teamId', '==', profile.teamId), orderBy('date'))
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => setEvents(
       snap.docs
         .map(d => ({ id:d.id, ...d.data() }))
         .filter(e => (e.dateEnd || e.date) >= todayStr)
     ))
-  }, [profile?.teamId])
+  }, [teamId])
 
   useEffect(() => {
-    if (!showDetail || !profile?.teamId) { setDetailUnavail([]); return }
+    if (!showDetail || !teamId) { setDetailUnavail([]); return }
     // Le regole Firestore valutano "list" sulla query stessa: senza un filtro
     // di uguaglianza su teamId corrispondente alla regola (resource.data.teamId),
     // l'intera richiesta viene rifiutata con permission-denied, anche se il
     // worker non ha alcuna indisponibilità registrata.
-    const q = query(collection(db, 'unavailability'), where('teamId', '==', profile.teamId), where('workerId', '==', showDetail.id))
+    const q = query(collection(db, 'unavailability'), where('teamId', '==', teamId), where('workerId', '==', showDetail.id))
     return onSnapshot(q, snap => setDetailUnavail(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [showDetail?.id, profile?.teamId])
+  }, [showDetail?.id, teamId])
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
@@ -228,7 +228,7 @@ export default function AdminUsers() {
         internalEmail,
         email:         form.email.trim().toLowerCase() || null,
         role:          form.role || 'worker',
-        teamId:        profile.teamId,
+        teamId:        teamId,
         approved:      true,
         active:        true,
         createdAt:     new Date().toISOString(),
@@ -504,7 +504,7 @@ export default function AdminUsers() {
         }}>
           {team?.logoUrl
             ? <img src={team.logoUrl} alt={team?.name || ''} style={{ width:'100%', height:'100%', objectFit:'contain' }} />
-            : <img src="/logo.png" alt="" style={{ width:'70%', height:'70%', objectFit:'contain', opacity:0.5 }} />
+            : <img src="/logo-default.svg" alt="" style={{ width:'70%', height:'70%', objectFit:'contain', opacity:0.5 }} />
           }
         </div>
         <div style={{ flex:1, minWidth:0 }}>

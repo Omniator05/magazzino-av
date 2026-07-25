@@ -1,9 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
 import { useState, useEffect, useRef } from 'react'
-import Login from './pages/Login'
-import Signup from './pages/Signup'
+import Auth from './pages/Auth'
+import Welcome from './pages/Welcome'
 import PendingApproval from './pages/PendingApproval'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
@@ -11,6 +11,7 @@ import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import Scanner from './pages/Scanner'
 import AdminUsers from './pages/AdminUsers'
+import SuperAdmin from './pages/SuperAdmin'
 import Vehicles from './pages/Vehicles'
 import Archive from './pages/Archive'
 import Tasks from './pages/Tasks'
@@ -25,6 +26,33 @@ import EventOrganizerHome from './pages/EventOrganizerHome'
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
+import OnboardingReveal from './components/OnboardingReveal'
+
+// Barra sempre visibile mentre un super admin sta "dentro" un'altra azienda
+// (vedi enterGhostTeam in AuthContext) — promemoria costante di dove si è,
+// con uscita immediata a un tap.
+function GhostBanner() {
+  const { ghostTeamId, exitGhostTeam, team } = useAuth()
+  const navigate = useNavigate()
+  if (!ghostTeamId) return null
+  return (
+    <div style={{
+      position:'fixed', top:0, left:0, right:0, zIndex:2000,
+      background:'#111827', color:'white',
+      padding:'calc(env(safe-area-inset-top) + 8px) 14px 8px',
+      display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+      fontSize:12.5, fontWeight:700, boxShadow:'0 2px 12px rgba(0,0,0,0.3)',
+    }}>
+      <span>👻 {team?.name || '…'}</span>
+      <button onClick={() => { exitGhostTeam(); navigate('/super') }} style={{
+        background:'rgba(255,255,255,0.15)', color:'white', border:'none',
+        borderRadius:8, padding:'3px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer',
+      }}>
+        Esci
+      </button>
+    </div>
+  )
+}
 
 /* Wrapper che riattiva l'animazione ad ogni cambio di route */
 function AnimatedPage({ children }) {
@@ -49,11 +77,16 @@ function AnimatedPage({ children }) {
 }
 
 function PrivateRoutes({ toggleTheme, theme }) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, signupInProgress, ghostTeamId } = useAuth()
   const { pathname } = useLocation()
   const onScannerRoute = pathname.endsWith('/scan')
+  const onSuperAdminRoute = pathname === '/super'
+  const onWelcomeRoute = pathname === '/welcome'
 
-  if (loading) return (
+  // Durante il signup l'utente Auth esiste già ma il profilo arriva un attimo
+  // dopo: senza questa attesa comparirebbe per un secondo la pagina "errore
+  // con questo account" prima della Dashboard.
+  if (loading || (signupInProgress && !profile)) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16 }}>
       <div style={{ width:40, height:40, border:'3px solid rgba(233,69,96,0.3)', borderTop:'3px solid #e94560', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
       <p style={{ color:'#9090b0', fontSize:14 }}>Caricamento...</p>
@@ -120,8 +153,19 @@ function PrivateRoutes({ toggleTheme, theme }) {
 
   // Admin view — unico ramo rimasto: role è garantito 'admin' dal controllo
   // KNOWN_ROLES sopra (nessun fallback implicito su ruoli sconosciuti).
+  // Il super admin resta sempre in questo ramo anche in modalità ghost (il
+  // suo profile.role non cambia mai): il banner segnala solo dove opera.
+
+  // Un super admin non deve mai vedere la propria dashboard personale prima
+  // di aver scelto (o auto-scelto, se ce n'è una sola — vedi AuthContext)
+  // un'azienda in cui operare: finché non l'ha fatto resta su /super.
+  if (profile?.superAdmin && !ghostTeamId && pathname !== '/super') {
+    return <Navigate to="/super" replace />
+  }
+
   return (
     <>
+      <GhostBanner />
       <AnimatedPage>
         <Routes>
           <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
@@ -133,13 +177,15 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/events/:id/scan" element={<WorkerScanner />} />
           <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/super" element={<SuperAdmin />} />
+          <Route path="/welcome" element={<Welcome />} />
           <Route path="/vehicles" element={<Vehicles />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatedPage>
-      {!onScannerRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}
+      {!onScannerRoute && !onSuperAdminRoute && !onWelcomeRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}
     </>
   )
 }
@@ -160,9 +206,10 @@ export default function App() {
         <BrowserRouter>
           <LoadingBar />
           <PageTransition />
+          <OnboardingReveal />
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+            <Route path="/login" element={<Auth initialMode="login" />} />
+            <Route path="/signup" element={<Auth initialMode="signup" />} />
             <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
           </Routes>
         </BrowserRouter>

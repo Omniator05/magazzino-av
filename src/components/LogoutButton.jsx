@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext'
 import { LogOut } from './Icon'
@@ -12,11 +12,21 @@ export default function LogoutButton({ style, className, name }) {
   const [confirm, setConfirm] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const first = (name || '').split(' ')[0]
+  const logoSrc = team?.logoUrl || '/logo-default.svg'
+
+  // Precarica il logo appena si apre il dialog di conferma: quando parte
+  // l'overlay d'uscita l'immagine è già in cache e appare subito, senza
+  // arrivare in ritardo rispetto al ritorno alla pagina di login.
+  useEffect(() => {
+    if (!confirm) return
+    const img = new Image()
+    img.src = logoSrc
+  }, [confirm, logoSrc])
 
   const doLogout = () => {
     setConfirm(false)
     setLeaving(true)
-    setTimeout(() => logout(), 1300)
+    setTimeout(() => logout(), 1500)
   }
 
   return (
@@ -40,7 +50,7 @@ export default function LogoutButton({ style, className, name }) {
         <div className="lo-overlay">
           <div className="lo-orb lo-orb-a" />
           <div className="lo-orb lo-orb-b" />
-          <img src={team?.logoUrl || '/logo.png'} alt={team?.name || 'The Service Group'} className="lo-logo" />
+          <img src={logoSrc} alt={team?.name || 'Gestione Magazzino'} className="lo-logo" />
           <p className="lo-bye">A presto{first ? `, ${first}` : ''}!</p>
           <div className="lo-spinner" />
         </div>, document.body)}
@@ -87,7 +97,7 @@ export default function LogoutButton({ style, className, name }) {
         .lo-orb { position: absolute; border-radius: 50%; pointer-events: none; }
         .lo-orb-a { top:-15%; left:-8%; width:60vmax; height:60vmax; background: radial-gradient(circle, rgba(230,57,70,.18) 0%, transparent 65%); animation: loOrbA 13s ease-in-out infinite; }
         .lo-orb-b { bottom:-18%; right:-10%; width:65vmax; height:65vmax; background: radial-gradient(circle, rgba(37,99,235,.12) 0%, transparent 65%); animation: loOrbB 17s ease-in-out infinite; }
-        .lo-logo { width: 220px; max-width: 60vw; height: 124px; object-fit: contain; z-index: 1;
+        .lo-logo { width: 120px; max-width: 34vw; height: 120px; object-fit: contain; z-index: 1;
           filter: drop-shadow(0 0 26px rgba(230,57,70,0.35));
           animation: loPop 0.6s cubic-bezier(0.34,1.4,0.64,1) both;
         }

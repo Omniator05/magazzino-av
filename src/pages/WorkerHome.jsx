@@ -6,7 +6,8 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore'
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
-import { Unload, Recurring, Pin, Box } from '../components/Icon'
+import TutorialModal from '../components/TutorialModal'
+import { Unload, Recurring, Pin, Box, Gear } from '../components/Icon'
 import { formatDate, capitalize } from '../utils/formatDate'
 import Profile from './Profile'
 
@@ -20,7 +21,7 @@ const greetingKey = () => {
 
 export default function WorkerHome() {
   const { t, i18n } = useTranslation()
-  const { profile, logout, teamId } = useAuth()
+  const { profile, logout, teamId, showOverlay } = useAuth()
   const [showProfile, setShowProfile] = useState(false)
   const [events, setEvents] = useState([])
   const [weather, setWeather] = useState(() => {
@@ -238,8 +239,11 @@ export default function WorkerHome() {
         <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
           <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
             {/* Avatar — tap → pagina profilo */}
-            <button onClick={() => setShowProfile(true)} style={{ flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
+            <button onClick={() => setShowProfile(true)} aria-label={t('workerHome.openSettings')} style={{ position:'relative', flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.3)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
               {profile?.avatar || initial}
+              <span style={{ position:'absolute', bottom:-4, right:-4, width:22, height:22, borderRadius:'50%', background:'var(--accent)', color:'white', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 6px rgba(0,0,0,0.35)' }}>
+                <Gear size={12} />
+              </span>
             </button>
             <div style={{ minWidth:0 }}>
               <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.8)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{t(greetingKey())},</p>
@@ -340,6 +344,8 @@ export default function WorkerHome() {
       </div>
 
       {showProfile && <Profile onClose={() => setShowProfile(false)} />}
+
+      {!showOverlay && <TutorialModal role="worker" />}
     </div>
   )
 }

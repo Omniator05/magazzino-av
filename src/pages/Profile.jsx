@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { auth } from '../firebase'
 import { reauthenticateWithCredential, EmailAuthProvider, updatePassword as fbUpdatePassword } from 'firebase/auth'
-import { useModalDrag } from '../hooks/useModalDrag'
+import { useCenteredModal } from '../hooks/useCenteredModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const AVATARS = [
@@ -45,11 +45,14 @@ const IconLock = () => (
 // Card modale (non più pagina a sé) aperta sopra Dashboard/WorkerHome tramite
 // tap sull'avatar — evita i bordi vuoti laterali che una pagina "page-narrow"
 // centrata avrebbe su desktop, dato che ora il contenuto è compatto.
+// Popup centrato (stile dialogo, come il tutorial o la conferma di logout)
+// invece di bottom-sheet: le impostazioni non sono un'azione rapida da un
+// contesto, meritano la stessa "finestra" delle altre schermate di sistema.
 export default function Profile({ onClose }) {
   const { t, i18n } = useTranslation()
   const { profile, user, updateProfileData } = useAuth()
   const [savingLang, setSavingLang] = useState(false)
-  const drag = useModalDrag(onClose, undefined, undefined, true)
+  const modal = useCenteredModal(onClose)
   useModalScrollLock(true)
 
   const [name, setName]           = useState(profile?.name || '')
@@ -57,7 +60,7 @@ export default function Profile({ onClose }) {
   const [nameOk, setNameOk]       = useState(false)
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const emojiDrag = useModalDrag(() => setShowEmojiPicker(false))
+  const emojiModal = useCenteredModal(() => setShowEmojiPicker(false))
 
   const [currentPwd,  setCurrentPwd]  = useState('')
   const [newPwd,      setNewPwd]      = useState('')
@@ -126,10 +129,18 @@ export default function Profile({ onClose }) {
   }
 
   return (
-    <div className={`modal-overlay${drag.closing ? ' closing' : ''}`} onClick={drag.onOverlayClick}>
-      <div className={`modal${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...drag.props}>
-        <button className="close-btn" onClick={drag.close}>✕</button>
-        <h2>{t('profile.title')}</h2>
+    <div
+      onClick={modal.close}
+      style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, animation: modal.closing ? 'profFadeOut 0.2s ease forwards' : 'profFadeIn 0.15s ease' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 22px 24px', width:'100%', maxWidth:400, maxHeight:'85dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: modal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
+      >
+        <button onClick={modal.close} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
+        <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20, letterSpacing:'-0.3px' }}>{t('profile.title')}</h2>
 
         {/* Riga identità — orizzontale, non più un hero centrato */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 0 20px' }}>
@@ -265,12 +276,20 @@ export default function Profile({ onClose }) {
           )}
         </GroupCard>
 
-        {/* Emoji picker */}
+        {/* Emoji picker — stesso stile popup centrato, sopra al popup Profilo */}
         {showEmojiPicker && (
-          <div className={`modal-overlay${emojiDrag.closing ? ' closing' : ''}`} onClick={emojiDrag.onOverlayClick}>
-            <div className={`modal${emojiDrag.jiggling ? ' modal-jiggle' : ''}${emojiDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...emojiDrag.props}>
-              <button className="close-btn" onClick={emojiDrag.close}>✕</button>
-              <h2>{t('profile.chooseAvatar')}</h2>
+          <div
+            onClick={emojiModal.close}
+            style={{ position:'fixed', inset:0, zIndex:10060, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, animation: emojiModal.closing ? 'profFadeOut 0.2s ease forwards' : 'profFadeIn 0.15s ease' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 22px 24px', width:'100%', maxWidth:380, boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: emojiModal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
+            >
+              <button onClick={emojiModal.close} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
+              <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20, letterSpacing:'-0.3px' }}>{t('profile.chooseAvatar')}</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: avatar ? 14 : 0 }}>
                 {AVATARS.map(em => (
                   <button
@@ -299,6 +318,12 @@ export default function Profile({ onClose }) {
           </div>
         )}
       </div>
+      <style>{`
+        @keyframes profFadeIn  { from{opacity:0} to{opacity:1} }
+        @keyframes profFadeOut { from{opacity:1} to{opacity:0} }
+        @keyframes profPopIn   { from{opacity:0; transform:translateY(12px) scale(0.96)} to{opacity:1; transform:translateY(0) scale(1)} }
+        @keyframes profPopOut  { from{opacity:1; transform:scale(1)} to{opacity:0; transform:scale(0.97)} }
+      `}</style>
     </div>
   )
 }

@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
-import AuthShell from '../components/AuthShell'
 
-export default function Login() {
+// Solo il form di accesso: il guscio (sfondo + card divisa) è in Auth.jsx,
+// che tiene login e signup montati nella stessa card così il pannello rosso
+// può scivolare da un lato all'altro quando si cambia modalità.
+export default function LoginForm({ onSwitch }) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -31,7 +33,7 @@ export default function Login() {
   }
 
   return (
-    <AuthShell>
+    <>
       <form onSubmit={handleSubmit}>
         <div className="auth-card">
           <h2 style={{ fontSize:22, fontWeight:700, color:'white', marginBottom:6, letterSpacing:'-0.3px' }}>
@@ -90,8 +92,12 @@ export default function Login() {
       </form>
 
       <p style={{ textAlign:'center', color:'rgba(255,255,255,0.2)', fontSize:12, marginTop:20, letterSpacing:'0.2px' }}>
-        {t('login.noAccount')} <Link to="/signup" style={{ color:'rgba(255,255,255,0.5)', fontWeight:600 }}>{t('login.signUp')}</Link>
+        {t('login.noAccount')}{' '}
+        <button type="button" onClick={onSwitch}
+          style={{ background:'none', border:'none', padding:0, color:'rgba(255,255,255,0.5)', fontWeight:600, fontSize:12, cursor:'pointer', textDecoration:'underline' }}>
+          {t('login.signUp')}
+        </button>
       </p>
-    </AuthShell>
+    </>
   )
 }

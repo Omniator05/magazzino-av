@@ -47,8 +47,10 @@ function FlapName({ text, startDelay = 450 }) {
 export default function PageTransition() {
   const { loading, profile, team, showOverlay, setShowOverlay, loginName } = useAuth()
   const [exiting, setExiting] = useState(false)
+  const [logoLoaded, setLogoLoaded] = useState(false)
   const minReadyAt = useRef(0)
   const exitTimer  = useRef(null)
+  const logoSrc = team?.logoUrl || '/logo-default.svg'
 
   // Permanenza minima allungata per dare spazio all'animazione split-flap (~2.8s)
   useEffect(() => {
@@ -58,9 +60,38 @@ export default function PageTransition() {
     }
   }, [showOverlay])
 
+  // Il logo è "pronto" solo quando profilo e team sono davvero risolti:
+  // `loading` non basta perché nel login manuale resta false per tutto il
+  // tempo, e partiremmo col logo di default per poi scambiarlo con quello
+  // dell'azienda appena arriva (la doppia apparizione da evitare).
+  const teamReady = !loading && !!profile && (!profile.teamId || !!team)
+
+  // Nome e logo appaiono solo a dati pronti: la permanenza minima riparte da
+  // QUEL momento, così lo split-flap ha sempre il tempo di completarsi anche
+  // se profilo/team arrivano un po' dopo l'apertura dell'overlay.
   useEffect(() => {
-    if (!showOverlay || loading) return
-    const wait = Math.max(0, minReadyAt.current - Date.now())
+    if (showOverlay && teamReady) minReadyAt.current = Date.now() + 2800
+  }, [showOverlay, teamReady])
+
+  // Precarica il logo definitivo fuori schermo: il fade parte solo a
+  // immagine effettivamente decodificata, mai su un riquadro vuoto.
+  useEffect(() => {
+    if (!teamReady) { setLogoLoaded(false); return }
+    let cancelled = false
+    const img = new Image()
+    img.onload = () => { if (!cancelled) setLogoLoaded(true) }
+    img.onerror = () => { if (!cancelled) setLogoLoaded(true) }
+    img.src = logoSrc
+    return () => { cancelled = true }
+  }, [teamReady, logoSrc])
+
+  useEffect(() => {
+    if (!showOverlay) return
+    // Esci solo a dati pronti (rispettando la permanenza minima); se il profilo
+    // non arriva mai (es. utente orfano → PendingApproval), sblocco forzato.
+    const hardCap = minReadyAt.current + 3200
+    const target = teamReady ? Math.max(minReadyAt.current, Date.now()) : hardCap
+    const wait = Math.max(0, target - Date.now())
     exitTimer.current = setTimeout(() => {
       setExiting(true)
       setTimeout(() => {
@@ -69,11 +100,14 @@ export default function PageTransition() {
       }, 750)
     }, wait)
     return () => clearTimeout(exitTimer.current)
-  }, [showOverlay, loading, profile, setShowOverlay])
+  }, [showOverlay, teamReady, setShowOverlay])
 
   if (!showOverlay) return null
 
-  const firstName = (profile?.name || loginName || '').split(' ')[0]
+  // Il nome parte SOLO a profilo risolto: prima arriverebbe loginName (prefisso
+  // email o displayName, es. "mattia.cruciotti") e lo split-flap partirebbe con
+  // quella scritta lunga per poi accorciarsi al nome vero — da evitare.
+  const firstName = teamReady ? (profile?.name || loginName || '').split(' ')[0] : ''
 
   return (
     <>
@@ -99,6 +133,8 @@ export default function PageTransition() {
         }
         .flap-cell { transform-origin: center; }
         .flap-lock { animation: flapLock 0.32s cubic-bezier(0.36,0.07,0.19,0.97) both; }
+        @keyframes ptOverlayIn { from{opacity:0} to{opacity:1} }
+        .pt-wrap { animation: ptOverlayIn 0.4s ease both; }
         .pt-wrap.exiting {
           animation: ptOverlayOut 0.75s cubic-bezier(0.4,0,1,1) forwards;
           pointer-events: none;
@@ -141,13 +177,16 @@ export default function PageTransition() {
           animation: 'ptOrbB 17s ease-in-out infinite', pointerEvents: 'none',
         }} />
 
-        {/* Logo */}
+        {/* Logo — niente placeholder: lo spazio resta vuoto e il logo vero
+            (precaricato dall'effect sopra) appare con un solo leggero fade
+            appena è pronto. Un'unica apparizione, mai sostituzioni a scatto. */}
         <div style={{
           zIndex: 1, textAlign: 'center', marginBottom: 52,
           animation: 'ptLogoIn 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards',
         }}>
-          <div style={{ display: 'inline-block', width: 260, maxWidth: '68vw', height: 146, animation: 'ptGlow 3s ease-in-out infinite' }}>
-            <img src={team?.logoUrl || '/logo.png'} alt={team?.name || 'The Service Group'} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <div style={{ position: 'relative', display: 'inline-block', width: 140, maxWidth: '40vw', height: 140, animation: logoLoaded ? 'ptGlow 3s ease-in-out infinite' : 'none' }}>
+            <img src={logoSrc} alt={team?.name || 'Gestione Magazzino'}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: logoLoaded ? 1 : 0, transition: 'opacity 0.7s ease' }} />
           </div>
           <p style={{
             color: 'rgba(255,255,255,0.25)', fontSize: 10,

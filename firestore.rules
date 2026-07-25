@@ -24,27 +24,55 @@ service cloud.firestore {
     function isTeamAdmin(teamId) {
       return isApprovedMember(teamId) && myProfile().data.role == 'admin';
     }
+    // Super admin ("amministratore ghost"): flag impostato SOLO manualmente
+    // da console/script admin — mai dall'app (vedi guardie su create/update
+    // di profiles). In modalità ghost (lato client) opera sui dati di
+    // un'altra squadra per assisterla/correggerne le impostazioni: le regole
+    // sotto gli danno pieno accesso equivalente a un admin di QUALSIASI
+    // squadra — non solo lettura — perché "entra" per risolvere problemi,
+    // non solo osservare.
+    function isSuperAdmin() {
+      return request.auth != null && myProfile().data.get('superAdmin', false) == true;
+    }
+    // Wrapper usati ovunque prima si usava isApprovedMember/isTeamAdmin per
+    // decidere l'accesso a UNA squadra specifica: il super admin li supera
+    // sempre, qualunque sia teamId.
+    function canAccessTeam(teamId) {
+      return isApprovedMember(teamId) || isSuperAdmin();
+    }
+    function canAdminTeam(teamId) {
+      return isTeamAdmin(teamId) || isSuperAdmin();
+    }
 
     match /profiles/{uid} {
       // Signup: il profilo non esiste ancora, non può dipendere da myProfile().
-      allow create: if request.auth != null && request.auth.uid == uid;
+      // Nessuno può nascere già superAdmin.
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.get('superAdmin', false) != true;
       // Il proprio profilo è sempre leggibile (serve anche prima dell'approvazione,
-      // per la schermata "in attesa"); un membro approvato legge anche i profili
-      // della propria squadra (es. AdminUsers, assegnazione worker a un evento).
+      // per la schermata "in attesa"); un membro approvato (o il super admin)
+      // legge anche i profili della squadra (es. AdminUsers, assegnazione worker).
       allow read: if request.auth != null
-        && (request.auth.uid == uid || isApprovedMember(resource.data.teamId));
+        && (request.auth.uid == uid || canAccessTeam(resource.data.teamId));
+      // Il flag superAdmin è immutabile dall'app: qualunque update deve
+      // lasciarlo esattamente com'era (assente compreso).
       allow update: if request.auth != null
-        && (isTeamAdmin(resource.data.teamId) || request.auth.uid == uid);
-      allow delete: if isTeamAdmin(resource.data.teamId);
+        && (canAdminTeam(resource.data.teamId) || request.auth.uid == uid)
+        && request.resource.data.get('superAdmin', false) == resource.data.get('superAdmin', false);
+      allow delete: if canAdminTeam(resource.data.teamId);
     }
 
     match /teams/{teamId} {
-      // Lettura/creazione aperta a chiunque sia autenticato: serve per la ricerca
-      // per nome azienda in Signup, prima che l'utente abbia un proprio profilo.
-      // Espone solo nome squadra, non è un dato sensibile.
-      allow read: if request.auth != null;
+      // Lettura pubblica (anche senza login): serve per la ricerca per nome
+      // azienda e il controllo duplicati in Signup, che avvengono PRIMA che
+      // l'utente crei il proprio account Firebase Auth. Espone solo nome
+      // squadra e logo, non è un dato sensibile.
+      allow read: if true;
       allow create: if request.auth != null;
-      allow update: if isTeamAdmin(teamId);
+      allow update: if canAdminTeam(teamId);
+      // Eliminazione azienda: SOLO il super admin, mai un admin della propria
+      // squadra (troppo distruttivo per essere self-service dai clienti).
+      allow delete: if isSuperAdmin();
     }
 
     // Pattern comune per tutte le collection dati applicative: items, events,
@@ -58,11 +86,11 @@ service cloud.firestore {
       // esplicitamente, altrimenti anche i listener su documenti legittimamente
       // assenti falliscono con permission-denied invece di restituire "non esiste".
       allow get: if collection != 'profiles' && collection != 'teams'
-        && (resource == null || isApprovedMember(resource.data.teamId));
+        && (resource == null || canAccessTeam(resource.data.teamId));
       allow list, update, delete: if collection != 'profiles' && collection != 'teams'
-        && isApprovedMember(resource.data.teamId);
+        && canAccessTeam(resource.data.teamId);
       allow create: if collection != 'profiles' && collection != 'teams'
-        && isApprovedMember(request.resource.data.teamId);
+        && canAccessTeam(request.resource.data.teamId);
     }
   }
 }
