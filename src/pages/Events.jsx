@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import FabButton from '../components/FabButton'
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 function addDays(dateStr, days) {
@@ -501,14 +502,10 @@ export default function Events() {
           }}>
             <IconArchive /> {t('events.archive')}
           </button>
-          <button onClick={() => setShowTemplateMenu(true)} style={{
-            background:'var(--accent)', color:'white', border:'none',
-            borderRadius:50, padding:'8px 16px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6,
-          }}>
-            <IconPlus /> {t('events.newEventButton')}
-          </button>
         </div>
       </div>
+
+      <FabButton onClick={() => setShowTemplateMenu(true)} ariaLabel={t('events.newEventButton')} />
 
       {/* Search bar SEMPRE visibile */}
       <div style={{ padding:'0 16px 12px' }}>

@@ -16,4 +16,10 @@ const app = initializeApp(firebaseConfig)
 export const db = getFirestore(app)
 export const auth = getAuth(app)
 export const storage = getStorage(app)
+
+// App secondaria usata SOLO per creare nuovi utenti (createUserWithEmailAndPassword
+// su `auth` switcherebbe la sessione corrente al nuovo utente appena creato).
+const secondaryApp = initializeApp(firebaseConfig, 'Secondary')
+export const secondaryAuth = getAuth(secondaryApp)
+
 export default app

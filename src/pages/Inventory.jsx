@@ -11,7 +11,10 @@ import { formatDate } from '../utils/formatDate'
 import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
+import { useCenteredModal } from '../hooks/useCenteredModal'
 import { Pin, Cart, Box, Kit, Save, Wrench } from '../components/Icon'
+import FabButton from '../components/FabButton'
+import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 
 const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const KIT_CATEGORIES = CATEGORIES
@@ -91,13 +94,19 @@ export default function Inventory() {
   const [qrUrl, setQrUrl] = useState(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showPrintPopup, setShowPrintPopup] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importStep, setImportStep] = useState('instructions') // instructions | preview | importing | done
+  const [importParsed, setImportParsed] = useState(null) // { items, warnings }
+  const [importError, setImportError] = useState('')
+  const [importProgress, setImportProgress] = useState(0)
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
   const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
   const kitDrag     = useModalDrag(() => setShowKitModal(false))
-  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup)
+  const importModal = useCenteredModal(() => setShowImportModal(false))
+  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showImportModal)
   // Kit form: nome + componenti
 
   // Items in shared global collection so workers can read them
@@ -273,6 +282,57 @@ export default function Inventory() {
     URL.revokeObjectURL(url)
   }
 
+  // \u2500\u2500 Importa lista da CSV \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // Riconosce le intestazioni per nome (IT/EN, anche quelle del nostro
+  // export) invece di richiedere un ordine di colonne rigido \u2014 cos\u00EC una
+  // lista che qualcuno ha gi\u00E0 in un foglio di calcolo ha buone probabilit\u00E0
+  // di funzionare senza doverla riformattare. Ogni articolo importato parte
+  // sempre "tutto disponibile, niente rotti": non fidiamoci di eventuali
+  // colonne disponibilit\u00E0/rotti/codice in un file esterno, potrebbero non
+  // rispecchiare lo stato reale del magazzino.
+  const openImport = () => {
+    setImportStep('instructions')
+    setImportParsed(null)
+    setImportError('')
+    setImportProgress(0)
+    setShowImportModal(true)
+  }
+
+  const handleImportFile = async e => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImportError('')
+    try {
+      const text = await file.text()
+      const rows = parseCSV(text)
+      const { items: parsedItems, warnings } = mapRowsToItems(rows, CATEGORIES)
+      if (parsedItems.length === 0) { setImportError(t('inventory.importErrorNoRows')); return }
+      setImportParsed({ items: parsedItems, warnings })
+      setImportStep('preview')
+    } catch (err) {
+      setImportError(err.code === 'no-name-column' ? t('inventory.importErrorNoNameColumn') : t('inventory.importErrorNoRows'))
+    }
+  }
+
+  const confirmImport = async () => {
+    if (!importParsed) return
+    setImportStep('importing')
+    setImportProgress(0)
+    const toImport = importParsed.items
+    for (let i = 0; i < toImport.length; i++) {
+      const it = toImport[i]
+      const ref = await addDoc(collection(db, 'items'), {
+        name: it.name, category: it.category, totalQty: it.totalQty, availableQty: it.totalQty,
+        minStock: 0, brokenQty: 0, brand: it.brand, model: it.model, location: it.location, notes: it.notes,
+        teamId, createdAt: serverTimestamp(), createdBy: user.uid,
+      })
+      await updateDoc(ref, { code: generateItemCode(ref.id) })
+      setImportProgress(i + 1)
+    }
+    setImportStep('done')
+  }
+
   const [activeFilter, setActiveFilter] = useState(navState?.filter || 'all')
 
   const filtered = items.filter(i => {
@@ -326,6 +386,12 @@ export default function Inventory() {
                     minWidth:190, overflow:'hidden',
                   }}>
                     <button
+                      onClick={() => { setShowActionsMenu(false); openImport() }}
+                      style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid var(--border)' }}
+                    >
+                      <span>📥</span> {t('inventory.importList')}
+                    </button>
+                    <button
                       onClick={() => { setShowActionsMenu(false); exportCSV() }}
                       style={{ width:'100%', padding:'13px 16px', textAlign:'left', background:'transparent', color:'var(--text)', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid var(--border)' }}
                     >
@@ -341,10 +407,11 @@ export default function Inventory() {
                 </>
               )}
             </div>
-            <button onClick={() => setShowAddMenu(true)} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>{t('inventory.addButton')}</button>
           </div>
         </div>
       </div>
+
+      <FabButton onClick={() => setShowAddMenu(true)} ariaLabel={t('inventory.addButton')} />
 
       <div className="search-bar" style={{ position:'relative' }}>
         <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -730,6 +797,117 @@ export default function Inventory() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Importa lista da CSV — finestra centrata (non bottom-sheet): prima
+          le istruzioni sul formato, poi l'anteprima di cosa verrà importato,
+          poi il progresso. Sempre annullabile finché non si conferma. */}
+      {showImportModal && (
+        <div
+          onClick={importModal.close}
+          style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, animation: importModal.closing ? 'invImportFadeOut 0.2s ease forwards' : 'invImportFadeIn 0.15s ease' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 24px 24px', width:'100%', maxWidth:420, maxHeight:'85dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: importModal.closing ? 'invImportPopOut 0.2s ease forwards' : 'invImportPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
+          >
+            {importStep !== 'importing' && (
+              <button onClick={importModal.close} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
+            )}
+
+            {importStep === 'instructions' && (
+              <>
+                <h2 style={{ fontSize:19, fontWeight:800, marginBottom:6 }}>{t('inventory.importInstructionsTitle')}</h2>
+                <p style={{ color:'var(--text2)', fontSize:13.5, lineHeight:1.55, marginBottom:16 }}>{t('inventory.importInstructionsDesc')}</p>
+
+                <div style={{ background:'var(--card2)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', marginBottom:16 }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('inventory.importColumnsTitle')}</p>
+                  <ul style={{ margin:0, paddingLeft:18, fontSize:13, color:'var(--text)', lineHeight:1.7 }}>
+                    <li><strong>{t('inventory.csv.name')}</strong> — {t('inventory.importColRequired')}</li>
+                    <li>{t('inventory.csv.category')} — {t('inventory.importColCategory')}</li>
+                    <li>{t('inventory.csv.brand')} / {t('inventory.csv.model')}</li>
+                    <li>{t('inventory.csv.totalQty')} — {t('inventory.importColQty')}</li>
+                    <li>{t('inventory.csv.location')}</li>
+                    <li>{t('inventory.csv.notes')}</li>
+                  </ul>
+                </div>
+
+                <p style={{ fontSize:12.5, color:'var(--text2)', marginBottom:16, lineHeight:1.5 }}>{t('inventory.importFormatHint')}</p>
+
+                {importError && <p style={{ color:'var(--accent)', fontSize:13, fontWeight:600, marginBottom:12 }}>{importError}</p>}
+
+                <label className="btn btn-primary btn-full" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, cursor:'pointer' }}>
+                  {t('inventory.importChooseFile')}
+                  <input type="file" accept=".csv,text/csv" onChange={handleImportFile} style={{ display:'none' }} />
+                </label>
+              </>
+            )}
+
+            {importStep === 'preview' && importParsed && (
+              <>
+                <h2 style={{ fontSize:19, fontWeight:800, marginBottom:6 }}>{t('inventory.importPreviewTitle', { count: importParsed.items.length })}</h2>
+                <p style={{ color:'var(--text2)', fontSize:13.5, lineHeight:1.5, marginBottom:14 }}>{t('inventory.importPreviewDesc')}</p>
+
+                <div style={{ background:'var(--card2)', border:'1px solid var(--border)', borderRadius:12, padding:'4px 14px', marginBottom:14, maxHeight:180, overflowY:'auto' }}>
+                  {importParsed.items.slice(0, 8).map((it, i) => (
+                    <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                      <span style={{ fontSize:13.5, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.name}</span>
+                      <span style={{ fontSize:12, color:'var(--text2)', flexShrink:0 }}>{it.category} · ×{it.totalQty}</span>
+                    </div>
+                  ))}
+                  {importParsed.items.length > 8 && (
+                    <p style={{ fontSize:12, color:'var(--text2)', padding:'8px 0', borderTop:'1px solid var(--border)' }}>{t('common.moreCount', { count: importParsed.items.length - 8 })}</p>
+                  )}
+                </div>
+
+                {(importParsed.warnings.categoryFallbacks > 0 || importParsed.warnings.qtyFallbacks > 0 || importParsed.warnings.skippedEmptyName > 0 || importParsed.warnings.malformedRows > 0) && (
+                  <div style={{ background:'rgba(245,166,35,0.10)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:10, padding:'10px 12px', marginBottom:16, fontSize:12.5, color:'var(--accent2)', lineHeight:1.6 }}>
+                    {importParsed.warnings.malformedRows > 0 && <p>{t('inventory.importWarnMalformed', { count: importParsed.warnings.malformedRows })}</p>}
+                    {importParsed.warnings.categoryFallbacks > 0 && <p>{t('inventory.importWarnCategory', { count: importParsed.warnings.categoryFallbacks })}</p>}
+                    {importParsed.warnings.qtyFallbacks > 0 && <p>{t('inventory.importWarnQty', { count: importParsed.warnings.qtyFallbacks })}</p>}
+                    {importParsed.warnings.skippedEmptyName > 0 && <p>{t('inventory.importWarnSkipped', { count: importParsed.warnings.skippedEmptyName })}</p>}
+                  </div>
+                )}
+
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={() => setImportStep('instructions')} className="btn-no-anim" style={{ flex:1, padding:13, borderRadius:12, background:'var(--card2)', color:'var(--text2)', fontWeight:700, fontSize:14 }}>
+                    {t('common.back')}
+                  </button>
+                  <button onClick={confirmImport} className="btn btn-primary" style={{ flex:2 }}>
+                    {t('inventory.importConfirm', { count: importParsed.items.length })}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {importStep === 'importing' && (
+              <div style={{ textAlign:'center', padding:'20px 0' }}>
+                <div style={{ width:40, height:40, border:'3px solid var(--border)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 16px' }} />
+                <p style={{ fontWeight:700, fontSize:15, marginBottom:4 }}>{t('inventory.importingProgress', { done: importProgress, total: importParsed?.items.length || 0 })}</p>
+                <p style={{ color:'var(--text2)', fontSize:13 }}>{t('inventory.importingHint')}</p>
+                <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+              </div>
+            )}
+
+            {importStep === 'done' && (
+              <div style={{ textAlign:'center', padding:'12px 0' }}>
+                <div style={{ width:56, height:56, borderRadius:'50%', background:'rgba(52,211,153,0.12)', color:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+                  <Save size={26} />
+                </div>
+                <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>{t('inventory.importDoneTitle', { count: importParsed?.items.length || 0 })}</h2>
+                <button onClick={() => setShowImportModal(false)} className="btn btn-primary btn-full">{t('common.close')}</button>
+              </div>
+            )}
+          </div>
+          <style>{`
+            @keyframes invImportFadeIn  { from{opacity:0} to{opacity:1} }
+            @keyframes invImportFadeOut { from{opacity:1} to{opacity:0} }
+            @keyframes invImportPopIn   { from{opacity:0; transform:translateY(12px) scale(0.96)} to{opacity:1; transform:translateY(0) scale(1)} }
+            @keyframes invImportPopOut  { from{opacity:1; transform:scale(1)} to{opacity:0; transform:scale(0.97)} }
+          `}</style>
         </div>
       )}
 

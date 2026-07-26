@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { auth, db } from '../firebase'
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { db, secondaryAuth } from '../firebase'
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
@@ -63,13 +63,11 @@ export default function Welcome() {
     setCreatingWorker(true); setWorkerError('')
     const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
     const internalEmail = usernameToEmail(username)
-    const adminEmail = auth.currentUser.email
-    const adminPassword = sessionStorage.getItem('__ap')
 
     try {
-      // createUserWithEmailAndPassword switcha la sessione al nuovo utente:
-      // rientriamo come admin subito dopo (stesso pattern di AdminUsers.jsx).
-      const cred = await createUserWithEmailAndPassword(auth, internalEmail, form.password)
+      // Crea il nuovo utente su un'app Firebase secondaria: non tocca la
+      // sessione admin corrente (stesso pattern di AdminUsers.jsx).
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
       await setDoc(doc(db, 'profiles', cred.user.uid), {
         name: form.name.trim(),
         username,
@@ -81,7 +79,7 @@ export default function Welcome() {
         createdAt: new Date().toISOString(),
         createdBy: user.uid,
       })
-      if (adminPassword) await signInWithEmailAndPassword(auth, adminEmail, adminPassword)
+      await signOut(secondaryAuth)
       setWorkerCreated(true)
       setTimeout(() => setStep('done'), 900)
     } catch (err) {

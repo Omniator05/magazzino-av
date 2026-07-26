@@ -6,16 +6,18 @@ import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
-import { db, auth } from '../firebase'
+import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
+import FabButton from '../components/FabButton'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updatePassword,
   EmailAuthProvider,
-  reauthenticateWithCredential
+  reauthenticateWithCredential,
+  signOut
 } from 'firebase/auth'
 
 const EMPTY_ORG_CONFIG = { eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' }
@@ -110,7 +112,7 @@ function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
 
 export default function AdminUsers() {
   const { t, i18n } = useTranslation()
-  const { user, profile, team, teamId, updateTeamData, logout } = useAuth()
+  const { user, profile, team, teamId, updateTeamData } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [users, setUsers]             = useState([])
@@ -124,7 +126,6 @@ export default function AdminUsers() {
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker' })
   const [newPw, setNewPw]             = useState('')
-  const [adminPw, setAdminPw]         = useState('')
   const [newUsername, setNewUsername]   = useState('')
   const [error, setError]             = useState('')
   const [detailMsg, setDetailMsg]     = useState({ text:'', type:'' })
@@ -213,13 +214,12 @@ export default function AdminUsers() {
     setLoading(true); setError('')
 
     const internalEmail = usernameToEmail(username)
-    const adminEmail    = auth.currentUser.email
-    // Leggi la password admin da sessionStorage (salvata al login)
-    const adminPassword = sessionStorage.getItem('__ap')
 
     try {
-      // Crea il nuovo utente Firebase Auth
-      const cred = await createUserWithEmailAndPassword(auth, internalEmail, form.password)
+      // Crea il nuovo utente su un'app Firebase secondaria: non tocca la
+      // sessione admin corrente (createUserWithEmailAndPassword su `auth`
+      // switcherebbe l'admin al nuovo utente appena creato).
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
 
       // Salva il profilo
       await setDoc(doc(db, 'profiles', cred.user.uid), {
@@ -241,15 +241,8 @@ export default function AdminUsers() {
           : {}),
       })
 
-      // Firebase ci ha switchato all'utente appena creato → rientra come admin
-      if (adminPassword) {
-        await signInWithEmailAndPassword(auth, adminEmail, adminPassword)
-        showToast(t('adminUsers.accountCreatedFor', { name: form.name }))
-      } else {
-        // Non abbiamo la password admin in sessione → avvisa e forza logout
-        showToast(t('adminUsers.accountCreatedReauth'))
-        setTimeout(() => logout(), 2500)
-      }
+      await signOut(secondaryAuth)
+      showToast(t('adminUsers.accountCreatedFor', { name: form.name }))
 
       setForm({ name:'', username:'', password:'', email:'', role:'worker' })
       setOrgConfig(EMPTY_ORG_CONFIG)
@@ -351,50 +344,37 @@ export default function AdminUsers() {
   }
 
   // ── Cambia password ───────────────────────────────────────────
-  // Strategia: riloghiamo temporaneamente come l'utente target,
-  // aggiorniamo la password, poi riloghiamo come admin.
+  // Login temporaneo come utente target su un'app Firebase secondaria:
+  // non tocca mai la sessione admin principale (stesso pattern di createAccount).
   const changePassword = async () => {
     if (newPw.length < 6) { setDetailMsg({ text:t('adminUsers.errorPasswordLength'), type:'error' }); return }
-    if (!adminPw) { setDetailMsg({ text:t('adminUsers.errorAdminPasswordRequired'), type:'error' }); return }
 
     setLoading(true); clearDetailMsg()
-    const adminEmail = auth.currentUser.email
 
     try {
-      // 1. Entra come utente target
-      const targetCred = await signInWithEmailAndPassword(auth, showDetail.internalEmail, showDetail._currentPw || '??')
+      // 1. Entra come utente target (su secondaryAuth)
+      const targetCred = await signInWithEmailAndPassword(secondaryAuth, showDetail.internalEmail, showDetail._currentPw || '??')
       // Se arriviamo qui la password era già quella — caso raro
       await updatePassword(targetCred.user, newPw)
+      await signOut(secondaryAuth)
     } catch(loginErr) {
-      // Non conosciamo la password attuale → usiamo un workaround:
-      // riautentichiamo l'admin e scriviamo un flag su Firestore
-      // poi l'utente viene "resettato" la prossima volta che accede
-      // NOTA: questa limitazione è di Firebase lato client.
-      // Per cambiare la password di un altro utente senza conoscerla
-      // servono le Firebase Admin SDK (Cloud Functions).
-      // Come alternativa pratica, salviamo la nuova password come
-      // "richiesta di cambio" e la applichiamo al prossimo login dell'utente.
-      try {
-        // Riautentica admin (potrebbe essere scaduto il token)
-        await signInWithEmailAndPassword(auth, adminEmail, adminPw)
-        // Salva la nuova password cifrata base64 (non sicurezza critica, uso interno)
-        await updateDoc(doc(db, 'profiles', showDetail.id), {
-          pendingPassword: btoa(newPw),
-          pendingPasswordSetAt: new Date().toISOString(),
-        })
-        clearDetailMsg()
-        setNewPw(''); setAdminPw('')
-        showToast(t('adminUsers.passwordPendingToast', { name: showDetail.name }))
-      } catch(e) {
-        setDetailMsg({ text: t('adminUsers.errorWrongAdminPassword'), type:'error' })
-      } finally { setLoading(false) }
+      // Non conosciamo la password attuale → non possiamo cambiarla via client SDK
+      // (servirebbero le Firebase Admin SDK / Cloud Functions). Come alternativa
+      // pratica, salviamo la nuova password come "richiesta di cambio" e la
+      // applichiamo al prossimo login dell'utente.
+      await updateDoc(doc(db, 'profiles', showDetail.id), {
+        pendingPassword: btoa(newPw),
+        pendingPasswordSetAt: new Date().toISOString(),
+      })
+      clearDetailMsg()
+      setNewPw('')
+      setLoading(false)
+      showToast(t('adminUsers.passwordPendingToast', { name: showDetail.name }))
       return
     }
 
-    // Rientra come admin
-    try { await signInWithEmailAndPassword(auth, adminEmail, adminPw) } catch(e) {}
     clearDetailMsg()
-    setNewPw(''); setAdminPw('')
+    setNewPw('')
     setLoading(false)
     showToast(t('adminUsers.passwordUpdatedToast', { name: showDetail.name }))
   }
@@ -489,11 +469,11 @@ export default function AdminUsers() {
       )}
 
       <div className="page-header">
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div><h1>{t('adminUsers.title')}</h1><p>{t('adminUsers.totalAccounts', { count: users.length })}</p></div>
-          <button onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} className="btn btn-primary" style={{ padding:'10px 16px', fontSize:14 }}>{t('adminUsers.newButton')}</button>
-        </div>
+        <h1>{t('adminUsers.title')}</h1>
+        <p>{t('adminUsers.totalAccounts', { count: users.length })}</p>
       </div>
+
+      <FabButton onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} ariaLabel={t('adminUsers.newButton')} />
 
       {/* Logo squadra — mostrato al posto del logo di default nell'app e nei PDF */}
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px', display:'flex', alignItems:'center', gap:14 }}>
@@ -779,11 +759,7 @@ export default function AdminUsers() {
                     <label>{t('adminUsers.newPasswordLabel')}</label>
                     <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder={t('adminUsers.newPasswordPlaceholder')} />
                   </div>
-                  <div className="form-group" style={{ marginBottom:10 }}>
-                    <label>{t('adminUsers.yourAdminPasswordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.yourAdminPasswordHint')}</span></label>
-                    <input type="password" value={adminPw} onChange={e => setAdminPw(e.target.value)} placeholder={t('adminUsers.yourAdminPasswordPlaceholder')} />
-                  </div>
-                  <button onClick={changePassword} className="btn btn-secondary" style={{ width:'100%', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }} disabled={loading}>
+                  <button onClick={changePassword} className="btn btn-secondary" style={{ width:'100%', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, marginTop:10 }} disabled={loading}>
                     {loading ? t('common.saving') : <><Save size={16} /> {t('adminUsers.saveNewPassword')}</>}
                   </button>
                 </div>
