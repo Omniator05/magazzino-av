@@ -65,7 +65,12 @@ export default function TutorialModal({ role }) {
   const slides = SLIDES[role] || SLIDES.worker
 
   useEffect(() => {
-    if (profile && profile.tutorialSeen !== true) setShow(true)
+    if (!profile || profile.tutorialSeen === true) return
+    // Un po' di respiro dopo qualunque transizione appena finita (es. la
+    // rivelazione della dashboard a fine onboarding) — senza, il popup
+    // spuntava incollato subito dopo, tutto troppo "uno dopo l'altro".
+    const timer = setTimeout(() => setShow(true), 1100)
+    return () => clearTimeout(timer)
   }, [profile])
 
   const close = () => {

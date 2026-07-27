@@ -1,6 +1,7 @@
-// Helper condiviso dalle tre API Stripe: stessa identica inizializzazione
-// firebase-admin già usata in sync-google-calendar.js (un solo service account,
-// una sola inizializzazione per tutta la funzione serverless).
+// Helper condiviso da tutte le API server-side che devono verificare "chi
+// chiama è admin della propria squadra" (Stripe, invio email...) — stessa
+// identica inizializzazione firebase-admin già usata in sync-google-calendar.js
+// (un solo service account, una sola inizializzazione per funzione serverless).
 import admin from 'firebase-admin'
 
 export function getAdmin() {
@@ -30,7 +31,7 @@ export async function requireTeamAdmin(req) {
   const profileSnap = await db.collection('profiles').doc(decoded.uid).get()
   const profile = profileSnap.data()
   if (!profile || profile.role !== 'admin') {
-    const e = new Error('Solo un admin può gestire l\'abbonamento'); e.status = 403; throw e
+    const e = new Error('Azione riservata agli admin'); e.status = 403; throw e
   }
 
   const teamRef = db.collection('teams').doc(profile.teamId)

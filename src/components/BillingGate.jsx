@@ -48,7 +48,7 @@ export default function BillingGate() {
         {error && <p style={{ color:'#dc2626', fontSize:13, marginBottom:14, fontWeight:600 }}>{error}</p>}
         {isAdmin && (
           <button onClick={startCheckout} disabled={loading} className="btn btn-primary btn-full">
-            {loading ? t('common.saving') : t('billing.subscribeButton')}
+            {loading ? t('common.redirecting') : t('billing.subscribeButton')}
           </button>
         )}
         <button onClick={logout} style={{ marginTop:16, background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:600, padding:8 }}>

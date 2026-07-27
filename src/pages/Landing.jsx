@@ -21,7 +21,7 @@ export default function Landing() {
     <AuthBackground>
       <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
         <h1 style={{ fontSize: 34, fontWeight: 800, color: 'white', letterSpacing: '-0.5px', marginBottom: 10 }}>
-          Magazzino AV
+          Roadcase
         </h1>
         <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 15, lineHeight: 1.6, marginBottom: 30 }}>
           Il gestionale per aziende di noleggio audio/video/luci: magazzino, calendario eventi

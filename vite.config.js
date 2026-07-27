@@ -20,8 +20,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'The Service — Magazzino',
-        short_name: 'TheService',
+        name: 'Roadcase',
+        short_name: 'Roadcase',
         description: 'Gestione attrezzatura audio/luci per eventi',
         theme_color: '#0a0a14',
         background_color: '#0a0a14',

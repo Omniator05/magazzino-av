@@ -3,7 +3,7 @@
 // squadra dell'admin che chiama. Il client fa POST qui e reindirizza il
 // browser all'URL restituito.
 import Stripe from 'stripe'
-import { requireTeamAdmin } from './_stripeAdmin.js'
+import { requireTeamAdmin } from './_authAdmin.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

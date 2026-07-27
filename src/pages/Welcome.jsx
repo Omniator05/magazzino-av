@@ -64,10 +64,11 @@ export default function Welcome() {
     const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
     const internalEmail = usernameToEmail(username)
 
+    let cred = null
     try {
       // Crea il nuovo utente su un'app Firebase secondaria: non tocca la
       // sessione admin corrente (stesso pattern di AdminUsers.jsx).
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
+      cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
       await setDoc(doc(db, 'profiles', cred.user.uid), {
         name: form.name.trim(),
         username,
@@ -83,6 +84,9 @@ export default function Welcome() {
       setWorkerCreated(true)
       setTimeout(() => setStep('done'), 900)
     } catch (err) {
+      // Il profilo non si è salvato: se l'account Auth era stato creato,
+      // ripulisci — altrimenti resta orfano e blocca per sempre quello username.
+      if (cred) await cred.user.delete().catch(() => {})
       setWorkerError(err.code === 'auth/email-already-in-use' ? t('welcome.errorUsernameTaken') : t('welcome.errorGeneric'))
     } finally { setCreatingWorker(false) }
   }

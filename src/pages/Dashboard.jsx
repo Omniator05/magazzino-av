@@ -10,6 +10,7 @@ import { Pin, Gear } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import Profile from './Profile'
 import TutorialModal from '../components/TutorialModal'
+import GettingStartedWidget from '../components/GettingStartedWidget'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const RECAP_SEEN_KEY = 'weeklyRecapSeenWeek'
@@ -84,7 +85,6 @@ const IconTruck = () => (
     <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
   </svg>
 )
-
 export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
   const { profile, logout, teamId, showOverlay } = useAuth()
@@ -644,6 +644,8 @@ export default function Dashboard({ toggleTheme, theme }) {
       {showProfile && <Profile onClose={() => setShowProfile(false)} />}
 
       {!showOverlay && !showRecapBanner && !showRecapModal && <TutorialModal role="admin" />}
+
+      <GettingStartedWidget teamId={teamId} items={items} events={events} />
 
       {/* Popup avviso resoconto pronto — stesso stile del popup di conferma (logout ecc.) */}
       {showRecapBanner && (

@@ -140,6 +140,17 @@ function CreateTeamStep({ onBack, onDone }) {
         createdAt: new Date().toISOString(),
       })
 
+      // Email di benvenuto best-effort: non deve mai far sembrare fallito un
+      // signup già riuscito.
+      try {
+        const idToken = await cred.user.getIdToken()
+        await fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toEmail: f.email.trim().toLowerCase(), adminName: f.name.trim() }),
+        })
+      } catch {}
+
       onDone()
     } catch (err) {
       // L'utente Auth esiste ma il profilo/la squadra no: senza questo si

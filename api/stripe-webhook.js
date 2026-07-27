@@ -7,7 +7,7 @@
 // corpo della richiesta byte-per-byte così come inviato, non ri-serializzato
 // dopo un parsing JSON.
 import Stripe from 'stripe'
-import { getAdmin } from './_stripeAdmin.js'
+import { getAdmin } from './_authAdmin.js'
 
 export const config = { api: { bodyParser: false } }
 

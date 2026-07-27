@@ -8,7 +8,7 @@ import AuthBackground from './AuthBackground'
 // `heroSide` sposta il pannello ('right' per il login, 'left' per il signup)
 // con uno slide animato — la diagonale si specchia durante il movimento.
 // Su mobile il pannello diventa un banner in alto con taglio diagonale.
-export default function AuthShell({ children, heroTitle = 'Bentornato!', heroText = '', subtitle = 'Gestione Magazzino', heroSide = 'right' }) {
+export default function AuthShell({ children, heroTitle = 'Bentornato!', heroText = '', subtitle = 'Roadcase', heroSide = 'right' }) {
   const [mounted, setMounted] = useState(false)
   const formContentRef = useRef(null)
   const [formHeight, setFormHeight] = useState(null)

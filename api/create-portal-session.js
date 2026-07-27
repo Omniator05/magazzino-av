@@ -2,7 +2,7 @@
 // per gestire/annullare l'abbonamento, cambiare metodo di pagamento, vedere
 // le fatture) per la squadra dell'admin che chiama.
 import Stripe from 'stripe'
-import { requireTeamAdmin } from './_stripeAdmin.js'
+import { requireTeamAdmin } from './_authAdmin.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { formatDate } from '../utils/formatDate'
@@ -117,6 +117,7 @@ export default function AdminUsers() {
   const { user, profile, team, teamId, updateTeamData } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
+  const location = useLocation()
   const [users, setUsers]             = useState([])
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError]     = useState('')
@@ -176,6 +177,16 @@ export default function AdminUsers() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
+
+  // Ritorno da Stripe Checkout (vedi success_url in api/create-checkout-session.js).
+  // Il webhook aggiorna già billingStatus da solo: qui è solo il messaggio di
+  // conferma — puliamo subito l'URL per non ri-mostrarlo a un refresh/back.
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('billing') === 'success') {
+      showToast(t('adminUsers.billingSuccessToast'))
+      navigate('/admin/users', { replace: true })
+    }
+  }, [])
 
   // ── Logo squadra — sostituisce "The Service Group" nella UI e nei PDF ──
   const handleLogoChange = async (e) => {
@@ -278,11 +289,12 @@ export default function AdminUsers() {
 
     const internalEmail = usernameToEmail(username)
 
+    let cred = null
     try {
       // Crea il nuovo utente su un'app Firebase secondaria: non tocca la
       // sessione admin corrente (createUserWithEmailAndPassword su `auth`
       // switcherebbe l'admin al nuovo utente appena creato).
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
+      cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
 
       // Salva il profilo
       await setDoc(doc(db, 'profiles', cred.user.uid), {
@@ -307,11 +319,28 @@ export default function AdminUsers() {
       await signOut(secondaryAuth)
       showToast(t('adminUsers.accountCreatedFor', { name: form.name }))
 
+      // Email di invito best-effort: solo se è stata data un'email vera, e
+      // non deve mai far sembrare fallita una creazione account già riuscita.
+      const inviteEmail = form.email.trim().toLowerCase()
+      if (inviteEmail) {
+        try {
+          const idToken = await user.getIdToken()
+          await fetch('/api/send-invite-email', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password }),
+          })
+        } catch {}
+      }
+
       setForm({ name:'', username:'', password:'', email:'', role:'worker' })
       setOrgConfig(EMPTY_ORG_CONFIG)
       setAssignedEventId('')
       setShowCreate(false)
     } catch(e) {
+      // Il profilo non si è salvato: se l'account Auth era stato creato,
+      // ripulisci — altrimenti resta orfano e blocca per sempre quello username.
+      if (cred) await cred.user.delete().catch(() => {})
       const msgs = {
         'auth/email-already-in-use': t('adminUsers.errorEmailInUse'),
         'auth/weak-password':        t('adminUsers.errorWeakPassword'),
@@ -571,22 +600,31 @@ export default function AdminUsers() {
       {/* Abbonamento */}
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
         <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.billingTitle')}</p>
-        <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>
-          {team?.billingStatus === 'exempt' ? t('adminUsers.billingExempt')
-            : team?.billingStatus === 'active' ? t('adminUsers.billingActive')
-            : team?.billingStatus === 'past_due' ? t('adminUsers.billingPastDue')
-            : team?.billingStatus === 'canceled' ? t('adminUsers.billingCanceled')
-            : t('adminUsers.billingTrialing', { days: Math.max(trialDaysLeft(team) ?? 0, 0) })}
-        </p>
+        {team?.billingStatus === 'trialing' ? (
+          <>
+            <div style={{ display:'flex', alignItems:'baseline', gap:7, marginTop:6, marginBottom:5 }}>
+              <span style={{ fontSize:30, fontWeight:800, color:'var(--accent)', lineHeight:1 }}>{Math.max(trialDaysLeft(team) ?? 0, 0)}</span>
+              <span style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>{t('adminUsers.billingTrialingDaysLabel', { count: Math.max(trialDaysLeft(team) ?? 0, 0) })}</span>
+            </div>
+            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.billingTrialingDesc')}</p>
+          </>
+        ) : (
+          <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>
+            {team?.billingStatus === 'exempt' ? t('adminUsers.billingExempt')
+              : team?.billingStatus === 'active' ? t('adminUsers.billingActive')
+              : team?.billingStatus === 'past_due' ? t('adminUsers.billingPastDue')
+              : t('adminUsers.billingCanceled')}
+          </p>
+        )}
         {billingError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{billingError}</p>}
         {team?.billingStatus !== 'exempt' && (
           team?.stripeSubscriptionId ? (
             <button onClick={() => manageBilling(true)} className="btn btn-secondary btn-full" disabled={billingLoading}>
-              {billingLoading ? t('common.saving') : t('adminUsers.manageBillingButton')}
+              {billingLoading ? t('common.redirecting') : t('adminUsers.manageBillingButton')}
             </button>
           ) : (
             <button onClick={() => manageBilling(false)} className="btn btn-primary btn-full" disabled={billingLoading}>
-              {billingLoading ? t('common.saving') : t('adminUsers.subscribeButton')}
+              {billingLoading ? t('common.redirecting') : t('adminUsers.subscribeButton')}
             </button>
           )
         )}
