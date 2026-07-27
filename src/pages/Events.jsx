@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -222,7 +222,7 @@ export default function Events() {
   }
 
   const syncFromGoogle = async (interactive) => {
-    if (!team?.googleCalendarId) return
+    if (!team?.googleCalendarId || gSyncing) return
     setGSyncing(true)
     try {
       if (interactive) await connectGoogleCalendar()
@@ -238,14 +238,17 @@ export default function Events() {
     } finally { setGSyncing(false) }
   }
 
-  // Un solo tentativo automatico e silenzioso ad ogni apertura pagina, appena
-  // gli eventi già esistenti sono stati caricati (altrimenti rischierebbe di
-  // ricreare come "nuovi" eventi già collegati ma non ancora arrivati da Firestore)
-  const autoSyncedRef = useRef(false)
+  // Tentativo automatico e silenzioso: all'apertura pagina (appena gli eventi
+  // già esistenti sono stati caricati, altrimenti rischierebbe di ricreare
+  // come "nuovi" eventi già collegati ma non ancora arrivati da Firestore) e
+  // ogni volta che si torna su questa scheda/app — es. dopo essere passati su
+  // Google Calendar ad aggiungere una data e poi tornati indietro.
   useEffect(() => {
-    if (loading || !team?.googleCalendarId || autoSyncedRef.current) return
-    autoSyncedRef.current = true
-    syncFromGoogle(false)
+    if (!team?.googleCalendarId) return
+    if (!loading) syncFromGoogle(false)
+    const onVisible = () => { if (document.visibilityState === 'visible') syncFromGoogle(false) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [loading, team?.googleCalendarId])
 
   const today = new Date().toISOString().split('T')[0]

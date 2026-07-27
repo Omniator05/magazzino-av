@@ -34,21 +34,41 @@ service cloud.firestore {
     function isSuperAdmin() {
       return request.auth != null && myProfile().data.get('superAdmin', false) == true;
     }
+    // Abbonamento valido: esente (squadre "grandfathered" o la nostra),
+    // attivo, oppure ancora in prova gratuita e non scaduta. Le squadre create
+    // prima di questa feature vengono marcate 'exempt' una tantum (script di
+    // migrazione) — senza billingStatus impostato il default 'exempt' NON si
+    // applica qui apposta: una squadra nuova deve sempre avere trialing+data
+    // esplicite (impostate da Signup.jsx alla creazione), quindi un campo
+    // assente indica un bug di scrittura, non un caso da lasciar passare.
+    function hasValidBilling(teamId) {
+      let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
+      let status = team.get('billingStatus', 'trialing');
+      return status == 'exempt' || status == 'active'
+        || (status == 'trialing' && team.get('trialEndsAt', request.time) > request.time);
+    }
     // Wrapper usati ovunque prima si usava isApprovedMember/isTeamAdmin per
     // decidere l'accesso a UNA squadra specifica: il super admin li supera
-    // sempre, qualunque sia teamId.
+    // sempre, qualunque sia teamId — anche a scadenza abbonamento, per poter
+    // assistere/sbloccare un cliente.
     function canAccessTeam(teamId) {
-      return isApprovedMember(teamId) || isSuperAdmin();
+      return (isApprovedMember(teamId) && hasValidBilling(teamId)) || isSuperAdmin();
     }
     function canAdminTeam(teamId) {
-      return isTeamAdmin(teamId) || isSuperAdmin();
+      return (isTeamAdmin(teamId) && hasValidBilling(teamId)) || isSuperAdmin();
     }
 
     match /profiles/{uid} {
       // Signup: il profilo non esiste ancora, non può dipendere da myProfile().
-      // Nessuno può nascere già superAdmin.
-      allow create: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.get('superAdmin', false) != true;
+      // Nessuno può nascere già superAdmin. Un admin può anche creare il
+      // profilo di un NUOVO worker/utente della propria squadra (AdminUsers.jsx,
+      // Welcome.jsx): da quando la creazione account usa un'app Firebase
+      // secondaria per non switchare la sessione admin (vedi src/firebase.js),
+      // request.auth.uid resta quello dell'admin — non più uguale a `uid` come
+      // capitava prima "per sbaglio" quando la sessione veniva davvero switchata.
+      allow create: if request.auth != null
+        && request.resource.data.get('superAdmin', false) != true
+        && (request.auth.uid == uid || canAdminTeam(request.resource.data.teamId));
       // Il proprio profilo è sempre leggibile (serve anche prima dell'approvazione,
       // per la schermata "in attesa"); un membro approvato (o il super admin)
       // legge anche i profili della squadra (es. AdminUsers, assegnazione worker).

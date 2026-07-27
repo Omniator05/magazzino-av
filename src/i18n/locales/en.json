@@ -11,6 +11,16 @@
     "noName": "No name",
     "unknown": "Unknown"
   },
+  "billing": {
+    "trialExpiredTitle": "Trial ended",
+    "pastDueTitle": "Payment failed",
+    "canceledTitle": "Subscription canceled",
+    "adminDesc": "Your company's 30-day free trial has ended. Subscribe to keep using the app — €35/month, cancel anytime.",
+    "workerDesc": "Your company's subscription isn't active. Contact your admin to keep using the app.",
+    "subscribeButton": "Subscribe — €35/month",
+    "logoutButton": "Log out",
+    "errorGeneric": "Something went wrong. Try again shortly."
+  },
   "dashboard": {
     "greeting_night": "Good night,",
     "greeting_morning": "Good morning,",
@@ -386,6 +396,16 @@
     "googleCalendarIdLabel": "Target calendar",
     "googleCalendarIdHint": "(leave \"primary\" for your main calendar, or paste the ID of a dedicated calendar — so it doesn't mix with your personal events)",
     "googleCalendarIdSavedToast": "✓ Calendar updated",
+    "billingTitle": "Subscription",
+    "billingExempt": "Your team has no costs.",
+    "billingActive": "Active subscription — €35/month.",
+    "billingPastDue": "Last payment failed. Update your payment method to avoid losing access.",
+    "billingCanceled": "Subscription canceled. Reactivate it to keep using the app.",
+    "billingTrialing_one": "Free trial — {{days}} day left.",
+    "billingTrialing_other": "Free trial — {{days}} days left.",
+    "subscribeButton": "Subscribe — €35/month",
+    "manageBillingButton": "Manage subscription",
+    "errorBillingGeneric": "Something went wrong. Try again shortly.",
     "weekdaySunday": "Sunday", "weekdayMonday": "Monday", "weekdayTuesday": "Tuesday",
     "weekdayWednesday": "Wednesday", "weekdayThursday": "Thursday", "weekdayFriday": "Friday", "weekdaySaturday": "Saturday",
     "eventNameLabel": "Event name",

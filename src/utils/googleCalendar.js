@@ -112,28 +112,38 @@ export async function deleteGoogleEvent(googleEventId, calendarId) {
 
 // Elenca gli eventi dal calendario collegato in una finestra di tempo, con le
 // occorrenze ricorrenti già "espanse" in eventi singoli (singleEvents=true —
-// combacia con il nostro modello: un documento per occorrenza). Ritorna null
-// se la sync non è disponibile in questa sessione (calendario non collegato o
-// token scaduto) — diverso da [] che vuol dire "collegato ma nessun evento".
-export async function listUpcomingGoogleEvents(calendarId, { pastDays = 7, futureDays = 365 } = {}) {
+// combacia con il nostro modello: un documento per occorrenza). Scorre tutte
+// le pagine dei risultati (l'API ne ritorna al massimo 250 per richiesta).
+// Ritorna null se la sync non è disponibile in questa sessione (calendario
+// non collegato o token scaduto) — diverso da [] che vuol dire "collegato ma
+// nessun evento nella finestra di tempo".
+export async function listUpcomingGoogleEvents(calendarId, { pastDays = 400, futureDays = 400 } = {}) {
   if (!calendarId) return null
   const accessToken = getCachedAccessToken()
   if (!accessToken) return null
 
   const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString()
   const timeMax = new Date(Date.now() + futureDays * 86400000).toISOString()
-  const params = new URLSearchParams({ singleEvents: 'true', orderBy: 'startTime', timeMin, timeMax, maxResults: '250' })
+  const headers = { Authorization: `Bearer ${accessToken}` }
 
+  const items = []
+  let pageToken = ''
+  let firstPage = true
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events?${params}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return (data.items || []).filter(ev => ev.status !== 'cancelled')
+    do {
+      const params = new URLSearchParams({ singleEvents: 'true', orderBy: 'startTime', timeMin, timeMax, maxResults: '250' })
+      if (pageToken) params.set('pageToken', pageToken)
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events?${params}`, { headers })
+      if (!res.ok) { if (firstPage) return null; break }
+      const data = await res.json()
+      items.push(...(data.items || []))
+      pageToken = data.nextPageToken || ''
+      firstPage = false
+    } while (pageToken)
   } catch {
-    return null
+    if (items.length === 0) return null
   }
+  return items.filter(ev => ev.status !== 'cancelled')
 }
 
 // Converte un evento Google Calendar nei campi usati dai nostri documenti

@@ -35,57 +35,10 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
   return (
     <>
       <style>{`
-        .auth-input {
-          width:100%;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.12);
-          border-radius:12px;
-          padding:13px 16px;
-          color:white;
-          font-size:15px;
-          transition:border-color 0.2s, box-shadow 0.2s;
-          box-sizing:border-box;
-        }
-        .auth-input::placeholder { color:rgba(255,255,255,0.25); }
-        .auth-input:focus {
-          outline:none;
-          border-color:rgba(230,57,70,0.7);
-          box-shadow:0 0 0 3px rgba(230,57,70,0.15);
-        }
-        .auth-btn {
-          width:100%;
-          padding:14px;
-          border-radius:12px;
-          background:linear-gradient(135deg,#e63946 0%,#c1121f 100%);
-          color:white;
-          font-size:15px;
-          font-weight:700;
-          border:none;
-          cursor:pointer;
-          box-shadow:0 4px 24px rgba(230,57,70,0.4);
-          letter-spacing:0.3px;
-          transition:transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s;
-        }
-        .auth-btn:hover:not(:disabled) {
-          transform:translateY(-2px);
-          box-shadow:0 8px 36px rgba(230,57,70,0.55);
-        }
-        .auth-btn:active:not(:disabled) { transform:translateY(0); }
-        .auth-btn:disabled { opacity:0.6; cursor:not-allowed; }
-        .auth-btn-secondary {
-          width:100%;
-          padding:14px;
-          border-radius:12px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.14);
-          color:white;
-          font-size:15px;
-          font-weight:700;
-          cursor:pointer;
-          letter-spacing:0.3px;
-          transition:background 0.18s ease, border-color 0.18s ease;
-        }
-        .auth-btn-secondary:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.25); }
+        /* .auth-input/.auth-btn/.auth-btn-secondary/.auth-card (stile base)
+           vivono in AuthBackground.jsx, condivisi anche da chi lo usa senza
+           questo guscio (es. Landing.jsx). Qui resta solo l'override che
+           serve unicamente dentro la card divisa. */
 
         /* Card divisa: dentro il guscio la vecchia .auth-card diventa
            trasparente (il contenitore esterno fa già da card) — così le

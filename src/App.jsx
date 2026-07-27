@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
 import { useState, useEffect, useRef } from 'react'
 import Auth from './pages/Auth'
+import Landing from './pages/Landing'
 import Welcome from './pages/Welcome'
 import PendingApproval from './pages/PendingApproval'
 import Dashboard from './pages/Dashboard'
@@ -27,6 +28,8 @@ import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
 import OnboardingReveal from './components/OnboardingReveal'
+import BillingGate from './components/BillingGate'
+import { isBillingValid } from './utils/billing'
 
 // Barra sempre visibile mentre un super admin sta "dentro" un'altra azienda
 // (vedi enterGhostTeam in AuthContext) — promemoria costante di dove si è,
@@ -77,7 +80,7 @@ function AnimatedPage({ children }) {
 }
 
 function PrivateRoutes({ toggleTheme, theme }) {
-  const { user, profile, loading, signupInProgress, ghostTeamId } = useAuth()
+  const { user, profile, team, loading, signupInProgress, ghostTeamId } = useAuth()
   const { pathname } = useLocation()
   const onScannerRoute = pathname.endsWith('/scan')
   const onSuperAdminRoute = pathname === '/super'
@@ -94,7 +97,11 @@ function PrivateRoutes({ toggleTheme, theme }) {
     </div>
   )
 
-  if (!user) return <Navigate to="/login" replace />
+  // Chi arriva sulla home senza essere loggato vede la pagina pubblica
+  // (presentazione prodotto/prezzo — serve sia ai clienti che a chi deve
+  // verificare l'attività, es. Stripe); qualunque altro link diretto (es.
+  // /inventory condiviso per errore) va comunque dritto al login.
+  if (!user) return pathname === '/' ? <Landing /> : <Navigate to="/login" replace />
 
   // Profilo mancante (utente Auth orfano, senza doc in profiles) — mai deve
   // ricadere sul ramo admin di default: mostra errore invece di dare accesso.
@@ -107,6 +114,11 @@ function PrivateRoutes({ toggleTheme, theme }) {
 
   const KNOWN_ROLES = ['admin', 'worker', 'organizzatore-brasserie', 'organizzatore-evento']
   if (!KNOWN_ROLES.includes(profile.role)) return <PendingApproval reason="unknown" />
+
+  // Abbonamento scaduto/non pagato → blocca TUTTA l'app (qualunque ruolo),
+  // tranne il super admin che deve poter sempre entrare per assistere/sbloccare
+  // (stessa eccezione delle regole Firestore, vedi hasValidBilling).
+  if (!profile.superAdmin && !isBillingValid(team)) return <BillingGate />
 
   // Worker view
   if (profile?.role === 'worker') {

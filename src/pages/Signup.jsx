@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { deleteUser } from 'firebase/auth'
-import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
 import { createSignupUser } from '../utils/authCleanup'
 
@@ -124,6 +124,10 @@ function CreateTeamStep({ onBack, onDone }) {
         nameLower,
         createdAt: serverTimestamp(),
         createdByUid: cred.user.uid,
+        // Prova gratuita di 30 giorni: dopo questa data l'app si blocca finché
+        // non si sottoscrive un abbonamento (vedi firestore.rules → hasValidBilling).
+        billingStatus: 'trialing',
+        trialEndsAt: Timestamp.fromDate(new Date(Date.now() + 30 * 86400000)),
       })
 
       await setDoc(doc(db, 'profiles', cred.user.uid), {

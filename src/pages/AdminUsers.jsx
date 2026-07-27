@@ -12,6 +12,7 @@ import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
 import FabButton from '../components/FabButton'
 import { connectGoogleCalendar, disconnectGoogleCalendar } from '../utils/googleCalendar'
+import { trialDaysLeft } from '../utils/billing'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -123,6 +124,8 @@ export default function AdminUsers() {
   const [gError, setGError]           = useState('')
   const [gCalId, setGCalId]           = useState('')
   const [gCalSaving, setGCalSaving]   = useState(false)
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [billingError, setBillingError]     = useState('')
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
   const createDrag = useModalDrag(() => setShowCreate(false))
@@ -232,6 +235,28 @@ export default function AdminUsers() {
       await updateTeamData({ googleCalendarId: id })
       showToast(t('adminUsers.googleCalendarIdSavedToast'))
     } finally { setGCalSaving(false) }
+  }
+
+  // ── Abbonamento ────────────────────────────────────────────────
+  // portal=true → Stripe Billing Portal (gestisci/annulla un abbonamento
+  // esistente); portal=false → Stripe Checkout (sottoscrivi per la prima volta,
+  // o dopo una cancellazione). Entrambi reindirizzano a una pagina Stripe: le
+  // carte non passano mai dal nostro codice.
+  const manageBilling = async (portal) => {
+    setBillingLoading(true); setBillingError('')
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch(portal ? '/api/create-portal-session' : '/api/create-checkout-session', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      const data = await res.json()
+      if (res.ok && data.url) window.location.href = data.url
+      else { setBillingError(data.error || t('adminUsers.errorBillingGeneric')); setBillingLoading(false) }
+    } catch {
+      setBillingError(t('adminUsers.errorBillingGeneric'))
+      setBillingLoading(false)
+    }
   }
 
   // ── Crea account ──────────────────────────────────────────────
@@ -543,39 +568,27 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      {/* Google Calendar — sync one-way (app → Google), best-effort finché chi
-          l'ha collegato ha l'app aperta con la sessione attiva */}
+      {/* Abbonamento */}
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-        <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.googleCalendarTitle')}</p>
-        <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.googleCalendarDesc')}</p>
-        {gError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{gError}</p>}
-        {team?.googleCalendarId ? (
-          <>
-            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12, color:'#15803d', fontSize:13, fontWeight:700 }}>
-              <Check size={16} /> {t('adminUsers.googleCalendarConnected')}
-            </div>
-            <div className="form-group" style={{ marginBottom:10 }}>
-              <label>{t('adminUsers.googleCalendarIdLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.googleCalendarIdHint')}</span></label>
-              <div style={{ display:'flex', gap:8 }}>
-                <input value={gCalId} onChange={e => setGCalId(e.target.value)} placeholder="primary" style={{ flex:1, fontFamily:'monospace', fontSize:13 }} />
-                <button onClick={saveCalendarId} className="btn btn-secondary" disabled={gCalSaving || gCalId.trim() === (team.googleCalendarId || '')} style={{ flexShrink:0, padding:'0 16px' }}>
-                  {gCalSaving ? t('common.saving') : t('adminUsers.save')}
-                </button>
-              </div>
-            </div>
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={connectGoogle} className="btn btn-secondary" style={{ flex:1 }} disabled={gLoading}>
-                {gLoading ? t('common.saving') : t('adminUsers.googleCalendarReconnect')}
-              </button>
-              <button onClick={disconnectGoogle} style={{ flex:1, background:'transparent', border:'1px solid var(--border)', borderRadius:'var(--radius-sm, 10px)', color:'var(--red)', fontWeight:700, fontSize:13 }}>
-                {t('adminUsers.googleCalendarDisconnect')}
-              </button>
-            </div>
-          </>
-        ) : (
-          <button onClick={connectGoogle} className="btn btn-primary btn-full" disabled={gLoading}>
-            {gLoading ? t('common.saving') : t('adminUsers.googleCalendarConnectButton')}
-          </button>
+        <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.billingTitle')}</p>
+        <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>
+          {team?.billingStatus === 'exempt' ? t('adminUsers.billingExempt')
+            : team?.billingStatus === 'active' ? t('adminUsers.billingActive')
+            : team?.billingStatus === 'past_due' ? t('adminUsers.billingPastDue')
+            : team?.billingStatus === 'canceled' ? t('adminUsers.billingCanceled')
+            : t('adminUsers.billingTrialing', { days: Math.max(trialDaysLeft(team) ?? 0, 0) })}
+        </p>
+        {billingError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{billingError}</p>}
+        {team?.billingStatus !== 'exempt' && (
+          team?.stripeSubscriptionId ? (
+            <button onClick={() => manageBilling(true)} className="btn btn-secondary btn-full" disabled={billingLoading}>
+              {billingLoading ? t('common.saving') : t('adminUsers.manageBillingButton')}
+            </button>
+          ) : (
+            <button onClick={() => manageBilling(false)} className="btn btn-primary btn-full" disabled={billingLoading}>
+              {billingLoading ? t('common.saving') : t('adminUsers.subscribeButton')}
+            </button>
+          )
         )}
       </div>
 
@@ -623,6 +636,49 @@ export default function AdminUsers() {
           <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>{t('adminUsers.howLoginWorksTitle')}</p>
           <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
         </div>
+
+        {/* Google Calendar — sync one-way (app → Google), best-effort finché chi
+            l'ha collegato ha l'app aperta con la sessione attiva. Visibile solo
+            per i team con il flag abilitato: l'app Google OAuth resta in modalità
+            "Testing" (solo account autorizzati a mano dal developer possono
+            collegarsi), quindi mostrarla a tutti darebbe solo un bottone rotto
+            con un 403 a chiunque non sia già stato aggiunto come tester. Ultima
+            voce della pagina apposta, per tenerla fuori dai piedi. */}
+        {team?.googleCalendarFeatureEnabled && (
+          <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
+            <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.googleCalendarTitle')}</p>
+            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.googleCalendarDesc')}</p>
+            {gError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{gError}</p>}
+            {team?.googleCalendarId ? (
+              <>
+                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12, color:'#15803d', fontSize:13, fontWeight:700 }}>
+                  <Check size={16} /> {t('adminUsers.googleCalendarConnected')}
+                </div>
+                <div className="form-group" style={{ marginBottom:10 }}>
+                  <label>{t('adminUsers.googleCalendarIdLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.googleCalendarIdHint')}</span></label>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <input value={gCalId} onChange={e => setGCalId(e.target.value)} placeholder="primary" style={{ flex:1, fontFamily:'monospace', fontSize:13 }} />
+                    <button onClick={saveCalendarId} className="btn btn-secondary" disabled={gCalSaving || gCalId.trim() === (team.googleCalendarId || '')} style={{ flexShrink:0, padding:'0 16px' }}>
+                      {gCalSaving ? t('common.saving') : t('adminUsers.save')}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={connectGoogle} className="btn btn-secondary" style={{ flex:1 }} disabled={gLoading}>
+                    {gLoading ? t('common.saving') : t('adminUsers.googleCalendarReconnect')}
+                  </button>
+                  <button onClick={disconnectGoogle} style={{ flex:1, background:'transparent', border:'1px solid var(--border)', borderRadius:'var(--radius-sm, 10px)', color:'var(--red)', fontWeight:700, fontSize:13 }}>
+                    {t('adminUsers.googleCalendarDisconnect')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button onClick={connectGoogle} className="btn btn-primary btn-full" disabled={gLoading}>
+                {gLoading ? t('common.saving') : t('adminUsers.googleCalendarConnectButton')}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Modal crea account ─────────────────────────────── */}

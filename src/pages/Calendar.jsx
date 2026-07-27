@@ -86,6 +86,7 @@ export default function Calendar() {
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
   const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'' })
   const [savingAbsence, setSavingAbsence] = useState(false)
+  const [myAbsencesOpen, setMyAbsencesOpen] = useState(false)
   const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
 
   // Selezione assenza tap-sul-calendario
@@ -586,11 +587,21 @@ export default function Calendar() {
               ))}
             </div>
           )}
-          {/* Le mie assenze */}
+          {/* Le mie assenze — retraibile: è la lista COMPLETA delle proprie
+              assenze (non solo quelle del giorno selezionato), quindi se
+              aperta sempre finiva per allungare il pannello ad ogni giorno */}
           {myAbsences.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><List size={13} /> {t('calendar.myAbsences')}</p>
-              {myAbsences.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
+              <button onClick={() => setMyAbsencesOpen(o => !o)} className="btn-no-anim"
+                style={{ width:'auto', display:'inline-flex', alignItems:'center', gap:6, marginBottom: myAbsencesOpen ? 8 : 0, background:'transparent', border:'none', padding:0 }}>
+                <span style={{ color:'var(--text2)', display:'flex' }}><List size={13} /></span>
+                <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('calendar.myAbsences')}</span>
+                <span style={{ background:'var(--bg3)', borderRadius:10, padding:'1px 7px', fontSize:11, fontWeight:700, color:'var(--text2)' }}>{myAbsences.length}</span>
+                <span style={{ color:'var(--text2)', display:'flex', transition:'transform 0.2s', transform: myAbsencesOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+              </button>
+              {myAbsencesOpen && myAbsences.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
                   <div style={{ flex:1, minWidth:0 }}>

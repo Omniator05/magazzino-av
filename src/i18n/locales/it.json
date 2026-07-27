@@ -11,6 +11,16 @@
     "noName": "Senza nome",
     "unknown": "Sconosciuto"
   },
+  "billing": {
+    "trialExpiredTitle": "Prova terminata",
+    "pastDueTitle": "Pagamento non riuscito",
+    "canceledTitle": "Abbonamento cancellato",
+    "adminDesc": "La prova gratuita di 30 giorni della tua azienda è terminata. Abbonati per continuare a usare l'app — 35€/mese, disdici quando vuoi.",
+    "workerDesc": "L'abbonamento della tua azienda non è attivo. Contatta il tuo amministratore per continuare a usare l'app.",
+    "subscribeButton": "Abbonati — 35€/mese",
+    "logoutButton": "Esci",
+    "errorGeneric": "Qualcosa è andato storto. Riprova tra poco."
+  },
   "dashboard": {
     "greeting_night": "Buonanotte,",
     "greeting_morning": "Buongiorno,",
@@ -386,6 +396,16 @@
     "googleCalendarIdLabel": "Calendario di destinazione",
     "googleCalendarIdHint": "(lascia \"primary\" per il tuo calendario principale, oppure incolla l'ID di un calendario dedicato — così non si mischia con i tuoi eventi personali)",
     "googleCalendarIdSavedToast": "✓ Calendario aggiornato",
+    "billingTitle": "Abbonamento",
+    "billingExempt": "La tua squadra non ha costi.",
+    "billingActive": "Abbonamento attivo — 35€/mese.",
+    "billingPastDue": "Ultimo pagamento non riuscito. Aggiorna il metodo di pagamento per non perdere l'accesso.",
+    "billingCanceled": "Abbonamento cancellato. Riattivalo per continuare a usare l'app.",
+    "billingTrialing_one": "Prova gratuita — {{days}} giorno rimasto.",
+    "billingTrialing_other": "Prova gratuita — {{days}} giorni rimasti.",
+    "subscribeButton": "Abbonati — 35€/mese",
+    "manageBillingButton": "Gestisci abbonamento",
+    "errorBillingGeneric": "Qualcosa è andato storto. Riprova tra poco.",
     "weekdaySunday": "Domenica", "weekdayMonday": "Lunedì", "weekdayTuesday": "Martedì",
     "weekdayWednesday": "Mercoledì", "weekdayThursday": "Giovedì", "weekdayFriday": "Venerdì", "weekdaySaturday": "Sabato",
     "eventNameLabel": "Nome evento",
