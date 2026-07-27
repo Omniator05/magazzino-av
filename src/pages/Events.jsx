@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -13,7 +13,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
-import { syncEventToGoogle, deleteGoogleEvent } from '../utils/googleCalendar'
+import { syncEventToGoogle, deleteGoogleEvent, listUpcomingGoogleEvents, fromGoogleEvent, connectGoogleCalendar } from '../utils/googleCalendar'
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 function addDays(dateStr, days) {
@@ -95,6 +95,13 @@ const IconArchive = () => (
     <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
   </svg>
 )
+const IconSync = ({ spinning }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+    style={spinning ? { animation:'spin 0.9s linear infinite' } : undefined}>
+    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+  </svg>
+)
 const IconPlus = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -134,6 +141,9 @@ export default function Events() {
   ]
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
+  const [gSyncing, setGSyncing]   = useState(false)
+  const [toast, setToast]         = useState('')
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const [showModal, setShowModal] = useState(false)
   const eventDrag = useModalDrag(() => setShowModal(false))
   const templateDrag = useModalDrag(() => setShowTemplateMenu(false))
@@ -180,6 +190,63 @@ export default function Events() {
     const q = query(collection(db, 'templates'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
   }, [teamId])
+
+  // ── Import da Google Calendar (i collaboratori scrivono lì, non in app) ──
+  // Confronta gli eventi Google con quelli già collegati (googleEventId) fra
+  // quelli già caricati: crea i nuovi, aggiorna quelli cambiati. Non cancella
+  // mai nulla in automatico — un evento sparito da Google resta in app finché
+  // qualcuno non lo elimina a mano (troppo rischioso farlo alla cieca su
+  // eventi che magari hanno già oggetti caricati).
+  const importFromGoogle = async (googleEvents) => {
+    const byGoogleId = new Map(events.filter(ev => ev.googleEventId).map(ev => [ev.googleEventId, ev]))
+    let created = 0, updated = 0
+    for (const gEv of googleEvents) {
+      const mapped = fromGoogleEvent(gEv)
+      if (!mapped) continue
+      const existing = byGoogleId.get(gEv.id)
+      if (existing) {
+        const changed = existing.name !== mapped.name || existing.date !== mapped.date
+          || (existing.dateEnd || null) !== mapped.dateEnd
+          || (existing.location || '') !== mapped.location || (existing.notes || '') !== mapped.notes
+        if (changed) { await updateDoc(doc(db, 'events', existing.id), mapped); updated++ }
+      } else {
+        await addDoc(collection(db, 'events'), {
+          ...mapped, googleEventId: gEv.id, items: [], teamId,
+          createdAt: serverTimestamp(), createdBy: user.uid,
+          recurrence: 'never', seriesId: null, type: 'event', phases: {},
+        })
+        created++
+      }
+    }
+    return { created, updated }
+  }
+
+  const syncFromGoogle = async (interactive) => {
+    if (!team?.googleCalendarId) return
+    setGSyncing(true)
+    try {
+      if (interactive) await connectGoogleCalendar()
+      const googleEvents = await listUpcomingGoogleEvents(team.googleCalendarId)
+      if (googleEvents === null) {
+        if (interactive) showToast(t('events.googleSyncUnavailable'))
+        return
+      }
+      const { created, updated } = await importFromGoogle(googleEvents)
+      if (interactive) showToast(t('events.googleSyncDone', { created, updated }))
+    } catch {
+      if (interactive) showToast(t('events.googleSyncUnavailable'))
+    } finally { setGSyncing(false) }
+  }
+
+  // Un solo tentativo automatico e silenzioso ad ogni apertura pagina, appena
+  // gli eventi già esistenti sono stati caricati (altrimenti rischierebbe di
+  // ricreare come "nuovi" eventi già collegati ma non ancora arrivati da Firestore)
+  const autoSyncedRef = useRef(false)
+  useEffect(() => {
+    if (loading || !team?.googleCalendarId || autoSyncedRef.current) return
+    autoSyncedRef.current = true
+    syncFromGoogle(false)
+  }, [loading, team?.googleCalendarId])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -502,12 +569,26 @@ export default function Events() {
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
+      {toast && (
+        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
+          {toast}
+        </div>
+      )}
       <div style={{ padding:'56px 22px 18px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
         <div>
           <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1 }}>{t('events.title')}</h1>
           <p style={{ fontSize:13, color:'var(--dash-muted)', fontWeight:500, marginTop:3 }}>{t('events.upcomingCount', { count: upcomingSingle.length + pinnedRecurring.length })}</p>
         </div>
         <div style={{ display:'flex', gap:8, paddingTop:4 }}>
+          {team?.googleCalendarId && (
+            <button onClick={() => syncFromGoogle(true)} disabled={gSyncing} style={{
+              background:'var(--dash-pill-bg)', border:'1px solid var(--dash-pill-border)', color:'var(--dash-muted)',
+              borderRadius:50, padding:'8px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6,
+              opacity: gSyncing ? 0.6 : 1,
+            }}>
+              <IconSync spinning={gSyncing} /> {t('events.googleSyncButton')}
+            </button>
+          )}
           <button onClick={() => navigate('/archive')} style={{
             background:'var(--dash-pill-bg)', border:'1px solid var(--dash-pill-border)', color:'var(--dash-muted)',
             borderRadius:50, padding:'8px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6,
@@ -778,6 +859,7 @@ export default function Events() {
         /* Hover sezioni: si ingrandisce solo il testo label, non la barra intera */
         .section-label { display:inline-block; transition: transform 0.15s ease; transform-origin: left center; }
         .btn-section:hover .section-label { transform: scale(1.06); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   )

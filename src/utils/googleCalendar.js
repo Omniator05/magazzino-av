@@ -109,3 +109,55 @@ export async function deleteGoogleEvent(googleEventId, calendarId) {
     })
   } catch {}
 }
+
+// Elenca gli eventi dal calendario collegato in una finestra di tempo, con le
+// occorrenze ricorrenti già "espanse" in eventi singoli (singleEvents=true —
+// combacia con il nostro modello: un documento per occorrenza). Ritorna null
+// se la sync non è disponibile in questa sessione (calendario non collegato o
+// token scaduto) — diverso da [] che vuol dire "collegato ma nessun evento".
+export async function listUpcomingGoogleEvents(calendarId, { pastDays = 7, futureDays = 365 } = {}) {
+  if (!calendarId) return null
+  const accessToken = getCachedAccessToken()
+  if (!accessToken) return null
+
+  const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString()
+  const timeMax = new Date(Date.now() + futureDays * 86400000).toISOString()
+  const params = new URLSearchParams({ singleEvents: 'true', orderBy: 'startTime', timeMin, timeMax, maxResults: '250' })
+
+  try {
+    const res = await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return (data.items || []).filter(ev => ev.status !== 'cancelled')
+  } catch {
+    return null
+  }
+}
+
+// Converte un evento Google Calendar nei campi usati dai nostri documenti
+// evento. Torna null se l'evento non ha una data valida (non dovrebbe capitare).
+export function fromGoogleEvent(gEvent) {
+  let date, dateEnd = null
+  if (gEvent.start?.date) {
+    // Evento "all day": la data di fine su Google è ESCLUSIVA (-1 giorno per noi)
+    date = gEvent.start.date
+    const endInclusive = new Date(gEvent.end.date + 'T00:00:00')
+    endInclusive.setDate(endInclusive.getDate() - 1)
+    const end = endInclusive.toISOString().split('T')[0]
+    if (end !== date) dateEnd = end
+  } else if (gEvent.start?.dateTime) {
+    date = gEvent.start.dateTime.slice(0, 10)
+    const end = (gEvent.end?.dateTime || gEvent.start.dateTime).slice(0, 10)
+    if (end !== date) dateEnd = end
+  } else {
+    return null
+  }
+  return {
+    name: gEvent.summary?.trim() || '(senza titolo)',
+    date, dateEnd,
+    location: gEvent.location || '',
+    notes: gEvent.description || '',
+  }
+}

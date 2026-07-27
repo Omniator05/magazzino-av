@@ -121,6 +121,8 @@ export default function AdminUsers() {
   const [logoError, setLogoError]     = useState('')
   const [gLoading, setGLoading]       = useState(false)
   const [gError, setGError]           = useState('')
+  const [gCalId, setGCalId]           = useState('')
+  const [gCalSaving, setGCalSaving]   = useState(false)
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
   const createDrag = useModalDrag(() => setShowCreate(false))
@@ -203,11 +205,14 @@ export default function AdminUsers() {
   // Sync client-only: il token vive solo in questa sessione browser, non su
   // Firestore — va riottenuto (di solito senza popup se sei già collegato con
   // Google) ogni volta che si riapre l'app.
+  useEffect(() => { setGCalId(team?.googleCalendarId || '') }, [team?.googleCalendarId])
+
   const connectGoogle = async () => {
     setGLoading(true); setGError('')
     try {
       await connectGoogleCalendar()
-      await updateTeamData({ googleCalendarId: 'primary' })
+      // Non sovrascrive un calendario già scelto in precedenza (es. al "Riconnetti")
+      if (!team?.googleCalendarId) await updateTeamData({ googleCalendarId: 'primary' })
       showToast(t('adminUsers.googleCalendarConnectedToast'))
     } catch {
       setGError(t('adminUsers.errorGoogleCalendarConnect'))
@@ -218,6 +223,15 @@ export default function AdminUsers() {
     disconnectGoogleCalendar()
     await updateTeamData({ googleCalendarId: null })
     showToast(t('adminUsers.googleCalendarDisconnectedToast'))
+  }
+
+  const saveCalendarId = async () => {
+    const id = gCalId.trim() || 'primary'
+    setGCalSaving(true)
+    try {
+      await updateTeamData({ googleCalendarId: id })
+      showToast(t('adminUsers.googleCalendarIdSavedToast'))
+    } finally { setGCalSaving(false) }
   }
 
   // ── Crea account ──────────────────────────────────────────────
@@ -539,6 +553,15 @@ export default function AdminUsers() {
           <>
             <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12, color:'#15803d', fontSize:13, fontWeight:700 }}>
               <Check size={16} /> {t('adminUsers.googleCalendarConnected')}
+            </div>
+            <div className="form-group" style={{ marginBottom:10 }}>
+              <label>{t('adminUsers.googleCalendarIdLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.googleCalendarIdHint')}</span></label>
+              <div style={{ display:'flex', gap:8 }}>
+                <input value={gCalId} onChange={e => setGCalId(e.target.value)} placeholder="primary" style={{ flex:1, fontFamily:'monospace', fontSize:13 }} />
+                <button onClick={saveCalendarId} className="btn btn-secondary" disabled={gCalSaving || gCalId.trim() === (team.googleCalendarId || '')} style={{ flexShrink:0, padding:'0 16px' }}>
+                  {gCalSaving ? t('common.saving') : t('adminUsers.save')}
+                </button>
+              </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={connectGoogle} className="btn btn-secondary" style={{ flex:1 }} disabled={gLoading}>
