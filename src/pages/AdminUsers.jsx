@@ -11,6 +11,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, order
 import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
 import FabButton from '../components/FabButton'
+import { connectGoogleCalendar, disconnectGoogleCalendar } from '../utils/googleCalendar'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -118,6 +119,8 @@ export default function AdminUsers() {
   const [users, setUsers]             = useState([])
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError]     = useState('')
+  const [gLoading, setGLoading]       = useState(false)
+  const [gError, setGError]           = useState('')
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
   const createDrag = useModalDrag(() => setShowCreate(false))
@@ -194,6 +197,27 @@ export default function AdminUsers() {
     await updateTeamData({ logoUrl: null, logoPath: null })
     if (oldPath) await deleteTeamLogo(oldPath)
     showToast(t('adminUsers.logoRemovedToast'))
+  }
+
+  // ── Google Calendar ───────────────────────────────────────────
+  // Sync client-only: il token vive solo in questa sessione browser, non su
+  // Firestore — va riottenuto (di solito senza popup se sei già collegato con
+  // Google) ogni volta che si riapre l'app.
+  const connectGoogle = async () => {
+    setGLoading(true); setGError('')
+    try {
+      await connectGoogleCalendar()
+      await updateTeamData({ googleCalendarId: 'primary' })
+      showToast(t('adminUsers.googleCalendarConnectedToast'))
+    } catch {
+      setGError(t('adminUsers.errorGoogleCalendarConnect'))
+    } finally { setGLoading(false) }
+  }
+
+  const disconnectGoogle = async () => {
+    disconnectGoogleCalendar()
+    await updateTeamData({ googleCalendarId: null })
+    showToast(t('adminUsers.googleCalendarDisconnectedToast'))
   }
 
   // ── Crea account ──────────────────────────────────────────────
@@ -503,6 +527,33 @@ export default function AdminUsers() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Google Calendar — sync one-way (app → Google), best-effort finché chi
+          l'ha collegato ha l'app aperta con la sessione attiva */}
+      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
+        <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.googleCalendarTitle')}</p>
+        <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.googleCalendarDesc')}</p>
+        {gError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{gError}</p>}
+        {team?.googleCalendarId ? (
+          <>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12, color:'#15803d', fontSize:13, fontWeight:700 }}>
+              <Check size={16} /> {t('adminUsers.googleCalendarConnected')}
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={connectGoogle} className="btn btn-secondary" style={{ flex:1 }} disabled={gLoading}>
+                {gLoading ? t('common.saving') : t('adminUsers.googleCalendarReconnect')}
+              </button>
+              <button onClick={disconnectGoogle} style={{ flex:1, background:'transparent', border:'1px solid var(--border)', borderRadius:'var(--radius-sm, 10px)', color:'var(--red)', fontWeight:700, fontSize:13 }}>
+                {t('adminUsers.googleCalendarDisconnect')}
+              </button>
+            </div>
+          </>
+        ) : (
+          <button onClick={connectGoogle} className="btn btn-primary btn-full" disabled={gLoading}>
+            {gLoading ? t('common.saving') : t('adminUsers.googleCalendarConnectButton')}
+          </button>
+        )}
       </div>
 
       <div style={{ padding:'16px 0 0' }}>

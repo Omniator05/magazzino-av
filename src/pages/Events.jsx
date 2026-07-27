@@ -13,6 +13,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
+import { syncEventToGoogle, deleteGoogleEvent } from '../utils/googleCalendar'
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 function addDays(dateStr, days) {
@@ -118,7 +119,7 @@ const IconCalendarSm = () => (
 
 export default function Events() {
   const { t, i18n } = useTranslation()
-  const { user, teamId } = useAuth()
+  const { user, team, teamId } = useAuth()
   const confirm = useConfirm()
   const RECURRENCE_OPTIONS = [
     { value:'never',   label:t('events.recurrenceNever') },
@@ -270,13 +271,16 @@ export default function Events() {
     setSaving(true)
     try {
       if (editing) {
-        await updateDoc(doc(db, 'events', editing.id), {
+        const updated = {
           name: form.name.trim(), date: form.date,
           dateEnd: form.dateEnd || null,
           location: form.location.trim(), notes: form.notes.trim(),
           type: form.type || 'event',
           phases: form.phases || {},
-        })
+        }
+        await updateDoc(doc(db, 'events', editing.id), updated)
+        const gId = await syncEventToGoogle({ ...updated, googleEventId: editing.googleEventId }, team?.googleCalendarId)
+        if (gId && gId !== editing.googleEventId) await updateDoc(doc(db, 'events', editing.id), { googleEventId: gId })
         setShowModal(false)
         setEditing(null)
         setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
@@ -294,8 +298,12 @@ export default function Events() {
           phases: form.phases || {},
         }
         const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
+        const gId = await syncEventToGoogle({ ...base, date: form.date }, team?.googleCalendarId)
+        if (gId) await updateDoc(doc(db, 'events', ref.id), { googleEventId: gId })
         for (const date of futureDates) {
-          await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
+          const r = await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
+          const gId2 = await syncEventToGoogle({ ...base, date }, team?.googleCalendarId)
+          if (gId2) await updateDoc(doc(db, 'events', r.id), { googleEventId: gId2 })
         }
         setShowModal(false)
         setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
@@ -309,11 +317,15 @@ export default function Events() {
   const deleteEvent = async (e, event) => {
     e.stopPropagation()
     if (event.seriesId) {
-      if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteSeriesMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))
+      if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteSeriesMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
         await deleteDoc(doc(db, 'events', event.id))
+        await deleteGoogleEvent(event.googleEventId, team?.googleCalendarId)
+      }
     } else {
-      if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))
+      if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
         await deleteDoc(doc(db, 'events', event.id))
+        await deleteGoogleEvent(event.googleEventId, team?.googleCalendarId)
+      }
     }
   }
 
