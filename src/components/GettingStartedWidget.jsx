@@ -41,12 +41,14 @@ const DISMISS_KEY_PREFIX = 'gettingStartedDismissed_'
 // pagina — non sposta nient'altro — ed è sempre richiudibile: una X lo
 // nasconde per sempre su questo dispositivo (localStorage), la freccia lo
 // riduce solo alla barra del titolo senza perdere il progresso.
-export default function GettingStartedWidget({ teamId, items, events }) {
+export default function GettingStartedWidget({ teamId, items, events, dataReady }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [workerCount, setWorkerCount] = useState(null) // null = ancora in caricamento
   const [collapsed, setCollapsed] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [entered, setEntered] = useState(false)
 
   useEffect(() => {
     if (!teamId) return
@@ -72,11 +74,35 @@ export default function GettingStartedWidget({ teamId, items, events }) {
   ]
   const doneCount = steps.filter(s => s.done).length
 
-  if (dismissed || doneCount === steps.length) return null
+  // Finché items/eventi/squadra non sono ancora arrivati da Firestore i
+  // rispettivi step risultano "non fatti" per definizione (array vuoti,
+  // workerCount null) — senza questo guard il widget lampeggia visibile per
+  // uno o due frame anche per squadre che hanno già completato tutto.
+  const shouldShow = !dismissed && dataReady && workerCount !== null && doneCount < steps.length
+
+  // Il widget resta montato durante il fade out (chiusura manuale con la X,
+  // o completamento automatico di tutti gli step) invece di sparire di
+  // scatto: `entered` pilota l'opacità, e solo dopo la transizione lo si
+  // smonta davvero.
+  useEffect(() => {
+    if (shouldShow) {
+      setMounted(true)
+      const id = requestAnimationFrame(() => setEntered(true))
+      return () => cancelAnimationFrame(id)
+    }
+    setEntered(false)
+    const t = setTimeout(() => setMounted(false), 220)
+    return () => clearTimeout(t)
+  }, [shouldShow])
+
+  if (!mounted) return null
 
   return (
     <div className="gsw-widget" style={{
       position:'fixed', zIndex:60,
+      opacity: entered ? 1 : 0,
+      transition: 'opacity 0.22s ease',
+      pointerEvents: entered ? 'auto' : 'none',
       background:'var(--card)', borderRadius:18, border:'1px solid var(--border)',
       boxShadow:'0 10px 32px rgba(0,0,0,0.16)', overflow:'hidden',
     }}>

@@ -20,9 +20,12 @@ export default function Landing() {
   return (
     <AuthBackground>
       <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
-        <h1 style={{ fontSize: 34, fontWeight: 800, color: 'white', letterSpacing: '-0.5px', marginBottom: 10 }}>
-          Roadcase
-        </h1>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <img src="/pwa-512x512.png" alt="" width={44} height={44} style={{ borderRadius: 10, display: 'block' }} />
+          <h1 style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
+            <span style={{ color: 'white' }}>ROAD</span><span style={{ color: '#e63946' }}>CASE</span>
+          </h1>
+        </div>
         <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 15, lineHeight: 1.6, marginBottom: 30 }}>
           Il gestionale per aziende di noleggio audio/video/luci: magazzino, calendario eventi
           e personale in un'unica app.

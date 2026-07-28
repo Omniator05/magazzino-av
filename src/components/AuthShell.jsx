@@ -8,7 +8,7 @@ import AuthBackground from './AuthBackground'
 // `heroSide` sposta il pannello ('right' per il login, 'left' per il signup)
 // con uno slide animato — la diagonale si specchia durante il movimento.
 // Su mobile il pannello diventa un banner in alto con taglio diagonale.
-export default function AuthShell({ children, heroTitle = 'Bentornato!', heroText = '', subtitle = 'Roadcase', heroSide = 'right' }) {
+export default function AuthShell({ children, heroTitle = 'Bentornato!', heroText = '', heroSide = 'right' }) {
   const [mounted, setMounted] = useState(false)
   const formContentRef = useRef(null)
   const [formHeight, setFormHeight] = useState(null)
@@ -119,12 +119,18 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
           animation:authFadeIn 0.45s ease 0.3s both;
         }
         .auth-hero-brand {
+          display:flex;
+          align-items:center;
+          gap:7px;
+          margin-bottom:14px;
+        }
+        .auth-hero-brand img { display:block; opacity:0.85; }
+        .auth-hero-brand span {
           color:rgba(255,255,255,0.7);
           font-size:10px;
           letter-spacing:3px;
           text-transform:uppercase;
           font-weight:700;
-          margin-bottom:14px;
         }
         .auth-hero-title {
           color:white;
@@ -186,7 +192,7 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
           </div>
           <div className="auth-split-hero">
             <div className="auth-hero-content" key={heroTitle}>
-              <p className="auth-hero-brand">{subtitle}</p>
+              <p className="auth-hero-brand"><img src="/logo-mark-white.png" alt="" width={13} height={12} /><span>Roadcase</span></p>
               <h1 className="auth-hero-title">{heroTitle}</h1>
               {heroText && <p className="auth-hero-text">{heroText}</p>}
             </div>

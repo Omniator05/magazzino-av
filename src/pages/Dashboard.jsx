@@ -93,6 +93,8 @@ export default function Dashboard({ toggleTheme, theme }) {
   const [items, setItems]   = useState([])
   const [tasks, setTasks]   = useState([])
   const [events, setEvents] = useState([])
+  const [itemsLoaded, setItemsLoaded]   = useState(false)
+  const [eventsLoaded, setEventsLoaded] = useState(false)
   const [weather, setWeather] = useState(() => {
     try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
   })
@@ -106,8 +108,8 @@ export default function Dashboard({ toggleTheme, theme }) {
 
   useEffect(() => {
     if (!teamId) return
-    const u1 = onSnapshot(query(collection(db, 'items'),  where('teamId','==',teamId), orderBy('name')),  s => setItems(s.docs.map(d => ({ id:d.id,...d.data() }))))
-    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => setEvents(s.docs.map(d => ({ id:d.id,...d.data() }))))
+    const u1 = onSnapshot(query(collection(db, 'items'),  where('teamId','==',teamId), orderBy('name')),  s => { setItems(s.docs.map(d => ({ id:d.id,...d.data() }))); setItemsLoaded(true) })
+    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => { setEvents(s.docs.map(d => ({ id:d.id,...d.data() }))); setEventsLoaded(true) })
     const u3 = onSnapshot(query(collection(db, 'tasks'),  where('teamId','==',teamId)),                   s => setTasks(s.docs.map(d => ({ id:d.id,...d.data() }))))
     return () => { u1(); u2(); u3() }
   }, [teamId])
@@ -645,7 +647,7 @@ export default function Dashboard({ toggleTheme, theme }) {
 
       {!showOverlay && !showRecapBanner && !showRecapModal && <TutorialModal role="admin" />}
 
-      <GettingStartedWidget teamId={teamId} items={items} events={events} />
+      <GettingStartedWidget teamId={teamId} items={items} events={events} dataReady={itemsLoaded && eventsLoaded} />
 
       {/* Popup avviso resoconto pronto — stesso stile del popup di conferma (logout ecc.) */}
       {showRecapBanner && (

@@ -28,13 +28,20 @@ export async function sendEmail({ to, subject, html }) {
 const BRAND_RED = '#e63946'
 
 // Guscio HTML condiviso dalle email transazionali — email client non
-// supportano <style>/CSS esterno in modo affidabile, quindi tutto inline.
-function emailShell({ title, bodyHtml, ctaLabel, ctaUrl }) {
+// supportano <style>/CSS esterno in modo affidabile, quindi tutto inline; il
+// logo nell'intestazione usa una <table> (non flex/grid) per lo stesso
+// motivo, dato che Outlook desktop la ignora. `logoUrl` deve essere un URL
+// assoluto (le email non possono caricare risorse relative né data: URI
+// affidabilmente) — i chiamanti lo derivano dall'origin della richiesta.
+function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl }) {
   return `
   <div style="background:#f5f5f3;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
     <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;">
-      <div style="background:${BRAND_RED};padding:22px 28px;">
-        <p style="margin:0;color:#ffffff;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Roadcase</p>
+      <div style="background:${BRAND_RED};padding:20px 28px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td style="padding-right:8px;vertical-align:middle;"><img src="${logoUrl}" width="15" height="14" alt="" style="display:block;"></td>
+          <td style="vertical-align:middle;"><span style="color:#ffffff;font-size:13px;font-weight:700;letter-spacing:0.06em;">ROADCASE</span></td>
+        </tr></table>
       </div>
       <div style="padding:28px;">
         <h1 style="margin:0 0 14px;font-size:20px;font-weight:800;color:#1a1a1a;">${title}</h1>
@@ -50,6 +57,7 @@ function emailShell({ title, bodyHtml, ctaLabel, ctaUrl }) {
 
 export function inviteEmailHtml({ workerName, teamName, username, password, loginUrl }) {
   return emailShell({
+    logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,
     title: `Ciao ${workerName},`,
     bodyHtml: `
       <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
@@ -69,6 +77,7 @@ export function inviteEmailHtml({ workerName, teamName, username, password, logi
 
 export function welcomeEmailHtml({ adminName, teamName, appUrl }) {
   return emailShell({
+    logoUrl: `${appUrl}/logo-mark-white.png`,
     title: `Benvenuto, ${adminName}!`,
     bodyHtml: `
       <p style="margin:0;color:#4b5563;font-size:14.5px;line-height:1.6;">
