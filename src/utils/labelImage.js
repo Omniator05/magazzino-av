@@ -67,7 +67,7 @@ function drawLines(ctx, lines, x, y, lineHeight) {
 // Disegna l'etichetta (QR a sinistra, blocco titolo/posizione/codice centrato
 // verticalmente a destra, testo dimensionato per riempire lo spazio) e
 // restituisce un data URL PNG 680×180 pronto da scaricare/importare.
-export async function renderLabelPNG({ name, location, code }) {
+export async function renderLabelPNG({ name, location, code, teamId }) {
   const W = LABEL_W * SS, H = LABEL_H * SS, pad = PAD * SS
 
   const canvas = document.createElement('canvas')
@@ -81,7 +81,7 @@ export async function renderLabelPNG({ name, location, code }) {
   const qrSize = H - pad * 2
   // Generiamo il QR già alla risoluzione finale di disegno: evita un
   // ulteriore passaggio di scala (e la conseguente sfocatura) sull'immagine.
-  const qrDataUrl = await generateQRDataURL(qrPayloadForCode(code), Math.round(qrSize))
+  const qrDataUrl = await generateQRDataURL(qrPayloadForCode(code, teamId), Math.round(qrSize))
   const qrImg = await loadImage(qrDataUrl)
   ctx.drawImage(qrImg, pad, pad, qrSize, qrSize)
 

@@ -394,6 +394,7 @@ export default function WorkerScanner() {
             location: data?.location || null,
             notes: data?.notes || null,
             components: data?.isBundle && data?.components?.length ? data.components : null,
+            instances: data?.isBundle ? (data.instances || []) : null,
           }
         })
         return next
@@ -904,6 +905,11 @@ function ChecklistRow({ item }) {
   // genitore) hanno priorità così la lista è sempre aggiornata.
   const liveComponents = item._details?.components || item.components || null
   const isKit = item.isBundle || (liveComponents && liveComponents.length > 0)
+  // Bauli assegnati a questa riga — letti in tempo reale dal kit, così se un
+  // baule viene segnato incompleto in magazzino l'avviso arriva anche qui,
+  // dove serve davvero (il magazziniere deve sapere QUALE baule caricare).
+  const assignedInstances = (item._details?.instances || []).filter(inst => (item.instanceNumbers || []).includes(inst.number))
+  const damagedInstances = assignedInstances.filter(inst => (inst.brokenComponents || []).length > 0)
   // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes
@@ -921,6 +927,16 @@ function ChecklistRow({ item }) {
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
             {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
             {item._vehicle && <span style={{ background:`${item._vehicle.color || 'var(--blue)'}22`, color: item._vehicle.color || 'var(--blue)', border:`1px solid ${item._vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{item._vehicle.emoji || '🚐'} {item._vehicle.name}</span>}
+            {item.isBundle && (item.instanceNumbers || []).length > 0 && (
+              <span style={{
+                background: damagedInstances.length ? 'rgba(248,113,113,0.15)' : 'rgba(148,163,184,0.15)',
+                color: damagedInstances.length ? 'var(--red)' : 'var(--text2)',
+                border: `1px solid ${damagedInstances.length ? 'rgba(248,113,113,0.35)' : 'var(--border)'}`,
+                borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0,
+              }}>
+                {damagedInstances.length > 0 ? '⚠️ ' : ''}{t('workerScanner.kitInstancesBadge', { numbers: item.instanceNumbers.join(', ') })}
+              </span>
+            )}
             {hasInfo && (
               <button onClick={() => setShowInfo(s => !s)}
                 style={{
@@ -943,6 +959,14 @@ function ChecklistRow({ item }) {
             <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
             <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{t('workerScanner.piecesUnit')}</span>
           </div>
+          {damagedInstances.length > 0 && (
+            <p style={{ color:'var(--red)', fontSize:11, marginTop:3, lineHeight:1.4 }}>
+              {damagedInstances.map(inst => t('eventDetail.kitInstanceIssue', {
+                number: inst.number,
+                names: inst.brokenComponents.map(b => (liveComponents || []).find(c => c.itemId === b.itemId)?.name || '?').join(', '),
+              })).join(' · ')}
+            </p>
+          )}
         </div>
         </div>
         {/* Bottoni touch-friendly - grandi abbastanza per il dito */}

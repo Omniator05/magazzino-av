@@ -7,6 +7,7 @@ import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
 import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
+import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -104,9 +105,18 @@ export default function EventDetail() {
   const [bulkVehicleId, setBulkVehicleId] = useState('')
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const saveItemEdit = async ({ id, qty, eventNote, mancante }) => {
+  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, itemRef, instanceNumbers }) => {
+    // Per i kit: se la qty è cambiata dal picker bauli non ancora aggiornato
+    // (es. utente ha solo mosso lo stepper senza aprire il picker), riallinea
+    // il numero di bauli assegnati alla nuova qty prima di salvare.
+    let finalInstanceNumbers = instanceNumbers
+    if (isBundle) {
+      const kitDoc = allItems.find(i => i.id === (itemRef || id))
+      const kitInstances = ensureInstanceList(kitDoc?.instances, kitDoc?.totalQty ?? qty)
+      finalInstanceNumbers = reconcileInstanceNumbers(kitInstances, instanceNumbers, qty)
+    }
     const updated = eventItems.map(i =>
-      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false }
+      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(isBundle ? { instanceNumbers: finalInstanceNumbers } : {}) }
     )
     await updateEventItems(updated)
     setEditItem(null)
@@ -496,7 +506,7 @@ export default function EventDetail() {
         // Aggiorna qty se già nel carrello
         return prev.map(c => c.id === item.id ? { ...c, qty } : c)
       }
-      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, isBundle: item.isBundle||false, components: item.components||null, qty }]
+      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, isBundle: item.isBundle||false, components: item.components||null, instances: item.instances||null, totalQty: item.totalQty||null, qty }]
     })
   }
 
@@ -518,6 +528,12 @@ export default function EventDetail() {
         continue
       }
       const alreadyExists = updated.some(e => e.id === c.id || e.itemRef === c.id)
+      // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
+      // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
+      // poi cambiarli a mano dalla modifica riga.
+      const instanceNumbers = c.isBundle
+        ? reconcileInstanceNumbers(ensureInstanceList(c.instances, c.totalQty ?? c.qty), [], c.qty)
+        : null
       if (alreadyExists) {
         // Riga separata con id unico, itemRef punta all'articolo Firebase originale
         updated.push({
@@ -526,6 +542,7 @@ export default function EventDetail() {
           name: c.name, category: c.category, location: c.location||'',
           isKit: c.isKit||false, kitSize: c.kitSize||null,
           isBundle: c.isBundle||false, components: c.components||null,
+          ...(c.isBundle ? { instanceNumbers } : {}),
           qty: c.qty, loaded: false, returned: false,
           mancante: true,
         })
@@ -534,6 +551,7 @@ export default function EventDetail() {
           id: c.id, name: c.name, category: c.category, location: c.location||'',
           isKit: c.isKit||false, kitSize: c.kitSize||null,
           isBundle: c.isBundle||false, components: c.components||null,
+          ...(c.isBundle ? { instanceNumbers } : {}),
           qty: c.qty, loaded: false, returned: false,
           mancante: addAsMancante || false,
         })
@@ -775,7 +793,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} />
+        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} />
       ))}
     </div>
   ))
@@ -1377,6 +1395,56 @@ export default function EventDetail() {
               />
             </div>
 
+            {editItem.isBundle && (() => {
+              const kitDoc = allItems.find(i => i.id === editItem.itemRef)
+              const kitInstances = ensureInstanceList(kitDoc?.instances, kitDoc?.totalQty ?? editItem.qty)
+              const selected = editItem.instanceNumbers || []
+              const toggleInstance = num => setEditItem(ei => {
+                const current = ei.instanceNumbers || []
+                if (current.includes(num)) return { ...ei, instanceNumbers: current.filter(n => n !== num) }
+                if (current.length >= ei.qty) return ei
+                return { ...ei, instanceNumbers: [...current, num].sort((a, b) => a - b) }
+              })
+              const damagedSelected = kitInstances.filter(inst => selected.includes(inst.number) && (inst.brokenComponents || []).length > 0)
+              return (
+                <div className="form-group">
+                  <label>{t('eventDetail.kitInstancesLabel', { count: editItem.qty })}</label>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom: damagedSelected.length ? 8 : 0 }}>
+                    {kitInstances.map(inst => {
+                      const isSelected = selected.includes(inst.number)
+                      const isDamaged = (inst.brokenComponents || []).length > 0
+                      return (
+                        <button
+                          key={inst.number}
+                          type="button"
+                          onClick={() => toggleInstance(inst.number)}
+                          style={{
+                            width:40, height:40, borderRadius:10, fontWeight:800, fontSize:14,
+                            display:'flex', alignItems:'center', justifyContent:'center',
+                            background: isSelected ? (isDamaged ? 'rgba(248,113,113,0.18)' : 'rgba(105,240,174,0.15)') : 'var(--card2)',
+                            border: isSelected ? `1.5px solid ${isDamaged ? 'var(--red)' : 'var(--green)'}` : '1.5px solid var(--border)',
+                            color: isSelected ? (isDamaged ? 'var(--red)' : 'var(--green)') : 'var(--text2)',
+                          }}>
+                          {inst.number}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {damagedSelected.length > 0 && (
+                    <p style={{ color:'var(--red)', fontSize:12, lineHeight:1.5, display:'flex', alignItems:'flex-start', gap:5 }}>
+                      <Warn size={13} />
+                      <span>
+                        {damagedSelected.map(inst => t('eventDetail.kitInstanceIssue', {
+                          number: inst.number,
+                          names: inst.brokenComponents.map(b => kitDoc?.components?.find(c => c.itemId === b.itemId)?.name || '?').join(', '),
+                        })).join(' · ')}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
+
             <button
               className="btn-no-anim"
               onClick={() => setEditItem(ei => ({ ...ei, mancante: !ei.mancante }))}
@@ -1472,7 +1540,7 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle }) {
+function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems }) {
   const { t } = useTranslation()
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
   // Elenco selezionabile: solo furgoni attivi, più quello attualmente
@@ -1481,11 +1549,20 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
     ? [...vehicles.filter(v => v.active !== false), vehicle]
     : vehicles.filter(v => v.active !== false)
 
+  // Bauli fisici assegnati a questa riga (solo per i kit) — letti in tempo
+  // reale dal documento kit, così se un baule viene segnato incompleto in
+  // magazzino l'avviso compare qui automaticamente (vedi kitInstances.js).
+  const kitDoc = item.isBundle ? allItems.find(i => i.id === (item.itemRef || item.id)) : null
+  const assignedInstances = kitDoc
+    ? (kitDoc.instances || []).filter(inst => (item.instanceNumbers || []).includes(inst.number))
+    : []
+  const damagedInstances = assignedInstances.filter(inst => (inst.brokenComponents || []).length > 0)
+
   return (
     <div style={{ borderBottom:'1px solid var(--border)', background: bulkSelected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: bulkSelected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
       <div
         style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
-        onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false })}
+        onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, isBundle: item.isBundle || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [] })}
       >
         {bulkMode && (
           <div style={{
@@ -1514,6 +1591,16 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
             {vehicle && (
               <span style={{ background:`${vehicle.color || 'var(--blue)'}22`, color: vehicle.color || 'var(--blue)', border:`1px solid ${vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicle.emoji || '🚐'} {vehicle.name}</span>
             )}
+            {item.isBundle && (item.instanceNumbers || []).length > 0 && (
+              <span style={{
+                background: damagedInstances.length ? 'rgba(248,113,113,0.15)' : 'rgba(148,163,184,0.15)',
+                color: damagedInstances.length ? 'var(--red)' : 'var(--text2)',
+                border: `1px solid ${damagedInstances.length ? 'rgba(248,113,113,0.35)' : 'var(--border)'}`,
+                borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0, display:'inline-flex', alignItems:'center', gap:3,
+              }}>
+                {damagedInstances.length > 0 && <Warn size={10} />} {t('eventDetail.kitInstancesBadge', { numbers: item.instanceNumbers.join(', ') })}
+              </span>
+            )}
           </div>
           <p style={{ color:'var(--text2)', fontSize:13 }}>{t('eventDetail.qty', { count: item.qty || 1 })}</p>
           {item.eventNote ? (
@@ -1521,6 +1608,15 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
           ) : warehouseNotes ? (
             <p style={{ color:'var(--text3)', fontSize:11, marginTop:3, fontStyle:'italic' }}>💡 {warehouseNotes}</p>
           ) : null}
+          {damagedInstances.length > 0 && (
+            <p style={{ color:'var(--red)', fontSize:11, marginTop:3, lineHeight:1.4 }}>
+              <Warn size={10} />{' '}
+              {damagedInstances.map(inst => t('eventDetail.kitInstanceIssue', {
+                number: inst.number,
+                names: inst.brokenComponents.map(b => kitDoc?.components?.find(c => c.itemId === b.itemId)?.name || '?').join(', '),
+              })).join(' · ')}
+            </p>
+          )}
           {location ? (
             <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'3px 8px' }}>
               <span style={{ fontSize:11 }}>📍</span>

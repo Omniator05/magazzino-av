@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
@@ -12,9 +13,10 @@ import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useCenteredModal } from '../hooks/useCenteredModal'
-import { Pin, Cart, Box, Kit, Save, Wrench } from '../components/Icon'
+import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter } from '../components/Icon'
 import FabButton from '../components/FabButton'
 import { parseCSV, mapRowsToItems } from '../utils/csvImport'
+import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
 
 const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const KIT_CATEGORIES = CATEGORIES
@@ -78,12 +80,23 @@ export default function Inventory() {
   const { state: navState } = useLocation()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
+  const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [filterMenuMounted, setFilterMenuMounted] = useState(false)
+  const [filterMenuEntered, setFilterMenuEntered] = useState(false)
+  const [filterMenuPos, setFilterMenuPos] = useState(null)
+  const filterButtonRef = useRef(null)
+  const [sortBy, setSortBy] = useState('')       // '' | 'az' | 'za' | 'qty'
+  const [filterCategory, setFilterCategory] = useState('')
+  const [filterLocation, setFilterLocation] = useState('')
+  const [filterKitOnly, setFilterKitOnly] = useState(false)
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showAddMenu, setShowAddMenu]   = useState(false)
   const [showKitModal, setShowKitModal]         = useState(false)
   const [showKitEditModal, setShowKitEditModal] = useState(false)
   const [editingKit, setEditingKit]             = useState(null)
   const [kitEditComponents, setKitEditComponents] = useState([])
+  const [kitEditInstances, setKitEditInstances] = useState([])
   const [kitEditSearch, setKitEditSearch]       = useState('')
   const [kitForm, setKitForm]           = useState({ name:'', location:'', qty:1, category:'Altro' })
   const [kitComponents, setKitComponents] = useState([])
@@ -108,6 +121,21 @@ export default function Inventory() {
   const importModal = useCenteredModal(() => setShowImportModal(false))
   useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showImportModal)
   // Kit form: nome + componenti
+
+  // Menu filtri: resta montato durante il fade out (invece di sparire di
+  // scatto) così l'animazione a cascata può girare anche in chiusura, in
+  // ordine inverso — stesso pattern già usato per il widget "Per iniziare".
+  useEffect(() => {
+    if (showFilterMenu) {
+      setFilterMenuMounted(true)
+      const id = requestAnimationFrame(() => setFilterMenuEntered(true))
+      return () => cancelAnimationFrame(id)
+    }
+    setFilterMenuEntered(false)
+    setCategoryPickerOpen(false)
+    const timeout = setTimeout(() => setFilterMenuMounted(false), 200)
+    return () => clearTimeout(timeout)
+  }, [showFilterMenu])
 
   // Items in shared global collection so workers can read them
   useEffect(() => {
@@ -165,11 +193,30 @@ export default function Inventory() {
       setEditingKit(item)
       setKitForm({ name:item.name, location:item.location||'', qty:item.totalQty||1, category:item.category||'Altro' })
       setKitEditComponents((item.components||[]).map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty, maxQty:99 })))
+      setKitEditInstances(item.instances || [])
       setKitEditSearch('')
       setShowKitEditModal(true)
     } else {
       setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0 }); setShowModal(true)
     }
+  }
+
+  // Segna/toglie N pezzi rotti di un componente DENTRO un baule specifico —
+  // stato persistente sul kit (non sull'evento): resta finché non lo si
+  // riporta a 0 da qui, e ricompare in ogni evento a cui quel baule viene
+  // assegnato (vedi src/utils/kitInstances.js).
+  const toggleInstanceBroken = (instanceNumber, componentItemId, maxQty, delta) => {
+    setKitEditInstances(prev => {
+      const list = ensureInstanceList(prev, kitForm.qty)
+      return list.map(inst => {
+        if (inst.number !== instanceNumber) return inst
+        const current = (inst.brokenComponents || []).find(b => b.itemId === componentItemId)?.qty || 0
+        const next = Math.max(0, Math.min(maxQty, current + delta))
+        const brokenComponents = (inst.brokenComponents || []).filter(b => b.itemId !== componentItemId)
+        if (next > 0) brokenComponents.push({ itemId: componentItemId, qty: next })
+        return { ...inst, brokenComponents }
+      })
+    })
   }
 
   const saveItem = async () => {
@@ -209,7 +256,7 @@ export default function Inventory() {
   const openDetail = async item => {
     setShowDetail(item); setQrUrl(null)
     const code = item.code || generateItemCode(item.id)
-    const url = await generateQRDataURL(qrPayloadForCode(code))
+    const url = await generateQRDataURL(qrPayloadForCode(code, teamId))
     setQrUrl(url)
     setTimeout(() => generateBarcodeSVG(code, 'barcode-svg'), 100)
   }
@@ -219,7 +266,7 @@ export default function Inventory() {
   // pagina/margini ed è inaffidabile per etichette di quella dimensione.
   const printCode = async () => {
     const code = showDetail.code || generateItemCode(showDetail.id)
-    const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code })
+    const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId })
     downloadDataUrl(png, labelFilename(showDetail.name, code))
   }
 
@@ -230,7 +277,7 @@ export default function Inventory() {
 
     const zip = new JSZip()
     for (const code of unitCodes) {
-      const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code })
+      const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId })
       zip.file(labelFilename(showDetail.name, code), png.split(',')[1], { base64: true })
     }
     const blob = await zip.generateAsync({ type: 'blob' })
@@ -248,7 +295,7 @@ export default function Inventory() {
         ? Array.from({ length: totalUnits }, (_, i) => generateUnitCode(item.code, i + 1))
         : [item.code]
       for (const code of unitCodes) {
-        const png = await renderLabelPNG({ name: item.name, location: item.location, code })
+        const png = await renderLabelPNG({ name: item.name, location: item.location, code, teamId })
         zip.file(labelFilename(item.name, code), png.split(',')[1], { base64: true })
       }
     }
@@ -351,6 +398,27 @@ export default function Inventory() {
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
   const countReorder = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock).length
 
+  // Filtri avanzati (menu filtri): si combinano con ricerca testo + chip
+  // rapidi qui sopra. Non appena uno di questi è attivo, la vista passa da
+  // "raggruppata per categoria" a lista piatta ordinata — le due modalità
+  // non hanno senso insieme (un ordinamento per quantità o un filtro per
+  // posizione attraversa le categorie).
+  const uniqueLocations = [...new Set(items.map(i => i.location).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  const advancedFiltersActive = !!(sortBy || filterCategory || filterLocation || filterKitOnly)
+
+  const advancedFiltered = filtered.filter(i => {
+    if (filterCategory && i.category !== filterCategory) return false
+    if (filterLocation && !(i.location || '').toLowerCase().includes(filterLocation.trim().toLowerCase())) return false
+    if (filterKitOnly && !i.isBundle) return false
+    return true
+  })
+  const sortedFlat = [...advancedFiltered].sort((a, b) => {
+    if (sortBy === 'za') return (b.name || '').localeCompare(a.name || '')
+    if (sortBy === 'qty') return (b.totalQty || 0) - (a.totalQty || 0)
+    return (a.name || '').localeCompare(b.name || '') // default e 'az': alfabetico
+  })
+  const clearAdvancedFilters = () => { setSortBy(''); setFilterCategory(''); setFilterLocation(''); setFilterKitOnly(false) }
+
   // Raggruppa per categoria — kit appaiono nel loro gruppo, non in 'Kit'
   const groupedFiltered = CATEGORY_ORDER.map(cat => ({
     cat,
@@ -413,9 +481,178 @@ export default function Inventory() {
 
       <FabButton onClick={() => setShowAddMenu(true)} ariaLabel={t('inventory.addButton')} />
 
-      <div className="search-bar" style={{ position:'relative' }}>
-        <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} />
+      <div className="search-bar" style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} />
+        </div>
+
+        {/* Menu filtri avanzati (ordina/categoria/kit/posizione) — il pannello
+            va in portal su document.body: la search-bar ha backdrop-filter,
+            che in CSS crea un nuovo contenimento per gli elementi "fixed"
+            annidati, quindi l'overlay per chiudere al tap-fuori restava
+            confinato dentro la barra invece di coprire tutta la pagina. */}
+        <div style={{ position:'relative', flexShrink:0 }}>
+          <button
+            ref={filterButtonRef}
+            onClick={() => {
+              if (!showFilterMenu && filterButtonRef.current) {
+                const r = filterButtonRef.current.getBoundingClientRect()
+                setFilterMenuPos({ top: r.bottom + 6, right: window.innerWidth - r.right })
+              }
+              setShowFilterMenu(v => !v)
+            }}
+            aria-label={t('inventory.filterButtonLabel')}
+            className="btn btn-secondary"
+            style={{ position:'relative', width:44, height:44, padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+          >
+            <Filter size={17} />
+            {advancedFiltersActive && (
+              <span style={{ position:'absolute', top:-3, right:-3, width:10, height:10, borderRadius:'50%', background:'var(--accent)', boxShadow:'0 2px 5px rgba(0,0,0,0.3)' }} />
+            )}
+          </button>
+          {filterMenuMounted && filterMenuPos && createPortal((() => {
+            const CASCADE_STEP = 26
+            const CASCADE_BLOCKS = 5 // ordina, categoria, posizione, kit, cancella
+            const cascade = index => ({
+              opacity: filterMenuEntered ? 1 : 0,
+              transform: filterMenuEntered ? 'translateY(0)' : 'translateY(-6px)',
+              transition: 'opacity 150ms ease, transform 150ms ease',
+              transitionDelay: filterMenuEntered ? `${index * CASCADE_STEP}ms` : `${(CASCADE_BLOCKS - 1 - index) * CASCADE_STEP}ms`,
+            })
+            return (
+              <>
+                {/* Copre tutto lo schermo: un tap ovunque fuori dal pannello lo chiude */}
+                <div onClick={() => setShowFilterMenu(false)} style={{ position:'fixed', inset:0, zIndex:99 }} />
+                <div style={{
+                  position:'fixed', top:filterMenuPos.top, right:filterMenuPos.right, zIndex:100,
+                  background:'var(--card)', border:'1px solid var(--border)', borderRadius:12,
+                  boxShadow:'0 8px 24px rgba(0,0,0,0.18)', width:250, padding:14,
+                  maxHeight:'70vh', overflowY:'auto',
+                  opacity: filterMenuEntered ? 1 : 0,
+                  transition:'opacity 150ms ease',
+                }}>
+                  <div style={cascade(0)}>
+                    <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('inventory.filterSortLabel')}</p>
+                    <div style={{ display:'flex', flexDirection:'column', gap:4, marginBottom:14 }}>
+                      {[
+                        { key:'az',  label:t('inventory.filterSortAZ') },
+                        { key:'za',  label:t('inventory.filterSortZA') },
+                        { key:'qty', label:t('inventory.filterSortQty') },
+                      ].map(opt => (
+                        <button
+                          key={opt.key}
+                          onClick={() => setSortBy(s => s === opt.key ? '' : opt.key)}
+                          className="btn-no-anim"
+                          style={{
+                            width:'100%', textAlign:'left', padding:'8px 10px', borderRadius:8, fontSize:13, fontWeight:600,
+                            background: sortBy === opt.key ? 'var(--card2)' : 'transparent',
+                            color: sortBy === opt.key ? 'var(--accent)' : 'var(--text)',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={cascade(1)}>
+                    <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>{t('inventory.filterCategoryLabel')}</p>
+                    {/* Campo compatto che si espande al tap — stesso principio del
+                        DateField: di default il pannello resta basso (soprattutto
+                        su mobile), la griglia con le 13 categorie si vede solo
+                        quando serve davvero cambiarla. */}
+                    <button
+                      onClick={() => setCategoryPickerOpen(o => !o)}
+                      className="btn-no-anim"
+                      style={{
+                        width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'9px 10px', borderRadius:8, fontSize:13, fontWeight:600, marginBottom: categoryPickerOpen ? 6 : 14,
+                        background:'var(--card2)', border:'1px solid var(--border)',
+                        color: filterCategory ? 'var(--text)' : 'var(--text2)',
+                      }}
+                    >
+                      <span style={{ display:'flex', alignItems:'center', gap:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {filterCategory && <span style={{ flexShrink:0 }}>{ICONS[filterCategory] || '📦'}</span>}
+                        {filterCategory || t('inventory.filterAllCategories')}
+                      </span>
+                      <span style={{ flexShrink:0, fontSize:10, color:'var(--text2)', transition:'transform 0.15s', transform: categoryPickerOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+                    </button>
+                    {categoryPickerOpen && (
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:14 }}>
+                        <button
+                          onClick={() => { setFilterCategory(''); setCategoryPickerOpen(false) }}
+                          className="btn-no-anim"
+                          style={{
+                            padding:'7px 8px', borderRadius:8, fontSize:11.5, fontWeight:700, textAlign:'left',
+                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                            background: filterCategory === '' ? 'var(--accent)' : 'var(--card2)',
+                            color: filterCategory === '' ? '#fff' : 'var(--text2)',
+                            border: `1px solid ${filterCategory === '' ? 'var(--accent)' : 'var(--border)'}`,
+                          }}
+                        >
+                          {t('inventory.filterAllCategories')}
+                        </button>
+                        {CATEGORIES.map(c => (
+                          <button
+                            key={c}
+                            onClick={() => { setFilterCategory(fc => fc === c ? '' : c); setCategoryPickerOpen(false) }}
+                            className="btn-no-anim"
+                            style={{
+                              padding:'7px 8px', borderRadius:8, fontSize:11.5, fontWeight:700,
+                              display:'flex', alignItems:'center', gap:5, overflow:'hidden',
+                              background: filterCategory === c ? 'var(--accent)' : 'var(--card2)',
+                              color: filterCategory === c ? '#fff' : 'var(--text2)',
+                              border: `1px solid ${filterCategory === c ? 'var(--accent)' : 'var(--border)'}`,
+                            }}
+                          >
+                            <span style={{ flexShrink:0 }}>{ICONS[c] || '📦'}</span>
+                            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={cascade(2)}>
+                    <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>{t('inventory.filterLocationLabel')}</p>
+                    <input
+                      list="inventory-filter-locations"
+                      value={filterLocation}
+                      onChange={e => setFilterLocation(e.target.value)}
+                      placeholder={t('inventory.filterLocationPlaceholder')}
+                      style={{ fontSize:13, marginBottom:14 }}
+                    />
+                    <datalist id="inventory-filter-locations">
+                      {uniqueLocations.map(loc => <option key={loc} value={loc} />)}
+                    </datalist>
+                  </div>
+
+                  <div style={cascade(3)}>
+                    <button
+                      onClick={() => setFilterKitOnly(v => !v)}
+                      className="btn-no-anim"
+                      style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 10px', borderRadius:8, background: filterKitOnly ? 'rgba(245,166,35,0.10)' : 'var(--card2)', border: filterKitOnly ? '1.5px solid rgba(245,166,35,0.35)' : '1.5px solid var(--border)' }}
+                    >
+                      <span style={{ fontSize:13, fontWeight:700, color: filterKitOnly ? 'var(--accent2)' : 'var(--text2)', display:'flex', alignItems:'center', gap:6 }}><Kit size={14} /> {t('inventory.filterKitOnly')}</span>
+                      <span style={{ width:34, height:19, borderRadius:10, background: filterKitOnly ? 'var(--accent2)' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', justifyContent: filterKitOnly ? 'flex-end' : 'flex-start' }}>
+                        <span style={{ width:13, height:13, borderRadius:'50%', background:'white', display:'block' }} />
+                      </span>
+                    </button>
+                  </div>
+
+                  {advancedFiltersActive && (
+                    <div style={cascade(4)}>
+                      <button onClick={clearAdvancedFilters} className="btn-no-anim" style={{ width:'100%', marginTop:14, padding:'9px 10px', borderRadius:8, background:'transparent', color:'var(--red)', fontSize:13, fontWeight:700, textAlign:'center' }}>
+                        {t('inventory.filterClear')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )
+          })(), document.body)}
+        </div>
       </div>
 
       {/* Filtri rapidi - scrollabili orizzontalmente */}
@@ -446,9 +683,13 @@ export default function Inventory() {
         </div>
       </div>
 
-      {filtered.length === 0
+      {(advancedFiltersActive ? sortedFlat.length === 0 : filtered.length === 0)
         ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
             <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p></div>
+          </div>
+        : advancedFiltersActive
+        ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
+            {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} />)}
           </div>
         : groupedFiltered.map(({ cat, catItems }) => (
           <div key={cat} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
@@ -458,47 +699,7 @@ export default function Inventory() {
               <span style={{ fontWeight:700, fontSize:12, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{cat}</span>
               <span style={{ fontSize:12, color:'var(--text3)', marginLeft:'auto' }}>{catItems.length}</span>
             </div>
-            {catItems.map(item => (
-              <div key={item.id} className="item-row" onClick={() => openDetail(item)}>
-                <div className="item-icon">{ICONS[item.category] || '📦'}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
-                    <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
-                    {item.isBundle && (
-                      <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, flexShrink:0, display:'inline-flex', alignItems:'center', gap:3 }}><Kit size={11} /> KIT</span>
-                    )}
-                  </div>
-                  <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
-                  {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {item.location}</p>}
-                </div>
-                <div style={{ textAlign:'right', flexShrink:0 }}>
-                  <span className={`badge ${
-                    item.category === 'Consumabili'
-                      ? (item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock ? 'partial' : 'in')
-                      : (item.availableQty === (item.totalQty - (item.brokenQty||0)) ? 'in' : item.availableQty === 0 ? 'out' : 'partial')
-                  }`}>
-                    {item.category === 'Consumabili'
-                      ? (item.availableQty ?? item.totalQty)
-                      : `${item.availableQty}/${item.totalQty}`
-                    }
-                  </span>
-                  {item.brokenQty > 0 && (
-                    <div style={{ marginTop:4 }}>
-                      <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
-                        <Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}
-                      </span>
-                    </div>
-                  )}
-                  {item.category === 'Consumabili' && item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock && (
-                    <div style={{ marginTop:4 }}>
-                      <span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
-                        <Cart size={11} /> {t('inventory.toReorder')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+            {catItems.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} />)}
           </div>
         ))
       }
@@ -957,26 +1158,66 @@ export default function Inventory() {
                 </div>
               </div>
             </div>
-            {kitEditComponents.length > 0 && (
-              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
-                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.componentsCount', { count: kitEditComponents.length })}</p>
-                {kitEditComponents.map(comp => (
-                  <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                    <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{comp.name}</span>
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                      <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
-                      <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:c.qty+1} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+            {/* Un solo scroll per tutto il contenuto centrale (componenti, stato
+                bauli, ricerca + risultati): prima queste erano sezioni fisse
+                separate, e con più bauli/componenti la ricerca finiva spinta
+                fuori dalla modale, irraggiungibile. Header e bottoni restano
+                fissi (flexShrink:0), solo questo blocco scorre. */}
+            <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
+              {kitEditComponents.length > 0 && (
+                <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'rgba(245,166,35,0.04)' }}>
+                  <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.componentsCount', { count: kitEditComponents.length })}</p>
+                  {kitEditComponents.map(comp => (
+                    <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                      <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{comp.name}</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                        <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
+                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:c.qty+1} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                      </div>
+                      <button onClick={() => setKitEditComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>✕</button>
                     </div>
-                    <button onClick={() => setKitEditComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>✕</button>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+              {kitEditComponents.length > 0 && (
+                <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
+                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, marginBottom:2, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.kitInstancesTitle')}</p>
+                  <p style={{ color:'var(--text3)', fontSize:11.5, marginBottom:8, lineHeight:1.4 }}>{t('inventory.kitInstancesHint')}</p>
+                  {ensureInstanceList(kitEditInstances, kitForm.qty).map(inst => {
+                    const hasBroken = (inst.brokenComponents || []).length > 0
+                    return (
+                      <div key={inst.number} style={{ marginBottom:8, padding:'8px 10px', borderRadius:8, background: hasBroken ? 'rgba(248,113,113,0.06)' : 'var(--card2)', border: hasBroken ? '1px solid rgba(248,113,113,0.25)' : '1px solid var(--border)' }}>
+                        <p style={{ fontSize:12.5, fontWeight:800, color: hasBroken ? 'var(--red)' : 'var(--text)', marginBottom:6, display:'flex', alignItems:'center', gap:5 }}>
+                          {hasBroken && <Warn size={12} />} {t('inventory.kitInstanceLabel', { number: inst.number })}
+                        </p>
+                        {kitEditComponents.map(comp => {
+                          const brokenQty = (inst.brokenComponents || []).find(b => b.itemId === comp.itemId)?.qty || 0
+                          return (
+                            <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                              <span style={{ flex:1, fontSize:12.5, color:'var(--text2)' }}>{comp.name}</span>
+                              <button
+                                onClick={() => toggleInstanceBroken(inst.number, comp.itemId, comp.qty, -1)}
+                                disabled={brokenQty === 0}
+                                style={{ width:22, height:22, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty === 0 ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                              <span style={{ fontSize:12, fontWeight:800, minWidth:36, textAlign:'center', color: brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }}>
+                                {brokenQty > 0 ? t('inventory.kitInstanceMissingCount', { count: brokenQty }) : '✓'}
+                              </span>
+                              <button
+                                onClick={() => toggleInstanceBroken(inst.number, comp.itemId, comp.qty, 1)}
+                                disabled={brokenQty >= comp.qty}
+                                style={{ width:22, height:22, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty >= comp.qty ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
+                <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder={t('inventory.addComponentPlaceholder')} style={{ fontSize:13 }} />
               </div>
-            )}
-            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder={t('inventory.addComponentPlaceholder')} style={{ fontSize:13 }} />
-            </div>
-            <div style={{ overflowY:'auto', flex:1 }}>
               {items
                 .filter(i => !i.isBundle && !kitEditComponents.some(c => c.itemId===i.id))
                 .filter(i => !kitEditSearch || i.name?.toLowerCase().includes(kitEditSearch.toLowerCase()))
@@ -1017,6 +1258,7 @@ export default function Inventory() {
                     totalQty: newTotal,
                     availableQty: newAvailable,
                     components: kitEditComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
+                    instances: ensureInstanceList(kitEditInstances, newTotal),
                   })
                   setShowKitEditModal(false)
                   setShowDetail(null)
@@ -1092,6 +1334,7 @@ export default function Inventory() {
                     category: kitForm.category || 'Altro', isBundle: true,
                     components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
                     totalQty: kitQty, availableQty: kitQty,
+                    instances: ensureInstanceList([], kitQty),
                     teamId, createdAt: serverTimestamp(), createdBy: user.uid,
                   })
                   await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -1106,6 +1349,60 @@ export default function Inventory() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Riga oggetto — estratta per essere riusata sia nella vista raggruppata per
+// categoria (default) sia nella lista piatta ordinata (quando un filtro
+// avanzato è attivo), senza duplicare tutto il markup nei due rami.
+function ItemRow({ item, onOpen, t }) {
+  return (
+    <div className="item-row" onClick={() => onOpen(item)}>
+      <div className="item-icon">{ICONS[item.category] || '📦'}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+          <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>
+          {item.isBundle && (
+            <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, flexShrink:0, display:'inline-flex', alignItems:'center', gap:3 }}><Kit size={11} /> KIT</span>
+          )}
+        </div>
+        <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
+        {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {item.location}</p>}
+      </div>
+      <div style={{ textAlign:'right', flexShrink:0 }}>
+        <span className={`badge ${
+          item.category === 'Consumabili'
+            ? (item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock ? 'partial' : 'in')
+            : (item.availableQty === (item.totalQty - (item.brokenQty||0)) ? 'in' : item.availableQty === 0 ? 'out' : 'partial')
+        }`}>
+          {item.category === 'Consumabili'
+            ? (item.availableQty ?? item.totalQty)
+            : `${item.availableQty}/${item.totalQty}`
+          }
+        </span>
+        {item.brokenQty > 0 && (
+          <div style={{ marginTop:4 }}>
+            <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
+              <Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}
+            </span>
+          </div>
+        )}
+        {kitHasIncompleteInstance(item) && (
+          <div style={{ marginTop:4 }}>
+            <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
+              <Warn size={11} /> {t('inventory.kitIncomplete')}
+            </span>
+          </div>
+        )}
+        {item.category === 'Consumabili' && item.minStock > 0 && (item.availableQty ?? item.totalQty) <= item.minStock && (
+          <div style={{ marginTop:4 }}>
+            <span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
+              <Cart size={11} /> {t('inventory.toReorder')}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

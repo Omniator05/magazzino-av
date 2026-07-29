@@ -29,6 +29,7 @@ import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
 import OnboardingReveal from './components/OnboardingReveal'
 import BillingGate from './components/BillingGate'
+import QrRedirect from './components/QrRedirect'
 import { isBillingValid } from './utils/billing'
 
 // Barra sempre visibile mentre un super admin sta "dentro" un'altra azienda
@@ -81,10 +82,19 @@ function AnimatedPage({ children }) {
 
 function PrivateRoutes({ toggleTheme, theme }) {
   const { user, profile, team, loading, signupInProgress, ghostTeamId } = useAuth()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const onScannerRoute = pathname.endsWith('/scan')
   const onSuperAdminRoute = pathname === '/super'
   const onWelcomeRoute = pathname === '/welcome'
+
+  // QR di magazzino scansionato con la fotocamera normale del telefono
+  // (fuori dall'app): esce subito verso il sito della squadra o quello
+  // dell'app, PRIMA di qualunque controllo su login/ruolo — non ha senso
+  // provare a instradarlo dentro l'app. Vedi src/components/QrRedirect.jsx.
+  if (pathname === '/' && search) {
+    const qrCode = new URLSearchParams(search).get('c')
+    if (qrCode) return <QrRedirect teamId={new URLSearchParams(search).get('t')} />
+  }
 
   // Durante il signup l'utente Auth esiste già ma il profilo arriva un attimo
   // dopo: senza questa attesa comparirebbe per un secondo la pagina "errore

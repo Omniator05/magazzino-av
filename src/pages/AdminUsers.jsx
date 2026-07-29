@@ -125,6 +125,9 @@ export default function AdminUsers() {
   const [gError, setGError]           = useState('')
   const [gCalId, setGCalId]           = useState('')
   const [gCalSaving, setGCalSaving]   = useState(false)
+  const [websiteUrl, setWebsiteUrl]       = useState('')
+  const [websiteSaving, setWebsiteSaving] = useState(false)
+  const [websiteError, setWebsiteError]   = useState('')
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError]     = useState('')
   const [showCreate, setShowCreate]   = useState(false)
@@ -220,6 +223,7 @@ export default function AdminUsers() {
   // Firestore — va riottenuto (di solito senza popup se sei già collegato con
   // Google) ogni volta che si riapre l'app.
   useEffect(() => { setGCalId(team?.googleCalendarId || '') }, [team?.googleCalendarId])
+  useEffect(() => { setWebsiteUrl(team?.websiteUrl || '') }, [team?.websiteUrl])
 
   const connectGoogle = async () => {
     setGLoading(true); setGError('')
@@ -248,6 +252,24 @@ export default function AdminUsers() {
     } finally { setGCalSaving(false) }
   }
 
+  // ── Sito web (destinazione dei QR scansionati fuori dall'app) ──────────
+  const saveWebsiteUrl = async () => {
+    let raw = websiteUrl.trim()
+    // Chi scrive "esempio.it" senza protocollo non deve ricevere un errore:
+    // lo normalizziamo noi invece di pretendere l'https:// esplicito.
+    if (raw && !/^https?:\/\//i.test(raw)) raw = `https://${raw}`
+    if (raw) {
+      try { new URL(raw) } catch { setWebsiteError(t('adminUsers.errorWebsiteUrlInvalid')); return }
+    }
+    setWebsiteError('')
+    setWebsiteSaving(true)
+    try {
+      await updateTeamData({ websiteUrl: raw || null })
+      setWebsiteUrl(raw)
+      showToast(t('adminUsers.websiteUrlSavedToast'))
+    } finally { setWebsiteSaving(false) }
+  }
+
   // ── Abbonamento ────────────────────────────────────────────────
   // portal=true → Stripe Billing Portal (gestisci/annulla un abbonamento
   // esistente); portal=false → Stripe Checkout (sottoscrivi per la prima volta,
@@ -274,9 +296,6 @@ export default function AdminUsers() {
   const createAccount = async () => {
     if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
       setError(t('adminUsers.errorFillAllFields')); return
-    }
-    if (form.role === 'organizzatore-brasserie' && !orgConfig.eventName.trim()) {
-      setError(t('adminUsers.errorOrgEventName')); return
     }
     if (form.role === 'organizzatore-evento' && !assignedEventId) {
       setError(t('adminUsers.errorOrgLinkedEvent')); return
@@ -308,9 +327,6 @@ export default function AdminUsers() {
         active:        true,
         createdAt:     new Date().toISOString(),
         createdBy:     user.uid,
-        ...(form.role === 'organizzatore-brasserie'
-          ? { organizerConfig: { ...orgConfig, eventName: orgConfig.eventName.trim() } }
-          : {}),
         ...(form.role === 'organizzatore-evento'
           ? { assignedEventId }
           : {}),
@@ -649,6 +665,11 @@ export default function AdminUsers() {
           </>
         )}
 
+        <div style={{ margin:'0 16px 16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
+          <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>{t('adminUsers.howLoginWorksTitle')}</p>
+          <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
+        </div>
+
         <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.workersSection')}</p>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
           {workers.length === 0
@@ -670,9 +691,20 @@ export default function AdminUsers() {
           </>
         )}
 
-        <div style={{ margin:'16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
-          <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>{t('adminUsers.howLoginWorksTitle')}</p>
-          <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
+        {/* Sito web — dove finisce chi scansiona un QR di magazzino SENZA
+            l'app (fotocamera normale del telefono): se non impostato, il QR
+            reindirizza al sito di Roadcase invece che a una pagina a caso
+            (vedi src/utils/generateCode.js + src/pages/QrRedirect.jsx). */}
+        <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
+          <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.websiteUrlTitle')}</p>
+          <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.websiteUrlDesc')}</p>
+          {websiteError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{websiteError}</p>}
+          <div style={{ display:'flex', gap:8 }}>
+            <input value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder={t('adminUsers.websiteUrlPlaceholder')} style={{ flex:1, fontSize:13 }} />
+            <button onClick={saveWebsiteUrl} className="btn btn-secondary" disabled={websiteSaving || websiteUrl.trim() === (team?.websiteUrl || '')} style={{ flexShrink:0, padding:'0 16px' }}>
+              {websiteSaving ? t('common.saving') : t('adminUsers.save')}
+            </button>
+          </div>
         </div>
 
         {/* Google Calendar — sync one-way (app → Google), best-effort finché chi
@@ -764,21 +796,9 @@ export default function AdminUsers() {
               <label>{t('adminUsers.roleLabel')}</label>
               <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
                 <option value="worker">{t('adminUsers.roleWorkerOption')}</option>
-                <option value="organizzatore-brasserie">{t('adminUsers.roleOrgBrasserieOption')}</option>
                 <option value="organizzatore-evento">{t('adminUsers.roleOrgEventOption')}</option>
               </select>
             </div>
-
-            {form.role === 'organizzatore-brasserie' && (
-              <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.eventConfigTitle')}</p>
-                <OrgConfigFields
-                  orgConfig={orgConfig} setOrgConfig={setOrgConfig}
-                  newCustomDate={newCustomDate} setNewCustomDate={setNewCustomDate}
-                  addCustomDate={addCustomDate} removeCustomDate={removeCustomDate}
-                />
-              </div>
-            )}
 
             {form.role === 'organizzatore-evento' && (
               <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
@@ -945,7 +965,6 @@ export default function AdminUsers() {
                         {[
                           { key:'worker', label:t('adminUsers.roleMagazziniere') },
                           { key:'admin', label:t('adminUsers.roleAdminOption') },
-                          { key:'organizzatore-brasserie', label:t('adminUsers.roleOrgBrasserieOption') },
                           { key:'organizzatore-evento', label:t('adminUsers.roleOrgEventOption') },
                         ].map(r => (
                           <button key={r.key} onClick={() => changeRole(r.key)} className="btn-no-anim" style={{

@@ -12,7 +12,11 @@ export default function LogoutButton({ style, className, name }) {
   const [confirm, setConfirm] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const first = (name || '').split(' ')[0]
-  const logoSrc = team?.logoUrl || '/logo-default.svg'
+  // Il badge (sfondo rosso pieno + simbolo nero) invece del solo simbolo
+  // trasparente: qui non c'è nessun contenitore attorno a incorniciarlo (a
+  // differenza del placeholder in AdminUsers.jsx), quindi la versione con
+  // sfondo è quella che si legge meglio da sola su un fondo scuro pieno.
+  const logoSrc = team?.logoUrl || '/pwa-512x512.png'
 
   // Precarica il logo appena si apre il dialog di conferma: quando parte
   // l'overlay d'uscita l'immagine è già in cache e appare subito, senza

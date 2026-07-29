@@ -21,6 +21,9 @@ export const Box = ({ size }) => (
 export const Kit = ({ size }) => (
   <svg {...base(size)}><path d="M10 2h4a2 2 0 0 1 2 2v2h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3V4a2 2 0 0 1 2-2Z"/><path d="M8 6h8"/><path d="M1 12h22"/></svg>
 )
+export const Filter = ({ size }) => (
+  <svg {...base(size)}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>
+)
 export const Wrench = ({ size }) => (
   <svg {...base(size)}><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-2.5Z"/></svg>
 )
