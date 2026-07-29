@@ -34,9 +34,18 @@ export function qrPayloadForCode(code, teamId) {
 // codice base dell'oggetto "genitore" per il lookup su Firestore.
 export function parseScannedCode(decodedText) {
   const raw = (decodedText || '').trim()
-  let code = raw
+  // Alcuni lettori HID (es. Netum C750) impostati su layout tastiera USA
+  // invece che italiano scambiano il trattino con l'apostrofo — capita sia
+  // nel dominio dell'URL del QR (es. "magazzino'av" invece di "magazzino-av",
+  // che fa fallire il parsing dell'URL sotto) sia nel codice stesso. Nessun
+  // codice valido contiene mai un apostrofo, quindi normalizzarlo qui a
+  // trattino è sempre sicuro — ma la soluzione vera resta impostare la
+  // lingua tastiera giusta sul lettore, altrimenti altri simboli dell'URL
+  // (?, =, &) possono comunque risultare sbagliati.
+  const normalized = raw.replace(/'/g, '-')
+  let code = normalized
   try {
-    const url = new URL(raw)
+    const url = new URL(normalized)
     const param = url.searchParams.get('c')
     if (param) code = param
   } catch { /* non è un URL: è già il codice grezzo (etichetta vecchia) */ }

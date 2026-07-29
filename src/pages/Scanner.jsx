@@ -7,6 +7,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore'
 import { Pin, Check, Warn } from '../components/Icon'
 import { parseScannedCode } from '../utils/generateCode'
 import BackHomeButton from '../components/BackHomeButton'
+import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 
 export default function Scanner() {
   const { t } = useTranslation()
@@ -27,6 +28,17 @@ export default function Scanner() {
   }
 
   const [scanToast, setScanToast] = useState(null)
+
+  // Stesso percorso per inserimento manuale, tasto "Cerca" e lettore
+  // wireless (Netum C750 e simili in modalità Bluetooth HID) — quest'ultimo
+  // "digita" il codice e Invio come farebbe una persona, vedi useKeyboardWedgeScanner.
+  const submitCode = async code => {
+    const r = await lookupCode(code)
+    setManualCode('')
+    if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } })
+    else setResult(r)
+  }
+  useKeyboardWedgeScanner(submitCode)
 
   const startScanner = async () => {
     setError(null); setResult(null); setScanning(true)
@@ -177,9 +189,9 @@ export default function Scanner() {
           <p style={{ fontWeight:700, marginBottom:12, fontSize:15 }}>{t('scanner.manualEntry')}</p>
           <div style={{ display:'flex', gap:10 }}>
             <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder={t('scanner.manualCodePlaceholder')}
-              onKeyDown={async e => { if (e.key === 'Enter') { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) } }}
+              onKeyDown={e => { if (e.key === 'Enter') submitCode(manualCode) }}
               style={{ fontFamily:'monospace' }} />
-            <button onClick={async () => { const r = await lookupCode(manualCode); setManualCode(''); if (r.found) navigate('/inventory', { state: { openItemId: r.item.id } }); else setResult(r) }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 16px' }}>{t('scanner.search')}</button>
+            <button onClick={() => submitCode(manualCode)} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 16px' }}>{t('scanner.search')}</button>
           </div>
         </div>
 

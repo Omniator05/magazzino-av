@@ -137,6 +137,18 @@ export default function Inventory() {
     return () => clearTimeout(timeout)
   }, [showFilterMenu])
 
+  // Il pannello è in portal, con posizione calcolata una volta all'apertura:
+  // se la pagina scorre resta "appeso" dov'era invece di seguire il bottone.
+  // Più semplice e affidabile ricalcolare tutto: lo si chiude e basta. Ascolto
+  // solo lo scroll della PAGINA (non capturing), così lo scroll interno del
+  // pannello stesso (es. dentro la griglia categorie) non lo chiude da solo.
+  useEffect(() => {
+    if (!showFilterMenu) return
+    const closeOnScroll = () => setShowFilterMenu(false)
+    window.addEventListener('scroll', closeOnScroll)
+    return () => window.removeEventListener('scroll', closeOnScroll)
+  }, [showFilterMenu])
+
   // Items in shared global collection so workers can read them
   useEffect(() => {
     if (!teamId) return

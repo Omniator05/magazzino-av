@@ -7,6 +7,7 @@ import { doc, onSnapshot, updateDoc, getDoc, collection, query, where, orderBy }
 import { parseScannedCode } from '../utils/generateCode'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -244,6 +245,11 @@ export default function WorkerScanner() {
     }
     setProcessing(false)
   }
+
+  // Lettore wireless (Netum C750 e simili in modalità Bluetooth HID): si
+  // comporta come una tastiera, "digita" il codice e Invio da solo — stessa
+  // funzione già usata da fotocamera e inserimento manuale.
+  useKeyboardWedgeScanner(processCode)
 
   const startScanner = async () => {
     setError(null); setLastScan(null); setScanning(true)
