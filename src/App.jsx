@@ -137,7 +137,13 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<WorkerHome />} />
-            <Route path="/inventory" element={<WorkerInventory />} />
+            {/* Magazziniere "senior": stesso ruolo, un permesso in più impostato
+                dall'admin per singolo utente (AdminUsers.jsx) — vede il
+                magazzino completo (aggiungi/modifica/elimina, etichette,
+                bauli, rotture) invece della vista di sola consultazione.
+                Pensato per chi lavora davvero il magazzino ma non deve avere
+                accesso a utenti/fatturazione/impostazioni squadra. */}
+            <Route path="/inventory" element={profile?.canManageInventory ? <Inventory /> : <WorkerInventory />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
             <Route path="/events/:id" element={<WorkerScanner />} />

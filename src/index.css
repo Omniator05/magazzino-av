@@ -91,6 +91,14 @@ button:not(:disabled):active {
 }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* Modal creazione/modifica utente: tante interazioni ravvicinate (menu
+   ruolo, permesso magazzino, toggle...) — l'effetto "schiacciato" standard
+   lì risultava troppo marcato. Attenuato solo qui, non nel resto dell'app. */
+.admin-user-modal button:not(:disabled):active {
+  transform: scale(0.995);
+  filter: none;
+}
+
 /* ── Inputs ───────────────────────────────────── */
 input, textarea, select {
   font-family: inherit;
@@ -212,18 +220,28 @@ select option { background: var(--bg2); }
   color: var(--text);
   border: 1px solid var(--border2);
 }
-.btn-secondary:not(:disabled):hover {
-  background: var(--card3);
-  filter: brightness(0.97);
-  border-color: var(--border2);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+/* Come per .btn-primary sopra: hover solo con mouse vero. Senza questo
+   guard, su mobile un tap può lasciare il filtro/ombra "attaccato" dopo il
+   rilascio (niente mouseleave a cancellarlo) — es. il bottone filtri del
+   magazzino che restava con l'ombra anche da chiuso. */
+@media (hover: hover) and (pointer: fine) {
+  .btn-secondary:not(:disabled):hover {
+    background: var(--card3);
+    filter: brightness(0.97);
+    border-color: var(--border2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
 }
 
 .btn-green { background: rgba(52,211,153,0.20); color: var(--green); border: 1px solid rgba(52,211,153,0.30); }
-.btn-green:not(:disabled):hover { background: rgba(52,211,153,0.32); box-shadow: 0 4px 14px rgba(52,211,153,0.20); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-green:not(:disabled):hover { background: rgba(52,211,153,0.32); box-shadow: 0 4px 14px rgba(52,211,153,0.20); }
+}
 
 .btn-red { background: rgba(248,113,113,0.20); color: var(--red); border: 1px solid rgba(248,113,113,0.30); }
-.btn-red:not(:disabled):hover { background: rgba(248,113,113,0.32); box-shadow: 0 4px 14px rgba(248,113,113,0.20); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-red:not(:disabled):hover { background: rgba(248,113,113,0.32); box-shadow: 0 4px 14px rgba(248,113,113,0.20); }
+}
 
 .btn-full { width: 100%; }
 
@@ -232,11 +250,13 @@ select option { background: var(--bg2); }
   color: #f5c842;
   border: 1px solid rgba(245,166,35,0.45);
 }
-.btn-gold:hover {
-  background: linear-gradient(135deg, rgba(245,166,35,0.28) 0%, rgba(255,200,60,0.18) 100%);
-  box-shadow: 0 4px 18px rgba(245,166,35,0.25);
-  border-color: rgba(245,166,35,0.7);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .btn-gold:hover {
+    background: linear-gradient(135deg, rgba(245,166,35,0.28) 0%, rgba(255,200,60,0.18) 100%);
+    box-shadow: 0 4px 18px rgba(245,166,35,0.25);
+    border-color: rgba(245,166,35,0.7);
+    transform: translateY(-1px);
+  }
 }
 
 /* ── List items ───────────────────────────────── */

@@ -8,7 +8,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
-import { Check, Save, Trash, Edit, User, Warn } from '../components/Icon'
+import { Check, Save, Trash, Edit, User, Warn, Box } from '../components/Icon'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
 import FabButton from '../components/FabButton'
 import { connectGoogleCalendar, disconnectGoogleCalendar } from '../utils/googleCalendar'
@@ -136,7 +136,7 @@ export default function AdminUsers() {
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   useModalScrollLock(showCreate || !!showDetail)
   const [editMode, setEditMode]       = useState(false)
-  const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker' })
+  const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
   const [newPw, setNewPw]             = useState('')
   const [newUsername, setNewUsername]   = useState('')
   const [error, setError]             = useState('')
@@ -330,6 +330,9 @@ export default function AdminUsers() {
         ...(form.role === 'organizzatore-evento'
           ? { assignedEventId }
           : {}),
+        ...(form.role === 'worker'
+          ? { canManageInventory: !!form.canManageInventory }
+          : {}),
       })
 
       await signOut(secondaryAuth)
@@ -349,7 +352,7 @@ export default function AdminUsers() {
         } catch {}
       }
 
-      setForm({ name:'', username:'', password:'', email:'', role:'worker' })
+      setForm({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
       setOrgConfig(EMPTY_ORG_CONFIG)
       setAssignedEventId('')
       setShowCreate(false)
@@ -416,6 +419,13 @@ export default function AdminUsers() {
     clearDetailMsg()
     setRoleMenuOpen(false)
     showToast(t('adminUsers.roleChangedToast', { name: showDetail.name, role: ROLE_LABELS[newRole] }))
+  }
+
+  const toggleCanManageInventory = async () => {
+    const next = !showDetail.canManageInventory
+    await updateDoc(doc(db, 'profiles', showDetail.id), { canManageInventory: next })
+    setShowDetail(d => ({ ...d, canManageInventory: next }))
+    showToast(next ? t('adminUsers.canManageInventoryOnToast', { name: showDetail.name }) : t('adminUsers.canManageInventoryOffToast', { name: showDetail.name }))
   }
 
   // ── Configurazione evento organizzatore (nome + frequenza) ──────
@@ -555,6 +565,11 @@ export default function AdminUsers() {
           <p style={{ color:'var(--text2)', fontSize:13 }}>{u.username ? `@${u.username}` : u.email}</p>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          {u.role === 'worker' && u.canManageInventory && (
+            <span title={t('adminUsers.canManageInventoryLabel')} style={{ color:'var(--accent2)', display:'flex', flexShrink:0 }}>
+              <Box size={15} />
+            </span>
+          )}
           <span className="badge" style={{
             background: u.approved === false ? 'rgba(245,166,35,0.15)' : roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
             color: u.approved === false ? 'var(--accent2)' : roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
@@ -754,7 +769,7 @@ export default function AdminUsers() {
       {/* ── Modal crea account ─────────────────────────────── */}
       {showCreate && (
         <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
-          <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
+          <div className={`modal admin-user-modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
             <button className="close-btn" onClick={createDrag.close}>✕</button>
             <h2>{t('adminUsers.newAccountTitle')}</h2>
 
@@ -807,6 +822,26 @@ export default function AdminUsers() {
               </div>
             )}
 
+            {form.role === 'worker' && (
+              <button
+                type="button"
+                onClick={() => setForm({...form, canManageInventory: !form.canManageInventory})}
+                className="btn-no-anim"
+                style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 14px', borderRadius:10, marginBottom:16,
+                  background: form.canManageInventory ? 'rgba(245,166,35,0.08)' : 'var(--card2)',
+                  border: form.canManageInventory ? '1.5px solid rgba(245,166,35,0.35)' : '1.5px solid var(--border)',
+                }}
+              >
+                <span style={{ textAlign:'left' }}>
+                  <span style={{ display:'block', fontSize:13, fontWeight:700, color: form.canManageInventory ? 'var(--accent2)' : 'var(--text)' }}>{t('adminUsers.canManageInventoryLabel')}</span>
+                  <span style={{ display:'block', fontSize:11.5, color:'var(--text2)', marginTop:2 }}>{t('adminUsers.canManageInventoryHint')}</span>
+                </span>
+                <span style={{ flexShrink:0, marginLeft:10, width:36, height:20, borderRadius:10, background: form.canManageInventory ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: form.canManageInventory ? 'flex-end' : 'flex-start' }}>
+                  <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
+                </span>
+              </button>
+            )}
+
             <div className="form-group" style={{ marginBottom:6 }}>
               <label>{t('adminUsers.passwordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.passwordHint')}</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
@@ -828,7 +863,7 @@ export default function AdminUsers() {
       {/* ── Modal dettaglio account ────────────────────────── */}
       {showDetail && (
         <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
-          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
+          <div className={`modal admin-user-modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
             <button className="close-btn" onClick={detailDrag.close}>✕</button>
 
             {editMode && (
@@ -1000,6 +1035,30 @@ export default function AdminUsers() {
                     <EventOrganizerFields events={events} assignedEventId={assignedEventId} setAssignedEventId={setAssignedEventId} />
                     <button onClick={saveAssignedEvent} className="btn btn-primary btn-full" style={{ marginTop:12 }}>{t('adminUsers.organizedEventSaveButton')}</button>
                   </div>
+                )}
+
+                {/* Permesso magazzino avanzato (solo worker): stesso ruolo, ma
+                    con accesso alla vista magazzino completa (aggiungi/modifica/
+                    elimina, etichette, bauli, rotture) invece di quella di sola
+                    consultazione — impostabile per singolo utente, non per
+                    tutti i magazzinieri insieme. */}
+                {showDetail.role === 'worker' && (
+                  <button
+                    onClick={toggleCanManageInventory}
+                    className="btn-no-anim"
+                    style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 14px', borderRadius:10, marginBottom:16,
+                      background: showDetail.canManageInventory ? 'rgba(245,166,35,0.08)' : 'var(--card2)',
+                      border: showDetail.canManageInventory ? '1.5px solid rgba(245,166,35,0.35)' : '1.5px solid var(--border)',
+                    }}
+                  >
+                    <span style={{ textAlign:'left' }}>
+                      <span style={{ display:'block', fontSize:13, fontWeight:700, color: showDetail.canManageInventory ? 'var(--accent2)' : 'var(--text)' }}>{t('adminUsers.canManageInventoryLabel')}</span>
+                      <span style={{ display:'block', fontSize:11.5, color:'var(--text2)', marginTop:2 }}>{t('adminUsers.canManageInventoryHint')}</span>
+                    </span>
+                    <span style={{ flexShrink:0, marginLeft:10, width:36, height:20, borderRadius:10, background: showDetail.canManageInventory ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: showDetail.canManageInventory ? 'flex-end' : 'flex-start' }}>
+                      <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
+                    </span>
+                  </button>
                 )}
 
                 {/* Indisponibilità (solo worker) */}
