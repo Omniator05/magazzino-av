@@ -24,6 +24,9 @@ export const Kit = ({ size }) => (
 export const Filter = ({ size }) => (
   <svg {...base(size)}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>
 )
+export const Camera = ({ size }) => (
+  <svg {...base(size)}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+)
 export const Wrench = ({ size }) => (
   <svg {...base(size)}><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-2.5Z"/></svg>
 )
