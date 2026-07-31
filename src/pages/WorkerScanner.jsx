@@ -3,11 +3,12 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, getDoc, collection, query, where, orderBy } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, getDoc, getDocs, collection, query, where, orderBy } from 'firebase/firestore'
 import { parseScannedCode } from '../utils/generateCode'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
+import { Check, Truck, Unload } from '../components/Icon'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -48,7 +49,9 @@ export default function WorkerScanner() {
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
   const [manualCode, setManualCode] = useState('')
-  const [mode, setMode] = useState('load') // 'load' | 'return'
+  const [mode, setMode] = useState('load') // 'pronto' | 'load' | 'return'
+  const [returnShake, setReturnShake] = useState(false)
+  const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   const [error, setError] = useState(null)
   const [processing, setProcessing] = useState(false) // blocca scansioni doppie
   const [scanToast, setScanToast] = useState(null)
@@ -157,7 +160,6 @@ export default function WorkerScanner() {
 
     // Trova l'articolo nella lista dell'evento tramite codice
     // Prima cerca in Firestore per trovare l'id dell'articolo dal codice
-    const { collection, query, where, getDocs } = await import('firebase/firestore')
     const q = query(collection(db, 'items'), where('teamId', '==', teamId), where('code', '==', normalized))
     const itemSnap = await getDocs(q)
 
@@ -179,6 +181,28 @@ export default function WorkerScanner() {
       vibrate([100, 50, 100])
       playSound('error')
       const result = { action: 'not_in_list', item: foundItem }
+      setLastScan(result)
+      setScanToast({ ...result, ts: Date.now() })
+      setTimeout(() => setScanToast(null), 3000)
+      setProcessing(false)
+      return
+    }
+
+    if (mode === 'pronto') {
+      if (eventItem.pronto) {
+        vibrate([50])
+        const result = { action: 'already_pronto', item: eventItem }
+        setLastScan(result)
+        setScanToast({ ...result, ts: Date.now() })
+        setTimeout(() => setScanToast(null), 3000)
+        setProcessing(false)
+        return
+      }
+      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, pronto: true } : i)
+      await updateDoc(eventRef, { items: updated })
+      vibrate([60, 40, 120])
+      playSound('success')
+      const result = { action: 'pronto', item: eventItem }
       setLastScan(result)
       setScanToast({ ...result, ts: Date.now() })
       setTimeout(() => setScanToast(null), 3000)
@@ -311,11 +335,19 @@ export default function WorkerScanner() {
 
   // Derivazioni items — calcolate sempre (prima del return anticipato)
   const items = event ? event.items || [] : []
+  const prepared = items.filter(i => i.pronto).length
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
   const total    = items.length
+  // Campo "fatto" della fase corrente — usato per ordinamento liste, scroll
+  // al primo da fare, e contatore di completamento: unica fonte invece di
+  // ripetere lo stesso ternario in ogni punto che dipende dalla fase.
+  const doneField = mode === 'pronto' ? 'pronto' : mode === 'load' ? 'loaded' : 'returned'
+  const phaseColor = mode === 'pronto' ? 'var(--blue)' : mode === 'load' ? 'var(--accent2)' : 'var(--green)'
+  const PHASE_KEYS = ['pronto', 'load', 'return']
 
   const firstUnloadedRef = useRef(null)
+  const stepperBtnRefs = useRef({})
   const WS_ORDER_CONST = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
 
   const addExtraWorkerItem = async () => {
@@ -335,8 +367,8 @@ export default function WorkerScanner() {
   for (const cat of WS_ORDER_CONST) {
     const catItems = items
       .filter(i => (i.isExtra ? 'Extra' : (i.category || 'Altro')) === cat)
-      .sort((a, b) => (a.loaded ? 1 : 0) - (b.loaded ? 1 : 0))
-    const first = catItems.find(i => !i.loaded)
+      .sort((a, b) => (a[doneField] ? 1 : 0) - (b[doneField] ? 1 : 0))
+    const first = catItems.find(i => !i[doneField])
     if (first) { firstUnloadedId = first.id; break }
   }
 
@@ -411,6 +443,8 @@ export default function WorkerScanner() {
   if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p></div>
 
   const scanResult = {
+    pronto:           { bg:'rgba(79,195,247,0.15)',  border:'rgba(79,195,247,0.4)',  color:'var(--blue)',    icon:'📋', title:t('workerScanner.prontoTitle'), msg: i => t('workerScanner.prontoMsg', { name: i?.name }) },
+    already_pronto:   { bg:'rgba(79,195,247,0.1)',   border:'rgba(79,195,247,0.3)',  color:'var(--blue)',    icon:'ℹ️', title:t('workerScanner.alreadyPreparedTitle'), msg: i => t('workerScanner.alreadyPreparedMsg', { name: i?.name }) },
     loaded:           { bg:'rgba(245,166,35,0.15)', border:'rgba(245,166,35,0.4)', color:'var(--accent2)', icon:'🚛', title:t('workerScanner.loadedTitle'), msg: i => t('workerScanner.loadedMsg', { name: i?.name }) },
     returned:         { bg:'rgba(105,240,174,0.15)', border:'rgba(105,240,174,0.4)', color:'var(--green)', icon:'✅', title:t('workerScanner.returnedTitle'), msg: i => t('workerScanner.returnedMsg', { name: i?.name }) },
     not_found:        { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'❓', title:t('workerScanner.notFoundTitle'), msg: i => t('workerScanner.notFoundMsg', { code: lastScan?.code }) },
@@ -420,13 +454,27 @@ export default function WorkerScanner() {
     not_loaded:       { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:t('workerScanner.notLoadedTitle'), msg: i => t('workerScanner.notLoadedMsg', { name: i?.name }) },
   }
 
+  const srOnlyStyle = { position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }
+
   return (
     <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column', paddingBottom:140 }}>
+
+      {/* Annunci per screen reader: il popup/il messaggio bloccato sono
+          puramente visivi e temporizzati, altrimenti non arriverebbero a chi
+          non guarda lo schermo nel momento esatto in cui compaiono. Regioni
+          sempre montate (non condizionate) perché molti screen reader non
+          annunciano l'inserimento di un intero live-region nuovo di zecca. */}
+      <div aria-live="polite" role="status" style={srOnlyStyle}>
+        {scanToast ? `${scanResult[scanToast.action].title}. ${scanToast.item?.name || (scanToast.code ? t('scanner.code', { code: scanToast.code }) : '')}` : ''}
+      </div>
+      <div aria-live="assertive" role="alert" style={srOnlyStyle}>
+        {phaseBlockedMsg}
+      </div>
 
       {/* - Popup centrale post-scansione - */}
       {scanToast && (() => {
         const r = scanResult[scanToast.action]
-        const isOk = ['loaded','returned'].includes(scanToast.action)
+        const isOk = ['pronto','loaded','returned'].includes(scanToast.action)
         return (
           <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
             <div style={{
@@ -452,94 +500,48 @@ export default function WorkerScanner() {
 
       {/* - Header compatto - */}
       <style>{`
-        .plane-switch {
-          --dot: #fff;
-          --street: #6B6D76;
-          --street-line: #A8AAB4;
-          --street-line-mid: #C0C2C8;
-          --sky-1: #60A7FA;
-          --sky-2: #2F8EFC;
-          --light-1: rgba(255, 233, 0, 1);
-          --light-2: rgba(255, 233, 0, .3);
-          cursor: pointer;
+        .phase-stepper {
+          position: relative;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          background: var(--card2);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 4px;
+          margin-top: 10px;
+        }
+        .phase-stepper-thumb {
+          position: absolute;
+          top: 4px; bottom: 4px; left: 4px;
+          width: calc((100% - 8px) / 3);
+          border-radius: 10px;
+          transition: transform 0.35s cubic-bezier(0.65,0,0.35,1), background 0.25s ease;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+        .phase-stepper-btn {
+          position: relative; z-index: 1;
+          display: flex; align-items: center; justify-content: center;
+          gap: 6px;
+          padding: 10px 4px;
+          min-height: 44px;
+          border-radius: 10px;
+          background: transparent;
+          color: var(--text2);
+          font-size: 12.5px; font-weight: 700;
+          transition: color 0.25s ease, opacity 0.2s ease;
           -webkit-tap-highlight-color: transparent;
         }
-        .plane-switch input { display: none; }
-        .plane-switch input + div {
-          -webkit-mask-image: -webkit-radial-gradient(white, black);
-          position: relative;
-          overflow: hidden;
-          width: 76px;
-          height: 38px;
-          padding: 2px;
-          border-radius: 20px;
-          background: linear-gradient(90deg, var(--street) 0%, var(--street) 25%, var(--sky-1) 75%, var(--sky-2) 100%) left var(--p, 0%) top 0;
-          background-position-x: var(--p, 0%);
-          background-size: 400% auto;
-          transition: background-position 0.6s;
+        .phase-stepper-btn.active { color: white; }
+        .phase-stepper-btn.blocked { opacity: 0.4; }
+        @keyframes phaseShake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
         }
-        .plane-switch input + div:before, .plane-switch input + div:after {
-          content: "";
-          display: block;
-          position: absolute;
-          transform: translateX(var(--s, 0));
-          transition: transform 0.3s;
-        }
-        .plane-switch input + div:before {
-          width: 64px; right: 3px; top: 6px; height: 2px;
-          background: var(--street-line);
-          box-shadow: 0 24px 0 0 var(--street-line);
-        }
-        .plane-switch input + div:after {
-          width: 3px; height: 3px; border-radius: 50%;
-          left: 36px; top: 2px;
-          animation: lights2 2s linear infinite;
-          box-shadow: inset 0 0 0 3px var(--light-1), 0 32px 0 var(--light-1), 12px 0 0 var(--light-2), 12px 32px 0 var(--light-2), 24px 0 0 var(--light-2), 24px 32px 0 var(--light-2);
-        }
-        .plane-switch input + div span { display: block; position: absolute; }
-        .plane-switch input + div span.street-middle {
-          top: 18px; left: 32px; width: 5px; height: 2px;
-          transform: translateX(var(--s, 0));
-          background: var(--street-line-mid);
-          box-shadow: 8px 0 0 var(--street-line-mid), 16px 0 0 var(--street-line-mid), 24px 0 0 var(--street-line-mid), 32px 0 0 var(--street-line-mid), 40px 0 0 var(--street-line-mid);
-          transition: transform 0.3s;
-        }
-        .plane-switch input + div span.cloud {
-          width: 18px; height: 6px; border-radius: 3px; background: #fff;
-          position: absolute; top: var(--ct, 12px); left: 100%;
-          opacity: var(--co, 0); transition: opacity 0.3s;
-          animation: clouds2 2s linear infinite var(--cd, 0s);
-        }
-        .plane-switch input + div span.cloud:before, .plane-switch input + div span.cloud:after {
-          content: ""; position: absolute; transform: translateX(var(--cx, 0));
-          border-radius: 50%; width: var(--cs, 8px); height: var(--cs, 8px);
-          background: #fff; bottom: 1px; left: 2px;
-        }
-        .plane-switch input + div span.cloud:after { --cs: 9px; --cx: 6px; }
-        .plane-switch input + div span.cloud.two { --ct: 30px; --cd: 1s; opacity: var(--co-2, 0); }
-        .plane-switch input + div div {
-          display: table; position: relative; z-index: 1;
-          padding: 7px; border-radius: 50%; background: var(--dot);
-          transform: translateX(var(--x, 0));
-          transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.35, 1.2);
-        }
-        .plane-switch input + div div svg {
-          width: 18px; height: 18px; display: block;
-          color: var(--c, var(--street)); transition: color 0.6s;
-        }
-        .plane-switch input:checked + div {
-          --p: 100%; --x: 38px; --s: -75px; --c: var(--sky-2); --co: .8; --co-2: .6;
-        }
-        @keyframes lights2 {
-          20%, 30% { box-shadow: inset 0 0 0 3px var(--light-2), 0 32px 0 var(--light-2), 12px 0 0 var(--light-1), 12px 32px 0 var(--light-1), 24px 0 0 var(--light-2), 24px 32px 0 var(--light-2); }
-          55%, 65% { box-shadow: inset 0 0 0 3px var(--light-2), 0 32px 0 var(--light-2), 12px 0 0 var(--light-2), 12px 32px 0 var(--light-2), 24px 0 0 var(--light-1), 24px 32px 0 var(--light-1); }
-          90%, 100% { box-shadow: inset 0 0 0 3px var(--light-1), 0 32px 0 var(--light-1), 12px 0 0 var(--light-2), 12px 32px 0 var(--light-2), 24px 0 0 var(--light-2), 24px 32px 0 var(--light-2); }
-        }
-        @keyframes clouds2 {
-          97% { transform: translateX(-110px); visibility: visible; }
-          98%, 100% { visibility: hidden; }
-          99% { transform: translateX(-110px); }
-          100% { transform: translateX(0); }
+        .phase-stepper-btn.shake { animation: phaseShake 0.3s ease; }
+        @media (prefers-reduced-motion: reduce) {
+          .phase-stepper-thumb { transition: none; }
+          .phase-stepper-btn.shake { animation: none; }
         }
       `}</style>
       <div style={{ padding:'52px 16px 12px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
@@ -548,32 +550,81 @@ export default function WorkerScanner() {
             style={{ background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14, fontWeight:600 }}>
             ← {t('common.back')}
           </button>
-          {/* Toggle carico/rientro */}
-          <label className="plane-switch" title={mode === 'load' ? t('workerScanner.modeLoadTitle') : t('workerScanner.modeReturnTitle')}>
-            <input
-              type="checkbox"
-              checked={mode === 'return'}
-              onChange={e => { setMode(e.target.checked ? 'return' : 'load'); setLastScan(null) }}
-            />
-            <div>
-              <span className="street-middle" />
-              <span className="cloud" />
-              <span className="cloud two" />
-              <div>
-                <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M1 4a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v2h2.382a1 1 0 0 1 .894.553l2 4A1 1 0 0 1 21 11v4a1 1 0 0 1-1 1h-1.17A3 3 0 0 1 13 16H9a3 3 0 0 1-5.83 0H3a1 1 0 0 1-1-1V4zm2 10.17A3 3 0 0 1 8.83 15H13a3 3 0 0 1 2.83-2H15V5H3v9.17zM17 9h-2v4h4v-2.382L17 9zm-10 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm7 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
-                </svg>
-              </div>
-            </div>
-          </label>
         </div>
+
+        {/* Stepper a 3 fasi: Pronto ↔ Carico si scambiano liberamente (in
+            tanti saltano la preparazione), ma non si passa a Scarico senza
+            aver caricato almeno un oggetto — un tap lì mentre è bloccato fa
+            un piccolo scatto e mostra il motivo, invece di non fare nulla. */}
+        <div
+          className="phase-stepper" role="tablist" aria-label={t('workerScanner.modeLoadTitle')}
+          onKeyDown={e => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+            e.preventDefault()
+            const idx = PHASE_KEYS.indexOf(mode)
+            const dir = e.key === 'ArrowRight' ? 1 : -1
+            const nextKey = PHASE_KEYS[(idx + dir + PHASE_KEYS.length) % PHASE_KEYS.length]
+            if (nextKey === 'return' && loaded === 0) {
+              setReturnShake(true)
+              setTimeout(() => setReturnShake(false), 320)
+              setPhaseBlockedMsg(t('workerScanner.cannotStartReturnYet'))
+              setTimeout(() => setPhaseBlockedMsg(''), 2200)
+            } else {
+              setMode(nextKey)
+              setLastScan(null)
+            }
+            stepperBtnRefs.current[nextKey]?.focus()
+          }}
+        >
+          <div className="phase-stepper-thumb" style={{
+            transform: `translateX(${{ pronto:0, load:1, return:2 }[mode] * 100}%)`,
+            background: phaseColor,
+          }} />
+          {[
+            { key:'pronto', label:t('workerScanner.phasePronto'), Icon:Check },
+            { key:'load',   label:t('workerScanner.phaseLoad'),   Icon:Truck },
+            { key:'return', label:t('workerScanner.phaseReturn'), Icon:Unload },
+          ].map(p => {
+            const blocked = p.key === 'return' && mode !== 'return' && loaded === 0
+            return (
+              <button
+                key={p.key}
+                ref={el => { stepperBtnRefs.current[p.key] = el }}
+                role="tab"
+                aria-selected={mode === p.key}
+                aria-disabled={blocked}
+                tabIndex={mode === p.key ? 0 : -1}
+                className={`phase-stepper-btn${mode === p.key ? ' active' : ''}${blocked ? ' blocked' : ''}${returnShake && p.key === 'return' ? ' shake' : ''}`}
+                onClick={() => {
+                  if (blocked) {
+                    setReturnShake(true)
+                    setTimeout(() => setReturnShake(false), 320)
+                    setPhaseBlockedMsg(t('workerScanner.cannotStartReturnYet'))
+                    setTimeout(() => setPhaseBlockedMsg(''), 2200)
+                    return
+                  }
+                  if (mode !== p.key) { setMode(p.key); setLastScan(null) }
+                }}
+              >
+                <p.Icon size={15} />
+                {p.label}
+              </button>
+            )
+          })}
+        </div>
+        {phaseBlockedMsg && (
+          <p style={{ color:'var(--red)', fontSize:12, fontWeight:600, marginTop:6, textAlign:'center' }}>{phaseBlockedMsg}</p>
+        )}
+
         <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
           <h1 style={{ fontSize:18, fontWeight:800, letterSpacing:'-0.3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</h1>
           {event.notes && (
             <button
               onClick={() => setShowEventNotes(v => !v)}
+              aria-label={t('workerScanner.eventNotesToggle')}
+              aria-pressed={showEventNotes}
               style={{
-                flexShrink:0, width:22, height:22, borderRadius:'50%',
+                flexShrink:0, width:40, height:40, borderRadius:'50%',
                 background: showEventNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)',
                 border:'1px solid rgba(79,195,247,0.35)',
                 color: showEventNotes ? 'white' : 'var(--blue)',
@@ -603,7 +654,7 @@ export default function WorkerScanner() {
       <div style={{ padding:'12px 16px 0', flex:1 }}>
         <div style={{
           borderRadius:20, overflow:'hidden',
-          border:`2px solid ${scanning ? (mode === 'load' ? 'var(--accent2)' : 'var(--green)') : 'var(--border)'}`,
+          border:`2px solid ${scanning ? phaseColor : 'var(--border)'}`,
           transition:'border-color 0.3s',
           background:'var(--card)',
         }}>
@@ -622,7 +673,7 @@ export default function WorkerScanner() {
                       {lastScan.location && (
                         <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.18)', border:'1px solid rgba(79,195,247,0.4)', borderRadius:6, padding:'3px 10px' }}>
                           <span style={{ fontSize:12 }}>📍</span>
-                          <span style={{ color:'#7dd3fc', fontSize:13, fontWeight:800 }}>{lastScan.location}</span>
+                          <span style={{ color:'var(--blue)', fontSize:13, fontWeight:800 }}>{lastScan.location}</span>
                         </div>
                       )}
                     </div>
@@ -643,8 +694,8 @@ export default function WorkerScanner() {
             }}>
               <div style={{
                 width:72, height:72, borderRadius:20,
-                background: mode === 'load' ? 'rgba(245,166,35,0.15)' : 'rgba(52,211,153,0.12)',
-                border:`2px dashed ${mode === 'load' ? 'rgba(245,166,35,0.5)' : 'rgba(52,211,153,0.4)'}`,
+                background: mode === 'pronto' ? 'rgba(79,195,247,0.13)' : mode === 'load' ? 'rgba(245,166,35,0.15)' : 'rgba(52,211,153,0.12)',
+                border:`2px dashed ${mode === 'pronto' ? 'rgba(79,195,247,0.45)' : mode === 'load' ? 'rgba(245,166,35,0.5)' : 'rgba(52,211,153,0.4)'}`,
                 display:'flex', alignItems:'center', justifyContent:'center', fontSize:32,
               }}>
                 📷
@@ -652,7 +703,7 @@ export default function WorkerScanner() {
               <div>
                 <p style={{ fontWeight:800, fontSize:17, color:'var(--text)' }}>{t('scanner.startCamera')}</p>
                 <p style={{ color:'var(--text2)', fontSize:13, marginTop:4 }}>
-                  {mode === 'load' ? t('workerScanner.loadHint') : t('workerScanner.returnHint')}
+                  {mode === 'pronto' ? t('workerScanner.prontoHint') : mode === 'load' ? t('workerScanner.loadHint') : t('workerScanner.returnHint')}
                 </p>
               </div>
             </button>
@@ -667,7 +718,8 @@ export default function WorkerScanner() {
             {t('workerScanner.manualEntryToggle')}
           </summary>
           <div style={{ display:'flex', gap:8, marginTop:8 }}>
-            <input value={manualCode} onChange={e => setManualCode(e.target.value)}
+            <label htmlFor="ws-manual-code" style={srOnlyStyle}>{t('workerScanner.manualCodeLabel')}</label>
+            <input id="ws-manual-code" value={manualCode} onChange={e => setManualCode(e.target.value)}
               placeholder={t('workerScanner.manualCodePlaceholder')} onKeyDown={e => { if (e.key === 'Enter') { processCode(manualCode); setManualCode('') } }}
               style={{ fontFamily:'monospace', fontSize:13 }} />
             <button onClick={() => { processCode(manualCode); setManualCode('') }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 14px' }}>{t('workerScanner.ok')}</button>
@@ -680,43 +732,48 @@ export default function WorkerScanner() {
             {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
           </p>
 
-          {/* Contatore mancanti al carico completo */}
-          {total > 0 && mode === 'load' && (
-            <div
-              onClick={() => firstUnloadedRef.current?.scrollIntoView({ behavior:'smooth', block:'center' })}
-              style={{
-                display:'flex', alignItems:'center', gap:10,
-                padding:'10px 14px', borderRadius:12, marginBottom:8,
-                background: loaded === total ? 'rgba(52,211,153,0.10)' : 'rgba(216,56,63,0.07)',
-                border: `1px solid ${loaded === total ? 'rgba(52,211,153,0.30)' : 'rgba(216,56,63,0.20)'}`,
-                cursor: loaded === total ? 'default' : 'pointer',
-              }}>
-              <div style={{
-                width:36, height:36, borderRadius:10, flexShrink:0,
-                background: loaded === total ? 'rgba(52,211,153,0.22)' : 'var(--accent)',
-                color: loaded === total ? 'var(--green)' : 'white',
-                display:'flex', alignItems:'center', justifyContent:'center',
-                fontWeight:900, fontSize: loaded === total ? 20 : 17,
-              }}>
-                {loaded === total ? '✓' : total - loaded}
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
-                  {loaded === total
-                    ? t('workerScanner.allLoaded')
-                    : t('workerScanner.itemsMissing', { count: total - loaded })}
-                </p>
-                <div style={{ marginTop:5, height:4, borderRadius:4, background:'var(--border)', overflow:'hidden' }}>
-                  <div style={{
-                    height:'100%', borderRadius:4, transition:'width 0.4s ease',
-                    width:`${total > 0 ? (loaded / total) * 100 : 0}%`,
-                    background: loaded === total ? 'var(--green)' : 'var(--accent)',
-                  }} />
+          {/* Contatore mancanti al completamento della fase corrente (pronto/carico) */}
+          {total > 0 && (mode === 'pronto' || mode === 'load') && (() => {
+            const done = mode === 'pronto' ? prepared : loaded
+            const allDoneMsg = mode === 'pronto' ? t('workerScanner.allPrepared') : t('workerScanner.allLoaded')
+            const missingMsg = mode === 'pronto' ? t('workerScanner.itemsMissingPrep', { count: total - done }) : t('workerScanner.itemsMissing', { count: total - done })
+            const ofTotalMsg = mode === 'pronto' ? t('workerScanner.preparedOfTotal', { prepared: done, total }) : t('workerScanner.loadedOfTotal', { loaded: done, total })
+            return (
+              <div
+                onClick={() => firstUnloadedRef.current?.scrollIntoView({ behavior:'smooth', block:'center' })}
+                style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  padding:'10px 14px', borderRadius:12, marginBottom:8,
+                  background: done === total ? 'rgba(52,211,153,0.10)' : 'rgba(216,56,63,0.07)',
+                  border: `1px solid ${done === total ? 'rgba(52,211,153,0.30)' : 'rgba(216,56,63,0.20)'}`,
+                  cursor: done === total ? 'default' : 'pointer',
+                }}>
+                <div style={{
+                  width:36, height:36, borderRadius:10, flexShrink:0,
+                  background: done === total ? 'rgba(52,211,153,0.22)' : 'var(--accent)',
+                  color: done === total ? 'var(--green)' : 'white',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  fontWeight:900, fontSize: done === total ? 20 : 17,
+                }}>
+                  {done === total ? '✓' : total - done}
                 </div>
-                <p style={{ fontSize:11, color:'var(--text2)', marginTop:3 }}>{t('workerScanner.loadedOfTotal', { loaded, total })}</p>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
+                    {done === total ? allDoneMsg : missingMsg}
+                  </p>
+                  <div style={{ marginTop:5, height:4, borderRadius:4, background:'var(--border)', overflow:'hidden' }}>
+                    <div style={{
+                      height:'100%', width:'100%', borderRadius:4,
+                      transformOrigin:'left', transition:'transform 0.4s ease',
+                      transform:`scaleX(${total > 0 ? done / total : 0})`,
+                      background: done === total ? 'var(--green)' : 'var(--accent)',
+                    }} />
+                  </div>
+                  <p style={{ fontSize:11, color:'var(--text2)', marginTop:3 }}>{ofTotalMsg}</p>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             {items.length === 0
@@ -736,8 +793,8 @@ export default function WorkerScanner() {
                   // Dentro ogni categoria: da fare prima, caricati/rientrati in fondo
                   Object.keys(wsCatGrouped).forEach(cat => {
                     wsCatGrouped[cat].sort((a, b) => {
-                      const aDone = mode === 'load' ? (a.loaded ? 1 : 0) : (a.returned ? 1 : 0)
-                      const bDone = mode === 'load' ? (b.loaded ? 1 : 0) : (b.returned ? 1 : 0)
+                      const aDone = a[doneField] ? 1 : 0
+                      const bDone = b[doneField] ? 1 : 0
                       return aDone - bDone
                     })
                   })
@@ -754,7 +811,7 @@ export default function WorkerScanner() {
                         </div>
                       )}
                       {wsCatGrouped[cat].map(item => (
-                <div key={item.id} ref={mode === 'load' && !item.loaded && item.id === firstUnloadedId ? firstUnloadedRef : null}>
+                <div key={item.id} ref={!item[doneField] && item.id === firstUnloadedId ? firstUnloadedRef : null}>
                 <ChecklistRow item={{
                   ...item,
                   _vehicle: vehicles.find(v => v.id === item.vehicleId) || null,
@@ -872,18 +929,18 @@ export default function WorkerScanner() {
             <h2>{t('eventDetail.extraItemTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('workerScanner.extraItemDesc')}</p>
             <div className="form-group">
-              <label>{t('eventDetail.nameLabel')}</label>
-              <input value={extraWorkerForm.name} onChange={e => setExtraWorkerForm(f => ({...f, name:e.target.value}))} placeholder={t('workerScanner.extraNamePlaceholder')} autoFocus />
+              <label htmlFor="ws-extra-name">{t('eventDetail.nameLabel')}</label>
+              <input id="ws-extra-name" value={extraWorkerForm.name} onChange={e => setExtraWorkerForm(f => ({...f, name:e.target.value}))} placeholder={t('workerScanner.extraNamePlaceholder')} autoFocus />
             </div>
             <div className="form-group">
-              <label>{t('eventDetail.quantityLabel')}</label>
+              <label htmlFor="ws-extra-qty">{t('eventDetail.quantityLabel')}</label>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <button onClick={() => setExtraWorkerForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
+                <button aria-label={t('workerScanner.decreaseQty')} onClick={() => setExtraWorkerForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
                   style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                <input type="number" min="1" value={extraWorkerForm.qty}
+                <input id="ws-extra-qty" type="number" min="1" value={extraWorkerForm.qty}
                   onChange={e => setExtraWorkerForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))}
                   style={{ textAlign:'center', fontWeight:800, fontSize:16, width:60, padding:'6px 4px' }} />
-                <button onClick={() => setExtraWorkerForm(f => ({...f, qty:f.qty+1}))}
+                <button aria-label={t('workerScanner.increaseQty')} onClick={() => setExtraWorkerForm(f => ({...f, qty:f.qty+1}))}
                   style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
               </div>
             </div>
@@ -945,11 +1002,13 @@ function ChecklistRow({ item }) {
             )}
             {hasInfo && (
               <button onClick={() => setShowInfo(s => !s)}
+                aria-label={t('workerScanner.itemInfoToggle')}
+                aria-pressed={showInfo}
                 style={{
                   background: showInfo ? ((eventNote||isKit) ? 'var(--accent2)' : 'var(--blue)') : ((eventNote||isKit) ? 'rgba(245,166,35,0.15)' : 'rgba(79,195,247,0.15)'),
                   border: `1px solid ${(eventNote||isKit) ? 'rgba(245,166,35,0.4)' : 'rgba(79,195,247,0.3)'}`,
                   color: showInfo ? 'white' : ((eventNote||isKit) ? 'var(--accent2)' : 'var(--blue)'),
-                  borderRadius:'50%', width:20, height:20, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+                  borderRadius:'50%', width:30, height:30, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
                 }}>
                 {showInfo ? '✕' : 'i'}
               </button>
@@ -980,7 +1039,8 @@ function ChecklistRow({ item }) {
           {!item.loaded ? (
             <div style={{ display:'flex', gap:5 }}>
               <button
-                style={{ padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                style={{ minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                  display:'flex', alignItems:'center', justifyContent:'center',
                   background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
                   color: item.pronto ? '#059669' : 'var(--text3)',
                   border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
@@ -991,7 +1051,8 @@ function ChecklistRow({ item }) {
                 {item.pronto ? t('eventDetail.readyDone') : t('eventDetail.ready')}
               </button>
               <button
-                style={{ minWidth:70, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                style={{ minWidth:70, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                  display:'flex', alignItems:'center', justifyContent:'center',
                   background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
                   color: item.pronto ? 'var(--accent2)' : 'var(--text)',
                   border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
@@ -1004,7 +1065,8 @@ function ChecklistRow({ item }) {
             </div>
           ) : (
             <button
-              style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+              style={{ minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+                display:'flex', alignItems:'center', justifyContent:'center',
                 background:'rgba(245,166,35,0.18)', color:'var(--accent2)',
                 WebkitTapHighlightColor:'transparent',
               }}
@@ -1015,7 +1077,8 @@ function ChecklistRow({ item }) {
           )}
           <button
             disabled={!item.loaded}
-            style={{ minWidth:80, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+            style={{ minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+              display:'flex', alignItems:'center', justifyContent:'center',
               background: item.returned ? 'rgba(52,211,153,0.15)' : item.loaded ? 'var(--card2)' : 'var(--bg3)',
               color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--text3)',
               opacity: item.loaded ? 1 : 0.4,

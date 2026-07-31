@@ -336,8 +336,7 @@ export default function EventDetail() {
     // Propaga solo la struttura (nome, qty, categoria) agli altri eventi della serie,
     // senza copiare lo stato di carico/rientro che è specifico di ogni occorrenza
     if (event.seriesId) {
-      const { collection: col, query: q, where, getDocs: gd } = await import('firebase/firestore')
-      const seriesSnap = await gd(q(col(db, 'events'), where('teamId', '==', event.teamId), where('seriesId', '==', event.seriesId)))
+      const seriesSnap = await getDocs(query(collection(db, 'events'), where('teamId', '==', event.teamId), where('seriesId', '==', event.seriesId)))
       const itemsTemplate = items.map(({ loaded, returned, mancante, pronto, ...rest }) => ({
         ...rest, loaded: false, returned: false, mancante: false, pronto: false
       }))
@@ -402,7 +401,6 @@ export default function EventDetail() {
         if (kitSnap.exists()) {
           const kitData = kitSnap.data()
           const components = kitData.components || []
-          console.log('Componenti freschi da Firestore:', JSON.stringify(components))
           for (const comp of components) {
             try {
               const compRef = doc(db, 'items', comp.itemId)
@@ -856,7 +854,7 @@ export default function EventDetail() {
                 return (
                   <span key={wid} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
                     {unavail ? '⚠️' : '👷'} {w.name}
-                    <button onClick={() => toggleWorkerAssignment(eventRef, event, wid)} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                    <button onClick={() => toggleWorkerAssignment(eventRef, event, wid)} aria-label={t('eventDetail.unassignWorkerAria', { name: w.name })} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                   </span>
                 )
               })}
@@ -871,6 +869,8 @@ export default function EventDetail() {
           {event.notes && (
             <button
               onClick={() => setShowEventNotes(v => !v)}
+              aria-label={t('eventDetail.eventNotesToggleAria')}
+              aria-pressed={showEventNotes}
               style={{
                 flexShrink:0, width:30, height:30, borderRadius:'50%', marginTop:4,
                 background: showEventNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)',
@@ -916,8 +916,8 @@ export default function EventDetail() {
           </div>
         </div>
         {total > 0 && (
-          <div style={{ background:'var(--card2)', borderRadius:4, height:6 }}>
-            <div style={{ background: returned === total ? 'var(--green)' : 'var(--accent2)', height:'100%', borderRadius:4, width:`${(Math.max(loaded,returned)/total)*100}%`, transition:'width 0.4s ease' }} />
+          <div style={{ background:'var(--card2)', borderRadius:4, height:6, overflow:'hidden' }}>
+            <div style={{ background: returned === total ? 'var(--green)' : 'var(--accent2)', height:'100%', width:'100%', borderRadius:4, transformOrigin:'left', transition:'transform 0.4s ease', transform:`scaleX(${Math.max(loaded,returned)/total})` }} />
           </div>
         )}
         {returned === total && total > 0 && <p style={{ color:'var(--green)', fontSize:13, marginTop:8, fontWeight:700 }}>{t('eventDetail.allReturned')}</p>}
@@ -1120,7 +1120,7 @@ export default function EventDetail() {
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                 <h2 style={{ margin:0, fontSize:18 }}>{t('eventDetail.addToListTitle')}</h2>
-                <button className="close-btn" onClick={addItemDrag.close}>✕</button>
+                <button className="close-btn" onClick={addItemDrag.close} aria-label={t("common.close")}>✕</button>
               </div>
               {/* Barra di ricerca */}
               <div style={{ position:'relative' }}>
@@ -1128,18 +1128,20 @@ export default function EventDetail() {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={t('inventory.searchPlaceholder')}
+                  aria-label={t('inventory.searchPlaceholder')}
                   style={{ paddingLeft:36 }}
                 />
                 <svg style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }} viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16">
                   <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
                 </svg>
                 {search && (
-                  <button onClick={() => setSearch('')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'var(--card2)', borderRadius:'50%', width:20, height:20, fontSize:12, color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                  <button onClick={() => setSearch('')} aria-label={t('eventDetail.clearSearchAria')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'var(--card2)', borderRadius:'50%', width:20, height:20, fontSize:12, color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                 )}
               </div>
               {/* Toggle mancanti */}
               <button
                 className="btn-no-anim"
+                aria-pressed={addAsMancante}
                 onClick={() => setAddAsMancante(v => !v)}
                 style={{ marginTop:10, width:'100%', padding:'10px 14px', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'space-between',
                   background: addAsMancante ? 'rgba(234,88,12,0.08)' : 'var(--card2)',
@@ -1175,7 +1177,7 @@ export default function EventDetail() {
                     <div key={c.id} style={{ flexShrink:0, display:'flex', alignItems:'center', gap:6, background:'var(--card2)', borderRadius:20, padding:'5px 8px 5px 12px', fontSize:13, whiteSpace:'nowrap' }}>
                       <span style={{ fontWeight:600 }}>{c.name}</span>
                       <span style={{ color:'var(--text2)', fontSize:12 }}>×{c.qty}</span>
-                      <button onClick={() => removeFromCart(c.id)} style={{ background:'rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:'50%', width:18, height:18, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+                      <button onClick={() => removeFromCart(c.id)} aria-label={t('eventDetail.removeFromCartAria', { name: c.name })} style={{ background:'rgba(255,82,82,0.2)', color:'var(--red)', borderRadius:'50%', width:18, height:18, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -1254,28 +1256,28 @@ export default function EventDetail() {
       {showExtraModal && (
         <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick} style={{ zIndex: 300 }}>
           <div className={`modal${extraDrag.jiggling ? ' modal-jiggle' : ''}${extraDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...extraDrag.props}>
-            <button className="close-btn" onClick={extraDrag.close}>✕</button>
+            <button className="close-btn" onClick={extraDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('eventDetail.extraItemTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.extraItemDesc')}</p>
             <div className="form-group">
-              <label>{t('eventDetail.nameLabel')}</label>
-              <input value={extraForm.name} onChange={e => setExtraForm({...extraForm, name:e.target.value})} placeholder={t('eventDetail.extraNamePlaceholder')} autoFocus />
+              <label htmlFor="ed-extra-name">{t('eventDetail.nameLabel')}</label>
+              <input id="ed-extra-name" value={extraForm.name} onChange={e => setExtraForm({...extraForm, name:e.target.value})} placeholder={t('eventDetail.extraNamePlaceholder')} autoFocus />
             </div>
             <div className="form-group">
-              <label>{t('eventDetail.quantityLabel')}</label>
+              <label htmlFor="ed-extra-qty">{t('eventDetail.quantityLabel')}</label>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <button onClick={() => setExtraForm(f => ({...f, qty:Math.max(1,f.qty-1)}))}
-                  style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                <input type="number" min="1" value={extraForm.qty}
+                <button onClick={() => setExtraForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} aria-label={t('eventDetail.decreaseQtyAria')}
+                  style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                <input id="ed-extra-qty" type="number" min="1" value={extraForm.qty}
                   onChange={e => setExtraForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))}
                   style={{ textAlign:'center', fontWeight:800, fontSize:16, width:60, padding:'6px 4px' }} />
-                <button onClick={() => setExtraForm(f => ({...f, qty:f.qty+1}))}
-                  style={{ width:36, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                <button onClick={() => setExtraForm(f => ({...f, qty:f.qty+1}))} aria-label={t('eventDetail.increaseQtyAria')}
+                  style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
               </div>
             </div>
             <div className="form-group">
-              <label>{t('eventDetail.notesOptional')}</label>
-              <input value={extraForm.notes} onChange={e => setExtraForm({...extraForm, notes:e.target.value})} placeholder={t('eventDetail.extraNotesPlaceholder')} />
+              <label htmlFor="ed-extra-notes">{t('eventDetail.notesOptional')}</label>
+              <input id="ed-extra-notes" value={extraForm.notes} onChange={e => setExtraForm({...extraForm, notes:e.target.value})} placeholder={t('eventDetail.extraNotesPlaceholder')} />
             </div>
             <button onClick={addExtraItem} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!extraForm.name.trim()}>
@@ -1289,7 +1291,7 @@ export default function EventDetail() {
       {showTemplatePicker && (
         <div className={`modal-overlay${templatePickerDrag.closing ? ' closing' : ''}`} onClick={templatePickerDrag.onOverlayClick}>
           <div className={`modal${templatePickerDrag.jiggling ? ' modal-jiggle' : ''}${templatePickerDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templatePickerDrag.props}>
-            <button className="close-btn" onClick={templatePickerDrag.close}>✕</button>
+            <button className="close-btn" onClick={templatePickerDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('eventDetail.useTemplateTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.useTemplateDesc')}</p>
             <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'55dvh', overflowY:'auto' }}>
@@ -1318,7 +1320,7 @@ export default function EventDetail() {
       {showAssignModal && (
         <div className={`modal-overlay${assignDrag.closing ? ' closing' : ''}`} onClick={assignDrag.onOverlayClick}>
           <div className={`modal${assignDrag.jiggling ? ' modal-jiggle' : ''}${assignDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...assignDrag.props}>
-            <button className="close-btn" onClick={assignDrag.close}>✕</button>
+            <button className="close-btn" onClick={assignDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('eventDetail.assignWorkersTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.assignWorkersDesc')}</p>
             {workers.length === 0 ? (
@@ -1369,7 +1371,7 @@ export default function EventDetail() {
       {editItem && (
         <div className={`modal-overlay${itemEditDrag.closing ? ' closing' : ''}`} onClick={itemEditDrag.onOverlayClick}>
           <div className={`modal${itemEditDrag.jiggling ? ' modal-jiggle' : ''}${itemEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...itemEditDrag.props}>
-            <button className="close-btn" onClick={itemEditDrag.close}>✕</button>
+            <button className="close-btn" onClick={itemEditDrag.close} aria-label={t("common.close")}>✕</button>
             <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4 }}>{t('eventDetail.editItemTitle')}</p>
             <h2 style={{ fontSize:18, fontWeight:800, marginBottom:20 }}>{editItem.name}</h2>
 
@@ -1378,10 +1380,12 @@ export default function EventDetail() {
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <button
                   onClick={() => setEditItem(ei => ({ ...ei, qty: Math.max(1, ei.qty - 1) }))}
+                  aria-label={t('eventDetail.decreaseQtyAria')}
                   style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>−</button>
                 <span style={{ flex:1, textAlign:'center', fontWeight:800, fontSize:24, color:'var(--text)' }}>{editItem.qty}</span>
                 <button
                   onClick={() => setEditItem(ei => ({ ...ei, qty: ei.qty + 1 }))}
+                  aria-label={t('eventDetail.increaseQtyAria')}
                   style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>
               </div>
             </div>
@@ -1418,8 +1422,10 @@ export default function EventDetail() {
                           key={inst.number}
                           type="button"
                           onClick={() => toggleInstance(inst.number)}
+                          aria-label={t('eventDetail.kitInstanceToggleAria', { number: inst.number })}
+                          aria-pressed={isSelected}
                           style={{
-                            width:40, height:40, borderRadius:10, fontWeight:800, fontSize:14,
+                            width:44, height:44, borderRadius:10, fontWeight:800, fontSize:14,
                             display:'flex', alignItems:'center', justifyContent:'center',
                             background: isSelected ? (isDamaged ? 'rgba(248,113,113,0.18)' : 'rgba(105,240,174,0.15)') : 'var(--card2)',
                             border: isSelected ? `1.5px solid ${isDamaged ? 'var(--red)' : 'var(--green)'}` : '1.5px solid var(--border)',
@@ -1447,6 +1453,7 @@ export default function EventDetail() {
 
             <button
               className="btn-no-anim"
+              aria-pressed={editItem.mancante}
               onClick={() => setEditItem(ei => ({ ...ei, mancante: !ei.mancante }))}
               style={{ width:'100%', marginBottom:12, padding:'11px 14px', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'space-between',
                 background: editItem.mancante ? 'rgba(234,88,12,0.08)' : 'var(--card2)',
@@ -1560,10 +1567,16 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
 
   return (
     <div style={{ borderBottom:'1px solid var(--border)', background: bulkSelected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: bulkSelected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
-      <div
-        style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
-        onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, isBundle: item.isBundle || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [] })}
-      >
+      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
+        {/* Icona + testo — anche bottone reale per l'apertura da tastiera
+            (le azioni a destra restano bottoni separati, non annidati qui). */}
+        <button type="button"
+          className="btn-no-anim"
+          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, isBundle: item.isBundle || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [] })}
+          aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
+          aria-pressed={bulkMode ? bulkSelected : undefined}
+          style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
+        >
         {bulkMode && (
           <div style={{
             width:22, height:22, borderRadius:6, flexShrink:0,
@@ -1627,6 +1640,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
           )}
         </div>
         </div>
+        </button>
         {!bulkMode && (
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
           <select
@@ -1644,6 +1658,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
               <button
                 onClick={() => onTogglePronto(item.id)}
                 style={{
+                  minHeight:44, display:'flex', alignItems:'center', justifyContent:'center',
                   background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
                   color: item.pronto ? '#059669' : 'var(--text3)',
                   border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
@@ -1653,6 +1668,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
               </button>
               <button onClick={() => onToggleLoaded(item.id)}
                 style={{
+                  minHeight:44, display:'flex', alignItems:'center', justifyContent:'center',
                   background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
                   color: item.pronto ? 'var(--accent2)' : 'var(--text)',
                   border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
@@ -1663,12 +1679,12 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
             </div>
           ) : (
             <button onClick={() => onToggleLoaded(item.id)}
-              style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
+              style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
               {t('eventDetail.loadedButton')}
             </button>
           )}
           <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
-            style={{ background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
+            style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
             {item.returned ? t('eventDetail.returnedButton') : t('eventDetail.toReturn')}
           </button>
         </div>
