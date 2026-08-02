@@ -138,6 +138,7 @@ export default function WorkerInventory() {
             height: { ideal: 1080 },
             advanced: [{ focusMode: 'continuous' }],
           },
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         },
         async decodedText => {
           const { baseCode } = parseScannedCode(decodedText)

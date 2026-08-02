@@ -331,6 +331,7 @@ export default function WorkerScanner() {
             height: { ideal: 1080 },
             advanced: [{ focusMode: 'continuous' }],
           },
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         },
         async decodedText => {
           await processCode(decodedText)

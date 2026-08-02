@@ -70,6 +70,7 @@ export default function Scanner() {
             height: { ideal: 1080 },
             advanced: [{ focusMode: 'continuous' }],
           },
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         },
         async decodedText => {
           await html5QrCodeRef.current.stop()
