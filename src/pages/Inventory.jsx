@@ -104,6 +104,9 @@ export default function Inventory() {
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [showDetailEvents, setShowDetailEvents] = useState(false)
+  // Per i kit: filtra "dove si trova" a un baule fisico specifico invece
+  // dell'aggregato di tutto il kit — null = tutti i bauli insieme.
+  const [historyInstanceFilter, setHistoryInstanceFilter] = useState(null)
   const [qrUrl, setQrUrl] = useState(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showPrintPopup, setShowPrintPopup] = useState(false)
@@ -172,17 +175,24 @@ export default function Inventory() {
     return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [teamId])
 
+  // Riga evento che corrisponde all'oggetto selezionato — se è un kit e un
+  // baule specifico è filtrato, deve anche essere tra quelli assegnati a
+  // quella riga (instanceNumbers), non solo lo stesso kit in generale.
+  const matchesDetailItem = i => {
+    if (i.id !== showDetail.id && i.itemRef !== showDetail.id) return false
+    if (historyInstanceFilter == null) return true
+    return (i.instanceNumbers || []).includes(historyInstanceFilter)
+  }
+
   // Eventi in cui l'oggetto attualmente selezionato è caricato e non ancora rientrato
   const detailEvents = showDetail
-    ? events.filter(ev => (ev.items || []).some(i =>
-        (i.id === showDetail.id || i.itemRef === showDetail.id) && i.loaded && !i.returned
-      ))
+    ? events.filter(ev => (ev.items || []).some(i => matchesDetailItem(i) && i.loaded && !i.returned))
     : []
 
   // Storico: ultimi 5 eventi (di qualunque stato) in cui è comparso l'oggetto
   const detailEventHistory = showDetail
     ? events
-        .filter(ev => (ev.items || []).some(i => i.id === showDetail.id || i.itemRef === showDetail.id))
+        .filter(ev => (ev.items || []).some(matchesDetailItem))
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 5)
     : []
@@ -266,7 +276,7 @@ export default function Inventory() {
   }
 
   const openDetail = async item => {
-    setShowDetail(item); setQrUrl(null)
+    setShowDetail(item); setQrUrl(null); setHistoryInstanceFilter(null)
     const code = item.code || generateItemCode(item.id)
     const url = await generateQRDataURL(qrPayloadForCode(code, teamId))
     setQrUrl(url)
@@ -449,6 +459,8 @@ export default function Inventory() {
             <div style={{ position:'relative' }}>
               <button
                 onClick={() => setShowActionsMenu(v => !v)}
+                aria-label={t('inventory.actionsMenuAria')}
+                aria-expanded={showActionsMenu}
                 className="btn btn-secondary"
                 style={{ padding:'10px 13px', fontSize:18, lineHeight:1 }}
               >⋯</button>
@@ -555,6 +567,7 @@ export default function Inventory() {
                         <button
                           key={opt.key}
                           onClick={() => setSortBy(s => s === opt.key ? '' : opt.key)}
+                          aria-pressed={sortBy === opt.key}
                           className="btn-no-anim"
                           style={{
                             width:'100%', textAlign:'left', padding:'8px 10px', borderRadius:8, fontSize:13, fontWeight:600,
@@ -576,6 +589,7 @@ export default function Inventory() {
                         quando serve davvero cambiarla. */}
                     <button
                       onClick={() => setCategoryPickerOpen(o => !o)}
+                      aria-expanded={categoryPickerOpen}
                       className="btn-no-anim"
                       style={{
                         width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
@@ -594,6 +608,7 @@ export default function Inventory() {
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:14 }}>
                         <button
                           onClick={() => { setFilterCategory(''); setCategoryPickerOpen(false) }}
+                          aria-pressed={filterCategory === ''}
                           className="btn-no-anim"
                           style={{
                             padding:'7px 8px', borderRadius:8, fontSize:11.5, fontWeight:700, textAlign:'left',
@@ -609,6 +624,7 @@ export default function Inventory() {
                           <button
                             key={c}
                             onClick={() => { setFilterCategory(fc => fc === c ? '' : c); setCategoryPickerOpen(false) }}
+                            aria-pressed={filterCategory === c}
                             className="btn-no-anim"
                             style={{
                               padding:'7px 8px', borderRadius:8, fontSize:11.5, fontWeight:700,
@@ -643,6 +659,7 @@ export default function Inventory() {
                   <div style={cascade(3)}>
                     <button
                       onClick={() => setFilterKitOnly(v => !v)}
+                      aria-pressed={filterKitOnly}
                       className="btn-no-anim"
                       style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 10px', borderRadius:8, background: filterKitOnly ? 'rgba(245,166,35,0.10)' : 'var(--card2)', border: filterKitOnly ? '1.5px solid rgba(245,166,35,0.35)' : '1.5px solid var(--border)' }}
                     >
@@ -676,7 +693,7 @@ export default function Inventory() {
           { key:'broken',  label:t('inventory.filterBroken'),         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
           { key:'reorder', label:t('inventory.filterReorder'), count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
-          <button key={f.key} onClick={() => setActiveFilter(f.key)}
+          <button key={f.key} onClick={() => setActiveFilter(f.key)} aria-pressed={activeFilter === f.key}
             style={{
               padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
               background: activeFilter === f.key ? (f.bg || 'var(--accent)') : 'var(--card2)',
@@ -721,7 +738,7 @@ export default function Inventory() {
       {showModal && (
         <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
           <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
-            <button className="close-btn" onClick={myDrag.close}>✕</button>
+            <button className="close-btn" onClick={myDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
             <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
             <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
@@ -736,13 +753,13 @@ export default function Inventory() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group"><label>{t('inventory.totalQtyLabel')}</label>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})}
-                    style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                  <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})} aria-label={t('eventDetail.decreaseQtyAria')}
+                    style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
                   <input type="number" min="1" value={form.qty}
                     onChange={e => setForm({...form, qty:Math.max(1,parseInt(e.target.value)||1)})}
                     style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
-                  <button onClick={() => setForm({...form, qty:form.qty+1})}
-                    style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  <button onClick={() => setForm({...form, qty:form.qty+1})} aria-label={t('eventDetail.increaseQtyAria')}
+                    style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                 </div>
               </div>
               <div className="form-group">
@@ -750,13 +767,13 @@ export default function Inventory() {
                   {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
                 </label>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})}
-                    style={{ width:32, height:36, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                  <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})} aria-label={t('inventory.decreaseBrokenAria')}
+                    style={{ width:44, height:44, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
                   <input type="number" min="0" max={form.qty} value={form.brokenQty}
                     onChange={e => setForm({...form, brokenQty:Math.min(form.qty,Math.max(0,parseInt(e.target.value)||0))})}
                     style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1, color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }} />
-                  <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})}
-                    style={{ width:32, height:36, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})} aria-label={t('inventory.increaseBrokenAria')}
+                    style={{ width:44, height:44, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                 </div>
               </div>
             </div>
@@ -776,13 +793,13 @@ export default function Inventory() {
                 <label>{t('inventory.minStockLabel')}</label>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
-                    <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})}
-                      style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                    <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})} aria-label={t('inventory.decreaseMinStockAria')}
+                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                     <input type="number" min="0" value={form.minStock||0}
                       onChange={e => setForm({...form, minStock:Math.max(0,parseInt(e.target.value)||0)})}
                       style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
-                    <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})}
-                      style={{ width:32, height:36, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                    <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})} aria-label={t('inventory.increaseMinStockAria')}
+                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                   </div>
                 </div>
                 {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock })}</p>}
@@ -800,7 +817,7 @@ export default function Inventory() {
       {showDetail && (
         <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
           <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
-            <button className="close-btn" onClick={detailDrag.close}>✕</button>
+            <button className="close-btn" onClick={detailDrag.close} aria-label={t("common.close")}>✕</button>
 
             {/* Wrapper scorrevole: pannello principale + pannello "dove si trova" */}
             <div style={{ overflow:'hidden' }}>
@@ -817,9 +834,12 @@ export default function Inventory() {
                     <h2 style={{ margin:0 }}>{showDetail.name}</h2>
                     {(showDetail.brand || showDetail.model) && <p style={{ color:'var(--text2)', marginTop:4 }}>{showDetail.brand} {showDetail.model}</p>}
                   </div>
-                  <div
+                  <button
+                    type="button"
+                    className="btn-no-anim"
                     onClick={() => setShowDetailEvents(true)}
-                    style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor:'pointer' }}
+                    aria-label={t('inventory.whereItIsAria')}
+                    style={{ width:'100%', background:'var(--bg3)', border:'none', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor:'pointer', textAlign:'left', font:'inherit', color:'inherit' }}
                   >
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                       <span style={{ color:'var(--text2)', fontSize:14 }}>{t('inventory.detailAvailable')}</span>
@@ -850,7 +870,7 @@ export default function Inventory() {
                       🔍 {t('inventory.detailTapToSeeLocation')}
                       <span style={{ marginLeft:'auto' }}>→</span>
                     </p>
-                  </div>
+                  </button>
                   <div className="code-preview" style={{ marginBottom:14 }}>
                     {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>{t('inventory.generating')}</p></div>}
                     <p style={{ color:'#333', fontFamily:'monospace', fontWeight:700, fontSize:16 }}>{showDetail.code || generateItemCode(showDetail.id)}</p>
@@ -911,7 +931,45 @@ export default function Inventory() {
                     ← {t('common.back')}
                   </button>
                   <h2 style={{ marginBottom:4 }}>{t('inventory.whereItIs')}</h2>
-                  <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{showDetail.name}</p>
+                  <p style={{ color:'var(--text2)', fontSize:13, marginBottom: showDetail.isBundle ? 12 : 16 }}>{showDetail.name}</p>
+
+                  {/* Filtro per baule — solo per i kit: lo storico aggregato
+                      del kit intero non dice quale ESEMPLARE fisico è stato
+                      dove, che è esattamente quello che serve sapere quando
+                      un baule specifico torna con qualcosa di rotto/mancante. */}
+                  {showDetail.isBundle && (
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                      <button
+                        onClick={() => setHistoryInstanceFilter(null)}
+                        className="btn-no-anim"
+                        aria-pressed={historyInstanceFilter === null}
+                        style={{
+                          padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                          background: historyInstanceFilter === null ? 'var(--accent)' : 'var(--card2)',
+                          color: historyInstanceFilter === null ? '#fff' : 'var(--text2)',
+                          border: `1px solid ${historyInstanceFilter === null ? 'var(--accent)' : 'var(--border)'}`,
+                        }}
+                      >
+                        {t('inventory.allInstancesFilter')}
+                      </button>
+                      {ensureInstanceList(showDetail.instances, showDetail.totalQty).map(inst => (
+                        <button
+                          key={inst.number}
+                          onClick={() => setHistoryInstanceFilter(n => n === inst.number ? null : inst.number)}
+                          className="btn-no-anim"
+                          aria-pressed={historyInstanceFilter === inst.number}
+                          style={{
+                            padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                            background: historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--card2)',
+                            color: historyInstanceFilter === inst.number ? '#fff' : ((inst.brokenComponents||[]).length > 0 ? 'var(--red)' : 'var(--text2)'),
+                            border: `1px solid ${historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--border)'}`,
+                          }}
+                        >
+                          {t('inventory.kitInstanceLabel', { number: inst.number })}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {detailEvents.length === 0 && detailEventHistory.length === 0 && (
                     <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>{t('inventory.noHistoryAvailable')}</p>
@@ -920,14 +978,21 @@ export default function Inventory() {
                   {detailEvents.length > 0 && (
                     <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
                       <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.currentlyOut')}</p>
-                      {detailEvents.map(ev => (
+                      {detailEvents.map(ev => {
+                        const itm = (ev.items || []).find(matchesDetailItem)
+                        return (
                         <button
                           key={ev.id}
                           onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
                           style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
                         >
                           <div style={{ flex:1, minWidth:0 }}>
-                            <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                            <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                              <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                              {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
+                                <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
+                              )}
+                            </div>
                             <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
                               {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
                               {ev.location ? ` · ${ev.location}` : ''}
@@ -935,7 +1000,8 @@ export default function Inventory() {
                           </div>
                           <span style={{ color:'var(--text2)' }}>→</span>
                         </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
 
@@ -943,7 +1009,7 @@ export default function Inventory() {
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                       <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.history', { count: detailEventHistory.length })}</p>
                       {detailEventHistory.map(ev => {
-                        const itm = (ev.items || []).find(i => i.id === showDetail.id || i.itemRef === showDetail.id)
+                        const itm = (ev.items || []).find(matchesDetailItem)
                         const stillOut = itm?.loaded && !itm?.returned
                         return (
                           <button
@@ -952,7 +1018,12 @@ export default function Inventory() {
                             style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
                           >
                             <div style={{ flex:1, minWidth:0 }}>
-                              <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                              <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                                <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                                {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
+                                  <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
+                                )}
+                              </div>
                               <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
                                 {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
                                 {ev.location ? ` · ${ev.location}` : ''}
@@ -988,7 +1059,8 @@ export default function Inventory() {
           >
             <button
               onClick={() => setShowPrintPopup(false)}
-              style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center' }}
+              aria-label={t('common.close')}
+              style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}
             >
               ✕
             </button>
@@ -1028,7 +1100,7 @@ export default function Inventory() {
             style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 24px 24px', width:'100%', maxWidth:420, maxHeight:'85dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: importModal.closing ? 'invImportPopOut 0.2s ease forwards' : 'invImportPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
           >
             {importStep !== 'importing' && (
-              <button onClick={importModal.close} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
+              <button onClick={importModal.close} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:44, height:44, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
             )}
 
             {importStep === 'instructions' && (
@@ -1054,7 +1126,7 @@ export default function Inventory() {
 
                 <label className="btn btn-primary btn-full" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, cursor:'pointer' }}>
                   {t('inventory.importChooseFile')}
-                  <input type="file" accept=".csv,text/csv" onChange={handleImportFile} style={{ display:'none' }} />
+                  <input type="file" accept=".csv,text/csv" onChange={handleImportFile} style={{ position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }} />
                 </label>
               </>
             )}
@@ -1128,7 +1200,7 @@ export default function Inventory() {
       {showAddMenu && (
         <div className={`modal-overlay${addMenuDrag.closing ? ' closing' : ''}`} onClick={addMenuDrag.onOverlayClick}>
           <div className={`modal${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
-            <button className="close-btn" onClick={addMenuDrag.close}>✕</button>
+            <button className="close-btn" onClick={addMenuDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('inventory.addMenuTitle')}</h2>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
               <button onClick={() => { setShowAddMenu(false); openAdd() }}
@@ -1154,7 +1226,7 @@ export default function Inventory() {
         <div className={`modal-overlay${kitEditDrag.closing ? ' closing' : ''}`} onClick={kitEditDrag.onOverlayClick}>
           <div className={`modal${kitEditDrag.jiggling ? ' modal-jiggle' : ''}${kitEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={kitEditDrag.close}>✕</button>
+              <button className="close-btn" onClick={kitEditDrag.close} aria-label={t("common.close")}>✕</button>
               <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.editKitTitle')}</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholder')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholder')} style={{ fontSize:13, marginBottom:10 }} />
@@ -1164,9 +1236,9 @@ export default function Inventory() {
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button type="button" onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                  <button type="button" onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                   <input type="number" min="1" value={kitForm.qty} onChange={e => setKitForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))} style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }} />
-                  <button type="button" onClick={() => setKitForm(f => ({...f, qty:f.qty+1}))} style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  <button type="button" onClick={() => setKitForm(f => ({...f, qty:f.qty+1}))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                 </div>
               </div>
             </div>
@@ -1183,11 +1255,11 @@ export default function Inventory() {
                     <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                       <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{comp.name}</span>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                         <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
-                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:c.qty+1} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:c.qty+1} : c))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                       </div>
-                      <button onClick={() => setKitEditComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>✕</button>
+                      <button onClick={() => setKitEditComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} aria-label={t('inventory.removeComponentAria', { name: comp.name })} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'8px 6px', minHeight:32 }}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -1211,14 +1283,16 @@ export default function Inventory() {
                               <button
                                 onClick={() => toggleInstanceBroken(inst.number, comp.itemId, comp.qty, -1)}
                                 disabled={brokenQty === 0}
-                                style={{ width:22, height:22, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty === 0 ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                                aria-label={t('inventory.decreaseBrokenComponentAria', { name: comp.name, number: inst.number })}
+                                style={{ width:28, height:28, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty === 0 ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                               <span style={{ fontSize:12, fontWeight:800, minWidth:36, textAlign:'center', color: brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }}>
                                 {brokenQty > 0 ? t('inventory.kitInstanceMissingCount', { count: brokenQty }) : '✓'}
                               </span>
                               <button
                                 onClick={() => toggleInstanceBroken(inst.number, comp.itemId, comp.qty, 1)}
                                 disabled={brokenQty >= comp.qty}
-                                style={{ width:22, height:22, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty >= comp.qty ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                                aria-label={t('inventory.increaseBrokenComponentAria', { name: comp.name, number: inst.number })}
+                                style={{ width:28, height:28, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty >= comp.qty ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                             </div>
                           )
                         })}
@@ -1234,14 +1308,14 @@ export default function Inventory() {
                 .filter(i => !i.isBundle && !kitEditComponents.some(c => c.itemId===i.id))
                 .filter(i => !kitEditSearch || i.name?.toLowerCase().includes(kitEditSearch.toLowerCase()))
                 .map(item => (
-                  <div key={item.id} className="item-row" onClick={() => { setKitEditComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitEditSearch('') }}>
+                  <button type="button" key={item.id} className="item-row" onClick={() => { setKitEditComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitEditSearch('') }} aria-label={t('inventory.addComponentAria', { name: item.name })}>
                     <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
                       <p style={{ color:'var(--text2)', fontSize:12 }}>{t('inventory.availableShort', { count: item.availableQty??item.totalQty })}</p>
                     </div>
                     <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
-                  </div>
+                  </button>
                 ))
               }
             </div>
@@ -1289,7 +1363,7 @@ export default function Inventory() {
         <div className={`modal-overlay${kitDrag.closing ? ' closing' : ''}`} onClick={kitDrag.onOverlayClick}>
           <div className={`modal${kitDrag.jiggling ? ' modal-jiggle' : ''}${kitDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={kitDrag.close}>✕</button>
+              <button className="close-btn" onClick={kitDrag.close} aria-label={t("common.close")}>✕</button>
               <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.newKitTitle')}</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholderNew')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholderNew')} style={{ fontSize:13, marginBottom:10 }} />
@@ -1299,9 +1373,9 @@ export default function Inventory() {
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                  <button onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                   <input type="number" min="1" value={kitForm.qty} onChange={e => setKitForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))} style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }} />
-                  <button onClick={() => setKitForm(f => ({...f, qty:f.qty+1}))} style={{ width:28, height:28, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  <button onClick={() => setKitForm(f => ({...f, qty:f.qty+1}))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                 </div>
               </div>
             </div>
@@ -1312,11 +1386,11 @@ export default function Inventory() {
                   <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                     <span style={{ flex:1, fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                       <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
-                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.min(c.maxQty,c.qty+1)} : c))} style={{ width:26, height:26, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.min(c.maxQty,c.qty+1)} : c))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                     </div>
-                    <button onClick={() => setKitComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'2px 6px' }}>x</button>
+                    <button onClick={() => setKitComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} aria-label={t('inventory.removeComponentAria', { name: comp.name })} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'8px 6px', minHeight:32 }}>x</button>
                   </div>
                 ))}
               </div>
@@ -1326,14 +1400,14 @@ export default function Inventory() {
             </div>
             <div style={{ overflowY:'auto', flex:1 }}>
               {items.filter(i => !i.isBundle && !kitComponents.some(c => c.itemId===i.id)).filter(i => !kitSearch || i.name?.toLowerCase().includes(kitSearch.toLowerCase())).map(item => (
-                <div key={item.id} className="item-row" onClick={() => { setKitComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitSearch('') }}>
+                <button type="button" key={item.id} className="item-row" onClick={() => { setKitComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitSearch('') }} aria-label={t('inventory.addComponentAria', { name: item.name })}>
                   <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
                     <p style={{ color:'var(--text2)', fontSize:12 }}>{item.availableQty??item.totalQty} disp.</p>
                   </div>
                   <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
-                </div>
+                </button>
               ))}
             </div>
             <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
@@ -1370,7 +1444,7 @@ export default function Inventory() {
 // avanzato è attivo), senza duplicare tutto il markup nei due rami.
 function ItemRow({ item, onOpen, t }) {
   return (
-    <div className="item-row" onClick={() => onOpen(item)}>
+    <button type="button" className="item-row btn-no-anim" onClick={() => onOpen(item)} aria-label={t('inventory.openItemAria', { name: item.name })}>
       <div className="item-icon">{ICONS[item.category] || '📦'}</div>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
@@ -1415,6 +1489,6 @@ function ItemRow({ item, onOpen, t }) {
           </div>
         )}
       </div>
-    </div>
+    </button>
   )
 }

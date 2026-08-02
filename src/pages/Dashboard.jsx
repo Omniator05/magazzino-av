@@ -85,6 +85,16 @@ const IconTruck = () => (
     <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
   </svg>
 )
+const IconCalendarEmpty = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+)
+const IconPlusSm = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
 export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
   const { profile, logout, teamId, showOverlay } = useAuth()
@@ -372,7 +382,7 @@ export default function Dashboard({ toggleTheme, theme }) {
           </div>
           {/* Pannello super admin — visibile solo col flag (mai per i clienti) */}
           {profile?.superAdmin && (
-            <button onClick={() => navigate('/super')} aria-label="Super admin" style={{
+            <button onClick={() => navigate('/super')} aria-label={t('dashboard.superAdminAria')} style={{
               flexShrink:0, width:38, height:38, borderRadius:12,
               background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)',
               color:'white', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer',
@@ -500,12 +510,34 @@ export default function Dashboard({ toggleTheme, theme }) {
         )}
 
         {/* ── Prossimi eventi ──────────────────── */}
-        {upcoming.length > 0 && (
-          <>
-            <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:14 }}>
-              {t('dashboard.upcomingEvents')}
-            </p>
+        <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:14 }}>
+          {t('dashboard.upcomingEvents')}
+        </p>
 
+        {upcoming.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => navigate('/events', { state: { openNewEvent: true } })}
+            className="btn-no-anim"
+            style={{ width:'100%', background:'var(--dash-card)', border:'1.5px dashed var(--dash-pill-border)', borderRadius:20, padding:'28px 20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:10, cursor:'pointer', font:'inherit', color:'inherit' }}
+          >
+            <div style={{ width:52, height:52, borderRadius:'50%', background:'var(--dash-pill-bg)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--dash-muted)' }}>
+              <IconCalendarEmpty />
+            </div>
+            <div>
+              <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', marginBottom:4 }}>
+                {t('dashboard.noUpcomingEventsTitle')}
+              </p>
+              <p style={{ fontSize:12.5, color:'var(--dash-muted)', maxWidth:260 }}>
+                {t('dashboard.noUpcomingEventsDesc')}
+              </p>
+            </div>
+            <span style={{ marginTop:6, display:'inline-flex', alignItems:'center', gap:6, padding:'10px 18px', borderRadius:14, background:'var(--accent)', color:'white', fontWeight:700, fontSize:13 }}>
+              <IconPlusSm /> {t('dashboard.createFirstEvent')}
+            </span>
+          </button>
+        ) : (
+          <>
             {upcoming.map(ev => {
               const isToday = ev.date === today
               const iconGradient = isToday
@@ -520,11 +552,13 @@ export default function Dashboard({ toggleTheme, theme }) {
                 : ''
 
               return (
-                <div
+                <button
+                  type="button"
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
-                  className={isToday ? 'evt-card evt-today' : 'evt-card evt-soft'}
-                  style={{ marginBottom:10, background:'var(--dash-card)', border: isToday ? '1.5px solid transparent' : cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+                  aria-label={t('events.openEventAria', { name: ev.name })}
+                  className={`btn-no-anim ${isToday ? 'evt-card evt-today' : 'evt-card evt-soft'}`}
+                  style={{ width:'100%', marginBottom:10, background:'var(--dash-card)', border: isToday ? '1.5px solid transparent' : cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease', textAlign:'left', font:'inherit', color:'inherit' }}
                   onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.07)' }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
                 >
@@ -553,7 +587,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                     <p style={{ fontSize:12, fontWeight:500, color:'var(--dash-muted)' }}>{dateLabel}{dateEndLabel}</p>
                     {ev.location && <p style={{ fontSize:11, color:'var(--dash-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                   </div>
-                </div>
+                </button>
               )
             })}
 
@@ -638,7 +672,7 @@ export default function Dashboard({ toggleTheme, theme }) {
         .evt-soft::after { opacity: 0.18; }
 
         @media (prefers-reduced-motion:reduce){
-          [style*="dashOrb"]{animation:none!important}
+          [style*="animation:dash"]{animation:none!important}
           .evt-card::before, .evt-card::after { animation:none!important }
         }
       `}</style>
@@ -694,7 +728,7 @@ export default function Dashboard({ toggleTheme, theme }) {
             aria-modal="true"
             style={{ background:'#fff', borderRadius:24, padding:'26px 22px 22px', width:'100%', maxWidth:380, maxHeight:'82dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: recapClosing ? 'recapPopOut 0.15s ease forwards' : 'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)', position:'relative' }}
           >
-            <button onClick={closeRecap} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'#f3f4f6', color:'#6b7280', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>✕</button>
+            <button onClick={closeRecap} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'#f3f4f6', color:'#6b7280', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>✕</button>
 
             <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(2,132,199,0.12)', color:'#0284c7' }}>
               <IconClipboard />
@@ -714,11 +748,12 @@ export default function Dashboard({ toggleTheme, theme }) {
                 <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoEvents')}</p>
               ) : (
                 weekEvents.map(ev => (
-                  <div key={ev.id} onClick={() => { setShowRecapModal(false); navigate(`/events/${ev.id}`) }}
-                    style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer' }}>
+                  <button type="button" key={ev.id} className="btn-no-anim" onClick={() => { setShowRecapModal(false); navigate(`/events/${ev.id}`) }}
+                    aria-label={t('events.openEventAria', { name: ev.name })}
+                    style={{ width:'100%', background:'transparent', border:'none', font:'inherit', color:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer', textAlign:'left' }}>
                     <span style={{ fontSize:13.5, fontWeight:600, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</span>
                     <span style={{ fontSize:12, color:'#6b7280', flexShrink:0 }}>{formatDate(ev.date+'T12:00:00', { weekday:'short', day:'numeric' }, i18n.language)}</span>
-                  </div>
+                  </button>
                 ))
               )}
             </div>
@@ -747,16 +782,18 @@ export default function Dashboard({ toggleTheme, theme }) {
               ) : (
                 <>
                   {openTasks.slice(0, 5).map(task => (
-                    <div key={task.id} onClick={() => { setShowRecapModal(false); navigate('/tasks') }}
-                      style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer' }}>
+                    <button type="button" key={task.id} className="btn-no-anim" onClick={() => { setShowRecapModal(false); navigate('/tasks') }}
+                      aria-label={t('dashboard.openTaskAria', { title: task.title })}
+                      style={{ width:'100%', background:'transparent', border:'none', font:'inherit', color:'inherit', display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer', textAlign:'left' }}>
                       <span style={{ width:7, height:7, borderRadius:'50%', flexShrink:0, background: RECAP_TASK_DOT[task.priority] || RECAP_TASK_DOT.media }} />
                       <span style={{ fontSize:13.5, fontWeight:600, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{task.title}</span>
-                    </div>
+                    </button>
                   ))}
                   {openTasks.length > 5 && (
-                    <p onClick={() => { setShowRecapModal(false); navigate('/tasks') }} style={{ fontSize:12, fontWeight:700, color:'#0284c7', marginTop:8, cursor:'pointer' }}>
+                    <button type="button" className="btn-no-anim" onClick={() => { setShowRecapModal(false); navigate('/tasks') }}
+                      style={{ background:'transparent', border:'none', font:'inherit', fontSize:12, fontWeight:700, color:'#0284c7', marginTop:8, cursor:'pointer', textAlign:'left' }}>
                       {t('common.moreCount', { count: openTasks.length - 5 })}
-                    </p>
+                    </button>
                   )}
                 </>
               )}

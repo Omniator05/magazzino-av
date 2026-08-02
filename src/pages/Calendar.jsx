@@ -332,6 +332,7 @@ export default function Calendar() {
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
+              aria-pressed={reportMode}
               style={{
                 background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
                 border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
@@ -346,19 +347,19 @@ export default function Calendar() {
 
         {/* Toggle griglia / assegna personale */}
         <div style={{ display:'flex', gap:3, marginTop:22, background:'var(--card2)', borderRadius:10, padding:3, width:'fit-content', margin:'22px auto 0' }}>
-          <button onClick={() => setMode('grid')} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'grid' ? 'var(--accent)' : 'transparent', color: mode === 'grid' ? 'white' : 'var(--text2)' }}>
+          <button onClick={() => setMode('grid')} aria-pressed={mode === 'grid'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'grid' ? 'var(--accent)' : 'transparent', color: mode === 'grid' ? 'white' : 'var(--text2)' }}>
             {t('calendar.viewGrid')}
           </button>
-          <button onClick={() => setMode('assign')} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
+          <button onClick={() => setMode('assign')} aria-pressed={mode === 'assign'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
             {t('calendar.viewAssign')}
           </button>
         </div>
 
         {/* Navigazione mese */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
-          <button onClick={goPrevMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
+          <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
           <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
-          <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
+          <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
 
         {mode === 'grid' && reportMode && (
@@ -521,10 +522,17 @@ export default function Calendar() {
               ].map(({ ev, phaseOnDay, dotColor, borderColor }) => {
                 const assignedNames = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean)
                 return (
-                  <div key={ev.id + (phaseOnDay?.key||'')} style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8 }}>
+                  <div key={ev.id + (phaseOnDay?.key||'')}
+                    onClick={() => navigate(`/events/${ev.id}`)}
+                    style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
+                  >
                     <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />
-                      <div onClick={() => navigate(`/events/${ev.id}`)} style={{ flex:1, minWidth:0, cursor:'pointer' }}>
+                      <button type="button" className="btn-no-anim"
+                        onClick={e => { e.stopPropagation(); navigate(`/events/${ev.id}`) }}
+                        aria-label={t('events.openEventAria', { name: ev.name })}
+                        style={{ flex:1, minWidth:0, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
+                      >
                         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6 }}>
                           {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                         </p>
@@ -543,10 +551,10 @@ export default function Calendar() {
                             ))}
                           </div>
                         )}
-                      </div>
+                      </button>
                       <div style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
-                        <EditButton onClick={e => openEdit(e, ev)} size={32} />
-                        <DeleteButton onClick={e => deleteEvent(e, ev)} size={32} />
+                        <EditButton onClick={e => openEdit(e, ev)} size={44} ariaLabel={t('events.editEventAria')} />
+                        <DeleteButton onClick={e => deleteEvent(e, ev)} size={44} ariaLabel={t('events.deleteEventAria')} />
                       </div>
                     </div>
                   </div>
@@ -592,7 +600,7 @@ export default function Calendar() {
               aperta sempre finiva per allungare il pannello ad ogni giorno */}
           {myAbsences.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <button onClick={() => setMyAbsencesOpen(o => !o)} className="btn-no-anim"
+              <button onClick={() => setMyAbsencesOpen(o => !o)} className="btn-no-anim" aria-expanded={myAbsencesOpen}
                 style={{ width:'auto', display:'inline-flex', alignItems:'center', gap:6, marginBottom: myAbsencesOpen ? 8 : 0, background:'transparent', border:'none', padding:0 }}>
                 <span style={{ color:'var(--text2)', display:'flex' }}><List size={13} /></span>
                 <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('calendar.myAbsences')}</span>
@@ -601,7 +609,7 @@ export default function Calendar() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </span>
               </button>
-              {myAbsencesOpen && myAbsences.sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
+              {myAbsencesOpen && [...myAbsences].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(a => (
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
                   <div style={{ flex:1, minWidth:0 }}>
@@ -613,7 +621,7 @@ export default function Calendar() {
                     {a.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{a.reason}</p>}
                   </div>
                   <button onClick={() => removeAbsence(a.id)}
-                    style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700 }}>
+                    style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 14px', fontSize:12, fontWeight:700 }}>
                     {t('common.remove')}
                   </button>
                 </div>
@@ -641,6 +649,7 @@ export default function Calendar() {
                     draggable
                     onDragStart={e => e.dataTransfer.setData('text/plain', w.id)}
                     onClick={() => setSelectedWorkerId(id => id === w.id ? null : w.id)}
+                    aria-pressed={isSelected}
                     style={{
                       flexShrink:0, display:'flex', alignItems:'center', gap:6,
                       padding:'8px 14px', borderRadius:20,
@@ -659,7 +668,7 @@ export default function Calendar() {
           </div>
 
           <div style={{ padding:'8px 16px 24px' }}>
-            <button onClick={() => setShowPastAssign(v => !v)}
+            <button onClick={() => setShowPastAssign(v => !v)} aria-pressed={showPastAssign}
               style={{ background: showPastAssign ? 'var(--card2)' : 'transparent', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:700, marginBottom:10 }}>
               {showPastAssign ? '✓ ' : ''}{t('calendar.seePast')}
             </button>
@@ -699,7 +708,7 @@ export default function Calendar() {
                       return (
                         <span key={w.id} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
                           {unavail ? '⚠️' : '👷'} {w.name || t('common.noName')}
-                          <button onClick={e => { e.stopPropagation(); handleAssign(ev, w.id) }} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                          <button onClick={e => { e.stopPropagation(); handleAssign(ev, w.id) }} aria-label={t('eventDetail.unassignWorkerAria', { name: w.name || t('common.noName') })} style={{ width:20, height:20, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                         </span>
                       )
                     })}
@@ -737,7 +746,7 @@ export default function Calendar() {
       {showAbsenceModal && (
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
-            <button className="close-btn" onClick={absenceDrag.close}>✕</button>
+            <button className="close-btn" onClick={absenceDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.absenceModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('calendar.absenceModalDesc')}</p>
             <div className="form-group">
@@ -749,8 +758,8 @@ export default function Calendar() {
               <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder={t('calendar.singleDayPlaceholder')} onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
             </div>
             <div className="form-group">
-              <label>{t('calendar.reason')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({...f, reason:e.target.value}))} placeholder={t('calendar.reasonPlaceholder')} />
+              <label htmlFor="cal-absence-reason">{t('calendar.reason')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="cal-absence-reason" value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({...f, reason:e.target.value}))} placeholder={t('calendar.reasonPlaceholder')} />
             </div>
             <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={savingAbsence || !absenceForm.startDate}>
@@ -764,11 +773,11 @@ export default function Calendar() {
       {showCreate && (
         <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
           <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
-            <button className="close-btn" onClick={createDrag.close}>✕</button>
+            <button className="close-btn" onClick={createDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.newEventTitle')}</h2>
             <div className="form-group">
-              <label>{t('calendar.eventNameLabel')}</label>
-              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
+              <label htmlFor="cal-create-name">{t('calendar.eventNameLabel')}</label>
+              <input id="cal-create-name" value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
               <label>{t('calendar.startDateLabel')}</label>
@@ -791,12 +800,12 @@ export default function Calendar() {
               ))}
             </div>
             <div className="form-group">
-              <label>{t('calendar.locationLabel')}</label>
-              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
+              <label htmlFor="cal-create-location">{t('calendar.locationLabel')}</label>
+              <input id="cal-create-location" value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>{t('calendar.notesLabel')}</label>
-              <textarea value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
+              <label htmlFor="cal-create-notes">{t('calendar.notesLabel')}</label>
+              <textarea id="cal-create-notes" value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
             </div>
             <button onClick={createEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={creating || !editForm.name?.trim() || !editForm.date}>
@@ -810,11 +819,11 @@ export default function Calendar() {
       {editingEvent && (
         <div className={`modal-overlay${editDrag.closing ? ' closing' : ''}`} onClick={editDrag.onOverlayClick}>
           <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}${editDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...editDrag.props}>
-            <button className="close-btn" onClick={editDrag.close}>✕</button>
+            <button className="close-btn" onClick={editDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.editEventTitle')}</h2>
             <div className="form-group">
-              <label>{t('calendar.eventNameLabel')}</label>
-              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
+              <label htmlFor="cal-edit-name">{t('calendar.eventNameLabel')}</label>
+              <input id="cal-edit-name" value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
               <label>{t('calendar.startDateLabel')}</label>
@@ -837,12 +846,12 @@ export default function Calendar() {
               ))}
             </div>
             <div className="form-group">
-              <label>{t('calendar.locationLabel')}</label>
-              <input value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
+              <label htmlFor="cal-edit-location">{t('calendar.locationLabel')}</label>
+              <input id="cal-edit-location" value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
             </div>
             <div className="form-group">
-              <label>{t('calendar.notesLabel')}</label>
-              <textarea value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
+              <label htmlFor="cal-edit-notes">{t('calendar.notesLabel')}</label>
+              <textarea id="cal-edit-notes" value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
             </div>
             <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !editForm.name?.trim() || !editForm.date}>

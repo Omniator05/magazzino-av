@@ -268,6 +268,12 @@ select option { background: var(--bg2); }
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.12s ease;
+  width: 100%;
+  background: transparent;
+  border-left: none; border-right: none; border-top: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
 .item-row:last-child { border-bottom: none; }
 .item-row:active { background: var(--card2); }

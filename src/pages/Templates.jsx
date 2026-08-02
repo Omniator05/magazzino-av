@@ -138,8 +138,8 @@ export default function Templates() {
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <EditButton onClick={() => openEdit(tpl)} size={34} />
-                  <DeleteButton onClick={() => deleteTemplate(tpl.id)} size={34} />
+                  <EditButton onClick={() => openEdit(tpl)} size={44} ariaLabel={t('templates.editTemplateAria', { name: tpl.name })} />
+                  <DeleteButton onClick={() => deleteTemplate(tpl.id)} size={44} ariaLabel={t('templates.deleteTemplateAria', { name: tpl.name })} />
                 </div>
               </div>
             </div>

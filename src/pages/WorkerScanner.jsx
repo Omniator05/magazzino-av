@@ -141,7 +141,7 @@ export default function WorkerScanner() {
   }, [teamId])
 
   const processCode = async (code) => {
-    const { baseCode: normalized } = parseScannedCode(code)
+    const { baseCode: normalized, unitNumber } = parseScannedCode(code)
 
     // Ignora lo stesso codice scansionato entro 3 secondi (evita doppi)
     const now = Date.now()
@@ -186,6 +186,26 @@ export default function WorkerScanner() {
       setTimeout(() => setScanToast(null), 3000)
       setProcessing(false)
       return
+    }
+
+    // Baule sbagliato: il kit ha bauli specifici assegnati a questa riga
+    // (vedi src/utils/kitInstances.js) e l'etichetta scansionata è quella di
+    // un'unità fisica precisa (…-NN, vedi generateUnitCode) — se il numero
+    // non è tra quelli assegnati, il magazziniere ha in mano il baule
+    // sbagliato. Blocca l'azione invece di segnarlo comunque: altrimenti lo
+    // storico "dove è stato" di kitInstances risulterebbe falsato.
+    if (foundItem.isBundle && unitNumber && (eventItem.instanceNumbers || []).length > 0) {
+      const scannedInstance = parseInt(unitNumber, 10)
+      if (!eventItem.instanceNumbers.includes(scannedInstance)) {
+        vibrate([100, 50, 100])
+        playSound('error')
+        const result = { action: 'wrong_instance', item: eventItem, scannedInstance, expectedInstances: eventItem.instanceNumbers }
+        setLastScan(result)
+        setScanToast({ ...result, ts: Date.now() })
+        setTimeout(() => setScanToast(null), 4000)
+        setProcessing(false)
+        return
+      }
     }
 
     if (mode === 'pronto') {
@@ -452,6 +472,7 @@ export default function WorkerScanner() {
     already_loaded:   { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:t('workerScanner.alreadyLoadedTitle'), msg: i => t('workerScanner.alreadyLoadedMsg', { name: i?.name }) },
     already_returned: { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:t('workerScanner.alreadyReturnedTitle'), msg: i => t('workerScanner.alreadyReturnedMsg', { name: i?.name }) },
     not_loaded:       { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:t('workerScanner.notLoadedTitle'), msg: i => t('workerScanner.notLoadedMsg', { name: i?.name }) },
+    wrong_instance:   { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'🧳', title:t('workerScanner.wrongInstanceTitle'), msg: i => t('workerScanner.wrongInstanceMsg', { name: i?.name, scanned: lastScan?.scannedInstance, expected: (lastScan?.expectedInstances || []).join(', ') }) },
   }
 
   const srOnlyStyle = { position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }

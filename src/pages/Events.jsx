@@ -727,7 +727,7 @@ export default function Events() {
       {showTemplateMenu && (
         <div className={`modal-overlay${templateDrag.closing ? ' closing' : ''}`} onClick={templateDrag.onOverlayClick}>
           <div className={`modal${templateDrag.jiggling ? ' modal-jiggle' : ''}${templateDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templateDrag.props}>
-            <button className="close-btn" onClick={templateDrag.close}>✕</button>
+            <button className="close-btn" onClick={templateDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.newEventTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{t('events.newEventModalDesc')}</p>
 
@@ -772,7 +772,7 @@ export default function Events() {
       {showModal && (
         <div className={`modal-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={eventDrag.onOverlayClick}>
           <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
-            <button className="close-btn" onClick={eventDrag.close}>✕</button>
+            <button className="close-btn" onClick={eventDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{editing ? t('calendar.editEventTitle') : pendingTemplateItems ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
 
             {/* Toggle tipo: Evento / Installazione */}
@@ -780,6 +780,7 @@ export default function Events() {
               <div style={{ display:'flex', gap:8, marginBottom:16, background:'var(--card2)', borderRadius:12, padding:4 }}>
                 <button
                   onClick={() => setForm(f => ({...f, type:'event'}))}
+                  aria-pressed={form.type !== 'installation'}
                   style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                     background: form.type !== 'installation' ? 'var(--card)' : 'transparent',
                     color: form.type !== 'installation' ? 'var(--text)' : 'var(--text2)',
@@ -788,6 +789,7 @@ export default function Events() {
                   }}><IconCalendarSm /> {t('events.typeEvent')}</button>
                 <button
                   onClick={() => setForm(f => ({...f, type:'installation', recurrence:'never', endDate:''}))}
+                  aria-pressed={form.type === 'installation'}
                   style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                     background: form.type === 'installation' ? '#ede9fe' : 'transparent',
                     color: form.type === 'installation' ? '#5b4fcf' : 'var(--text2)',

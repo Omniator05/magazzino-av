@@ -163,7 +163,7 @@ export default function Archive() {
                           }}>
                           {isCopied ? t('archive.created') : isCopying ? t('archive.copying') : t('archive.useTemplate')}
                         </button>
-                        <DeleteButton onClick={() => deleteArchiveEvent(event)} size={38} />
+                        <DeleteButton onClick={() => deleteArchiveEvent(event)} size={44} ariaLabel={t('archive.deleteEventAria', { name: event.name })} />
                       </div>
                     </div>
 

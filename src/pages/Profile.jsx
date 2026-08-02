@@ -128,6 +128,8 @@ export default function Profile({ onClose }) {
     } finally { setSavingLang(false) }
   }
 
+  const srOnlyStyle = { position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }
+
   return (
     <div
       onClick={modal.close}
@@ -139,7 +141,14 @@ export default function Profile({ onClose }) {
         aria-modal="true"
         style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 22px 24px', width:'100%', maxWidth:400, maxHeight:'85dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: modal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
       >
-        <button onClick={modal.close} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
+        {/* Il nome/password salvati e l'errore di password sono solo visivi
+            (testo del bottone che cambia, o un paragrafo rosso) — senza
+            queste regioni chi usa uno screen reader non li sentirebbe mai. */}
+        <div aria-live="polite" role="status" style={srOnlyStyle}>
+          {nameOk ? t('profile.saved') : ''}{pwdOk ? ` ${t('profile.passwordChanged')}` : ''}
+        </div>
+        <div aria-live="assertive" role="alert" style={srOnlyStyle}>{pwdError}</div>
+        <button onClick={modal.close} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:44, height:44, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
         <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20, letterSpacing:'-0.3px' }}>{t('profile.title')}</h2>
 
         {/* Riga identità — orizzontale, non più un hero centrato */}
@@ -189,8 +198,9 @@ export default function Profile({ onClose }) {
         <GroupCard label={t('profile.sectionInfo')}>
           <Row first>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <label style={rowLabelStyle}>{t('profile.displayName')}</label>
+              <label htmlFor="prof-name" style={rowLabelStyle}>{t('profile.displayName')}</label>
               <input
+                id="prof-name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder={t('profile.namePlaceholder')}
@@ -203,7 +213,7 @@ export default function Profile({ onClose }) {
                 onClick={saveName}
                 disabled={savingName}
                 className="btn-no-anim"
-                style={{ flexShrink: 0, background: 'rgba(230,57,70,0.10)', color: 'var(--accent)', borderRadius: 10, padding: '8px 12px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                style={{ flexShrink: 0, minHeight: 44, background: 'rgba(230,57,70,0.10)', color: 'var(--accent)', borderRadius: 10, padding: '8px 12px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}
               >
                 {nameOk ? <><IconCheck /> {t('profile.saved')}</> : savingName ? t('profile.saving') : t('profile.saveName')}
               </button>
@@ -220,8 +230,9 @@ export default function Profile({ onClose }) {
                   key={l.code}
                   onClick={() => selectLanguage(l.code)}
                   disabled={savingLang}
+                  aria-pressed={(profile?.language || 'it') === l.code}
                   style={{
-                    padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 700, border: 'none',
+                    minHeight: 44, padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 700, border: 'none',
                     background: (profile?.language || 'it') === l.code ? 'var(--accent)' : 'transparent',
                     color: (profile?.language || 'it') === l.code ? 'white' : 'var(--text2)',
                   }}
@@ -238,7 +249,8 @@ export default function Profile({ onClose }) {
           <button
             onClick={() => setPwdOpen(v => !v)}
             className="btn-no-anim"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'transparent', textAlign: 'left' }}
+            aria-expanded={pwdOpen}
+            style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'transparent', textAlign: 'left' }}
           >
             <span style={{ color: 'var(--text2)', flexShrink: 0, display: 'flex' }}><IconLock /></span>
             <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{t('profile.changePassword')}</span>
@@ -248,16 +260,16 @@ export default function Profile({ onClose }) {
           {pwdOpen && (
             <div style={{ padding: '2px 16px 16px', borderTop: '1px solid var(--border)' }}>
               <div className="form-group" style={{ marginTop: 14 }}>
-                <label>{t('profile.currentPassword')}</label>
-                <input type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="••••••••" />
+                <label htmlFor="prof-pwd-current">{t('profile.currentPassword')}</label>
+                <input id="prof-pwd-current" type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="••••••••" />
               </div>
               <div className="form-group">
-                <label>{t('profile.newPassword')}</label>
-                <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder={t('profile.newPasswordPlaceholder')} />
+                <label htmlFor="prof-pwd-new">{t('profile.newPassword')}</label>
+                <input id="prof-pwd-new" type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder={t('profile.newPasswordPlaceholder')} />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>{t('profile.confirmPassword')}</label>
-                <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder={t('profile.confirmPasswordPlaceholder')} />
+                <label htmlFor="prof-pwd-confirm">{t('profile.confirmPassword')}</label>
+                <input id="prof-pwd-confirm" type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder={t('profile.confirmPasswordPlaceholder')} />
               </div>
               {pwdError && (
                 <p style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600, marginTop: 10, lineHeight: 1.4 }}>{pwdError}</p>
@@ -288,15 +300,17 @@ export default function Profile({ onClose }) {
               aria-modal="true"
               style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 22px 24px', width:'100%', maxWidth:380, boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: emojiModal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
             >
-              <button onClick={emojiModal.close} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
+              <button onClick={emojiModal.close} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:44, height:44, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
               <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20, letterSpacing:'-0.3px' }}>{t('profile.chooseAvatar')}</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: avatar ? 14 : 0 }}>
                 {AVATARS.map(em => (
                   <button
                     key={em}
                     onClick={() => selectEmoji(em)}
+                    aria-label={t('profile.selectAvatarAria', { emoji: em })}
+                    aria-pressed={avatar === em}
                     style={{
-                      fontSize: 26, padding: '6px 0', borderRadius: 10, cursor: 'pointer',
+                      fontSize: 26, padding: '8px 0', minHeight: 40, borderRadius: 10, cursor: 'pointer',
                       background: avatar === em ? 'rgba(230,57,70,0.10)' : 'var(--card2)',
                       border: avatar === em ? '2px solid var(--accent)' : '2px solid transparent',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
