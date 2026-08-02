@@ -88,8 +88,8 @@ export default function Landing() {
         </div>
 
         <div className="landing-reveal" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 16, padding: '16px 20px', marginBottom: 24, animationDelay: `${CARDS_START_MS + FEATURES.length * REVEAL_STEP_MS}ms` }}>
-          <p style={{ color: 'white', fontWeight: 800, fontSize: 22 }}>35€<span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}> /mese, per azienda</span></p>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12.5, marginTop: 4 }}>30 giorni di prova gratuita, nessuna carta richiesta all'attivazione. Disdici quando vuoi.</p>
+          <p style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>30 giorni di prova gratuita</p>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>Nessuna carta richiesta all'attivazione. Poi 35€/mese, per azienda. Disdici quando vuoi.</p>
         </div>
 
         <button onClick={() => navigate('/signup')} className="auth-btn landing-reveal" style={{ animationDelay: `${CARDS_START_MS + FEATURES.length * REVEAL_STEP_MS + 70}ms` }}>
