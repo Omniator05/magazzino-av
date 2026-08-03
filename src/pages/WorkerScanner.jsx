@@ -218,7 +218,7 @@ export default function WorkerScanner() {
         setProcessing(false)
         return
       }
-      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, pronto: true } : i)
+      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, pronto: true, mancante: false } : i)
       await updateDoc(eventRef, { items: updated })
       vibrate([60, 40, 120])
       playSound('success')
@@ -240,7 +240,7 @@ export default function WorkerScanner() {
         setProcessing(false)
         return
       }
-      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, loaded: true } : i)
+      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, loaded: true, mancante: false } : i)
       await updateDoc(eventRef, { items: updated })
       const invSnap = await getDoc(doc(db, 'items', foundItem.id))
       if (invSnap.exists()) {
@@ -359,7 +359,10 @@ export default function WorkerScanner() {
   const prepared = items.filter(i => i.pronto).length
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
-  const total    = items.length
+  // Gli oggetti segnati mancanti/rotti dal magazziniere non entrano mai in
+  // "pronto"/"caricato": escluderli dal totale evita che la lista resti
+  // bloccata al 90% per sempre quando un pezzo non si trova o è danneggiato.
+  const total    = items.filter(i => !i.mancante).length
   // Campo "fatto" della fase corrente — usato per ordinamento liste, scroll
   // al primo da fare, e contatore di completamento: unica fonte invece di
   // ripetere lo stesso ternario in ogni punto che dipende dalla fase.
@@ -388,8 +391,8 @@ export default function WorkerScanner() {
   for (const cat of WS_ORDER_CONST) {
     const catItems = items
       .filter(i => (i.isExtra ? 'Extra' : (i.category || 'Altro')) === cat)
-      .sort((a, b) => (a[doneField] ? 1 : 0) - (b[doneField] ? 1 : 0))
-    const first = catItems.find(i => !i[doneField])
+      .sort((a, b) => ((a[doneField] || a.mancante) ? 1 : 0) - ((b[doneField] || b.mancante) ? 1 : 0))
+    const first = catItems.find(i => !i[doneField] && !i.mancante)
     if (first) { firstUnloadedId = first.id; break }
   }
 
@@ -803,88 +806,142 @@ export default function WorkerScanner() {
               : (() => {
                   const WS_CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
                   const WS_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
-                  const wsCatGrouped = {}
-                  items.forEach(item => {
-                    // Categorie "orfane" (rinominate nel magazzino dopo l'aggiunta
-                    // all'evento) finiscono in Altro invece di sparire dalla lista.
-                    const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
-                    const cat = WS_ORDER.includes(rawCat) ? rawCat : 'Altro'
-                    if (!wsCatGrouped[cat]) wsCatGrouped[cat] = []
-                    wsCatGrouped[cat].push(item)
+
+                  const buildItemProps = (item, vehicleColor) => ({
+                    ...item,
+                    _vehicleColor: vehicleColor || null,
+                    _details: itemDetails[item.itemRef || item.id] || null,
+                    _onToggleLoaded: async (itemId) => {
+                      const snap = await getDoc(eventRef)
+                      if (!snap.exists()) return
+                      const evData = snap.data()
+                      const evItems = evData.items || []
+                      const itm = evItems.find(i => i.id === itemId)
+                      if (!itm) return
+                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, loaded: !i.loaded })
+                      await updateDoc(eventRef, { items: updated })
+                      const newLoaded = !itm.loaded
+                      const invRef = doc(db, 'items', itemId)
+                      const invSnap = await getDoc(invRef)
+                      if (invSnap.exists()) {
+                        const delta = newLoaded ? -(itm.qty||1) : (itm.qty||1)
+                        await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                      }
+                    },
+                    _onToggleReturned: async (itemId) => {
+                      const snap = await getDoc(eventRef)
+                      if (!snap.exists()) return
+                      const evData = snap.data()
+                      const evItems = evData.items || []
+                      const itm = evItems.find(i => i.id === itemId)
+                      if (!itm?.loaded) return
+                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, returned: !i.returned })
+                      await updateDoc(eventRef, { items: updated })
+                      const newReturned = !itm.returned
+                      const invRef = doc(db, 'items', itemId)
+                      const invSnap = await getDoc(invRef)
+                      if (invSnap.exists()) {
+                        const delta = newReturned ? (itm.qty||1) : -(itm.qty||1)
+                        await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                      }
+                    },
+                    _onTogglePronto: async (itemId) => {
+                      const snap = await getDoc(eventRef)
+                      if (!snap.exists()) return
+                      const evData = snap.data()
+                      const evItems = evData.items || []
+                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto })
+                      await updateDoc(eventRef, { items: updated })
+                    },
+                    _onToggleMancante: async (itemId) => {
+                      const snap = await getDoc(eventRef)
+                      if (!snap.exists()) return
+                      const evData = snap.data()
+                      const evItems = evData.items || []
+                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante })
+                      await updateDoc(eventRef, { items: updated })
+                    },
                   })
-                  // Dentro ogni categoria: da fare prima, caricati/rientrati in fondo
-                  Object.keys(wsCatGrouped).forEach(cat => {
-                    wsCatGrouped[cat].sort((a, b) => {
-                      const aDone = a[doneField] ? 1 : 0
-                      const bDone = b[doneField] ? 1 : 0
-                      return aDone - bDone
+
+                  // Raggruppa una lista di oggetti per categoria (Kit/Audio/Video/...),
+                  // da fare prima, caricati/rientrati/mancanti in fondo — riusata sia
+                  // per la vista piatta che per ogni sezione furgone.
+                  const renderCategoryGroups = (list, vehicleColor) => {
+                    const grouped = {}
+                    list.forEach(item => {
+                      // Categorie "orfane" (rinominate nel magazzino dopo l'aggiunta
+                      // all'evento) finiscono in Altro invece di sparire dalla lista.
+                      const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+                      const cat = WS_ORDER.includes(rawCat) ? rawCat : 'Altro'
+                      if (!grouped[cat]) grouped[cat] = []
+                      grouped[cat].push(item)
                     })
-                  })
-                  const wsCatKeys = WS_ORDER.filter(c => wsCatGrouped[c])
-                  const wsMultiCat = wsCatKeys.length > 1
-                  return wsCatKeys.map(cat => (
-                    <div key={cat}>
-                      {wsMultiCat && (
-                        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 3px', background:'var(--bg2)' }}>
-                          <span style={{ fontSize:11 }}>{WS_CAT_ICONS[cat]||'📦'}</span>
-                          <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
-                          <div style={{ flex:1, height:1, background:'var(--border)' }} />
-                          <span style={{ fontSize:10, color:'var(--text3)' }}>{wsCatGrouped[cat].length}</span>
+                    Object.keys(grouped).forEach(cat => {
+                      grouped[cat].sort((a, b) => {
+                        const aDone = (a[doneField] || a.mancante) ? 1 : 0
+                        const bDone = (b[doneField] || b.mancante) ? 1 : 0
+                        return aDone - bDone
+                      })
+                    })
+                    const catKeys = WS_ORDER.filter(c => grouped[c])
+                    const multiCat = catKeys.length > 1
+                    return catKeys.map(cat => (
+                      <div key={cat}>
+                        {multiCat && (
+                          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 3px', background:'var(--bg2)' }}>
+                            <span style={{ fontSize:11 }}>{WS_CAT_ICONS[cat]||'📦'}</span>
+                            <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
+                            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                            <span style={{ fontSize:10, color:'var(--text3)' }}>{grouped[cat].length}</span>
+                          </div>
+                        )}
+                        {grouped[cat].map(item => (
+                          <div key={item.id} ref={!item[doneField] && item.id === firstUnloadedId ? firstUnloadedRef : null}>
+                            <ChecklistRow item={buildItemProps(item, vehicleColor)} />
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  }
+
+                  // Se nessun oggetto ha un furgone assegnato, vista piatta identica
+                  // a prima. Altrimenti la lista si raggruppa per furgone — un
+                  // magazziniere carica un furgone alla volta, non oggetto per
+                  // oggetto — con gli oggetti non assegnati in una sezione a parte.
+                  const usesVehicles = items.some(i => i.vehicleId)
+                  if (!usesVehicles) return renderCategoryGroups(items, null)
+
+                  const vehicleSections = vehicles
+                    .map(v => ({ vehicle: v, items: items.filter(i => i.vehicleId === v.id) }))
+                    .filter(s => s.items.length > 0)
+                  const assignedIds = new Set(vehicleSections.flatMap(s => s.items.map(i => i.id)))
+                  const unassignedItems = items.filter(i => !assignedIds.has(i.id))
+
+                  return (
+                    <>
+                      {vehicleSections.map(({ vehicle, items: vItems }) => (
+                        <div key={vehicle.id}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:`${vehicle.color || 'var(--blue)'}18` }}>
+                            <span style={{ fontSize:12.5, fontWeight:800, color: vehicle.color || 'var(--blue)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{vehicle.name}</span>
+                            <div style={{ flex:1, height:1, background:`${vehicle.color || 'var(--blue)'}30` }} />
+                            <span style={{ fontSize:11, fontWeight:700, color: vehicle.color || 'var(--blue)' }}>{vItems.length}</span>
+                          </div>
+                          {renderCategoryGroups(vItems, vehicle.color)}
+                        </div>
+                      ))}
+                      {unassignedItems.length > 0 && (
+                        <div>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--bg2)' }}>
+                            <span style={{ fontSize:15 }}>📦</span>
+                            <span style={{ fontSize:12.5, fontWeight:800, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{t('workerScanner.unassignedVehicle')}</span>
+                            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                            <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)' }}>{unassignedItems.length}</span>
+                          </div>
+                          {renderCategoryGroups(unassignedItems, null)}
                         </div>
                       )}
-                      {wsCatGrouped[cat].map(item => (
-                <div key={item.id} ref={!item[doneField] && item.id === firstUnloadedId ? firstUnloadedRef : null}>
-                <ChecklistRow item={{
-                  ...item,
-                  _vehicle: vehicles.find(v => v.id === item.vehicleId) || null,
-                  _details: itemDetails[item.itemRef || item.id] || null,
-                  _onToggleLoaded: async (itemId) => {
-                    const snap = await getDoc(eventRef)
-                    if (!snap.exists()) return
-                    const evData = snap.data()
-                    const evItems = evData.items || []
-                    const itm = evItems.find(i => i.id === itemId)
-                    if (!itm) return
-                    const updated = evItems.map(i => i.id !== itemId ? i : { ...i, loaded: !i.loaded })
-                    await updateDoc(eventRef, { items: updated })
-                    const newLoaded = !itm.loaded
-                    const invRef = doc(db, 'items', itemId)
-                    const invSnap = await getDoc(invRef)
-                    if (invSnap.exists()) {
-                      const delta = newLoaded ? -(itm.qty||1) : (itm.qty||1)
-                      await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
-                    }
-                  },
-                  _onToggleReturned: async (itemId) => {
-                    const snap = await getDoc(eventRef)
-                    if (!snap.exists()) return
-                    const evData = snap.data()
-                    const evItems = evData.items || []
-                    const itm = evItems.find(i => i.id === itemId)
-                    if (!itm?.loaded) return
-                    const updated = evItems.map(i => i.id !== itemId ? i : { ...i, returned: !i.returned })
-                    await updateDoc(eventRef, { items: updated })
-                    const newReturned = !itm.returned
-                    const invRef = doc(db, 'items', itemId)
-                    const invSnap = await getDoc(invRef)
-                    if (invSnap.exists()) {
-                      const delta = newReturned ? (itm.qty||1) : -(itm.qty||1)
-                      await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
-                    }
-                  },
-                  _onTogglePronto: async (itemId) => {
-                    const snap = await getDoc(eventRef)
-                    if (!snap.exists()) return
-                    const evData = snap.data()
-                    const evItems = evData.items || []
-                    const updated = evItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto })
-                    await updateDoc(eventRef, { items: updated })
-                  },
-                }} />
-                </div>
-              ))}
-                    </div>
-                  ))
+                    </>
+                  )
                 })()
             }
           </div>
@@ -983,6 +1040,36 @@ export default function WorkerScanner() {
 function ChecklistRow({ item }) {
   const { t } = useTranslation()
   const [showInfo, setShowInfo]   = useState(false)
+  // Tenere premuto il bottone "Carico" segna l'oggetto mancante/rotto invece
+  // di caricarlo — evita un quarto bottone dedicato solo a un caso raro. La
+  // striscia arancione parte con un piccolo ritardo (non su un tap normale,
+  // solo se la pressione dura davvero) e si riempie nel tempo restante, così
+  // finisce di riempirsi esattamente quando scatta l'azione.
+  const MISSING_HOLD_MS = 550
+  const MISSING_FILL_DELAY_MS = 200
+  const [pressingMissing, setPressingMissing] = useState(false)
+  const missingFillTimer = useRef(null)
+  const missingTriggerTimer = useRef(null)
+  const missingPressFired = useRef(false)
+  useEffect(() => () => {
+    if (missingFillTimer.current) clearTimeout(missingFillTimer.current)
+    if (missingTriggerTimer.current) clearTimeout(missingTriggerTimer.current)
+  }, [])
+  const startMissingPress = () => {
+    missingPressFired.current = false
+    missingFillTimer.current = setTimeout(() => setPressingMissing(true), MISSING_FILL_DELAY_MS)
+    missingTriggerTimer.current = setTimeout(() => {
+      missingPressFired.current = true
+      setPressingMissing(false)
+      if (navigator.vibrate) navigator.vibrate([15, 40, 15, 40, 40])
+      item._onToggleMancante && item._onToggleMancante(item.id)
+    }, MISSING_HOLD_MS)
+  }
+  const cancelMissingPress = () => {
+    setPressingMissing(false)
+    if (missingFillTimer.current) { clearTimeout(missingFillTimer.current); missingFillTimer.current = null }
+    if (missingTriggerTimer.current) { clearTimeout(missingTriggerTimer.current); missingTriggerTimer.current = null }
+  }
   const location = item._details?.location || null
   const warehouseNotes = item._details?.notes || null
   // Auto-repair: se l'evento è stato salvato prima che i componenti fossero
@@ -1002,7 +1089,7 @@ function ChecklistRow({ item }) {
 
   return (
     <>
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showInfo ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showInfo ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : item._vehicleColor ? `${item._vehicleColor}10` : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : item._vehicleColor ? `3px solid ${item._vehicleColor}` : '3px solid transparent' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item.loaded ? 0.45 : 1, transition:'opacity 0.3s' }}>
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
@@ -1011,7 +1098,6 @@ function ChecklistRow({ item }) {
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
             {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
-            {item._vehicle && <span style={{ background:`${item._vehicle.color || 'var(--blue)'}22`, color: item._vehicle.color || 'var(--blue)', border:`1px solid ${item._vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{item._vehicle.emoji || '🚐'} {item._vehicle.name}</span>}
             {item.isBundle && (item.instanceNumbers || []).length > 0 && (
               <span style={{
                 background: damagedInstances.length ? 'rgba(248,113,113,0.15)' : 'rgba(148,163,184,0.15)',
@@ -1058,7 +1144,18 @@ function ChecklistRow({ item }) {
         </div>
         {/* Bottoni touch-friendly - grandi abbastanza per il dito */}
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>
-          {!item.loaded ? (
+          {item.mancante ? (
+            <button
+              style={{ minWidth:110, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                display:'flex', alignItems:'center', justifyContent:'center',
+                background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1.5px solid rgba(234,88,12,0.35)',
+                WebkitTapHighlightColor:'transparent',
+              }}
+              onClick={() => item._onToggleMancante && item._onToggleMancante(item.id)}
+            >
+              {t('workerScanner.restoreItem')}
+            </button>
+          ) : !item.loaded ? (
             <div style={{ display:'flex', gap:5 }}>
               <button
                 style={{ minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
@@ -1073,16 +1170,25 @@ function ChecklistRow({ item }) {
                 {item.pronto ? t('eventDetail.readyDone') : t('eventDetail.ready')}
               </button>
               <button
-                style={{ minWidth:70, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                style={{ position:'relative', overflow:'hidden', minWidth:70, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
                   background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
                   color: item.pronto ? 'var(--accent2)' : 'var(--text)',
                   border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
-                  WebkitTapHighlightColor:'transparent',
+                  WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
                 }}
-                onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
+                aria-label={t('workerScanner.toLoadShort') + ' — ' + t('workerScanner.markMissingHint')}
+                onPointerDown={startMissingPress}
+                onPointerUp={cancelMissingPress}
+                onPointerLeave={cancelMissingPress}
+                onPointerCancel={cancelMissingPress}
+                onClick={() => {
+                  if (missingPressFired.current) { missingPressFired.current = false; return }
+                  item._onToggleLoaded && item._onToggleLoaded(item.id)
+                }}
               >
-                {t('workerScanner.toLoadShort')}
+                <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(234,88,12,0.32)', transform: pressingMissing ? 'scaleX(1)' : 'scaleX(0)', transformOrigin:'left', transition: pressingMissing ? `transform ${MISSING_HOLD_MS - MISSING_FILL_DELAY_MS}ms linear` : 'transform 120ms ease-out' }} />
+                <span style={{ position:'relative' }}>{t('workerScanner.toLoadShort')}</span>
               </button>
             </div>
           ) : (
