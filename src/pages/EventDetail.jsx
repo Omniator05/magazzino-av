@@ -110,18 +110,31 @@ export default function EventDetail() {
   const [bulkVehicleId, setBulkVehicleId] = useState('')
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, itemRef, instanceNumbers }) => {
-    // Per i kit: se la qty è cambiata dal picker bauli non ancora aggiornato
-    // (es. utente ha solo mosso lo stepper senza aprire il picker), riallinea
-    // il numero di bauli assegnati alla nuova qty prima di salvare.
-    let finalInstanceNumbers = instanceNumbers
-    if (isBundle) {
-      const kitDoc = allItems.find(i => i.id === (itemRef || id))
-      const kitInstances = ensureInstanceList(kitDoc?.instances, kitDoc?.totalQty ?? qty)
-      finalInstanceNumbers = reconcileInstanceNumbers(kitInstances, instanceNumbers, qty)
+  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, itemRef, instanceNumbers, hadInstances }) => {
+    // Per i kit i bauli sono sempre assegnati (il kit "è" i suoi bauli fisici).
+    // Per un oggetto singolo, invece, l'assegnazione a unità specifiche resta
+    // solo se l'admin ne ha scelta almeno una — altrimenti basta modificare la
+    // quantità di un oggetto qualsiasi (es. un'americana, dove non importa
+    // quale pezzo esce) per "agganciarlo" per sbaglio a un'unità precisa e
+    // attivare la verifica per singolo pezzo allo scanner.
+    const currentSelection = instanceNumbers || []
+    let finalInstanceNumbers = currentSelection
+    let includeInstanceNumbers = false
+    if (isBundle || currentSelection.length > 0) {
+      const catalogItem = allItems.find(i => i.id === (itemRef || id))
+      const catalogInstances = ensureInstanceList(catalogItem?.instances, catalogItem?.totalQty ?? qty)
+      finalInstanceNumbers = reconcileInstanceNumbers(catalogInstances, currentSelection, qty)
+      includeInstanceNumbers = true
+    } else if (hadInstances) {
+      // Aveva unità assegnate ed è stato svuotato apposta nel picker: si
+      // salva l'array vuoto, altrimenti il vecchio valore resterebbe scritto
+      // su Firestore (updateDoc non tocca le chiavi che non gli passi) e il
+      // badge con i numeri continuerebbe a comparire come se nulla fosse.
+      finalInstanceNumbers = []
+      includeInstanceNumbers = true
     }
     await updateEventItems(current => current.map(i =>
-      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(isBundle ? { instanceNumbers: finalInstanceNumbers } : {}) }
+      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(includeInstanceNumbers ? { instanceNumbers: finalInstanceNumbers } : {}) }
     ))
     setEditItem(null)
   }
@@ -1473,9 +1486,14 @@ export default function EventDetail() {
               />
             </div>
 
-            {editItem.isBundle && (() => {
-              const kitDoc = allItems.find(i => i.id === editItem.itemRef)
-              const kitInstances = ensureInstanceList(kitDoc?.instances, kitDoc?.totalQty ?? editItem.qty)
+            {(() => {
+              const catalogItem = allItems.find(i => i.id === (editItem.itemRef || editItem.id))
+              // Il picker vale per qualsiasi oggetto con più di un pezzo in
+              // magazzino, non solo i kit — per un'americana da 2m non conta
+              // quale unità esce, quindi si lascia semplicemente vuoto.
+              const canPickInstances = editItem.isBundle || (catalogItem?.totalQty || 0) > 1
+              if (!canPickInstances) return null
+              const catalogInstances = ensureInstanceList(catalogItem?.instances, catalogItem?.totalQty ?? editItem.qty)
               const selected = editItem.instanceNumbers || []
               const toggleInstance = num => setEditItem(ei => {
                 const current = ei.instanceNumbers || []
@@ -1483,40 +1501,86 @@ export default function EventDetail() {
                 if (current.length >= ei.qty) return ei
                 return { ...ei, instanceNumbers: [...current, num].sort((a, b) => a - b) }
               })
-              const damagedSelected = kitInstances.filter(inst => selected.includes(inst.number) && (inst.brokenComponents || []).length > 0)
+              const damagedSelected = catalogInstances.filter(inst => selected.includes(inst.number) && (inst.brokenComponents || []).length > 0)
+              // Oltre 10 unità la griglia di bottoni diventa impraticabile
+              // (es. 100 cavi corrente) — sotto quella soglia si sceglie a
+              // tap, sopra si scrivono i numeri a mano separati da virgola:
+              // resta possibile puntare a unità precise anche con un
+              // magazzino grande (es. 20 VX1000), solo senza dover cercare
+              // il numero giusto in una griglia enorme.
+              const useManualInput = catalogInstances.length > 10
+              // Ogni token va diviso SOLO da virgola: un numero scritto male
+              // (es. "2.4" invece di "2, 4") non deve sparire in silenzio —
+              // meglio segnalarlo che salvare un numero diverso da quello voluto.
+              const parseManualInstances = raw => {
+                const tokens = raw.split(',').map(s => s.trim()).filter(Boolean)
+                const valid = []
+                let hasInvalid = false
+                tokens.forEach(tok => {
+                  const n = /^\d+$/.test(tok) ? parseInt(tok, 10) : null
+                  if (n !== null && n >= 1 && n <= catalogInstances.length) valid.push(n)
+                  else hasInvalid = true
+                })
+                return { numbers: [...new Set(valid)].sort((a, b) => a - b), hasInvalid }
+              }
+              const manualRaw = editItem.instanceNumbersText ?? selected.join(', ')
+              const manualHasInvalid = useManualInput && parseManualInstances(manualRaw).hasInvalid
               return (
                 <div className="form-group">
-                  <label>{t('eventDetail.kitInstancesLabel', { count: editItem.qty })}</label>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom: damagedSelected.length ? 8 : 0 }}>
-                    {kitInstances.map(inst => {
-                      const isSelected = selected.includes(inst.number)
-                      const isDamaged = (inst.brokenComponents || []).length > 0
-                      return (
-                        <button
-                          key={inst.number}
-                          type="button"
-                          onClick={() => toggleInstance(inst.number)}
-                          aria-label={t('eventDetail.kitInstanceToggleAria', { number: inst.number })}
-                          aria-pressed={isSelected}
-                          style={{
-                            width:44, height:44, borderRadius:10, fontWeight:800, fontSize:14,
-                            display:'flex', alignItems:'center', justifyContent:'center',
-                            background: isSelected ? (isDamaged ? 'rgba(248,113,113,0.18)' : 'rgba(105,240,174,0.15)') : 'var(--card2)',
-                            border: isSelected ? `1.5px solid ${isDamaged ? 'var(--red)' : 'var(--green)'}` : '1.5px solid var(--border)',
-                            color: isSelected ? (isDamaged ? 'var(--red)' : 'var(--green)') : 'var(--text2)',
-                          }}>
-                          {inst.number}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <label>{t(editItem.isBundle ? 'eventDetail.kitInstancesLabel' : 'eventDetail.unitInstancesLabel', { count: editItem.qty })}</label>
+                  {useManualInput ? (
+                    <>
+                      <input
+                        value={manualRaw}
+                        onChange={e => {
+                          const raw = e.target.value
+                          const { numbers } = parseManualInstances(raw)
+                          setEditItem(ei => ({ ...ei, instanceNumbersText: raw, instanceNumbers: numbers }))
+                        }}
+                        placeholder={t('eventDetail.unitInstancesManualPlaceholder')}
+                        style={{ fontFamily:'monospace' }}
+                      />
+                      {manualHasInvalid && (
+                        <p style={{ color:'var(--red)', fontSize:12, marginTop:6, display:'flex', alignItems:'center', gap:5 }}>
+                          <Warn size={12} /> {t('eventDetail.unitInstancesInvalidInput')}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom: damagedSelected.length ? 8 : 0 }}>
+                      {catalogInstances.map(inst => {
+                        const isSelected = selected.includes(inst.number)
+                        const isDamaged = (inst.brokenComponents || []).length > 0
+                        return (
+                          <button
+                            key={inst.number}
+                            type="button"
+                            onClick={() => toggleInstance(inst.number)}
+                            aria-label={t('eventDetail.kitInstanceToggleAria', { number: inst.number })}
+                            aria-pressed={isSelected}
+                            style={{
+                              width:44, height:44, borderRadius:10, fontWeight:800, fontSize:14,
+                              display:'flex', alignItems:'center', justifyContent:'center',
+                              background: isSelected ? (isDamaged ? 'rgba(248,113,113,0.18)' : 'rgba(105,240,174,0.15)') : 'var(--card2)',
+                              border: isSelected ? `1.5px solid ${isDamaged ? 'var(--red)' : 'var(--green)'}` : '1.5px solid var(--border)',
+                              color: isSelected ? (isDamaged ? 'var(--red)' : 'var(--green)') : 'var(--text2)',
+                            }}>
+                            {inst.number}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {!editItem.isBundle && selected.length === 0 && (
+                    <p style={{ color:'var(--text3)', fontSize:12, marginTop:6 }}>{t('eventDetail.unitInstancesHint')}</p>
+                  )}
                   {damagedSelected.length > 0 && (
                     <p style={{ color:'var(--red)', fontSize:12, lineHeight:1.5, display:'flex', alignItems:'flex-start', gap:5 }}>
                       <Warn size={13} />
                       <span>
                         {damagedSelected.map(inst => t('eventDetail.kitInstanceIssue', {
                           number: inst.number,
-                          names: inst.brokenComponents.map(b => kitDoc?.components?.find(c => c.itemId === b.itemId)?.name || '?').join(', '),
+                          names: inst.brokenComponents.map(b => catalogItem?.components?.find(c => c.itemId === b.itemId)?.name || '?').join(', '),
                         })).join(' · ')}
                       </span>
                     </p>
@@ -1630,12 +1694,12 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
     ? [...vehicles.filter(v => v.active !== false), vehicle]
     : vehicles.filter(v => v.active !== false)
 
-  // Bauli fisici assegnati a questa riga (solo per i kit) — letti in tempo
-  // reale dal documento kit, così se un baule viene segnato incompleto in
-  // magazzino l'avviso compare qui automaticamente (vedi kitInstances.js).
-  const kitDoc = item.isBundle ? allItems.find(i => i.id === (item.itemRef || item.id)) : null
-  const assignedInstances = kitDoc
-    ? (kitDoc.instances || []).filter(inst => (item.instanceNumbers || []).includes(inst.number))
+  // Unità fisiche assegnate a questa riga (kit o oggetto singolo) — lette in
+  // tempo reale dal documento in magazzino, così se un baule viene segnato
+  // incompleto l'avviso compare qui automaticamente (vedi kitInstances.js).
+  const catalogItem = allItems.find(i => i.id === (item.itemRef || item.id)) || null
+  const assignedInstances = catalogItem
+    ? (catalogItem.instances || []).filter(inst => (item.instanceNumbers || []).includes(inst.number))
     : []
   const damagedInstances = assignedInstances.filter(inst => (inst.brokenComponents || []).length > 0)
 
@@ -1646,7 +1710,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
             (le azioni a destra restano bottoni separati, non annidati qui). */}
         <button type="button"
           className="btn-no-anim"
-          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, isBundle: item.isBundle || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [] })}
+          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, isBundle: item.isBundle || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0 })}
           aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
           aria-pressed={bulkMode ? bulkSelected : undefined}
           style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
@@ -1678,7 +1742,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
             {vehicle && (
               <span style={{ background:`${vehicle.color || 'var(--blue)'}22`, color: vehicle.color || 'var(--blue)', border:`1px solid ${vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicle.emoji || '🚐'} {vehicle.name}</span>
             )}
-            {item.isBundle && (item.instanceNumbers || []).length > 0 && (
+            {(item.instanceNumbers || []).length > 0 && (
               <span style={{
                 background: damagedInstances.length ? 'rgba(248,113,113,0.15)' : 'rgba(148,163,184,0.15)',
                 color: damagedInstances.length ? 'var(--red)' : 'var(--text2)',
@@ -1700,7 +1764,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
               <Warn size={10} />{' '}
               {damagedInstances.map(inst => t('eventDetail.kitInstanceIssue', {
                 number: inst.number,
-                names: inst.brokenComponents.map(b => kitDoc?.components?.find(c => c.itemId === b.itemId)?.name || '?').join(', '),
+                names: inst.brokenComponents.map(b => catalogItem?.components?.find(c => c.itemId === b.itemId)?.name || '?').join(', '),
               })).join(' · ')}
             </p>
           )}

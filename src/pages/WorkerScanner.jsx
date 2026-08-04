@@ -209,20 +209,23 @@ export default function WorkerScanner() {
       if (!eventItem) { outcome = { action: 'not_in_list', item: foundItem }; return }
 
       const assignedInstances = eventItem.instanceNumbers || []
-      // Con più di un baule assegnato e un'etichetta PER SINGOLO BAULE (…-NN)
-      // bisogna scansionarli tutti prima che la riga risulti fatta. Ma molti
-      // bauli hanno ancora l'etichetta generica (non ancora rietichettati singolarmente):
-      // in quel caso non c'è modo di sapere quale dei due è stato scansionato,
-      // quindi un solo scan generico continua a completare tutta la riga come prima.
-      const requiresEachInstance = foundItem.isBundle && assignedInstances.length > 1
+      // Vale per qualunque oggetto (kit o singolo, es. una VX1000 specifica),
+      // non solo per i kit: se sulla riga sono state assegnate più unità
+      // specifiche e l'etichetta è PER SINGOLA UNITÀ (…-NN) bisogna
+      // scansionarle tutte prima che la riga risulti fatta. Ma molte unità
+      // hanno ancora l'etichetta generica (non ancora rietichettate
+      // singolarmente): in quel caso non c'è modo di sapere quale delle due è
+      // stata scansionata, quindi un solo scan generico continua a completare
+      // tutta la riga come prima.
+      const requiresEachInstance = assignedInstances.length > 1
 
-      // Baule sbagliato: il kit ha bauli specifici assegnati a questa riga
-      // (vedi src/utils/kitInstances.js) e l'etichetta scansionata è quella di
+      // Unità sbagliata: la riga ha unità specifiche assegnate (vedi
+      // src/utils/kitInstances.js) e l'etichetta scansionata è quella di
       // un'unità fisica precisa (…-NN, vedi generateUnitCode) — se il numero
-      // non è tra quelli assegnati, il magazziniere ha in mano il baule
+      // non è tra quelli assegnati, il magazziniere ha in mano il pezzo
       // sbagliato. Blocca l'azione invece di segnarlo comunque: altrimenti lo
       // storico "dove è stato" di kitInstances risulterebbe falsato.
-      if (foundItem.isBundle && unitNumber && assignedInstances.length > 0) {
+      if (unitNumber && assignedInstances.length > 0) {
         const scannedInstance = parseInt(unitNumber, 10)
         if (!assignedInstances.includes(scannedInstance)) {
           outcome = { action: 'wrong_instance', item: eventItem, scannedInstance, expectedInstances: assignedInstances }
@@ -1198,7 +1201,7 @@ function ChecklistRow({ item }) {
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
             {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
-            {item.isBundle && (item.instanceNumbers || []).length > 0 && (
+            {(item.instanceNumbers || []).length > 0 && (
               <span style={{
                 background: damagedInstances.length ? 'rgba(248,113,113,0.15)' : 'rgba(148,163,184,0.15)',
                 color: damagedInstances.length ? 'var(--red)' : 'var(--text2)',
