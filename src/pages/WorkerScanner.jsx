@@ -49,7 +49,12 @@ export default function WorkerScanner() {
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
   const [manualCode, setManualCode] = useState('')
-  const [mode, setMode] = useState('load') // 'pronto' | 'load' | 'return'
+  // Fase di default 'pronto', ma se questo evento era già più avanti (carico
+  // o scarico) si riparte da lì invece di tornare sempre a pronto — vedi i
+  // due useEffect più sotto che leggono/scrivono 'ws_phase_' + id.
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem('ws_phase_' + id) || 'pronto' } catch { return 'pronto' }
+  }) // 'pronto' | 'load' | 'return'
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   const [error, setError] = useState(null)
@@ -57,13 +62,19 @@ export default function WorkerScanner() {
   const [scanToast, setScanToast] = useState(null)
   const [showExtraWorker, setShowExtraWorker] = useState(false)
   const [extraWorkerForm, setExtraWorkerForm] = useState({ name:'', qty:1 })
+  // Ricerca nella checklist — nascosta dietro un'icona, serve solo quando la
+  // lista si allunga e si vuole trovare un oggetto senza scorrere le categorie.
+  const [itemListSearch, setItemListSearch] = useState('')
+  const [showItemListSearch, setShowItemListSearch] = useState(false)
+  const [showAllPreparedPopup, setShowAllPreparedPopup] = useState(false)
   const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
   const [showAllReturnedPopup, setShowAllReturnedPopup] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [showEventNotes, setShowEventNotes] = useState(false)
+  const prevPreparedRef = useRef(0)
   const prevLoadedRef = useRef(0)
   const prevReturnedRef = useRef(0)
-  useModalScrollLock(showExtraWorker || showAllLoadedPopup || showAllReturnedPopup)
+  useModalScrollLock(showExtraWorker || showAllPreparedPopup || showAllLoadedPopup || showAllReturnedPopup)
 
   const fireConfetti = () => {
     const duration = 4000
@@ -133,6 +144,19 @@ export default function WorkerScanner() {
     })
   }, [id])
 
+  // Ripristina la fase salvata se si cambia evento senza smontare il
+  // componente (raro, ma copre anche quel caso oltre al mount iniziale).
+  useEffect(() => {
+    try { setMode(localStorage.getItem('ws_phase_' + id) || 'pronto') } catch { setMode('pronto') }
+  }, [id])
+
+  // Ricorda la fase raggiunta per QUESTO evento: si riapre da lì la prossima
+  // volta invece di ripartire sempre da "pronto".
+  useEffect(() => {
+    if (!id) return
+    try { localStorage.setItem('ws_phase_' + id, mode) } catch {}
+  }, [mode, id])
+
   // Solo visualizzazione (badge): quale furgone va caricato/rientrato per ogni oggetto
   useEffect(() => {
     if (!teamId) return
@@ -184,39 +208,72 @@ export default function WorkerScanner() {
 
       if (!eventItem) { outcome = { action: 'not_in_list', item: foundItem }; return }
 
+      const assignedInstances = eventItem.instanceNumbers || []
+      // Con più di un baule assegnato e un'etichetta PER SINGOLO BAULE (…-NN)
+      // bisogna scansionarli tutti prima che la riga risulti fatta. Ma molti
+      // bauli hanno ancora l'etichetta generica (non ancora rietichettati singolarmente):
+      // in quel caso non c'è modo di sapere quale dei due è stato scansionato,
+      // quindi un solo scan generico continua a completare tutta la riga come prima.
+      const requiresEachInstance = foundItem.isBundle && assignedInstances.length > 1
+
       // Baule sbagliato: il kit ha bauli specifici assegnati a questa riga
       // (vedi src/utils/kitInstances.js) e l'etichetta scansionata è quella di
       // un'unità fisica precisa (…-NN, vedi generateUnitCode) — se il numero
       // non è tra quelli assegnati, il magazziniere ha in mano il baule
       // sbagliato. Blocca l'azione invece di segnarlo comunque: altrimenti lo
       // storico "dove è stato" di kitInstances risulterebbe falsato.
-      if (foundItem.isBundle && unitNumber && (eventItem.instanceNumbers || []).length > 0) {
+      if (foundItem.isBundle && unitNumber && assignedInstances.length > 0) {
         const scannedInstance = parseInt(unitNumber, 10)
-        if (!eventItem.instanceNumbers.includes(scannedInstance)) {
-          outcome = { action: 'wrong_instance', item: eventItem, scannedInstance, expectedInstances: eventItem.instanceNumbers }
+        if (!assignedInstances.includes(scannedInstance)) {
+          outcome = { action: 'wrong_instance', item: eventItem, scannedInstance, expectedInstances: assignedInstances }
           return
         }
       }
 
+      // Applica l'esito a una riga "semplice" (un solo scan la completa) o,
+      // se requiresEachInstance E il codice scansionato è specifico di un
+      // baule, tiene il conto di quali bauli sono già stati scansionati in
+      // QUESTA fase (pronto/load/return hanno storici separati) e completa la
+      // riga solo quando ci sono tutti. Un codice generico (unitNumber assente)
+      // salta questo conteggio e completa subito tutta la riga.
+      const applyOutcome = (doneFieldName, alreadyAction, doneAction, extra = {}) => {
+        if (eventItem[doneFieldName]) { outcome = { action: alreadyAction, item: eventItem, ...extra }; return }
+        if (requiresEachInstance && unitNumber) {
+          const scannedInstance = parseInt(unitNumber, 10)
+          const already = eventItem.scannedInstances?.[mode] || []
+          if (already.includes(scannedInstance)) { outcome = { action: alreadyAction, item: eventItem, ...extra }; return }
+          const nowScanned = [...already, scannedInstance]
+          const isComplete = assignedInstances.every(n => nowScanned.includes(n))
+          const updatedScanned = { ...(eventItem.scannedInstances || {}), [mode]: nowScanned }
+          tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
+            ...i, scannedInstances: updatedScanned, [doneFieldName]: isComplete,
+            ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
+          } : i) })
+          outcome = isComplete
+            ? { action: doneAction, item: eventItem, ...extra }
+            : { action: 'instance_progress', item: eventItem, scannedInstance, doneCount: nowScanned.length, totalCount: assignedInstances.length, ...extra }
+          return
+        }
+        tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
+          ...i, [doneFieldName]: true,
+          ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
+        } : i) })
+        outcome = { action: doneAction, item: eventItem, ...extra }
+      }
+
       if (mode === 'pronto') {
-        if (eventItem.pronto) { outcome = { action: 'already_pronto', item: eventItem }; return }
-        tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? { ...i, pronto: true, mancante: false } : i) })
-        outcome = { action: 'pronto', item: eventItem }
+        applyOutcome('pronto', 'already_pronto', 'pronto')
         return
       }
 
       if (mode === 'load') {
-        if (eventItem.loaded) { outcome = { action: 'already_loaded', item: eventItem }; return }
-        tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? { ...i, loaded: true, mancante: false } : i) })
-        outcome = { action: 'loaded', item: eventItem, location: foundItem.location || '' }
+        applyOutcome('loaded', 'already_loaded', 'loaded', { location: foundItem.location || '' })
         return
       }
 
       // return
       if (!eventItem.loaded) { outcome = { action: 'not_loaded', item: eventItem, location: foundItem.location || '' }; return }
-      if (eventItem.returned) { outcome = { action: 'already_returned', item: eventItem, location: foundItem.location || '' }; return }
-      tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? { ...i, returned: true } : i) })
-      outcome = { action: 'returned', item: eventItem, location: foundItem.location || '' }
+      applyOutcome('returned', 'already_returned', 'returned', { location: foundItem.location || '' })
     })
 
     if (outcome.action === 'event_missing') { setProcessing(false); return }
@@ -345,6 +402,7 @@ export default function WorkerScanner() {
     setShowExtraWorker(false)
   }
   const extraDrag       = useModalDrag(() => setShowExtraWorker(false), undefined, addExtraWorkerItem, showExtraWorker)
+  const allPreparedDrag = useModalDrag(() => setShowAllPreparedPopup(false), undefined, undefined, showAllPreparedPopup)
   const allLoadedDrag   = useModalDrag(() => setShowAllLoadedPopup(false), undefined, undefined, showAllLoadedPopup)
   const allReturnedDrag = useModalDrag(() => setShowAllReturnedPopup(false), undefined, undefined, showAllReturnedPopup)
   let firstUnloadedId = null
@@ -355,6 +413,26 @@ export default function WorkerScanner() {
     const first = catItems.find(i => !i[doneField] && !i.mancante)
     if (first) { firstUnloadedId = first.id; break }
   }
+
+  // Popup quando tutto è pronto — passa in automatico al carico, così
+  // riscansionando gli stessi codici finiscono dritti su "caricato" invece di
+  // dover cambiare fase a mano ogni volta.
+  useEffect(() => {
+    if (
+      mode === 'pronto' &&
+      total > 0 &&
+      prepared === total &&
+      prevPreparedRef.current < total
+    ) {
+      const key = 'prepared_popup_shown_' + id
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, '1')
+        setShowAllPreparedPopup(true)
+      }
+      setMode('load')
+    }
+    prevPreparedRef.current = prepared
+  }, [prepared, total, mode])
 
   // Popup quando tutto è caricato — non ripetere se già mostrato per questo evento
   useEffect(() => {
@@ -437,6 +515,7 @@ export default function WorkerScanner() {
     already_returned: { bg:'rgba(79,195,247,0.1)',  border:'rgba(79,195,247,0.3)',  color:'var(--blue)',   icon:'ℹ️', title:t('workerScanner.alreadyReturnedTitle'), msg: i => t('workerScanner.alreadyReturnedMsg', { name: i?.name }) },
     not_loaded:       { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:t('workerScanner.notLoadedTitle'), msg: i => t('workerScanner.notLoadedMsg', { name: i?.name }) },
     wrong_instance:   { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'🧳', title:t('workerScanner.wrongInstanceTitle'), msg: i => t('workerScanner.wrongInstanceMsg', { name: i?.name, scanned: lastScan?.scannedInstance, expected: (lastScan?.expectedInstances || []).join(', ') }) },
+    instance_progress: { bg:'rgba(52,211,153,0.15)', border:'rgba(52,211,153,0.4)', color:'var(--green)', icon:'🧳', title:t('workerScanner.instanceProgressTitle', { done: lastScan?.doneCount, total: lastScan?.totalCount }), msg: i => t('workerScanner.instanceProgressMsg', { name: i?.name }) },
   }
 
   const srOnlyStyle = { position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }
@@ -459,7 +538,7 @@ export default function WorkerScanner() {
       {/* - Popup centrale post-scansione - */}
       {scanToast && (() => {
         const r = scanResult[scanToast.action]
-        const isOk = ['pronto','loaded','returned'].includes(scanToast.action)
+        const isOk = ['pronto','loaded','returned','instance_progress'].includes(scanToast.action)
         return (
           <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
             <div style={{
@@ -713,9 +792,28 @@ export default function WorkerScanner() {
 
         {/* Lista carico - compatta con categorie */}
         <div style={{ marginTop:14, marginBottom:16 }}>
-          <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }}>
-            {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
-          </p>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', flex:1, minWidth:0 }}>
+              {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
+            </p>
+            {items.length > 0 && !showItemListSearch && (
+              <button onClick={() => setShowItemListSearch(true)} aria-label={t('workerScanner.searchItemsAria')}
+                style={{ width:30, height:30, borderRadius:8, background:'transparent', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              </button>
+            )}
+          </div>
+          {showItemListSearch && (
+            <div style={{ position:'relative', display:'flex', alignItems:'center', marginTop:8, marginBottom:16, animation:'fadeIn 0.15s ease' }}>
+              <svg style={{ position:'absolute', left:10 }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <label htmlFor="ws-item-search" style={srOnlyStyle}>{t('workerScanner.searchItemsPlaceholder')}</label>
+              <input id="ws-item-search" autoFocus value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
+                placeholder={t('workerScanner.searchItemsPlaceholder')}
+                style={{ width:'100%', padding:'9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card2)', color:'var(--text)', fontSize:13 }} />
+              <button onClick={() => { setItemListSearch(''); setShowItemListSearch(false) }} aria-label={t('common.close')}
+                style={{ marginLeft:6, width:32, height:32, borderRadius:8, background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+            </div>
+          )}
 
           {/* Contatore mancanti al completamento della fase corrente (pronto/carico) */}
           {total > 0 && (mode === 'pronto' || mode === 'load') && (() => {
@@ -880,8 +978,16 @@ export default function WorkerScanner() {
                   // a prima. Altrimenti la lista si raggruppa per furgone — un
                   // magazziniere carica un furgone alla volta, non oggetto per
                   // oggetto — con gli oggetti non assegnati in una sezione a parte.
+                  // Filtro di ricerca: non tocca i conteggi in alto (quelli
+                  // restano sull'intera lista), solo cosa viene disegnato qui sotto.
+                  const searchQuery = itemListSearch.trim().toLowerCase()
+                  const matchesSearch = item => !searchQuery || item.name?.toLowerCase().includes(searchQuery)
+                  if (searchQuery && !items.some(matchesSearch)) {
+                    return <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>{t('workerScanner.noItemsMatchSearch', { query: itemListSearch })}</p>
+                  }
+
                   const usesVehicles = items.some(i => i.vehicleId)
-                  if (!usesVehicles) return renderCategoryGroups(items, null)
+                  if (!usesVehicles) return renderCategoryGroups(items.filter(matchesSearch), null)
 
                   const vehicleSections = vehicles
                     .map(v => ({ vehicle: v, items: items.filter(i => i.vehicleId === v.id) }))
@@ -891,25 +997,29 @@ export default function WorkerScanner() {
 
                   return (
                     <>
-                      {vehicleSections.map(({ vehicle, items: vItems }) => (
+                      {vehicleSections.map(({ vehicle, items: vItems }) => {
+                        const visible = vItems.filter(matchesSearch)
+                        if (visible.length === 0) return null
+                        return (
                         <div key={vehicle.id}>
                           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:`${vehicle.color || 'var(--blue)'}18` }}>
                             <span style={{ fontSize:12.5, fontWeight:800, color: vehicle.color || 'var(--blue)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{vehicle.name}</span>
                             <div style={{ flex:1, height:1, background:`${vehicle.color || 'var(--blue)'}30` }} />
-                            <span style={{ fontSize:11, fontWeight:700, color: vehicle.color || 'var(--blue)' }}>{vItems.length}</span>
+                            <span style={{ fontSize:11, fontWeight:700, color: vehicle.color || 'var(--blue)' }}>{visible.length}</span>
                           </div>
-                          {renderCategoryGroups(vItems, vehicle.color)}
+                          {renderCategoryGroups(visible, vehicle.color)}
                         </div>
-                      ))}
-                      {unassignedItems.length > 0 && (
+                        )
+                      })}
+                      {unassignedItems.filter(matchesSearch).length > 0 && (
                         <div>
                           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--bg2)' }}>
                             <span style={{ fontSize:15 }}>📦</span>
                             <span style={{ fontSize:12.5, fontWeight:800, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{t('workerScanner.unassignedVehicle')}</span>
                             <div style={{ flex:1, height:1, background:'var(--border)' }} />
-                            <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)' }}>{unassignedItems.length}</span>
+                            <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)' }}>{unassignedItems.filter(matchesSearch).length}</span>
                           </div>
-                          {renderCategoryGroups(unassignedItems, null)}
+                          {renderCategoryGroups(unassignedItems.filter(matchesSearch), null)}
                         </div>
                       )}
                     </>
@@ -924,6 +1034,24 @@ export default function WorkerScanner() {
           </button>
         </div>
       </div>
+
+      {/* Popup tutto pronto — passa in automatico al carico */}
+      {showAllPreparedPopup && (
+        <div className={`modal-overlay${allPreparedDrag.closing ? ' closing' : ''}`} onClick={allPreparedDrag.onOverlayClick}>
+          <div className={`modal${allPreparedDrag.jiggling ? ' modal-jiggle' : ''}${allPreparedDrag.closing ? ' closing' : ''}`} style={{ position:'relative', textAlign:'center', padding:'36px 24px 32px' }} {...allPreparedDrag.props}>
+            <button className="close-btn" onClick={allPreparedDrag.close}>✕</button>
+            <div style={{ fontSize:64, marginBottom:12 }}>✅</div>
+            <h2 style={{ fontSize:22, marginBottom:8 }}>{t('workerScanner.allPreparedPopupTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:15, lineHeight:1.6, marginBottom:24, whiteSpace:'pre-line' }}>
+              {t('workerScanner.allPreparedPopupDesc')}
+            </p>
+            <button onClick={() => setShowAllPreparedPopup(false)}
+              className="btn btn-primary btn-full" style={{ fontSize:16, padding:'14px' }}>
+              {t('workerScanner.continueToLoad')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Popup tutto caricato */}
       {showAllLoadedPopup && (

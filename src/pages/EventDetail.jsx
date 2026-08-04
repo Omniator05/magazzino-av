@@ -98,6 +98,11 @@ export default function EventDetail() {
   const templatePickerDrag = useModalDrag(() => setShowTemplatePicker(false))
   const [search, setSearch] = useState('')
   const [showEventNotes, setShowEventNotes] = useState(false)
+  // Ricerca nella lista di carico già presente (diversa da "search" sopra,
+  // che è quella nel catalogo del modale "aggiungi oggetto") — nascosta
+  // dietro un'icona, utile solo quando la lista si allunga parecchio.
+  const [itemListSearch, setItemListSearch] = useState('')
+  const [showItemListSearch, setShowItemListSearch] = useState(false)
   // Assegnazione furgone in blocco — evita di dover aprire il menu su ogni riga
   // quando si vuole assegnare lo stesso furgone a più oggetti già in lista.
   const [bulkVehicleMode, setBulkVehicleMode] = useState(false)
@@ -809,8 +814,11 @@ export default function EventDetail() {
 
   const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
   const CAT_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
+  const filteredEventItems = itemListSearch.trim()
+    ? eventItems.filter(i => i.name?.toLowerCase().includes(itemListSearch.trim().toLowerCase()))
+    : eventItems
   const catGrouped = {}
-  eventItems.forEach(item => {
+  filteredEventItems.forEach(item => {
     // Categorie "orfane" finiscono in Altro invece di sparire: un articolo può
     // avere qui la categoria congelata al momento dell'aggiunta all'evento,
     // che non esiste più tra quelle attuali se nel frattempo è stata rinominata
@@ -1057,45 +1065,67 @@ export default function EventDetail() {
         </div>
       )}
 
-      {/* Assegnazione furgone in blocco */}
-      {eventItems.length > 0 && vehicles.length > 0 && (
-        bulkVehicleMode ? (
-          <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1.5px solid var(--accent)', borderRadius:'var(--radius)', padding:'12px 14px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-              <p style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</p>
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={() => setBulkSelectedIds(new Set(eventItems.map(i => i.id)))} style={{ background:'transparent', color:'var(--blue)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectAll')}</button>
-                <button onClick={() => setBulkSelectedIds(new Set())} style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectNone')}</button>
+      {/* Ricerca oggetti + assegnazione furgone in blocco, stessa riga */}
+      {eventItems.length > 0 && (
+        <div style={{ margin:'12px 16px 0' }}>
+          {bulkVehicleMode ? (
+            <div style={{ background:'var(--card)', border:'1.5px solid var(--accent)', borderRadius:'var(--radius)', padding:'12px 14px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                <p style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</p>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={() => setBulkSelectedIds(new Set(eventItems.map(i => i.id)))} style={{ background:'transparent', color:'var(--blue)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectAll')}</button>
+                  <button onClick={() => setBulkSelectedIds(new Set())} style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectNone')}</button>
+                </div>
               </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <select
+                  value={bulkVehicleId}
+                  onChange={e => setBulkVehicleId(e.target.value)}
+                  style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
+                >
+                  <option value="">{t('eventDetail.chooseVehicle')}</option>
+                  {vehicles.filter(v => v.active !== false).map(v => (
+                    <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}</option>
+                  ))}
+                  <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
+                </select>
+                <button onClick={applyBulkVehicle} disabled={bulkSelectedIds.size === 0 || !bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: (bulkSelectedIds.size === 0 || !bulkVehicleId) ? 0.5 : 1 }}>
+                  {t('eventDetail.apply')}
+                </button>
+              </div>
+              <button onClick={exitBulkVehicleMode} style={{ marginTop:10, width:'100%', background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px', fontSize:12, fontWeight:700 }}>{t('common.cancel')}</button>
             </div>
-            <div style={{ display:'flex', gap:8 }}>
-              <select
-                value={bulkVehicleId}
-                onChange={e => setBulkVehicleId(e.target.value)}
-                style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
-              >
-                <option value="">{t('eventDetail.chooseVehicle')}</option>
-                {vehicles.filter(v => v.active !== false).map(v => (
-                  <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}</option>
-                ))}
-                <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
-              </select>
-              <button onClick={applyBulkVehicle} disabled={bulkSelectedIds.size === 0 || !bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: (bulkSelectedIds.size === 0 || !bulkVehicleId) ? 0.5 : 1 }}>
-                {t('eventDetail.apply')}
-              </button>
+          ) : (
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              {showItemListSearch ? (
+                <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, animation:'fadeIn 0.15s ease' }}>
+                  <svg style={{ position:'absolute', left:10 }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                  <label htmlFor="ed-item-search" style={{ position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }}>{t('eventDetail.searchItemsPlaceholder')}</label>
+                  <input id="ed-item-search" autoFocus value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
+                    placeholder={t('eventDetail.searchItemsPlaceholder')}
+                    style={{ width:'100%', padding:'9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card)', color:'var(--text)', fontSize:13 }} />
+                  <button onClick={() => { setItemListSearch(''); setShowItemListSearch(false) }} aria-label={t('common.close')}
+                    style={{ marginLeft:6, width:36, height:36, borderRadius:8, background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setShowItemListSearch(true)} aria-label={t('eventDetail.searchItemsAria')}
+                    style={{ width:36, height:36, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                  </button>
+                  {vehicles.length > 0 && (
+                    <button
+                      onClick={() => setBulkVehicleMode(true)}
+                      style={{ marginLeft:'auto', background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
+                    >
+                      {t('eventDetail.assignVehicleToMultiple')}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
-            <button onClick={exitBulkVehicleMode} style={{ marginTop:10, width:'100%', background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px', fontSize:12, fontWeight:700 }}>{t('common.cancel')}</button>
-          </div>
-        ) : (
-          <div style={{ margin:'12px 16px 0', display:'flex', justifyContent:'flex-end' }}>
-            <button
-              onClick={() => setBulkVehicleMode(true)}
-              style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
-            >
-              {t('eventDetail.assignVehicleToMultiple')}
-            </button>
-          </div>
-        )
+          )}
+        </div>
       )}
 
       {/* Lista articoli */}
@@ -1114,7 +1144,9 @@ export default function EventDetail() {
                 </button>
               )}
             </div>
-          : <>{groupedEventItems}</>
+          : filteredEventItems.length === 0
+            ? <p style={{ padding:'24px 20px', textAlign:'center', color:'var(--text2)', fontSize:14 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
+            : <>{groupedEventItems}</>
         }
       </div>
 

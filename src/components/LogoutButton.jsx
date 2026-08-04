@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LogOut } from './Icon'
 
@@ -9,6 +10,7 @@ import { LogOut } from './Icon'
  */
 export default function LogoutButton({ style, className, name }) {
   const { logout, team } = useAuth()
+  const navigate = useNavigate()
   const [confirm, setConfirm] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const first = (name || '').split(' ')[0]
@@ -30,7 +32,10 @@ export default function LogoutButton({ style, className, name }) {
   const doLogout = () => {
     setConfirm(false)
     setLeaving(true)
-    setTimeout(() => logout(), 1500)
+    // Dopo l'uscita si va dritti alla schermata di registrazione invece che
+    // alla landing pubblica: chi clicca "Esci" più spesso vuole rientrare o
+    // creare una nuova squadra, non rileggere la presentazione del prodotto.
+    setTimeout(() => { logout().then(() => navigate('/signup')) }, 1500)
   }
 
   return (
