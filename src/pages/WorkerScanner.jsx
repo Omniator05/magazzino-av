@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, getDoc, getDocs, collection, query, where, orderBy } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, getDoc, getDocs, collection, query, where, orderBy, runTransaction } from 'firebase/firestore'
 import { parseScannedCode } from '../utils/generateCode'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
@@ -152,14 +152,8 @@ export default function WorkerScanner() {
     if (processing) return
     setProcessing(true)
 
-    const eventSnap = await getDoc(eventRef)
-    if (!eventSnap.exists()) return
-
-    const currentEvent = { id: eventSnap.id, ...eventSnap.data() }
-    const eventItems = currentEvent.items || []
-
-    // Trova l'articolo nella lista dell'evento tramite codice
-    // Prima cerca in Firestore per trovare l'id dell'articolo dal codice
+    // Trova l'articolo nella lista dell'evento tramite codice — lookup sul
+    // catalogo, non tocca event.items, non serve dentro la transazione.
     const q = query(collection(db, 'items'), where('teamId', '==', teamId), where('code', '==', normalized))
     const itemSnap = await getDocs(q)
 
@@ -175,117 +169,79 @@ export default function WorkerScanner() {
     }
 
     const foundItem = { id: itemSnap.docs[0].id, ...itemSnap.docs[0].data() }
-    const eventItem = eventItems.find(i => i.id === foundItem.id)
 
-    if (!eventItem) {
-      vibrate([100, 50, 100])
-      playSound('error')
-      const result = { action: 'not_in_list', item: foundItem }
-      setLastScan(result)
-      setScanToast({ ...result, ts: Date.now() })
-      setTimeout(() => setScanToast(null), 3000)
-      setProcessing(false)
-      return
-    }
+    // Tutto ciò che legge/scrive event.items va dentro una transazione: con
+    // più magazzinieri sulla stessa lista, due scansioni quasi simultanee
+    // basate su una lettura "vecchia" facevano sì che l'ultima scrittura
+    // vincesse cancellando in silenzio quella appena fatta da un collega
+    // (oggetti aggiunti spariti, spunte tornate indietro).
+    let outcome = null
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(eventRef)
+      if (!snap.exists()) { outcome = { action: 'event_missing' }; return }
+      const eventItems = snap.data().items || []
+      const eventItem = eventItems.find(i => i.id === foundItem.id)
 
-    // Baule sbagliato: il kit ha bauli specifici assegnati a questa riga
-    // (vedi src/utils/kitInstances.js) e l'etichetta scansionata è quella di
-    // un'unità fisica precisa (…-NN, vedi generateUnitCode) — se il numero
-    // non è tra quelli assegnati, il magazziniere ha in mano il baule
-    // sbagliato. Blocca l'azione invece di segnarlo comunque: altrimenti lo
-    // storico "dove è stato" di kitInstances risulterebbe falsato.
-    if (foundItem.isBundle && unitNumber && (eventItem.instanceNumbers || []).length > 0) {
-      const scannedInstance = parseInt(unitNumber, 10)
-      if (!eventItem.instanceNumbers.includes(scannedInstance)) {
-        vibrate([100, 50, 100])
-        playSound('error')
-        const result = { action: 'wrong_instance', item: eventItem, scannedInstance, expectedInstances: eventItem.instanceNumbers }
-        setLastScan(result)
-        setScanToast({ ...result, ts: Date.now() })
-        setTimeout(() => setScanToast(null), 4000)
-        setProcessing(false)
+      if (!eventItem) { outcome = { action: 'not_in_list', item: foundItem }; return }
+
+      // Baule sbagliato: il kit ha bauli specifici assegnati a questa riga
+      // (vedi src/utils/kitInstances.js) e l'etichetta scansionata è quella di
+      // un'unità fisica precisa (…-NN, vedi generateUnitCode) — se il numero
+      // non è tra quelli assegnati, il magazziniere ha in mano il baule
+      // sbagliato. Blocca l'azione invece di segnarlo comunque: altrimenti lo
+      // storico "dove è stato" di kitInstances risulterebbe falsato.
+      if (foundItem.isBundle && unitNumber && (eventItem.instanceNumbers || []).length > 0) {
+        const scannedInstance = parseInt(unitNumber, 10)
+        if (!eventItem.instanceNumbers.includes(scannedInstance)) {
+          outcome = { action: 'wrong_instance', item: eventItem, scannedInstance, expectedInstances: eventItem.instanceNumbers }
+          return
+        }
+      }
+
+      if (mode === 'pronto') {
+        if (eventItem.pronto) { outcome = { action: 'already_pronto', item: eventItem }; return }
+        tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? { ...i, pronto: true, mancante: false } : i) })
+        outcome = { action: 'pronto', item: eventItem }
         return
       }
-    }
 
-    if (mode === 'pronto') {
-      if (eventItem.pronto) {
-        vibrate([50])
-        const result = { action: 'already_pronto', item: eventItem }
-        setLastScan(result)
-        setScanToast({ ...result, ts: Date.now() })
-        setTimeout(() => setScanToast(null), 3000)
-        setProcessing(false)
+      if (mode === 'load') {
+        if (eventItem.loaded) { outcome = { action: 'already_loaded', item: eventItem }; return }
+        tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? { ...i, loaded: true, mancante: false } : i) })
+        outcome = { action: 'loaded', item: eventItem, location: foundItem.location || '' }
         return
       }
-      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, pronto: true, mancante: false } : i)
-      await updateDoc(eventRef, { items: updated })
-      vibrate([60, 40, 120])
-      playSound('success')
-      const result = { action: 'pronto', item: eventItem }
-      setLastScan(result)
-      setScanToast({ ...result, ts: Date.now() })
-      setTimeout(() => setScanToast(null), 3000)
-      setProcessing(false)
-      return
-    }
 
-    if (mode === 'load') {
-      if (eventItem.loaded) {
-        vibrate([50])
-        const result = { action: 'already_loaded', item: eventItem }
-        setLastScan(result)
-        setScanToast({ ...result, ts: Date.now() })
-        setTimeout(() => setScanToast(null), 3000)
-        setProcessing(false)
-        return
-      }
-      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, loaded: true, mancante: false } : i)
-      await updateDoc(eventRef, { items: updated })
-      const invSnap = await getDoc(doc(db, 'items', foundItem.id))
+      // return
+      if (!eventItem.loaded) { outcome = { action: 'not_loaded', item: eventItem, location: foundItem.location || '' }; return }
+      if (eventItem.returned) { outcome = { action: 'already_returned', item: eventItem, location: foundItem.location || '' }; return }
+      tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? { ...i, returned: true } : i) })
+      outcome = { action: 'returned', item: eventItem, location: foundItem.location || '' }
+    })
+
+    if (outcome.action === 'event_missing') { setProcessing(false); return }
+
+    // Feedback (vibrazione/suono/toast) fuori dalla transazione, sulla base
+    // dell'esito deciso dentro — se Firestore la ritenta per un conflitto
+    // concorrente, non vibra/suona più volte per la stessa scansione.
+    const isError = outcome.action === 'not_in_list' || outcome.action === 'wrong_instance' || outcome.action === 'not_loaded'
+    const isAlready = outcome.action === 'already_pronto' || outcome.action === 'already_loaded' || outcome.action === 'already_returned'
+    if (isError) { vibrate([100, 50, 100]); playSound('error') }
+    else if (isAlready) { vibrate([50]) }
+    else { vibrate([60, 40, 120]); playSound('success') }
+    setLastScan(outcome)
+    setScanToast({ ...outcome, ts: Date.now() })
+    setTimeout(() => setScanToast(null), outcome.action === 'wrong_instance' ? 4000 : 3000)
+
+    if (outcome.action === 'loaded' || outcome.action === 'returned') {
+      const invRef = doc(db, 'items', foundItem.id)
+      const invSnap = await getDoc(invRef)
       if (invSnap.exists()) {
         const inv = invSnap.data()
-        await updateDoc(doc(db, 'items', foundItem.id), { availableQty: Math.max(0, (inv.availableQty || 0) - (eventItem.qty || 1)) })
+        const qty = outcome.item.qty || 1
+        if (outcome.action === 'loaded') await updateDoc(invRef, { availableQty: Math.max(0, (inv.availableQty || 0) - qty) })
+        else await updateDoc(invRef, { availableQty: Math.min(inv.totalQty, (inv.availableQty || 0) + qty) })
       }
-      vibrate([60, 40, 120])
-      playSound('success')
-      const result = { action: 'loaded', item: eventItem, location: foundItem.location || '' }
-      setLastScan(result)
-      setScanToast({ ...result, ts: Date.now() })
-      setTimeout(() => setScanToast(null), 3000)
-    } else {
-      if (!eventItem.loaded) {
-        vibrate([100, 50, 100])
-        playSound('error')
-        const result = { action: 'not_loaded', item: eventItem, location: foundItem.location || '' }
-        setLastScan(result)
-        setScanToast({ ...result, ts: Date.now() })
-        setTimeout(() => setScanToast(null), 3000)
-        setProcessing(false)
-        return
-      }
-      if (eventItem.returned) {
-        vibrate([50])
-        const result = { action: 'already_returned', item: eventItem, location: foundItem.location || '' }
-        setLastScan(result)
-        setScanToast({ ...result, ts: Date.now() })
-        setTimeout(() => setScanToast(null), 3000)
-        setProcessing(false)
-        return
-      }
-      const updated = eventItems.map(i => i.id === foundItem.id ? { ...i, returned: true } : i)
-      await updateDoc(eventRef, { items: updated })
-      const invSnap = await getDoc(doc(db, 'items', foundItem.id))
-      if (invSnap.exists()) {
-        const inv = invSnap.data()
-        await updateDoc(doc(db, 'items', foundItem.id), { availableQty: Math.min(inv.totalQty, (inv.availableQty || 0) + (eventItem.qty || 1)) })
-      }
-      vibrate([60, 40, 120])
-      playSound('success')
-      const result = { action: 'returned', item: eventItem, location: foundItem.location || '' }
-      setLastScan(result)
-      setScanToast({ ...result, ts: Date.now() })
-      setTimeout(() => setScanToast(null), 3000)
     }
     setProcessing(false)
   }
@@ -376,11 +332,15 @@ export default function WorkerScanner() {
 
   const addExtraWorkerItem = async () => {
     if (!extraWorkerForm.name.trim()) return
-    const eventSnap = await getDoc(eventRef)
-    if (!eventSnap.exists()) return
-    const currentItems = eventSnap.data().items || []
-    const extra = { id:`extra-${Date.now()}`, name:extraWorkerForm.name.trim(), qty:extraWorkerForm.qty, category:'Extra', isExtra:true, loaded:false, returned:false }
-    await updateDoc(eventRef, { items: [...currentItems, extra] })
+    const name = extraWorkerForm.name.trim()
+    const qty = extraWorkerForm.qty
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(eventRef)
+      if (!snap.exists()) return
+      const currentItems = snap.data().items || []
+      const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false }
+      tx.update(eventRef, { items: [...currentItems, extra] })
+    })
     setExtraWorkerForm({ name:'', qty:1 })
     setShowExtraWorker(false)
   }
@@ -811,16 +771,25 @@ export default function WorkerScanner() {
                     ...item,
                     _vehicleColor: vehicleColor || null,
                     _details: itemDetails[item.itemRef || item.id] || null,
+                    // Ogni toggle rilegge e riscrive event.items dentro una
+                    // transazione Firestore: con più persone sulla stessa lista,
+                    // un semplice "leggi poi scrivi" perde in silenzio le
+                    // modifiche altrui fatte nel frattempo — la transazione
+                    // riprova automaticamente da una lettura fresca se qualcun
+                    // altro ha scritto nel mezzo.
                     _onToggleLoaded: async (itemId) => {
-                      const snap = await getDoc(eventRef)
-                      if (!snap.exists()) return
-                      const evData = snap.data()
-                      const evItems = evData.items || []
-                      const itm = evItems.find(i => i.id === itemId)
+                      let itm, newLoaded
+                      await runTransaction(db, async (tx) => {
+                        const snap = await tx.get(eventRef)
+                        if (!snap.exists()) return
+                        const evItems = snap.data().items || []
+                        const current = evItems.find(i => i.id === itemId)
+                        if (!current) return
+                        newLoaded = !current.loaded
+                        itm = current
+                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, loaded: newLoaded }) })
+                      })
                       if (!itm) return
-                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, loaded: !i.loaded })
-                      await updateDoc(eventRef, { items: updated })
-                      const newLoaded = !itm.loaded
                       const invRef = doc(db, 'items', itemId)
                       const invSnap = await getDoc(invRef)
                       if (invSnap.exists()) {
@@ -829,15 +798,18 @@ export default function WorkerScanner() {
                       }
                     },
                     _onToggleReturned: async (itemId) => {
-                      const snap = await getDoc(eventRef)
-                      if (!snap.exists()) return
-                      const evData = snap.data()
-                      const evItems = evData.items || []
-                      const itm = evItems.find(i => i.id === itemId)
-                      if (!itm?.loaded) return
-                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, returned: !i.returned })
-                      await updateDoc(eventRef, { items: updated })
-                      const newReturned = !itm.returned
+                      let itm, newReturned
+                      await runTransaction(db, async (tx) => {
+                        const snap = await tx.get(eventRef)
+                        if (!snap.exists()) return
+                        const evItems = snap.data().items || []
+                        const current = evItems.find(i => i.id === itemId)
+                        if (!current?.loaded) return
+                        newReturned = !current.returned
+                        itm = current
+                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, returned: newReturned }) })
+                      })
+                      if (!itm) return
                       const invRef = doc(db, 'items', itemId)
                       const invSnap = await getDoc(invRef)
                       if (invSnap.exists()) {
@@ -846,20 +818,20 @@ export default function WorkerScanner() {
                       }
                     },
                     _onTogglePronto: async (itemId) => {
-                      const snap = await getDoc(eventRef)
-                      if (!snap.exists()) return
-                      const evData = snap.data()
-                      const evItems = evData.items || []
-                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto })
-                      await updateDoc(eventRef, { items: updated })
+                      await runTransaction(db, async (tx) => {
+                        const snap = await tx.get(eventRef)
+                        if (!snap.exists()) return
+                        const evItems = snap.data().items || []
+                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto }) })
+                      })
                     },
                     _onToggleMancante: async (itemId) => {
-                      const snap = await getDoc(eventRef)
-                      if (!snap.exists()) return
-                      const evData = snap.data()
-                      const evItems = evData.items || []
-                      const updated = evItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante })
-                      await updateDoc(eventRef, { items: updated })
+                      await runTransaction(db, async (tx) => {
+                        const snap = await tx.get(eventRef)
+                        if (!snap.exists()) return
+                        const evItems = snap.data().items || []
+                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante }) })
+                      })
                     },
                   })
 

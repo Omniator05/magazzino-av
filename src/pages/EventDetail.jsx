@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
 import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
 import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
@@ -115,10 +115,9 @@ export default function EventDetail() {
       const kitInstances = ensureInstanceList(kitDoc?.instances, kitDoc?.totalQty ?? qty)
       finalInstanceNumbers = reconcileInstanceNumbers(kitInstances, instanceNumbers, qty)
     }
-    const updated = eventItems.map(i =>
+    await updateEventItems(current => current.map(i =>
       i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(isBundle ? { instanceNumbers: finalInstanceNumbers } : {}) }
-    )
-    await updateEventItems(updated)
+    ))
     setEditItem(null)
   }
   const itemEditDrag = useModalDrag(() => setEditItem(null), undefined, () => editItem && saveItemEdit(editItem))
@@ -229,7 +228,7 @@ export default function EventDetail() {
       id: c.id, name: c.name, category: c.category, qty: c.qty,
       loaded: false, returned: false,
     }))
-    await updateEventItems(items)
+    await updateEventItems(() => items)
     setShowTemplatePicker(false)
   }
 
@@ -340,13 +339,25 @@ export default function EventDetail() {
     }
   }
 
-  const updateEventItems = async (items) => {
-    await updateDoc(eventRef, { items })
+  // transformOrItems: o un array già pronto, o una funzione (currentItems) =>
+  // newItems calcolata dentro la transazione — quest'ultima è la forma sicura
+  // quando con più persone sullo stesso evento (admin + magazzinieri) una
+  // scrittura basata su dati non più freschi cancellerebbe in silenzio le
+  // modifiche fatte da un altro nel frattempo.
+  const updateEventItems = async (transformOrItems) => {
+    const transform = typeof transformOrItems === 'function' ? transformOrItems : () => transformOrItems
+    let finalItems
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(eventRef)
+      const current = snap.data()?.items || []
+      finalItems = transform(current)
+      tx.update(eventRef, { items: finalItems })
+    })
     // Propaga solo la struttura (nome, qty, categoria) agli altri eventi della serie,
     // senza copiare lo stato di carico/rientro che è specifico di ogni occorrenza
     if (event.seriesId) {
       const seriesSnap = await getDocs(query(collection(db, 'events'), where('teamId', '==', event.teamId), where('seriesId', '==', event.seriesId)))
-      const itemsTemplate = items.map(({ loaded, returned, mancante, pronto, ...rest }) => ({
+      const itemsTemplate = finalItems.map(({ loaded, returned, mancante, pronto, ...rest }) => ({
         ...rest, loaded: false, returned: false, mancante: false, pronto: false
       }))
       const updates = seriesSnap.docs
@@ -356,11 +367,20 @@ export default function EventDetail() {
     }
   }
 
+  // Variante senza propagazione alla serie — per stato del giorno-evento
+  // (pronto/mancante) che è per-occorrenza, non struttura del carico.
+  const updateEventItemsNoSeries = async (transform) => {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(eventRef)
+      const current = snap.data()?.items || []
+      tx.update(eventRef, { items: transform(current) })
+    })
+  }
+
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
   // non stato di avanzamento: passa da updateEventItems per propagarsi alla serie.
   const setItemVehicle = async (itemId, vehicleId) => {
-    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, vehicleId: vehicleId || null })
-    await updateEventItems(updated)
+    await updateEventItems(current => current.map(i => i.id !== itemId ? i : { ...i, vehicleId: vehicleId || null }))
   }
 
   const toggleBulkSelect = (itemId) => {
@@ -382,25 +402,25 @@ export default function EventDetail() {
   const applyBulkVehicle = async () => {
     if (bulkSelectedIds.size === 0 || !bulkVehicleId) return
     const vehicleId = bulkVehicleId === '__none__' ? null : bulkVehicleId
-    const updated = eventItems.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId } : i)
-    await updateEventItems(updated)
+    await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId } : i))
     exitBulkVehicleMode()
   }
 
   const toggleLoaded = async itemId => {
-    const updated = eventItems.map(i => {
+    let item, newState
+    await updateEventItems(current => current.map(i => {
       if (i.id !== itemId) return i
+      item = i
       const newLoaded = !i.loaded
-      return { ...i, loaded: newLoaded, returned: newLoaded ? false : i.returned, pronto: newLoaded ? i.pronto : false }
-    })
-    await updateEventItems(updated)
+      newState = { ...i, loaded: newLoaded, returned: newLoaded ? false : i.returned, pronto: newLoaded ? i.pronto : false }
+      return newState
+    }))
+    if (!item) return
 
     // Extra non toccano la giacenza
-    const item = eventItems.find(i => i.id === itemId)
-    if (item?.isExtra) return
+    if (item.isExtra) return
 
-    const newState = updated.find(i => i.id === itemId)
-    const firestoreId = item?.itemRef || itemId
+    const firestoreId = item.itemRef || itemId
 
     // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
     if (item?.isBundle || item?.category === 'Kit') {
@@ -444,26 +464,34 @@ export default function EventDetail() {
   }
 
   const toggleMancante = async itemId => {
-    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante })
-    await updateDoc(eventRef, { items: updated })
+    await updateEventItemsNoSeries(current => current.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante }))
   }
 
   const togglePronto = async itemId => {
-    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto })
-    await updateDoc(eventRef, { items: updated })
+    await updateEventItemsNoSeries(current => current.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto }))
   }
 
   const toggleReturned = async itemId => {
-    const item = eventItems.find(i => i.id === itemId)
-    if (!item.loaded) return
-    const updated = eventItems.map(i => i.id !== itemId ? i : { ...i, returned: !i.returned })
-    await updateEventItems(updated)
+    // Guardia rapida su stato locale (UX, evita un giro a vuoto se non è
+    // ancora caricato); dentro la transazione si ricontrolla sul dato fresco.
+    if (!eventItems.find(i => i.id === itemId)?.loaded) return
+    let item, newState
+    await updateEventItems(current => {
+      const found = current.find(i => i.id === itemId)
+      if (!found?.loaded) return current
+      item = found
+      return current.map(i => {
+        if (i.id !== itemId) return i
+        newState = { ...i, returned: !i.returned }
+        return newState
+      })
+    })
+    if (!item) return
 
     // Extra non toccano la giacenza
-    if (item?.isExtra) return
+    if (item.isExtra) return
 
-    const newState = updated.find(i => i.id === itemId)
-    const firestoreId = item?.itemRef || itemId
+    const firestoreId = item.itemRef || itemId
 
     // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
     if (item?.isBundle || item?.category === 'Kit') {
@@ -524,51 +552,55 @@ export default function EventDetail() {
   // Conferma e salva tutto il carrello sulla lista evento
   const confirmCart = async () => {
     if (cart.length === 0) return
-    let updated = [...eventItems]
-    for (const c of cart) {
-      if (c.isExtra) {
-        updated.push({
-          id: c.id, name: c.name, qty: c.qty || 1,
-          notes: c.notes || '', category: 'Extra', isExtra: true,
-          loaded: false, returned: false,
-        })
-        continue
-      }
-      const alreadyExists = updated.some(e => e.id === c.id || e.itemRef === c.id)
-      // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
-      // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
-      // poi cambiarli a mano dalla modifica riga.
-      const instanceNumbers = c.isBundle
-        ? reconcileInstanceNumbers(ensureInstanceList(c.instances, c.totalQty ?? c.qty), [], c.qty)
-        : null
-      if (alreadyExists) {
-        // Riga separata con id unico, itemRef punta all'articolo Firebase originale
-        updated.push({
-          id: `${c.id}_extra_${Date.now()}`,
-          itemRef: c.id,
-          name: c.name, category: c.category, location: c.location||'',
-          isKit: c.isKit||false, kitSize: c.kitSize||null,
-          isBundle: c.isBundle||false, components: c.components||null,
-          ...(c.isBundle ? { instanceNumbers } : {}),
-          qty: c.qty, loaded: false, returned: false,
-          mancante: true,
-        })
-      } else {
-        updated.push({
-          id: c.id, name: c.name, category: c.category, location: c.location||'',
-          isKit: c.isKit||false, kitSize: c.kitSize||null,
-          isBundle: c.isBundle||false, components: c.components||null,
-          ...(c.isBundle ? { instanceNumbers } : {}),
-          qty: c.qty, loaded: false, returned: false,
-          mancante: addAsMancante || false,
-        })
-      }
-    }
+    const cartSnapshot = cart
+    const addAsMancanteSnapshot = addAsMancante
     setCart([])
     setSearch('')
     setAddAsMancante(false)
     setShowAddItem(false)
-    await updateEventItems(updated)
+    await updateEventItems(current => {
+      const updated = [...current]
+      for (const c of cartSnapshot) {
+        if (c.isExtra) {
+          updated.push({
+            id: c.id, name: c.name, qty: c.qty || 1,
+            notes: c.notes || '', category: 'Extra', isExtra: true,
+            loaded: false, returned: false,
+          })
+          continue
+        }
+        const alreadyExists = updated.some(e => e.id === c.id || e.itemRef === c.id)
+        // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
+        // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
+        // poi cambiarli a mano dalla modifica riga.
+        const instanceNumbers = c.isBundle
+          ? reconcileInstanceNumbers(ensureInstanceList(c.instances, c.totalQty ?? c.qty), [], c.qty)
+          : null
+        if (alreadyExists) {
+          // Riga separata con id unico, itemRef punta all'articolo Firebase originale
+          updated.push({
+            id: `${c.id}_extra_${Date.now()}`,
+            itemRef: c.id,
+            name: c.name, category: c.category, location: c.location||'',
+            isKit: c.isKit||false, kitSize: c.kitSize||null,
+            isBundle: c.isBundle||false, components: c.components||null,
+            ...(c.isBundle ? { instanceNumbers } : {}),
+            qty: c.qty, loaded: false, returned: false,
+            mancante: true,
+          })
+        } else {
+          updated.push({
+            id: c.id, name: c.name, category: c.category, location: c.location||'',
+            isKit: c.isKit||false, kitSize: c.kitSize||null,
+            isBundle: c.isBundle||false, components: c.components||null,
+            ...(c.isBundle ? { instanceNumbers } : {}),
+            qty: c.qty, loaded: false, returned: false,
+            mancante: addAsMancanteSnapshot || false,
+          })
+        }
+      }
+      return updated
+    })
   }
 
   const openAddModal = () => {
@@ -579,9 +611,10 @@ export default function EventDetail() {
   }
 
   const addToEvent = async (item, qty) => {
-    if (eventItems.some(i => i.id === item.id)) return
-    const updated = [...eventItems, { id: item.id, name: item.name, category: item.category, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, qty, loaded: false, returned: false }]
-    await updateEventItems(updated)
+    await updateEventItems(current => {
+      if (current.some(i => i.id === item.id)) return current
+      return [...current, { id: item.id, name: item.name, category: item.category, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, qty, loaded: false, returned: false }]
+    })
     setShowAddItem(false)
     setSearch('')
   }
@@ -601,7 +634,7 @@ export default function EventDetail() {
         }
       } catch(e) {}
     }
-    await updateEventItems(eventItems.filter(i => i.id !== itemId))
+    await updateEventItems(current => current.filter(i => i.id !== itemId))
   }
 
   // Con "segna come mancanti" attivo, un articolo già in lista deve restare
