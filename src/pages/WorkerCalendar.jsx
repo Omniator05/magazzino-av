@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
@@ -65,6 +65,7 @@ export default function WorkerCalendar() {
   const [rangeStart, setRangeStart] = useState(null)
   const [pendingRange, setPendingRange] = useState(null)
   const [reasonInput, setReasonInput] = useState('')
+  const [editingId, setEditingId] = useState(null)
   useModalScrollLock(!!pendingRange)
 
   useEffect(() => {
@@ -158,9 +159,7 @@ export default function WorkerCalendar() {
     setSelectedDate(todayStr)
   }
 
-  const handleDayTap = (dStr, isPast) => {
-    if (isPast) return
-
+  const handleDayTap = (dStr) => {
     if (reportMode) {
       if (!rangeStart) {
         setRangeStart(dStr)
@@ -178,20 +177,41 @@ export default function WorkerCalendar() {
 
   const confirmUnavailability = async () => {
     if (!pendingRange || !user) return
-    await addDoc(collection(db, 'unavailability'), {
-      workerId: user.uid,
-      teamId,
-      startDate: pendingRange.start,
-      endDate: pendingRange.end,
-      reason: reasonInput.trim() || null,
-      createdAt: serverTimestamp(),
-    })
+    if (editingId) {
+      await updateDoc(doc(db, 'unavailability', editingId), {
+        startDate: pendingRange.start,
+        endDate: pendingRange.end,
+        reason: reasonInput.trim() || null,
+      })
+    } else {
+      await addDoc(collection(db, 'unavailability'), {
+        workerId: user.uid,
+        teamId,
+        startDate: pendingRange.start,
+        endDate: pendingRange.end,
+        reason: reasonInput.trim() || null,
+        createdAt: serverTimestamp(),
+      })
+    }
     setPendingRange(null)
     setReasonInput('')
+    setEditingId(null)
     setSelectedDate(todayStr)
   }
 
-  const absenceDrag = useModalDrag(() => setPendingRange(null), undefined, confirmUnavailability, !!pendingRange)
+  const openEditAbsence = (u) => {
+    setEditingId(u.id)
+    setPendingRange({ start: u.startDate, end: u.endDate })
+    setReasonInput(u.reason || '')
+  }
+
+  const closeAbsenceModal = () => {
+    setPendingRange(null)
+    setReasonInput('')
+    setEditingId(null)
+  }
+
+  const absenceDrag = useModalDrag(closeAbsenceModal, undefined, confirmUnavailability, !!pendingRange)
 
   const removeUnavailability = async (id) => {
     if (!(await confirm({ title: t('workerCalendar.confirmRemoveTitle'), message: t('workerCalendar.confirmRemoveMessage'), confirmLabel: t('workerCalendar.confirmRemoveLabel'), danger: true }))) return
@@ -276,8 +296,7 @@ export default function WorkerCalendar() {
             return (
               <button
                 key={i}
-                onClick={() => cell.current && handleDayTap(dStr, isPast)}
-                disabled={!cell.current || isPast}
+                onClick={() => handleDayTap(dStr)}
                 style={{
                   position:'relative',
                   minHeight:52,
@@ -291,7 +310,7 @@ export default function WorkerCalendar() {
                   alignItems:'center',
                   gap:4,
                   overflow:'hidden',
-                  cursor: cell.current && !isPast ? 'pointer' : 'default',
+                  cursor:'pointer',
                 }}
               >
                 <span style={{
@@ -428,10 +447,16 @@ export default function WorkerCalendar() {
                 </p>
                 {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
               </div>
-              <button onClick={() => removeUnavailability(u.id)}
-                style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, flexShrink:0 }}>
-                {t('common.remove')}
-              </button>
+              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                <button onClick={() => openEditAbsence(u)}
+                  style={{ background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', color:'var(--blue)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700 }}>
+                  {t('common.edit')}
+                </button>
+                <button onClick={() => removeUnavailability(u.id)}
+                  style={{ background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700 }}>
+                  {t('common.remove')}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -442,22 +467,37 @@ export default function WorkerCalendar() {
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
             <button className="close-btn" onClick={absenceDrag.close}>✕</button>
-            <h2>{t('calendar.absenceModalTitle')}</h2>
-            <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
-              {pendingRange.start === pendingRange.end
-                ? formatDate(pendingRange.start, { day:'numeric', month:'long', year:'numeric' }, i18n.language)
-                : t('workerCalendar.dateRange', {
-                    start: formatDate(pendingRange.start, { day:'numeric', month:'short' }, i18n.language),
-                    end: formatDate(pendingRange.end, { day:'numeric', month:'short', year:'numeric' }, i18n.language),
-                  })
-              }
-            </p>
+            <h2>{editingId ? t('workerCalendar.editAbsenceTitle') : t('calendar.absenceModalTitle')}</h2>
+            {editingId ? (
+              <>
+                <div className="form-group">
+                  <label>{t('workerCalendar.startDateLabel')}</label>
+                  <input type="date" value={pendingRange.start}
+                    onChange={e => setPendingRange(r => ({ start: e.target.value, end: r.end < e.target.value ? e.target.value : r.end }))} />
+                </div>
+                <div className="form-group">
+                  <label>{t('workerCalendar.endDateLabel')}</label>
+                  <input type="date" value={pendingRange.end} min={pendingRange.start}
+                    onChange={e => setPendingRange(r => ({ ...r, end: e.target.value }))} />
+                </div>
+              </>
+            ) : (
+              <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
+                {pendingRange.start === pendingRange.end
+                  ? formatDate(pendingRange.start, { day:'numeric', month:'long', year:'numeric' }, i18n.language)
+                  : t('workerCalendar.dateRange', {
+                      start: formatDate(pendingRange.start, { day:'numeric', month:'short' }, i18n.language),
+                      end: formatDate(pendingRange.end, { day:'numeric', month:'short', year:'numeric' }, i18n.language),
+                    })
+                }
+              </p>
+            )}
             <div className="form-group">
               <label>{t('calendar.reason')} {t('common.optional')}</label>
               <input value={reasonInput} onChange={e => setReasonInput(e.target.value)} placeholder={t('workerCalendar.reasonPlaceholder')} />
             </div>
             <button onClick={confirmUnavailability} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              <Check size={16} /> {t('workerCalendar.confirmAbsence')}
+              <Check size={16} /> {editingId ? t('common.save') : t('workerCalendar.confirmAbsence')}
             </button>
           </div>
         </div>

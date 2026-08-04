@@ -6,6 +6,8 @@
     "saving": "Salvataggio...",
     "redirecting": "Reindirizzamento...",
     "remove": "Rimuovi",
+    "edit": "Modifica",
+    "save": "Salva",
     "moreCount": "+{{count}} altri",
     "noneOption": "Nessuna",
     "optional": "(opzionale)",
@@ -752,7 +754,10 @@
     "confirmRemoveLabel": "Rimuovi",
     "dateRange": "Dal {{start}} al {{end}}",
     "reasonPlaceholder": "es. Ferie, visita medica...",
-    "confirmAbsence": "Confermo assenza"
+    "confirmAbsence": "Confermo assenza",
+    "editAbsenceTitle": "Modifica assenza",
+    "startDateLabel": "Dal",
+    "endDateLabel": "Al"
   },
   "workerHome": {
     "openSettings": "Apri profilo e impostazioni",

@@ -6,6 +6,8 @@
     "saving": "Saving...",
     "redirecting": "Redirecting...",
     "remove": "Remove",
+    "edit": "Edit",
+    "save": "Save",
     "moreCount": "+{{count}} more",
     "noneOption": "None",
     "optional": "(optional)",
@@ -752,7 +754,10 @@
     "confirmRemoveLabel": "Remove",
     "dateRange": "From {{start}} to {{end}}",
     "reasonPlaceholder": "e.g. Vacation, doctor's appointment...",
-    "confirmAbsence": "Confirm absence"
+    "confirmAbsence": "Confirm absence",
+    "editAbsenceTitle": "Edit absence",
+    "startDateLabel": "From",
+    "endDateLabel": "To"
   },
   "workerHome": {
     "openSettings": "Open profile and settings",
