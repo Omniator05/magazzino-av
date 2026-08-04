@@ -122,6 +122,11 @@ export default function BrasserieEditor({ date, onBack }) {
         date,
         organizerId: user.uid,
         teamId: profile.teamId,
+        // Salvato per collegare questa settimana all'evento giusto lato admin
+        // (vedi EventDetail.jsx): il match è "il nome evento contiene questo
+        // testo", non uguaglianza esatta — così "Brasserie + fari" o
+        // "Brasserie + CDJ" restano riconosciuti come lo stesso organizzatore.
+        eventName,
         layers: { artisti: artistiSlots, sponsor: sponsorSlots },
         nextGraphic: nextGraphic || null,
         status: newStatus,

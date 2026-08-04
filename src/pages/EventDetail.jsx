@@ -144,17 +144,26 @@ export default function EventDetail() {
   // Se questa data corrisponde a una settimana Brasserie configurata da un organizzatore,
   // mostra la card di verifica contenuti in cima alla lista di carico
   useEffect(() => {
-    if (!event?.date || !teamId) { setBrasserieWeek(null); return }
+    if (!event?.date || !event?.name || !teamId) { setBrasserieWeek(null); return }
     const q = query(collection(db, 'brasserieWeeks'), where('teamId', '==', teamId), where('date', '==', event.date))
     return onSnapshot(q, snap => {
       if (snap.empty) { setBrasserieWeek(null); return }
-      // Se per la stessa data esistono più documenti (es. residui di test con schema id vecchio),
+      // Prima si guardava solo la data: qualsiasi altro evento sulla stessa
+      // data (es. un doppio evento) mostrava per sbaglio i contenuti Brasserie.
+      // Ora serve anche che il nome dell'evento CONTENGA il nome configurato
+      // dall'organizzatore (case-insensitive, non uguaglianza esatta) — così
+      // "Brasserie + fari" o "Brasserie + CDJ" restano riconosciuti.
+      const eventNameLower = event.name.toLowerCase()
+      const matching = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(d => eventNameLower.includes((d.eventName || 'Brasserie').toLowerCase()))
+      if (matching.length === 0) { setBrasserieWeek(null); return }
+      // Se per la stessa data/nome esistono più documenti (es. residui di test con schema id vecchio),
       // prendi sempre quello aggiornato più di recente
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      docs.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0))
-      setBrasserieWeek(docs[0])
+      matching.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0))
+      setBrasserieWeek(matching[0])
     })
-  }, [event?.date, teamId])
+  }, [event?.date, event?.name, teamId])
 
   // Contenuti caricati da un organizzatore evento (generico) collegato a questo evento per id reale
   useEffect(() => {
