@@ -87,11 +87,13 @@ export default function BrasserieHome({ onSelectDate }) {
     cutoff.setDate(cutoff.getDate() - NEXT_GRAPHIC_RETENTION_DAYS)
     const cutoffYMD = toYMD(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate())
     weeks.forEach(w => {
-      if (w.nextGraphic?.path && w.date < cutoffYMD) {
-        deleteStorageFile(w.nextGraphic.path).finally(() => {
-          updateDoc(doc(db, 'brasserieWeeks', w.id), { nextGraphic: null }).catch(() => {})
-        })
-      }
+      if (w.date >= cutoffYMD) return
+      // Compatibilità con le settimane salvate prima del multi-grafica (campo singolare)
+      const graphics = w.nextGraphics || (w.nextGraphic ? [w.nextGraphic] : [])
+      if (graphics.length === 0) return
+      Promise.all(graphics.filter(g => g?.path).map(g => deleteStorageFile(g.path))).finally(() => {
+        updateDoc(doc(db, 'brasserieWeeks', w.id), { nextGraphics: [], nextGraphic: null }).catch(() => {})
+      })
     })
   }, [weeks])
 

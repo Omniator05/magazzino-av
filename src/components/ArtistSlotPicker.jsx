@@ -18,7 +18,7 @@ function deriveNameFromFilename(filename) {
  * oppure permette di caricarne uno nuovo (drag & drop), chiedendo sempre un nome
  * prima di salvarlo (utile quando il file è solo uno screenshot tipo "IMG_1234").
  */
-export default function ArtistSlotPicker({ slot, label, artists, onChange, onRemove }) {
+export default function ArtistSlotPicker({ slot, label, artists, onChange, onRemove, removeLabel = 'Rimuovi artista' }) {
   const { user, teamId } = useAuth()
   const confirm = useConfirm()
   const [query, setQuery] = useState(slot.artistName || '')
@@ -125,7 +125,7 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: editing ? 8 : 0 }}>
         <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{label}</span>
         {onRemove && (
-          <button onClick={onRemove} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700 }}>Rimuovi artista</button>
+          <button onClick={onRemove} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700 }}>{removeLabel}</button>
         )}
       </div>
 

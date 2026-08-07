@@ -68,9 +68,15 @@ export default function EventDetail() {
   const [organizerContent, setOrganizerContent] = useState(null)
   const [zipping, setZipping] = useState(false)
   const [zipError, setZipError] = useState('')
+  // Toast di errore salvataggio — prima un fallimento di scrittura (es. per
+  // connessione instabile) passava del tutto inosservato: l'interfaccia si
+  // comportava come se fosse andato tutto bene (carrello svuotato, modale
+  // chiuso) mentre in realtà l'oggetto non era mai stato salvato su Firestore.
+  const [saveError, setSaveError] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
   const [showExtraModal, setShowExtraModal] = useState(false)
   const [cart, setCart] = useState([])
+  const [confirmingCart, setConfirmingCart] = useState(false)
   const [showDiscardCart, setShowDiscardCart] = useState(false)
   const addItemDrag   = useModalDrag(
     () => setShowAddItem(false),
@@ -315,7 +321,10 @@ export default function EventDetail() {
   const brasserieSponsorSlots = brasserieWeek?.layers?.sponsor || []
   const brasserieFood = brasserieSponsorSlots.find(s => s.slotId === 'sponsor-food')
   const brasserieDj = brasserieSponsorSlots.find(s => s.slotId === 'sponsor-dj')
-  const brasserieNext = brasserieWeek?.nextGraphic
+  // Sponsor oltre ai 2 fissi (cibo/DJ) — colonna extra in Resolume da collegare a mano
+  const brasserieExtraSponsors = brasserieSponsorSlots.filter(s => s.slotId !== 'sponsor-food' && s.slotId !== 'sponsor-dj')
+  // Compatibilità con le settimane salvate prima del multi-grafica (campo singolare)
+  const brasserieNextList = brasserieWeek?.nextGraphics || (brasserieWeek?.nextGraphic ? [brasserieWeek.nextGraphic] : [])
 
   const downloadBrasserieZip = async () => {
     if (!brasserieWeek) return
@@ -326,7 +335,8 @@ export default function EventDetail() {
       brasserieArtistiSlots.forEach((s, i) => { if (s.logoUrl) files.push({ name: `artisti-${i + 1}-${slugifyName(s.artistName)}`, url: s.logoUrl }) })
       if (brasserieFood?.logoUrl) files.push({ name: `sponsor-cibo-${slugifyName(brasserieFood.artistName)}`, url: brasserieFood.logoUrl })
       if (brasserieDj?.logoUrl) files.push({ name: `sponsor-dj-${slugifyName(brasserieDj.artistName)}`, url: brasserieDj.logoUrl })
-      if (brasserieNext?.url) files.push({ name: 'next', url: brasserieNext.url })
+      brasserieExtraSponsors.forEach((s, i) => { if (s.logoUrl) files.push({ name: `sponsor-extra-${i + 1}-${slugifyName(s.artistName)}`, url: s.logoUrl }) })
+      brasserieNextList.forEach((g, i) => { if (g?.url) files.push({ name: brasserieNextList.length > 1 ? `next-${i + 1}` : 'next', url: g.url }) })
 
       if (files.length === 0) { setZipError('Nessun file da scaricare per questa settimana.'); return }
 
@@ -365,34 +375,74 @@ export default function EventDetail() {
   const updateEventItems = async (transformOrItems) => {
     const transform = typeof transformOrItems === 'function' ? transformOrItems : () => transformOrItems
     let finalItems
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(eventRef)
-      const current = snap.data()?.items || []
-      finalItems = transform(current)
-      tx.update(eventRef, { items: finalItems })
-    })
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(eventRef)
+        const current = snap.data()?.items || []
+        finalItems = transform(current)
+        tx.update(eventRef, { items: finalItems })
+      })
+    } catch (e) {
+      // Con una connessione instabile la scrittura può fallire in silenzio:
+      // prima l'interfaccia continuava come se fosse andato tutto bene
+      // (carrello svuotato, modale chiuso) mentre l'oggetto non era mai stato
+      // salvato — ora l'errore va sempre mostrato, e il chiamante può capire
+      // che non è andata a buon fine (il throw interrompe l'await a monte).
+      setSaveError(t('eventDetail.saveErrorMessage'))
+      throw e
+    }
     // Propaga solo la struttura (nome, qty, categoria) agli altri eventi della serie,
-    // senza copiare lo stato di carico/rientro che è specifico di ogni occorrenza
+    // senza copiare lo stato di carico/rientro che è specifico di ogni occorrenza.
+    // IMPORTANTE: per ogni sibling si fa un MERGE dentro una sua transazione
+    // (aggiorna/aggiunge gli oggetti del template, mantenendo in coda quelli
+    // presenti SOLO su quel sibling), non una sovrascrittura totale. Con due
+    // admin che lavorano insieme su eventi diversi della stessa serie, una
+    // sovrascrittura totale qui cancellava in silenzio gli oggetti appena
+    // aggiunti dall'uno mentre l'altro salvava quasi nello stesso istante —
+    // il motivo più probabile della "sparizione di oggetti" segnalata.
+    // Contropartita accettata: rimuovere un oggetto da UN evento della serie
+    // non lo rimuove più automaticamente dagli altri (va tolto occorrenza per
+    // occorrenza) — molto meglio di perdere dati a caso.
     if (event.seriesId) {
       const seriesSnap = await getDocs(query(collection(db, 'events'), where('teamId', '==', event.teamId), where('seriesId', '==', event.seriesId)))
       const itemsTemplate = finalItems.map(({ loaded, returned, mancante, pronto, ...rest }) => ({
         ...rest, loaded: false, returned: false, mancante: false, pronto: false
       }))
-      const updates = seriesSnap.docs
-        .filter(d => d.id !== event.id)
-        .map(d => updateDoc(doc(db, 'events', d.id), { items: itemsTemplate }))
-      await Promise.all(updates)
+      const templateIds = new Set(itemsTemplate.map(i => i.id))
+      const siblings = seriesSnap.docs.filter(d => d.id !== event.id)
+      try {
+        await Promise.all(siblings.map(d => {
+          const siblingRef = doc(db, 'events', d.id)
+          return runTransaction(db, async (tx) => {
+            const siblingSnap = await tx.get(siblingRef)
+            if (!siblingSnap.exists()) return
+            const siblingItems = siblingSnap.data().items || []
+            const extras = siblingItems.filter(i => !templateIds.has(i.id))
+            tx.update(siblingRef, { items: [...itemsTemplate, ...extras] })
+          })
+        }))
+      } catch (e) {
+        // Questo evento è già salvato correttamente sopra — se la sola
+        // sincronizzazione verso gli altri eventi della serie fallisce, si
+        // avvisa ma non si tratta come un fallimento del salvataggio principale.
+        setSaveError(t('eventDetail.seriesSyncErrorMessage'))
+      }
     }
   }
 
   // Variante senza propagazione alla serie — per stato del giorno-evento
   // (pronto/mancante) che è per-occorrenza, non struttura del carico.
   const updateEventItemsNoSeries = async (transform) => {
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(eventRef)
-      const current = snap.data()?.items || []
-      tx.update(eventRef, { items: transform(current) })
-    })
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(eventRef)
+        const current = snap.data()?.items || []
+        tx.update(eventRef, { items: transform(current) })
+      })
+    } catch (e) {
+      setSaveError(t('eventDetail.saveErrorMessage'))
+      throw e
+    }
   }
 
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
@@ -430,7 +480,20 @@ export default function EventDetail() {
       if (i.id !== itemId) return i
       item = i
       const newLoaded = !i.loaded
-      newState = { ...i, loaded: newLoaded, returned: newLoaded ? false : i.returned, pronto: newLoaded ? i.pronto : false }
+      // Carico implica pronto: altrimenti un oggetto caricato saltando la
+      // fase pronto risulta "mancante" nella lista pronto pur essendo a bordo.
+      const newPronto = newLoaded ? true : false
+      const newReturned = newLoaded ? false : i.returned
+      // Ogni volta che pronto/carico/rientro torna a false (anche come
+      // effetto collaterale, es. pronto si azzera quando si smarca il carico)
+      // si azzera anche il relativo conteggio bauli scansionati — altrimenti
+      // al prossimo giro lo scanner direbbe "già fatto" su un baule mai
+      // davvero ri-scansionato in un nuovo ciclo.
+      const scannedInstances = { ...(i.scannedInstances || {}) }
+      if (!newLoaded) scannedInstances.load = []
+      if (!newPronto) scannedInstances.pronto = []
+      if (!newReturned) scannedInstances.return = []
+      newState = { ...i, loaded: newLoaded, returned: newReturned, pronto: newPronto, scannedInstances }
       return newState
     }))
     if (!item) return
@@ -486,7 +549,11 @@ export default function EventDetail() {
   }
 
   const togglePronto = async itemId => {
-    await updateEventItemsNoSeries(current => current.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto }))
+    await updateEventItemsNoSeries(current => current.map(i => {
+      if (i.id !== itemId) return i
+      const newPronto = !i.pronto
+      return { ...i, pronto: newPronto, ...(!newPronto ? { scannedInstances: { ...(i.scannedInstances || {}), pronto: [] } } : {}) }
+    }))
   }
 
   const toggleReturned = async itemId => {
@@ -500,7 +567,14 @@ export default function EventDetail() {
       item = found
       return current.map(i => {
         if (i.id !== itemId) return i
-        newState = { ...i, returned: !i.returned }
+        const newReturned = !i.returned
+        newState = {
+          ...i, returned: newReturned,
+          // Rientrato implica pronto E carico: serve anche alla storia dei
+          // singoli bauli in Inventory.
+          ...(newReturned ? { pronto: true, loaded: true } : {}),
+          ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
+        }
         return newState
       })
     })
@@ -569,14 +643,12 @@ export default function EventDetail() {
 
   // Conferma e salva tutto il carrello sulla lista evento
   const confirmCart = async () => {
-    if (cart.length === 0) return
+    if (cart.length === 0 || confirmingCart) return
     const cartSnapshot = cart
     const addAsMancanteSnapshot = addAsMancante
-    setCart([])
-    setSearch('')
-    setAddAsMancante(false)
-    setShowAddItem(false)
-    await updateEventItems(current => {
+    setConfirmingCart(true)
+    try {
+      await updateEventItems(current => {
       const updated = [...current]
       for (const c of cartSnapshot) {
         if (c.isExtra) {
@@ -617,8 +689,20 @@ export default function EventDetail() {
           })
         }
       }
-      return updated
-    })
+        return updated
+      })
+      // Solo se il salvataggio è andato a buon fine si svuota il carrello e
+      // si chiude il modale — altrimenti restano lì così l'admin può
+      // riprovare senza dover riselezionare tutto da capo.
+      setCart([])
+      setSearch('')
+      setAddAsMancante(false)
+      setShowAddItem(false)
+    } catch (e) {
+      // Errore già mostrato da updateEventItems (toast saveError)
+    } finally {
+      setConfirmingCart(false)
+    }
   }
 
   const openAddModal = () => {
@@ -861,6 +945,13 @@ export default function EventDetail() {
 
   return (
     <div className="page">
+      {saveError && (
+        <div role="alert" style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:999, background:'rgba(40,16,20,0.97)', border:'1.5px solid var(--red)', borderRadius:14, padding:'12px 18px', maxWidth:'90vw', boxShadow:'0 8px 32px rgba(0,0,0,0.35)', display:'flex', alignItems:'center', gap:10 }}>
+          <Warn size={16} />
+          <p style={{ color:'#fff', fontSize:13, fontWeight:600, lineHeight:1.4 }}>{saveError}</p>
+          <button onClick={() => setSaveError('')} aria-label={t('common.close')} style={{ background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:16, fontWeight:700, flexShrink:0, padding:'0 2px' }}>✕</button>
+        </div>
+      )}
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
           <button onClick={() => navigate(-1)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← {t('common.back')}</button>
@@ -1050,8 +1141,18 @@ export default function EventDetail() {
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
               <span style={{ color:'var(--text2)' }}>{t('eventDetail.nextGraphic')}</span>
-              <span style={{ fontWeight:700, color: brasserieNext?.url ? 'var(--green)' : 'var(--red)' }}>{brasserieNext?.url ? '✓' : '✗'}</span>
+              <span style={{ fontWeight:700, color: brasserieNextList.length > 0 ? 'var(--green)' : 'var(--red)' }}>
+                {brasserieNextList.length > 1 ? `✓ ×${brasserieNextList.length}` : brasserieNextList.length === 1 ? '✓' : '✗'}
+              </span>
             </div>
+            {brasserieExtraSponsors.length > 0 && (
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+                <span style={{ color:'var(--text2)' }}>{t('eventDetail.extraSponsors')}</span>
+                <span style={{ fontWeight:700, color: brasserieExtraSponsors.every(s => s.logoUrl) ? 'var(--green)' : 'var(--accent2)' }}>
+                  {brasserieExtraSponsors.filter(s => s.logoUrl).length}/{brasserieExtraSponsors.length}
+                </span>
+              </div>
+            )}
           </div>
           <button onClick={downloadBrasserieZip} disabled={zipping} className="btn btn-secondary btn-full" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
             {zipping ? t('eventDetail.preparingZip') : t('eventDetail.downloadLogosZip')}
@@ -1325,13 +1426,15 @@ export default function EventDetail() {
             <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
               <button
                 onClick={confirmCart}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || confirmingCart}
                 className="btn btn-primary btn-full"
-                style={{ opacity: cart.length === 0 ? 0.4 : 1, fontSize:16, padding:'14px' }}
+                style={{ opacity: (cart.length === 0 || confirmingCart) ? 0.4 : 1, fontSize:16, padding:'14px' }}
               >
-                {cart.length === 0
-                  ? t('eventDetail.selectItemsPrompt')
-                  : t('eventDetail.confirmAddItems', { count: cart.length })
+                {confirmingCart
+                  ? t('common.saving')
+                  : cart.length === 0
+                    ? t('eventDetail.selectItemsPrompt')
+                    : t('eventDetail.confirmAddItems', { count: cart.length })
                 }
               </button>
             </div>

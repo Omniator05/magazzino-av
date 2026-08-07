@@ -8,7 +8,7 @@ import { parseScannedCode } from '../utils/generateCode'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
-import { Check, Truck, Unload } from '../components/Icon'
+import { Check, Truck, Unload, Warn } from '../components/Icon'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -58,6 +58,7 @@ export default function WorkerScanner() {
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   const [error, setError] = useState(null)
+  const [saveError, setSaveError] = useState('')
   const [processing, setProcessing] = useState(false) // blocca scansioni doppie
   const [scanToast, setScanToast] = useState(null)
   const [showExtraWorker, setShowExtraWorker] = useState(false)
@@ -199,7 +200,13 @@ export default function WorkerScanner() {
     // basate su una lettura "vecchia" facevano sì che l'ultima scrittura
     // vincesse cancellando in silenzio quella appena fatta da un collega
     // (oggetti aggiunti spariti, spunte tornate indietro).
+    // Tutto il blocco (transazione + eventuale aggiornamento inventario) è
+    // avvolto in try/finally: con la connessione debole del magazzino una
+    // scansione può fallire a metà — senza questo, "processing" restava
+    // bloccato a true per sempre (nessuna scansione successiva funzionava più)
+    // e non c'era alcun avviso visibile del perché.
     let outcome = null
+    try {
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(eventRef)
       if (!snap.exists()) { outcome = { action: 'event_missing' }; return }
@@ -239,6 +246,16 @@ export default function WorkerScanner() {
       // QUESTA fase (pronto/load/return hanno storici separati) e completa la
       // riga solo quando ci sono tutti. Un codice generico (unitNumber assente)
       // salta questo conteggio e completa subito tutta la riga.
+      // Carico implica pronto, rientro implica pronto E carico: altrimenti un
+      // oggetto caricato scansionando direttamente (saltando "pronto", cosa
+      // che molti fanno) risultava "mancante" nella lista pronto anche se in
+      // realtà era già a bordo — e lo stesso per il rientro, che serve anche
+      // a costruire la storia dei singoli bauli in magazzino.
+      const cascadeFor = doneFieldName =>
+        doneFieldName === 'loaded' ? { pronto: true }
+        : doneFieldName === 'returned' ? { pronto: true, loaded: true }
+        : {}
+
       const applyOutcome = (doneFieldName, alreadyAction, doneAction, extra = {}) => {
         if (eventItem[doneFieldName]) { outcome = { action: alreadyAction, item: eventItem, ...extra }; return }
         if (requiresEachInstance && unitNumber) {
@@ -250,6 +267,7 @@ export default function WorkerScanner() {
           const updatedScanned = { ...(eventItem.scannedInstances || {}), [mode]: nowScanned }
           tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
             ...i, scannedInstances: updatedScanned, [doneFieldName]: isComplete,
+            ...(isComplete ? cascadeFor(doneFieldName) : {}),
             ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
           } : i) })
           outcome = isComplete
@@ -258,7 +276,7 @@ export default function WorkerScanner() {
           return
         }
         tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
-          ...i, [doneFieldName]: true,
+          ...i, [doneFieldName]: true, ...cascadeFor(doneFieldName),
           ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
         } : i) })
         outcome = { action: doneAction, item: eventItem, ...extra }
@@ -279,7 +297,7 @@ export default function WorkerScanner() {
       applyOutcome('returned', 'already_returned', 'returned', { location: foundItem.location || '' })
     })
 
-    if (outcome.action === 'event_missing') { setProcessing(false); return }
+    if (outcome.action === 'event_missing') { return }
 
     // Feedback (vibrazione/suono/toast) fuori dalla transazione, sulla base
     // dell'esito deciso dentro — se Firestore la ritenta per un conflitto
@@ -303,7 +321,15 @@ export default function WorkerScanner() {
         else await updateDoc(invRef, { availableQty: Math.min(inv.totalQty, (inv.availableQty || 0) + qty) })
       }
     }
-    setProcessing(false)
+    } catch (e) {
+      // La scansione non è stata registrata: niente vibrazione/suono di
+      // successo (sarebbe fuorviante), solo l'avviso di errore.
+      setSaveError(t('workerScanner.saveErrorMessage'))
+      vibrate([100, 50, 100])
+      playSound('error')
+    } finally {
+      setProcessing(false)
+    }
   }
 
   // Lettore wireless (Netum C750 e simili in modalità Bluetooth HID): si
@@ -390,19 +416,30 @@ export default function WorkerScanner() {
   const stepperBtnRefs = useRef({})
   const WS_ORDER_CONST = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
 
+  const [confirmingExtra, setConfirmingExtra] = useState(false)
   const addExtraWorkerItem = async () => {
-    if (!extraWorkerForm.name.trim()) return
+    if (!extraWorkerForm.name.trim() || confirmingExtra) return
     const name = extraWorkerForm.name.trim()
     const qty = extraWorkerForm.qty
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(eventRef)
-      if (!snap.exists()) return
-      const currentItems = snap.data().items || []
-      const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false }
-      tx.update(eventRef, { items: [...currentItems, extra] })
-    })
-    setExtraWorkerForm({ name:'', qty:1 })
-    setShowExtraWorker(false)
+    setConfirmingExtra(true)
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(eventRef)
+        if (!snap.exists()) return
+        const currentItems = snap.data().items || []
+        const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false }
+        tx.update(eventRef, { items: [...currentItems, extra] })
+      })
+      // Solo dopo conferma di salvataggio si chiude il modale — altrimenti,
+      // con la connessione debole del magazzino, l'oggetto extra poteva
+      // sembrare aggiunto e in realtà non esserlo mai stato scritto.
+      setExtraWorkerForm({ name:'', qty:1 })
+      setShowExtraWorker(false)
+    } catch (e) {
+      setSaveError(t('workerScanner.saveErrorMessage'))
+    } finally {
+      setConfirmingExtra(false)
+    }
   }
   const extraDrag       = useModalDrag(() => setShowExtraWorker(false), undefined, addExtraWorkerItem, showExtraWorker)
   const allPreparedDrag = useModalDrag(() => setShowAllPreparedPopup(false), undefined, undefined, showAllPreparedPopup)
@@ -525,6 +562,14 @@ export default function WorkerScanner() {
 
   return (
     <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column', paddingBottom:140 }}>
+
+      {saveError && (
+        <div role="alert" style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:999, background:'rgba(40,16,20,0.97)', border:'1.5px solid var(--red)', borderRadius:14, padding:'12px 18px', maxWidth:'90vw', boxShadow:'0 8px 32px rgba(0,0,0,0.35)', display:'flex', alignItems:'center', gap:10 }}>
+          <Warn size={16} />
+          <p style={{ color:'#fff', fontSize:13, fontWeight:600, lineHeight:1.4 }}>{saveError}</p>
+          <button onClick={() => setSaveError('')} aria-label={t('common.close')} style={{ background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:16, fontWeight:700, flexShrink:0, padding:'0 2px' }}>✕</button>
+        </div>
+      )}
 
       {/* Annunci per screen reader: il popup/il messaggio bloccato sono
           puramente visivi e temporizzati, altrimenti non arriverebbero a chi
@@ -880,59 +925,95 @@ export default function WorkerScanner() {
                     // altro ha scritto nel mezzo.
                     _onToggleLoaded: async (itemId) => {
                       let itm, newLoaded
-                      await runTransaction(db, async (tx) => {
-                        const snap = await tx.get(eventRef)
-                        if (!snap.exists()) return
-                        const evItems = snap.data().items || []
-                        const current = evItems.find(i => i.id === itemId)
-                        if (!current) return
-                        newLoaded = !current.loaded
-                        itm = current
-                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, loaded: newLoaded }) })
-                      })
-                      if (!itm) return
-                      const invRef = doc(db, 'items', itemId)
-                      const invSnap = await getDoc(invRef)
-                      if (invSnap.exists()) {
-                        const delta = newLoaded ? -(itm.qty||1) : (itm.qty||1)
-                        await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                      try {
+                        await runTransaction(db, async (tx) => {
+                          const snap = await tx.get(eventRef)
+                          if (!snap.exists()) return
+                          const evItems = snap.data().items || []
+                          const current = evItems.find(i => i.id === itemId)
+                          if (!current) return
+                          newLoaded = !current.loaded
+                          itm = current
+                          tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : {
+                            ...i, loaded: newLoaded,
+                            // Carico implica pronto: se salta la fase pronto e
+                            // carica direttamente, non deve risultare "mancante"
+                            // nella lista pronto.
+                            ...(newLoaded ? { pronto: true } : {}),
+                            // Se si "smarca" manualmente, azzera anche i bauli
+                            // già scansionati per questa fase — altrimenti al
+                            // prossimo giro lo scanner direbbe "già caricato" su
+                            // un baule mai davvero ri-scansionato in un nuovo ciclo.
+                            ...(!newLoaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] } } : {}),
+                          }) })
+                        })
+                        if (!itm) return
+                        const invRef = doc(db, 'items', itemId)
+                        const invSnap = await getDoc(invRef)
+                        if (invSnap.exists()) {
+                          const delta = newLoaded ? -(itm.qty||1) : (itm.qty||1)
+                          await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                        }
+                      } catch (e) {
+                        setSaveError(t('workerScanner.saveErrorMessage'))
                       }
                     },
                     _onToggleReturned: async (itemId) => {
                       let itm, newReturned
-                      await runTransaction(db, async (tx) => {
-                        const snap = await tx.get(eventRef)
-                        if (!snap.exists()) return
-                        const evItems = snap.data().items || []
-                        const current = evItems.find(i => i.id === itemId)
-                        if (!current?.loaded) return
-                        newReturned = !current.returned
-                        itm = current
-                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, returned: newReturned }) })
-                      })
-                      if (!itm) return
-                      const invRef = doc(db, 'items', itemId)
-                      const invSnap = await getDoc(invRef)
-                      if (invSnap.exists()) {
-                        const delta = newReturned ? (itm.qty||1) : -(itm.qty||1)
-                        await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                      try {
+                        await runTransaction(db, async (tx) => {
+                          const snap = await tx.get(eventRef)
+                          if (!snap.exists()) return
+                          const evItems = snap.data().items || []
+                          const current = evItems.find(i => i.id === itemId)
+                          if (!current?.loaded) return
+                          newReturned = !current.returned
+                          itm = current
+                          tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : {
+                            ...i, returned: newReturned,
+                            // Rientrato implica pronto E carico: serve anche a
+                            // costruire correttamente la storia dei bauli in Inventory.
+                            ...(newReturned ? { pronto: true, loaded: true } : {}),
+                            ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
+                          }) })
+                        })
+                        if (!itm) return
+                        const invRef = doc(db, 'items', itemId)
+                        const invSnap = await getDoc(invRef)
+                        if (invSnap.exists()) {
+                          const delta = newReturned ? (itm.qty||1) : -(itm.qty||1)
+                          await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
+                        }
+                      } catch (e) {
+                        setSaveError(t('workerScanner.saveErrorMessage'))
                       }
                     },
                     _onTogglePronto: async (itemId) => {
-                      await runTransaction(db, async (tx) => {
-                        const snap = await tx.get(eventRef)
-                        if (!snap.exists()) return
-                        const evItems = snap.data().items || []
-                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, pronto: !i.pronto }) })
-                      })
+                      try {
+                        await runTransaction(db, async (tx) => {
+                          const snap = await tx.get(eventRef)
+                          if (!snap.exists()) return
+                          const evItems = snap.data().items || []
+                          tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : {
+                            ...i, pronto: !i.pronto,
+                            ...(i.pronto ? { scannedInstances: { ...(i.scannedInstances || {}), pronto: [] } } : {}),
+                          }) })
+                        })
+                      } catch (e) {
+                        setSaveError(t('workerScanner.saveErrorMessage'))
+                      }
                     },
                     _onToggleMancante: async (itemId) => {
-                      await runTransaction(db, async (tx) => {
-                        const snap = await tx.get(eventRef)
-                        if (!snap.exists()) return
-                        const evItems = snap.data().items || []
-                        tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante }) })
-                      })
+                      try {
+                        await runTransaction(db, async (tx) => {
+                          const snap = await tx.get(eventRef)
+                          if (!snap.exists()) return
+                          const evItems = snap.data().items || []
+                          tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante }) })
+                        })
+                      } catch (e) {
+                        setSaveError(t('workerScanner.saveErrorMessage'))
+                      }
                     },
                   })
 
@@ -1128,9 +1209,9 @@ export default function WorkerScanner() {
             </div>
             <button
               onClick={addExtraWorkerItem}
-              className="btn btn-primary btn-full" style={{ marginTop:8 }}
-              disabled={!extraWorkerForm.name.trim()}>
-              {t('eventDetail.confirmAddToList')}
+              className="btn btn-primary btn-full" style={{ marginTop:8, opacity: confirmingExtra ? 0.6 : 1 }}
+              disabled={!extraWorkerForm.name.trim() || confirmingExtra}>
+              {confirmingExtra ? t('common.saving') : t('eventDetail.confirmAddToList')}
             </button>
           </div>
         </div>
@@ -1185,6 +1266,13 @@ function ChecklistRow({ item }) {
   // dove serve davvero (il magazziniere deve sapere QUALE baule caricare).
   const assignedInstances = (item._details?.instances || []).filter(inst => (item.instanceNumbers || []).includes(inst.number))
   const damagedInstances = assignedInstances.filter(inst => (inst.brokenComponents || []).length > 0)
+  // Quante unità (bauli) sono già state scansionate in questa fase, per far
+  // vedere il progresso direttamente sul bottone Pronto/Carico — senza
+  // dipendere solo dal popup che scompare dopo pochi secondi.
+  const instanceTotal = (item.instanceNumbers || []).length
+  const hasMultiInstance = instanceTotal > 1
+  const prontoScanned = (item.scannedInstances?.pronto || []).length
+  const loadScanned = (item.scannedInstances?.load || []).length
   // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes
@@ -1261,7 +1349,7 @@ function ChecklistRow({ item }) {
           ) : !item.loaded ? (
             <div style={{ display:'flex', gap:5 }}>
               <button
-                style={{ minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
+                style={{ position:'relative', overflow:'hidden', minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
                   background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
                   color: item.pronto ? '#059669' : 'var(--text3)',
@@ -1270,7 +1358,16 @@ function ChecklistRow({ item }) {
                 }}
                 onClick={() => item._onTogglePronto && item._onTogglePronto(item.id)}
               >
-                {item.pronto ? t('eventDetail.readyDone') : t('eventDetail.ready')}
+                {!item.pronto && hasMultiInstance && prontoScanned > 0 && (
+                  <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(5,150,105,0.22)', transform:`scaleX(${prontoScanned / instanceTotal})`, transformOrigin:'left', transition:'transform 0.3s ease' }} />
+                )}
+                <span style={{ position:'relative' }}>
+                  {item.pronto
+                    ? t('eventDetail.readyDone')
+                    : hasMultiInstance && prontoScanned > 0
+                      ? t('workerScanner.prontoProgress', { done: prontoScanned, total: instanceTotal })
+                      : t('eventDetail.ready')}
+                </span>
               </button>
               <button
                 style={{ position:'relative', overflow:'hidden', minWidth:70, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
@@ -1290,8 +1387,13 @@ function ChecklistRow({ item }) {
                   item._onToggleLoaded && item._onToggleLoaded(item.id)
                 }}
               >
+                {hasMultiInstance && loadScanned > 0 && (
+                  <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(245,166,35,0.35)', transform:`scaleX(${loadScanned / instanceTotal})`, transformOrigin:'left', transition:'transform 0.3s ease' }} />
+                )}
                 <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(234,88,12,0.32)', transform: pressingMissing ? 'scaleX(1)' : 'scaleX(0)', transformOrigin:'left', transition: pressingMissing ? `transform ${MISSING_HOLD_MS - MISSING_FILL_DELAY_MS}ms linear` : 'transform 120ms ease-out' }} />
-                <span style={{ position:'relative' }}>{t('workerScanner.toLoadShort')}</span>
+                <span style={{ position:'relative' }}>
+                  {hasMultiInstance && loadScanned > 0 ? t('workerScanner.loadProgress', { done: loadScanned, total: instanceTotal }) : t('workerScanner.toLoadShort')}
+                </span>
               </button>
             </div>
           ) : (

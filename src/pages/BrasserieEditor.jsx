@@ -13,10 +13,18 @@ const SPONSOR_SLOT_DEFS = [
   { slotId: 'sponsor-food', label: '🍔 Bancarella cibo' },
   { slotId: 'sponsor-dj', label: '🎧 DJ pre-serata' },
 ]
-const normalizeSponsorSlots = (saved) => SPONSOR_SLOT_DEFS.map(def => {
-  const existing = saved.find(s => s.slotId === def.slotId)
-  return existing || { slotId: def.slotId, artistId: null, artistName: '', logoUrl: null }
-})
+// I 2 slot fissi sono sempre presenti (colonne dedicate in Resolume); oltre a
+// quelli si possono aggiungere sponsor extra — Resolume li ignora finché non
+// vengono collegati manualmente a una colonna, ma restano comunque salvati e
+// scaricabili da qui.
+const normalizeSponsorSlots = (saved) => {
+  const fixed = SPONSOR_SLOT_DEFS.map(def => {
+    const existing = saved.find(s => s.slotId === def.slotId)
+    return existing || { slotId: def.slotId, artistId: null, artistName: '', logoUrl: null }
+  })
+  const extra = saved.filter(s => !SPONSOR_SLOT_DEFS.some(def => def.slotId === s.slotId))
+  return [...fixed, ...extra]
+}
 
 export default function BrasserieEditor({ date, onBack }) {
   const { user, profile } = useAuth()
@@ -26,7 +34,7 @@ export default function BrasserieEditor({ date, onBack }) {
   const [artists, setArtists] = useState([])
   const [artistiSlots, setArtistiSlots] = useState([])
   const [sponsorSlots, setSponsorSlots] = useState([])
-  const [nextGraphic, setNextGraphic] = useState(null)
+  const [nextGraphics, setNextGraphics] = useState([])
   const [status, setStatus] = useState('draft')
   const [meta, setMeta] = useState({})
   const [loading, setLoading] = useState(true)
@@ -61,11 +69,13 @@ export default function BrasserieEditor({ date, onBack }) {
       const savedArtisti = d?.layers?.artisti || []
       const artisti = savedArtisti.length > 0 ? savedArtisti : [{ slotId: `artisti-${Date.now()}`, artistId: null, artistName: '', logoUrl: null }]
       const sponsor = normalizeSponsorSlots(d?.layers?.sponsor || [])
-      const next = d?.nextGraphic || null
+      // Compatibilità con le settimane salvate prima del multi-grafica: se
+      // esiste solo il vecchio campo singolare, lo si tratta come una lista di 1.
+      const next = d?.nextGraphics || (d?.nextGraphic ? [d.nextGraphic] : [])
       const st = d?.status || 'draft'
       setArtistiSlots(artisti)
       setSponsorSlots(sponsor)
-      setNextGraphic(next)
+      setNextGraphics(next)
       setStatus(st)
       setMeta({ createdAt: d?.createdAt || null, createdBy: d?.createdBy || null })
       baselineRef.current = JSON.stringify({ artisti, sponsor, next, st })
@@ -78,7 +88,7 @@ export default function BrasserieEditor({ date, onBack }) {
     })
   }, [weekDocId, retryCount])
 
-  const isDirty = !loading && JSON.stringify({ artisti: artistiSlots, sponsor: sponsorSlots, next: nextGraphic, st: status }) !== baselineRef.current
+  const isDirty = !loading && JSON.stringify({ artisti: artistiSlots, sponsor: sponsorSlots, next: nextGraphics, st: status }) !== baselineRef.current
 
   const handleBack = async () => {
     if (isDirty && !(await confirm({ title: 'Modifiche non salvate', message: 'Hai modifiche non salvate per questa settimana. Uscire comunque? Le modifiche andranno perse.', confirmLabel: 'Esci comunque', danger: true }))) return
@@ -88,12 +98,16 @@ export default function BrasserieEditor({ date, onBack }) {
   const addSlot = () => {
     setArtistiSlots(s => [...s, { slotId: `artisti-${Date.now()}`, artistId: null, artistName: '', logoUrl: null }])
   }
+  const addSponsorSlot = () => {
+    setSponsorSlots(s => [...s, { slotId: `sponsor-extra-${Date.now()}`, artistId: null, artistName: '', logoUrl: null }])
+  }
   const updateSlot = (layer, slotId, updated) => {
     const setter = layer === 'artisti' ? setArtistiSlots : setSponsorSlots
     setter(list => list.map(s => s.slotId === slotId ? updated : s))
   }
-  const removeSlot = (slotId) => {
-    setArtistiSlots(list => list.filter(s => s.slotId !== slotId))
+  const removeSlot = (layer, slotId) => {
+    const setter = layer === 'artisti' ? setArtistiSlots : setSponsorSlots
+    setter(list => list.filter(s => s.slotId !== slotId))
   }
 
   const handleNextFiles = async (files) => {
@@ -103,10 +117,13 @@ export default function BrasserieEditor({ date, onBack }) {
     setUploadingNext(true)
     try {
       const { url, path } = await uploadNextGraphic(file, date)
-      setNextGraphic({ url, path })
+      setNextGraphics(list => [...list, { url, path }])
     } finally {
       setUploadingNext(false)
     }
+  }
+  const removeNextGraphic = (path) => {
+    setNextGraphics(list => list.filter(g => g.path !== path))
   }
 
   const MIN_LOADING_MS = 1000
@@ -128,7 +145,7 @@ export default function BrasserieEditor({ date, onBack }) {
         // "Brasserie + CDJ" restano riconosciuti come lo stesso organizzatore.
         eventName,
         layers: { artisti: artistiSlots, sponsor: sponsorSlots },
-        nextGraphic: nextGraphic || null,
+        nextGraphics,
         status: newStatus,
         createdAt: meta.createdAt || serverTimestamp(),
         createdBy: meta.createdBy || user.uid,
@@ -137,7 +154,7 @@ export default function BrasserieEditor({ date, onBack }) {
       })
       setStatus(newStatus)
       setMeta(m => ({ createdAt: m.createdAt || serverTimestamp(), createdBy: m.createdBy || user.uid }))
-      baselineRef.current = JSON.stringify({ artisti: artistiSlots, sponsor: sponsorSlots, next: nextGraphic, st: newStatus })
+      baselineRef.current = JSON.stringify({ artisti: artistiSlots, sponsor: sponsorSlots, next: nextGraphics, st: newStatus })
       await Promise.all([...new Set(assignedIds)].map(id =>
         updateDoc(doc(db, 'brasserieArtists', id), { usageCount: increment(1), lastUsedAt: serverTimestamp() }).catch(() => {})
       ))
@@ -250,65 +267,77 @@ export default function BrasserieEditor({ date, onBack }) {
                   label={`Artista ${i + 1}`}
                   artists={artists}
                   onChange={updated => updateSlot('artisti', slot.slotId, updated)}
-                  onRemove={artistiSlots.length > 1 ? () => removeSlot(slot.slotId) : undefined}
+                  onRemove={artistiSlots.length > 1 ? () => removeSlot('artisti', slot.slotId) : undefined}
                 />
               ))}
             </div>
 
-            {/* Layer SPONSOR — sempre 2 slot fissi (cibo + DJ pre-serata), gli altri sponsor sono fissi in Resolume */}
+            {/* Layer SPONSOR — 2 slot fissi (cibo + DJ pre-serata) con colonna
+                dedicata in Resolume, più eventuali sponsor extra: Resolume non
+                li legge finché non li si collega a mano a una colonna, ma
+                restano comunque salvati e scaricabili da qui. */}
             <div className="be-card" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
-              <h3 style={{ margin: '0 0 12px' }}>🤝 Sponsor / pre-serata</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>🤝 Sponsor / pre-serata</h3>
+                <button onClick={addSponsorSlot} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: 12 }}>+ Aggiungi sponsor</button>
+              </div>
               {sponsorSlots.map(slot => {
                 const def = SPONSOR_SLOT_DEFS.find(d => d.slotId === slot.slotId)
+                const extraIndex = def ? null : sponsorSlots.filter(s => !SPONSOR_SLOT_DEFS.some(d => d.slotId === s.slotId)).findIndex(s => s.slotId === slot.slotId) + 1
                 return (
                   <ArtistSlotPicker
                     key={slot.slotId}
                     slot={slot}
-                    label={def?.label || slot.slotId}
+                    label={def?.label || `Sponsor extra ${extraIndex}`}
                     artists={artists}
                     onChange={updated => updateSlot('sponsor', slot.slotId, updated)}
+                    onRemove={def ? undefined : () => removeSlot('sponsor', slot.slotId)}
+                    removeLabel="Rimuovi sponsor"
                   />
                 )
               })}
             </div>
 
-            {/* Layer NEXT */}
+            {/* Layer NEXT — una o più grafiche per la stessa settimana */}
             <div className="be-card" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
               <h3 style={{ margin: '0 0 12px', textTransform: 'capitalize' }}>📣 Grafica "Next" — {nextEventLabel}</h3>
-              {nextGraphic ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <img src={nextGraphic.url} alt="Next" style={{ width: 72, height: 72, objectFit: 'contain', background: '#fff', borderRadius: 8, border: '1px solid var(--border)' }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13, color: 'var(--text2)' }}>Grafica caricata</p>
-                  </div>
-                  <button onClick={() => nextFileInputRef.current?.click()} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: 12 }}>Cambia</button>
-                  <button onClick={() => setNextGraphic(null)} className="btn-no-anim" style={{ background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>Rimuovi</button>
-                  <input ref={nextFileInputRef} type="file" accept={ACCEPT_IMAGE_ATTR} style={{ display: 'none' }} onChange={e => handleNextFiles(e.target.files)} />
-                </div>
-              ) : (
-                <div
-                  onDragOver={e => { e.preventDefault(); setDragNext(true) }}
-                  onDragLeave={() => setDragNext(false)}
-                  onDrop={e => { e.preventDefault(); setDragNext(false); handleNextFiles(e.dataTransfer.files) }}
-                  onClick={() => nextFileInputRef.current?.click()}
-                  style={{
-                    padding: '28px 16px', borderRadius: 12, textAlign: 'center', cursor: 'pointer',
-                    background: dragNext ? 'rgba(79,195,247,0.14)' : 'rgba(79,195,247,0.06)',
-                    border: `2px dashed ${dragNext ? 'var(--blue)' : 'rgba(79,195,247,0.35)'}`,
-                  }}
-                >
-                  <input ref={nextFileInputRef} type="file" accept={ACCEPT_IMAGE_ATTR} style={{ display: 'none' }} onChange={e => handleNextFiles(e.target.files)} />
-                  {uploadingNext ? (
-                    <p style={{ fontSize: 13, color: 'var(--blue)', fontWeight: 600 }}>Caricamento in corso...</p>
-                  ) : (
-                    <>
-                      <p style={{ fontSize: 32, marginBottom: 6 }}>📤</p>
-                      <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--blue)' }}>Trascina qui la grafica "Next"</p>
-                      <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>oppure tocca per selezionarlo</p>
-                    </>
-                  )}
+              {nextGraphics.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                  {nextGraphics.map((g, i) => (
+                    <div key={g.path} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <img src={g.url} alt={`Next ${i + 1}`} style={{ width: 60, height: 60, objectFit: 'contain', background: '#fff', borderRadius: 8, border: '1px solid var(--border)' }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 13, color: 'var(--text2)' }}>Grafica {i + 1}</p>
+                      </div>
+                      <button onClick={() => removeNextGraphic(g.path)} className="btn-no-anim" style={{ background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 700 }}>Rimuovi</button>
+                    </div>
+                  ))}
                 </div>
               )}
+              <div
+                onDragOver={e => { e.preventDefault(); setDragNext(true) }}
+                onDragLeave={() => setDragNext(false)}
+                onDrop={e => { e.preventDefault(); setDragNext(false); handleNextFiles(e.dataTransfer.files) }}
+                onClick={() => nextFileInputRef.current?.click()}
+                style={{
+                  padding: nextGraphics.length > 0 ? '14px 16px' : '28px 16px', borderRadius: 12, textAlign: 'center', cursor: 'pointer',
+                  background: dragNext ? 'rgba(79,195,247,0.14)' : 'rgba(79,195,247,0.06)',
+                  border: `2px dashed ${dragNext ? 'var(--blue)' : 'rgba(79,195,247,0.35)'}`,
+                }}
+              >
+                <input ref={nextFileInputRef} type="file" accept={ACCEPT_IMAGE_ATTR} style={{ display: 'none' }} onChange={e => handleNextFiles(e.target.files)} />
+                {uploadingNext ? (
+                  <p style={{ fontSize: 13, color: 'var(--blue)', fontWeight: 600 }}>Caricamento in corso...</p>
+                ) : nextGraphics.length > 0 ? (
+                  <p style={{ fontWeight: 700, fontSize: 13, color: 'var(--blue)' }}>+ Aggiungi un'altra grafica</p>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 32, marginBottom: 6 }}>📤</p>
+                    <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--blue)' }}>Trascina qui la grafica "Next"</p>
+                    <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>oppure tocca per selezionarlo</p>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Azioni */}
