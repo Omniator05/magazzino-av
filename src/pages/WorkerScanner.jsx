@@ -63,10 +63,9 @@ export default function WorkerScanner() {
   const [scanToast, setScanToast] = useState(null)
   const [showExtraWorker, setShowExtraWorker] = useState(false)
   const [extraWorkerForm, setExtraWorkerForm] = useState({ name:'', qty:1 })
-  // Ricerca nella checklist — nascosta dietro un'icona, serve solo quando la
+  // Ricerca nella checklist — sempre visibile in cima, utile quando la
   // lista si allunga e si vuole trovare un oggetto senza scorrere le categorie.
   const [itemListSearch, setItemListSearch] = useState('')
-  const [showItemListSearch, setShowItemListSearch] = useState(false)
   const [showAllPreparedPopup, setShowAllPreparedPopup] = useState(false)
   const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
   const [showAllReturnedPopup, setShowAllReturnedPopup] = useState(false)
@@ -840,26 +839,20 @@ export default function WorkerScanner() {
 
         {/* Lista carico - compatta con categorie */}
         <div style={{ marginTop:14, marginBottom:16 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px', flex:1, minWidth:0 }}>
-              {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
-            </p>
-            {items.length > 0 && !showItemListSearch && (
-              <button onClick={() => setShowItemListSearch(true)} aria-label={t('workerScanner.searchItemsAria')}
-                style={{ width:30, height:30, borderRadius:8, background:'transparent', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-              </button>
-            )}
-          </div>
-          {showItemListSearch && (
-            <div style={{ position:'relative', display:'flex', alignItems:'center', marginTop:8, marginBottom:16, animation:'fadeIn 0.15s ease' }}>
-              <svg style={{ position:'absolute', left:10 }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px' }}>
+            {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
+          </p>
+          {items.length > 0 && (
+            <div style={{ position:'relative', display:'flex', alignItems:'center', marginTop:8, marginBottom:16 }}>
+              <svg style={{ position:'absolute', left:10, pointerEvents:'none' }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
               <label htmlFor="ws-item-search" style={srOnlyStyle}>{t('workerScanner.searchItemsPlaceholder')}</label>
-              <input id="ws-item-search" autoFocus value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
+              <input id="ws-item-search" value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
                 placeholder={t('workerScanner.searchItemsPlaceholder')}
-                style={{ width:'100%', padding:'9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card2)', color:'var(--text)', fontSize:13 }} />
-              <button onClick={() => { setItemListSearch(''); setShowItemListSearch(false) }} aria-label={t('common.close')}
-                style={{ marginLeft:6, width:32, height:32, borderRadius:8, background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+                style={{ width:'100%', padding: itemListSearch ? '9px 34px 9px 32px' : '9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card2)', color:'var(--text)', fontSize:13 }} />
+              {itemListSearch && (
+                <button onClick={() => setItemListSearch('')} aria-label={t('common.close')}
+                  style={{ position:'absolute', right:6, width:26, height:26, borderRadius:6, background:'var(--card3)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+              )}
             </div>
           )}
 
@@ -1372,9 +1365,9 @@ function ChecklistRow({ item }) {
               <button
                 style={{ position:'relative', overflow:'hidden', minWidth:70, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
-                  background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
-                  color: item.pronto ? 'var(--accent2)' : 'var(--text)',
-                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
+                  background: 'var(--card2)',
+                  color: 'var(--text)',
+                  border: '1.5px solid var(--border)',
                   WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
                 }}
                 aria-label={t('workerScanner.toLoadShort') + ' — ' + t('workerScanner.markMissingHint')}

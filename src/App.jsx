@@ -30,6 +30,7 @@ import PageTransition from './components/PageTransition'
 import OnboardingReveal from './components/OnboardingReveal'
 import BillingGate from './components/BillingGate'
 import QrRedirect from './components/QrRedirect'
+import UpdateToast from './components/UpdateToast'
 import { isBillingValid } from './utils/billing'
 
 // Barra sempre visibile mentre un super admin sta "dentro" un'altra azienda
@@ -134,6 +135,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
   if (profile?.role === 'worker') {
     return (
       <>
+        <UpdateToast />
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<WorkerHome />} />
@@ -158,24 +160,30 @@ function PrivateRoutes({ toggleTheme, theme }) {
   // Organizzatore Brasserie — accesso solo alla propria sezione, nessuna tab bar
   if (profile?.role === 'organizzatore-brasserie') {
     return (
-      <AnimatedPage>
-        <Routes>
-          <Route path="/" element={<Brasserie />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AnimatedPage>
+      <>
+        <UpdateToast />
+        <AnimatedPage>
+          <Routes>
+            <Route path="/" element={<Brasserie />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatedPage>
+      </>
     )
   }
 
   // Organizzatore evento (generico, un evento specifico) — accesso solo alla propria sezione, nessuna tab bar
   if (profile?.role === 'organizzatore-evento') {
     return (
-      <AnimatedPage>
-        <Routes>
-          <Route path="/" element={<EventOrganizerHome />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AnimatedPage>
+      <>
+        <UpdateToast />
+        <AnimatedPage>
+          <Routes>
+            <Route path="/" element={<EventOrganizerHome />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AnimatedPage>
+      </>
     )
   }
 
@@ -193,6 +201,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
 
   return (
     <>
+      <UpdateToast />
       <GhostBanner />
       <AnimatedPage>
         <Routes>

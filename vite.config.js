@@ -1,8 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { execSync } from 'node:child_process'
+
+// Hash del commit corrente, incorporato in build: usato per mostrare un
+// popup "aggiornamento riuscito" al primo avvio dopo un nuovo deploy (vedi
+// src/components/UpdateToast.jsx). VERCEL_GIT_COMMIT_SHA copre il build su
+// Vercel; git rev-parse copre il build locale. Se nessuno dei due è
+// disponibile (es. zip senza storia git) il popup resta semplicemente
+// disattivato, non è un dato critico.
+const appVersion = process.env.VERCEL_GIT_COMMIT_SHA || (() => {
+  try { return execSync('git rev-parse HEAD').toString().trim() } catch { return '' }
+})()
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {

@@ -105,10 +105,9 @@ export default function EventDetail() {
   const [search, setSearch] = useState('')
   const [showEventNotes, setShowEventNotes] = useState(false)
   // Ricerca nella lista di carico già presente (diversa da "search" sopra,
-  // che è quella nel catalogo del modale "aggiungi oggetto") — nascosta
-  // dietro un'icona, utile solo quando la lista si allunga parecchio.
+  // che è quella nel catalogo del modale "aggiungi oggetto") — sempre
+  // visibile in cima alla lista, utile quando la lista si allunga parecchio.
   const [itemListSearch, setItemListSearch] = useState('')
-  const [showItemListSearch, setShowItemListSearch] = useState(false)
   // Assegnazione furgone in blocco — evita di dover aprire il menu su ogni riga
   // quando si vuole assegnare lo stesso furgone a più oggetti già in lista.
   const [bulkVehicleMode, setBulkVehicleMode] = useState(false)
@@ -117,16 +116,17 @@ export default function EventDetail() {
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, itemRef, instanceNumbers, hadInstances }) => {
-    // Per i kit i bauli sono sempre assegnati (il kit "è" i suoi bauli fisici).
-    // Per un oggetto singolo, invece, l'assegnazione a unità specifiche resta
-    // solo se l'admin ne ha scelta almeno una — altrimenti basta modificare la
+    // L'assegnazione a unità specifiche (kit o oggetto singolo) resta solo se
+    // l'admin ne ha scelta almeno una — altrimenti basta modificare la
     // quantità di un oggetto qualsiasi (es. un'americana, dove non importa
     // quale pezzo esce) per "agganciarlo" per sbaglio a un'unità precisa e
-    // attivare la verifica per singolo pezzo allo scanner.
+    // attivare la verifica per singolo pezzo allo scanner. Vale anche per i
+    // kit: se l'admin svuota apposta la selezione, va bene qualsiasi kit
+    // completo — niente riassegnazione automatica che la faccia riapparire.
     const currentSelection = instanceNumbers || []
     let finalInstanceNumbers = currentSelection
     let includeInstanceNumbers = false
-    if (isBundle || currentSelection.length > 0) {
+    if (currentSelection.length > 0) {
       const catalogItem = allItems.find(i => i.id === (itemRef || id))
       const catalogInstances = ensureInstanceList(catalogItem?.instances, catalogItem?.totalQty ?? qty)
       finalInstanceNumbers = reconcileInstanceNumbers(catalogInstances, currentSelection, qty)
@@ -1211,31 +1211,24 @@ export default function EventDetail() {
             </div>
           ) : (
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              {showItemListSearch ? (
-                <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, animation:'fadeIn 0.15s ease' }}>
-                  <svg style={{ position:'absolute', left:10 }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                  <label htmlFor="ed-item-search" style={{ position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }}>{t('eventDetail.searchItemsPlaceholder')}</label>
-                  <input id="ed-item-search" autoFocus value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
-                    placeholder={t('eventDetail.searchItemsPlaceholder')}
-                    style={{ width:'100%', padding:'9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card)', color:'var(--text)', fontSize:13 }} />
-                  <button onClick={() => { setItemListSearch(''); setShowItemListSearch(false) }} aria-label={t('common.close')}
-                    style={{ marginLeft:6, width:36, height:36, borderRadius:8, background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
-                </div>
-              ) : (
-                <>
-                  <button onClick={() => setShowItemListSearch(true)} aria-label={t('eventDetail.searchItemsAria')}
-                    style={{ width:36, height:36, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                  </button>
-                  {vehicles.length > 0 && (
-                    <button
-                      onClick={() => setBulkVehicleMode(true)}
-                      style={{ marginLeft:'auto', background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
-                    >
-                      {t('eventDetail.assignVehicleToMultiple')}
-                    </button>
-                  )}
-                </>
+              <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, minWidth:0 }}>
+                <svg style={{ position:'absolute', left:10, pointerEvents:'none' }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                <label htmlFor="ed-item-search" style={{ position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }}>{t('eventDetail.searchItemsPlaceholder')}</label>
+                <input id="ed-item-search" value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
+                  placeholder={t('eventDetail.searchItemsPlaceholder')}
+                  style={{ width:'100%', padding: itemListSearch ? '9px 34px 9px 32px' : '9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card)', color:'var(--text)', fontSize:13 }} />
+                {itemListSearch && (
+                  <button onClick={() => setItemListSearch('')} aria-label={t('common.close')}
+                    style={{ position:'absolute', right:6, width:26, height:26, borderRadius:6, background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+                )}
+              </div>
+              {vehicles.length > 0 && (
+                <button
+                  onClick={() => setBulkVehicleMode(true)}
+                  style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}
+                >
+                  {t('eventDetail.assignVehicleToMultiple')}
+                </button>
               )}
             </div>
           )}
@@ -1910,9 +1903,9 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
               <button onClick={() => onToggleLoaded(item.id)}
                 style={{
                   minHeight:44, display:'flex', alignItems:'center', justifyContent:'center',
-                  background: item.pronto ? 'rgba(245,166,35,0.20)' : 'var(--card2)',
-                  color: item.pronto ? 'var(--accent2)' : 'var(--text)',
-                  border: item.pronto ? '1.5px solid rgba(245,166,35,0.45)' : '1.5px solid var(--border)',
+                  background: 'var(--card2)',
+                  color: 'var(--text)',
+                  border: '1.5px solid var(--border)',
                   borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center',
                 }}>
                 {t('eventDetail.toLoad')}
