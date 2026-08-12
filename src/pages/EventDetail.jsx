@@ -14,6 +14,9 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import { Warn } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
+import { isModuleEnabled } from '../utils/modules'
+import { logItemActivity } from '../utils/itemActivity'
+import { syncKitAwareInventory } from '../utils/kitInventory'
 import JSZip from 'jszip'
 
 // Passata questa finestra di grazia dalla data dell'evento, i contenuti caricati
@@ -58,7 +61,14 @@ const ICONS = {
 export default function EventDetail() {
   const { t, i18n } = useTranslation()
   const { id } = useParams()
-  const { user, teamId, team } = useAuth()
+  // Alias esplicito per la cronologia: dentro saveItemEdit "id" viene
+  // destrutturato dall'oggetto (l'id della RIGA), che nasconde questo "id"
+  // dell'evento per tutto il corpo della funzione — usare sempre "eventId"
+  // nelle chiamate a logItemActivity evita di scrivere per sbaglio l'id
+  // della riga anche come eventId.
+  const eventId = id
+  const { user, profile, teamId, team } = useAuth()
+  const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [event, setEvent] = useState(null)
@@ -115,7 +125,7 @@ export default function EventDetail() {
   const [bulkVehicleId, setBulkVehicleId] = useState('')
   const [addAsMancante, setAddAsMancante] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, itemRef, instanceNumbers, hadInstances }) => {
+  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances }) => {
     // L'assegnazione a unità specifiche (kit o oggetto singolo) resta solo se
     // l'admin ne ha scelta almeno una — altrimenti basta modificare la
     // quantità di un oggetto qualsiasi (es. un'americana, dove non importa
@@ -142,6 +152,19 @@ export default function EventDetail() {
     await updateEventItems(current => current.map(i =>
       i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(includeInstanceNumbers ? { instanceNumbers: finalInstanceNumbers } : {}) }
     ))
+    // Solo se lo stato "mancante" è davvero cambiato — non ogni salvataggio
+    // della modifica riga tocca per forza questo campo. "wasMancante" è
+    // congelato al valore di apertura del modale (vedi onEdit in
+    // EventItemRow): "mancante" invece viene aggiornato dal bottone dentro
+    // il modale stesso, quindi da solo non basta per capire se è cambiato.
+    const wasMancante = editItem?.wasMancante || false
+    if ((mancante || false) !== wasMancante) {
+      logItemActivity({
+        teamId, eventId, eventName: event?.name, itemId: id, itemName: editItem?.name,
+        catalogItemId: isExtra ? null : (itemRef || id),
+        action: mancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
+      })
+    }
     setEditItem(null)
   }
   const itemEditDrag = useModalDrag(() => setEditItem(null), undefined, () => editItem && saveItemEdit(editItem))
@@ -151,6 +174,7 @@ export default function EventDetail() {
   const [itemDetails, setItemDetails] = useState({}) // id/itemRef → { location, notes } dal catalogo
   const resolvedItemDetailIdsRef = useRef(new Set())
   const [unavailability, setUnavailability] = useState([])
+  const [activityLog, setActivityLog] = useState([])
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
@@ -233,6 +257,16 @@ export default function EventDetail() {
     })
   }, [teamId])
 
+  // Cronologia "chi ha fatto cosa" — tutta l'attività dell'evento in un solo
+  // ascolto, filtrata per singolo oggetto al momento di mostrarla (vedi
+  // sezione "Cronologia" nel modale modifica riga): il volume per evento
+  // resta basso, non serve una query per ogni oggetto aperto.
+  useEffect(() => {
+    if (!id) return
+    const q = query(collection(db, 'itemActivity'), where('eventId', '==', id), orderBy('createdAt', 'desc'))
+    return onSnapshot(q, snap => setActivityLog(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [id])
+
   useEffect(() => {
     if (!teamId) return
     // Listen for real time updates
@@ -310,6 +344,7 @@ export default function EventDetail() {
   )
 
   const eventItems = event.items || []
+  const prepared = eventItems.filter(i => i.pronto).length
   const loaded = eventItems.filter(i => i.loaded).length
   const returned = eventItems.filter(i => i.returned).length
   const total = eventItems.length
@@ -430,21 +465,6 @@ export default function EventDetail() {
     }
   }
 
-  // Variante senza propagazione alla serie — per stato del giorno-evento
-  // (pronto/mancante) che è per-occorrenza, non struttura del carico.
-  const updateEventItemsNoSeries = async (transform) => {
-    try {
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(eventRef)
-        const current = snap.data()?.items || []
-        tx.update(eventRef, { items: transform(current) })
-      })
-    } catch (e) {
-      setSaveError(t('eventDetail.saveErrorMessage'))
-      throw e
-    }
-  }
-
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
   // non stato di avanzamento: passa da updateEventItems per propagarsi alla serie.
   const setItemVehicle = async (itemId, vehicleId) => {
@@ -474,158 +494,6 @@ export default function EventDetail() {
     exitBulkVehicleMode()
   }
 
-  const toggleLoaded = async itemId => {
-    let item, newState
-    await updateEventItems(current => current.map(i => {
-      if (i.id !== itemId) return i
-      item = i
-      const newLoaded = !i.loaded
-      // Carico implica pronto: altrimenti un oggetto caricato saltando la
-      // fase pronto risulta "mancante" nella lista pronto pur essendo a bordo.
-      const newPronto = newLoaded ? true : false
-      const newReturned = newLoaded ? false : i.returned
-      // Ogni volta che pronto/carico/rientro torna a false (anche come
-      // effetto collaterale, es. pronto si azzera quando si smarca il carico)
-      // si azzera anche il relativo conteggio bauli scansionati — altrimenti
-      // al prossimo giro lo scanner direbbe "già fatto" su un baule mai
-      // davvero ri-scansionato in un nuovo ciclo.
-      const scannedInstances = { ...(i.scannedInstances || {}) }
-      if (!newLoaded) scannedInstances.load = []
-      if (!newPronto) scannedInstances.pronto = []
-      if (!newReturned) scannedInstances.return = []
-      newState = { ...i, loaded: newLoaded, returned: newReturned, pronto: newPronto, scannedInstances }
-      return newState
-    }))
-    if (!item) return
-
-    // Extra non toccano la giacenza
-    if (item.isExtra) return
-
-    const firestoreId = item.itemRef || itemId
-
-    // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
-    if (item?.isBundle || item?.category === 'Kit') {
-      try {
-        const kitRef = doc(db, 'items', firestoreId)
-        const kitSnap = await getDoc(kitRef)
-        if (kitSnap.exists()) {
-          const kitData = kitSnap.data()
-          const components = kitData.components || []
-          for (const comp of components) {
-            try {
-              const compRef = doc(db, 'items', comp.itemId)
-              const snap = await getDoc(compRef)
-              if (snap.exists()) {
-                const current = snap.data()
-                const delta = newState.loaded ? -(comp.qty * (item.qty||1)) : (comp.qty * (item.qty||1))
-                const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty||0) + delta)) })
-              }
-            } catch(e) { console.error(e) }
-          }
-          // Aggiorna giacenza kit stesso
-          const delta = newState.loaded ? -(item.qty || 1) : (item.qty || 1)
-          await updateDoc(kitRef, { availableQty: Math.max(0, Math.min(kitData.totalQty||999, (kitData.availableQty||0) + delta)) })
-        }
-      } catch(e) { console.error(e) }
-      return
-    }
-
-    // Articolo singolo: aggiorna disponibilità normale
-    try {
-      const itemRef = doc(db, 'items', firestoreId)
-      const snap = await getDoc(itemRef)
-      if (snap.exists()) {
-        const current = snap.data()
-        const delta = newState.loaded ? -(item.qty || 1) : (item.qty || 1)
-        const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-        await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty || 0) + delta)) })
-      }
-    } catch(e) { console.error(e) }
-  }
-
-  const toggleMancante = async itemId => {
-    await updateEventItemsNoSeries(current => current.map(i => i.id !== itemId ? i : { ...i, mancante: !i.mancante }))
-  }
-
-  const togglePronto = async itemId => {
-    await updateEventItemsNoSeries(current => current.map(i => {
-      if (i.id !== itemId) return i
-      const newPronto = !i.pronto
-      return { ...i, pronto: newPronto, ...(!newPronto ? { scannedInstances: { ...(i.scannedInstances || {}), pronto: [] } } : {}) }
-    }))
-  }
-
-  const toggleReturned = async itemId => {
-    // Guardia rapida su stato locale (UX, evita un giro a vuoto se non è
-    // ancora caricato); dentro la transazione si ricontrolla sul dato fresco.
-    if (!eventItems.find(i => i.id === itemId)?.loaded) return
-    let item, newState
-    await updateEventItems(current => {
-      const found = current.find(i => i.id === itemId)
-      if (!found?.loaded) return current
-      item = found
-      return current.map(i => {
-        if (i.id !== itemId) return i
-        const newReturned = !i.returned
-        newState = {
-          ...i, returned: newReturned,
-          // Rientrato implica pronto E carico: serve anche alla storia dei
-          // singoli bauli in Inventory.
-          ...(newReturned ? { pronto: true, loaded: true } : {}),
-          ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
-        }
-        return newState
-      })
-    })
-    if (!item) return
-
-    // Extra non toccano la giacenza
-    if (item.isExtra) return
-
-    const firestoreId = item.itemRef || itemId
-
-    // Kit bundle o categoria Kit: legge sempre i componenti freschi da Firestore
-    if (item?.isBundle || item?.category === 'Kit') {
-      try {
-        const kitRef = doc(db, 'items', firestoreId)
-        const kitSnap = await getDoc(kitRef)
-        if (kitSnap.exists()) {
-          const kitData = kitSnap.data()
-          const components = kitData.components || []
-          for (const comp of components) {
-            try {
-              const compRef = doc(db, 'items', comp.itemId)
-              const snap = await getDoc(compRef)
-              if (snap.exists()) {
-                const current = snap.data()
-                const delta = newState.returned ? (comp.qty * (item.qty||1)) : -(comp.qty * (item.qty||1))
-                const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-                await updateDoc(compRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty||0) + delta)) })
-              }
-            } catch(e) { console.error(e) }
-          }
-          const delta = newState.returned ? (item.qty || 1) : -(item.qty || 1)
-          const kitMaxAvail = (kitData.totalQty||0) - (kitData.brokenQty||0)
-          await updateDoc(kitRef, { availableQty: Math.max(0, Math.min(kitMaxAvail, (kitData.availableQty||0) + delta)) })
-        }
-      } catch(e) { console.error(e) }
-      return
-    }
-
-    // Articolo singolo
-    try {
-      const itemRef = doc(db, 'items', firestoreId)
-      const snap = await getDoc(itemRef)
-      if (snap.exists()) {
-        const current = snap.data()
-        const delta = newState.returned ? (item.qty || 1) : -(item.qty || 1)
-        const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-        await updateDoc(itemRef, { availableQty: Math.max(0, Math.min(maxAvail, (current.availableQty || 0) + delta)) })
-      }
-    } catch(e) { console.error(e) }
-  }
-
   // Aggiunge al carrello temporaneo (non chiude il modal)
   const addToCart = (item, qty) => {
     setCart(prev => {
@@ -647,50 +515,49 @@ export default function EventDetail() {
     const cartSnapshot = cart
     const addAsMancanteSnapshot = addAsMancante
     setConfirmingCart(true)
-    try {
-      await updateEventItems(current => {
-      const updated = [...current]
-      for (const c of cartSnapshot) {
-        if (c.isExtra) {
-          updated.push({
-            id: c.id, name: c.name, qty: c.qty || 1,
-            notes: c.notes || '', category: 'Extra', isExtra: true,
-            loaded: false, returned: false,
-          })
-          continue
-        }
-        const alreadyExists = updated.some(e => e.id === c.id || e.itemRef === c.id)
-        // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
-        // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
-        // poi cambiarli a mano dalla modifica riga.
-        const instanceNumbers = c.isBundle
-          ? reconcileInstanceNumbers(ensureInstanceList(c.instances, c.totalQty ?? c.qty), [], c.qty)
-          : null
-        if (alreadyExists) {
-          // Riga separata con id unico, itemRef punta all'articolo Firebase originale
-          updated.push({
-            id: `${c.id}_extra_${Date.now()}`,
-            itemRef: c.id,
-            name: c.name, category: c.category, location: c.location||'',
-            isKit: c.isKit||false, kitSize: c.kitSize||null,
-            isBundle: c.isBundle||false, components: c.components||null,
-            ...(c.isBundle ? { instanceNumbers } : {}),
-            qty: c.qty, loaded: false, returned: false,
-            mancante: true,
-          })
-        } else {
-          updated.push({
-            id: c.id, name: c.name, category: c.category, location: c.location||'',
-            isKit: c.isKit||false, kitSize: c.kitSize||null,
-            isBundle: c.isBundle||false, components: c.components||null,
-            ...(c.isBundle ? { instanceNumbers } : {}),
-            qty: c.qty, loaded: false, returned: false,
-            mancante: addAsMancanteSnapshot || false,
-          })
+    // Righe da scrivere calcolate UNA volta qui fuori (non dentro il transform,
+    // che una transazione può rieseguire più volte in caso di conflitto) — così
+    // l'id usato per la cronologia è garantito lo stesso scritto su Firestore.
+    const rowsToAdd = cartSnapshot.map(c => {
+      if (c.isExtra) {
+        return { id: c.id, name: c.name, qty: c.qty || 1, notes: c.notes || '', category: 'Extra', isExtra: true, loaded: false, returned: false }
+      }
+      const alreadyExists = eventItems.some(e => e.id === c.id || e.itemRef === c.id)
+      // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
+      // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
+      // poi cambiarli a mano dalla modifica riga.
+      const instanceNumbers = c.isBundle
+        ? reconcileInstanceNumbers(ensureInstanceList(c.instances, c.totalQty ?? c.qty), [], c.qty)
+        : null
+      if (alreadyExists) {
+        // Riga separata con id unico, itemRef punta all'articolo Firebase originale
+        return {
+          id: `${c.id}_extra_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          itemRef: c.id,
+          name: c.name, category: c.category, location: c.location||'',
+          isKit: c.isKit||false, kitSize: c.kitSize||null,
+          isBundle: c.isBundle||false, components: c.components||null,
+          ...(c.isBundle ? { instanceNumbers } : {}),
+          qty: c.qty, loaded: false, returned: false,
+          mancante: true,
         }
       }
-        return updated
-      })
+      return {
+        id: c.id, name: c.name, category: c.category, location: c.location||'',
+        isKit: c.isKit||false, kitSize: c.kitSize||null,
+        isBundle: c.isBundle||false, components: c.components||null,
+        ...(c.isBundle ? { instanceNumbers } : {}),
+        qty: c.qty, loaded: false, returned: false,
+        mancante: addAsMancanteSnapshot || false,
+      }
+    })
+    try {
+      await updateEventItems(current => [...current, ...rowsToAdd])
+      await Promise.all(rowsToAdd.map(row => logItemActivity({
+        teamId, eventId, eventName: event?.name, itemId: row.id, itemName: row.name,
+        catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
+        action: 'added', profile, userId: user?.uid,
+      })))
       // Solo se il salvataggio è andato a buon fine si svuota il carrello e
       // si chiude il modale — altrimenti restano lì così l'admin può
       // riprovare senza dover riselezionare tutto da capo.
@@ -725,18 +592,19 @@ export default function EventDetail() {
     const item = eventItems.find(i => i.id === itemId)
     if (item.loaded && !item.returned) {
       if (!(await confirm({ title: t('eventDetail.confirmStillOutTitle'), message: t('eventDetail.confirmStillOutMessage'), confirmLabel: t('eventDetail.confirmStillOutLabel'), danger: true }))) return
-      // Ripristina disponibilità
-      try {
-        const itemRef = doc(db, 'items', item.itemRef || itemId)
-        const snap = await getDoc(itemRef)
-        if (snap.exists()) {
-          const current = snap.data()
-          const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-          await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty || 0) + (item.qty || 1)) })
-        }
-      } catch(e) {}
+      // Ripristina disponibilità — anche dei componenti se è un kit, che
+      // hanno una giacenza propria indipendente dal kit nel suo insieme.
+      await syncKitAwareInventory({
+        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+        isBundle: item.isBundle, category: item.category, qty: item.qty, sign: 1,
+      })
     }
     await updateEventItems(current => current.filter(i => i.id !== itemId))
+    logItemActivity({
+      teamId, eventId, eventName: event?.name, itemId, itemName: item.name,
+      catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+      action: 'removed', profile, userId: user?.uid,
+    })
   }
 
   // Con "segna come mancanti" attivo, un articolo già in lista deve restare
@@ -808,9 +676,12 @@ export default function EventDetail() {
   const exportPDF = () => {
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]))
     const items = event.items || []
-    const loaded = items.filter(i => i.loaded && !i.isExtra)
-    const extras = items.filter(i => i.loaded && i.isExtra)
-    const list = [...loaded, ...extras]
+    // Tutta la lista, non solo il già caricato: così si può stampare PRIMA di
+    // caricare e usarlo come lista fisica da spuntare in magazzino. Chi è già
+    // segnato caricato appare con la spunta piena, per un doppio controllo
+    // rispetto a quanto risulta sull'app.
+    const list = [...items.filter(i => !i.isExtra), ...items.filter(i => i.isExtra)]
+    const loadedCount = list.filter(i => i.loaded).length
     const totPezzi = list.reduce((s, i) => s + (i.qty || 1), 0)
 
     const fmt = (d, opt) => d ? new Date(d + 'T12:00:00').toLocaleDateString('it-IT', opt) : ''
@@ -827,7 +698,7 @@ export default function EventDetail() {
         <td class="num">${n + 1}</td>
         <td class="art">${esc(i.name)}${i.isExtra ? ' <span class="tag">EXTRA</span>' : ''}${i.eventNote ? `<div class="note">${esc(i.eventNote)}</div>` : ''}</td>
         <td class="qty">${i.qty || 1}</td>
-        <td class="chk"></td>
+        <td class="chk${i.loaded ? ' checked' : ''}"></td>
       </tr>`
     ).join('')
 
@@ -859,6 +730,7 @@ export default function EventDetail() {
       tbody td.qty { text-align:center; font-weight: 800; color:#e63946; }
       tbody td.chk { text-align:center; }
       tbody td.chk::before { content:''; display:inline-block; width:16px; height:16px; border:1.5px solid #9ca3af; border-radius:4px; }
+      tbody td.chk.checked::before { content:'✓'; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1.5px solid #059669; background:#059669; color:#fff; font-size:11px; font-weight:900; border-radius:4px; }
       tbody tr:nth-child(even) { background:#fafafa; }
       .tag { background:#fef3c7; color:#92400e; border-radius:4px; padding:0 5px; font-size:9px; font-weight:800; vertical-align:middle; }
       .note { color:#6b7280; font-size:11px; font-weight:400; margin-top:2px; }
@@ -883,11 +755,12 @@ export default function EventDetail() {
         ${metaRow('Luogo', event.location)}
         ${phases.length ? metaRow('Fasi', phases.join('  ·  ')) : ''}
         ${metaRow('Articoli', `${list.length} voci · ${totPezzi} pezzi totali`)}
+        ${list.length ? metaRow('Già caricati', `${loadedCount} di ${list.length}`) : ''}
       </div>
 
       <table>
         <thead><tr><th class="num">#</th><th>Articolo</th><th class="qty">Q.tà</th><th class="chk">✓</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px;">Nessun articolo caricato</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px;">Nessun articolo nella lista</td></tr>'}</tbody>
       </table>
       <p class="tot">Totale: <strong>${list.length} voci · ${totPezzi} pezzi</strong></p>
 
@@ -938,7 +811,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onToggleLoaded={toggleLoaded} onToggleReturned={toggleReturned} onRemove={removeFromEvent} onEdit={setEditItem} onToggleMancante={toggleMancante} onTogglePronto={togglePronto} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} />
+        <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} />
       ))}
     </div>
   ))
@@ -955,20 +828,22 @@ export default function EventDetail() {
       <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
           <button onClick={() => navigate(-1)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← {t('common.back')}</button>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={exportPDF}
-              style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.2)', color:'var(--accent)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-              {t('eventDetail.pdf')}
+          {loadListsOn && (
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={exportPDF}
+                style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.2)', color:'var(--accent)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                {t('eventDetail.pdf')}
+              </button>
+            <button
+              onClick={() => navigate(`/events/${id}/scan`)}
+              style={{ background:'linear-gradient(135deg,rgba(79,195,247,0.2),rgba(79,195,247,0.08))', border:'1px solid rgba(79,195,247,0.35)', color:'var(--blue)', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
+              {t('eventDetail.startLoading')}
             </button>
-          <button
-            onClick={() => navigate(`/events/${id}/scan`)}
-            style={{ background:'linear-gradient(135deg,rgba(79,195,247,0.2),rgba(79,195,247,0.08))', border:'1px solid rgba(79,195,247,0.35)', color:'var(--blue)', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
-            {t('eventDetail.startLoading')}
-          </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Nome evento + badge installazione + tasto ℹ️ note */}
@@ -1059,14 +934,18 @@ export default function EventDetail() {
         </div>
       )}
       <div style={{ padding:'16px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
-          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px' }}>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>{t('eventDetail.loadedStat')}</p>
-            <p style={{ fontWeight:800, fontSize:22, color: total > 0 && loaded === total ? 'var(--green)' : 'var(--accent2)' }}>{loaded}<span style={{ color:'var(--text2)', fontSize:14, fontWeight:400 }}>/{total}</span></p>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:12 }}>
+          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px' }}>
+            <p style={{ color:'var(--text2)', fontSize:11.5, marginBottom:4 }}>{t('eventDetail.preparedStat')}</p>
+            <p style={{ fontWeight:800, fontSize:19, color: total > 0 && prepared === total ? 'var(--green)' : '#059669' }}>{prepared}<span style={{ color:'var(--text2)', fontSize:13, fontWeight:400 }}>/{total}</span></p>
           </div>
-          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px' }}>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:4 }}>{t('eventDetail.returnedStat')}</p>
-            <p style={{ fontWeight:800, fontSize:22, color: total > 0 && returned === total ? 'var(--green)' : 'var(--text2)' }}>{returned}<span style={{ color:'var(--text2)', fontSize:14, fontWeight:400 }}>/{total}</span></p>
+          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px' }}>
+            <p style={{ color:'var(--text2)', fontSize:11.5, marginBottom:4 }}>{t('eventDetail.loadedStat')}</p>
+            <p style={{ fontWeight:800, fontSize:19, color: total > 0 && loaded === total ? 'var(--green)' : 'var(--accent2)' }}>{loaded}<span style={{ color:'var(--text2)', fontSize:13, fontWeight:400 }}>/{total}</span></p>
+          </div>
+          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px' }}>
+            <p style={{ color:'var(--text2)', fontSize:11.5, marginBottom:4 }}>{t('eventDetail.returnedStat')}</p>
+            <p style={{ fontWeight:800, fontSize:19, color: total > 0 && returned === total ? 'var(--green)' : 'var(--text2)' }}>{returned}<span style={{ color:'var(--text2)', fontSize:13, fontWeight:400 }}>/{total}</span></p>
           </div>
         </div>
         {total > 0 && (
@@ -1179,6 +1058,10 @@ export default function EventDetail() {
         </div>
       )}
 
+      {/* Sezione liste di carico — nascosta se il modulo è disattivato per
+          questa squadra (Impostazioni → Moduli); nome/data/luogo/note
+          dell'evento sopra restano visibili in ogni caso. */}
+      {loadListsOn && <>
       {/* Ricerca oggetti + assegnazione furgone in blocco, stessa riga */}
       {eventItems.length > 0 && (
         <div style={{ margin:'12px 16px 0' }}>
@@ -1273,6 +1156,7 @@ export default function EventDetail() {
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
+      </>}
 
       {/* Conferma: chiusura con articoli selezionati non aggiunti */}
       {showDiscardCart && (
@@ -1712,6 +1596,40 @@ export default function EventDetail() {
               style={{ width:'100%', marginTop:10, padding:'12px', borderRadius:10, background:'rgba(248,113,113,0.10)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', fontWeight:700, fontSize:14 }}>
               {t('eventDetail.removeFromList')}
             </button>
+
+            {/* Cronologia — chi ha aggiunto/caricato/segnato mancante questo
+                oggetto, letta da itemActivity (vedi src/utils/itemActivity.js). */}
+            {(() => {
+              const itemHistory = activityLog.filter(a => a.itemId === editItem.id)
+              if (itemHistory.length === 0) return null
+              const ACTIVITY_COLORS = {
+                added:'var(--blue)', removed:'var(--red)',
+                pronto:'#059669', unpronto:'var(--text3)',
+                loaded:'var(--accent2)', unloaded:'var(--text3)',
+                returned:'var(--green)', unreturned:'var(--text3)',
+                missing:'#ea580c', unmissing:'var(--text3)',
+              }
+              return (
+                <div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
+                  <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>{t('eventDetail.historyTitle')}</p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10, maxHeight:220, overflowY:'auto' }}>
+                    {itemHistory.map(entry => (
+                      <div key={entry.id} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
+                        <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:5 }} />
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontSize:13, fontWeight:600 }}>
+                            {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
+                          </p>
+                          <p style={{ fontSize:11, color:'var(--text2)', marginTop:1 }}>
+                            {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -1781,9 +1699,18 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggleReturned, onRemove, onEdit, onToggleMancante, onTogglePronto, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems }) {
+function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems }) {
   const { t } = useTranslation()
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
+  // Stato di sola lettura pronto/carico/rientro — si aggiorna dallo scanner
+  // (Avvia carico), qui è solo un riepilogo, non un controllo.
+  const itemStatus = item.returned
+    ? { label: t('eventDetail.returnedButton'), bg:'rgba(105,240,174,0.15)', color:'var(--green)' }
+    : item.loaded
+    ? { label: t('eventDetail.loadedButton'), bg:'rgba(245,166,35,0.15)', color:'var(--accent2)' }
+    : item.pronto
+    ? { label: t('eventDetail.readyDone'), bg:'rgba(5,150,105,0.15)', color:'#059669' }
+    : { label: t('eventDetail.statusPending'), bg:'var(--card2)', color:'var(--text3)' }
   // Elenco selezionabile: solo furgoni attivi, più quello attualmente
   // assegnato anche se disattivato (per non "perdere" la selezione corrente).
   const vehicleOptions = vehicle && vehicle.active === false
@@ -1806,7 +1733,7 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
             (le azioni a destra restano bottoni separati, non annidati qui). */}
         <button type="button"
           className="btn-no-anim"
-          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, isBundle: item.isBundle || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0 })}
+          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0 })}
           aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
           aria-pressed={bulkMode ? bulkSelected : undefined}
           style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
@@ -1887,40 +1814,17 @@ function EventItemRow({ item, location, warehouseNotes, onToggleLoaded, onToggle
               <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}</option>
             ))}
           </select>
-          {!item.loaded ? (
-            <div style={{ display:'flex', gap:5, alignItems:'center' }}>
-              <button
-                onClick={() => onTogglePronto(item.id)}
-                style={{
-                  minHeight:44, display:'flex', alignItems:'center', justifyContent:'center',
-                  background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
-                  color: item.pronto ? '#059669' : 'var(--text3)',
-                  border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
-                  borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700,
-                }}>
-                {item.pronto ? t('eventDetail.readyDone') : t('eventDetail.ready')}
-              </button>
-              <button onClick={() => onToggleLoaded(item.id)}
-                style={{
-                  minHeight:44, display:'flex', alignItems:'center', justifyContent:'center',
-                  background: 'var(--card2)',
-                  color: 'var(--text)',
-                  border: '1.5px solid var(--border)',
-                  borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center',
-                }}>
-                {t('eventDetail.toLoad')}
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => onToggleLoaded(item.id)}
-              style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center' }}>
-              {t('eventDetail.loadedButton')}
-            </button>
-          )}
-          <button onClick={() => onToggleReturned(item.id)} disabled={!item.loaded}
-            style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background: item.returned ? 'rgba(105,240,174,0.15)' : item.loaded ? 'var(--card2)' : 'transparent', color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--border)', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, minWidth:90, textAlign:'center', opacity: item.loaded ? 1 : 0.4 }}>
-            {item.returned ? t('eventDetail.returnedButton') : t('eventDetail.toReturn')}
-          </button>
+          {/* Sola lettura: pronto/carico/rientro si spuntano dallo scanner
+              (Avvia carico), non più da qui — avere due punti che scrivono
+              lo stesso stato creava confusione senza motivo, dato che
+              l'admin ha comunque la stessa pagina scanner a disposizione. */}
+          <span style={{
+            minHeight:28, display:'flex', alignItems:'center', justifyContent:'center',
+            background: itemStatus.bg, color: itemStatus.color,
+            borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:700, whiteSpace:'nowrap',
+          }}>
+            {itemStatus.label}
+          </span>
         </div>
         )}
       </div>

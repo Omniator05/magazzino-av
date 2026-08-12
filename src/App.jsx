@@ -11,7 +11,12 @@ import Inventory from './pages/Inventory'
 import Events from './pages/Events'
 import EventDetail from './pages/EventDetail'
 import Scanner from './pages/Scanner'
-import AdminUsers from './pages/AdminUsers'
+import Settings from './pages/Settings'
+import SettingsProfile from './pages/SettingsProfile'
+import SettingsModules from './pages/SettingsModules'
+import SettingsBilling from './pages/SettingsBilling'
+import SettingsUsers from './pages/SettingsUsers'
+import SettingsIntegrations from './pages/SettingsIntegrations'
 import SuperAdmin from './pages/SuperAdmin'
 import Vehicles from './pages/Vehicles'
 import Archive from './pages/Archive'
@@ -140,7 +145,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Routes>
             <Route path="/" element={<WorkerHome />} />
             {/* Magazziniere "senior": stesso ruolo, un permesso in più impostato
-                dall'admin per singolo utente (AdminUsers.jsx) — vede il
+                dall'admin per singolo utente (Settings.jsx) — vede il
                 magazzino completo (aggiungi/modifica/elimina, etichette,
                 bauli, rotture) invece della vista di sola consultazione.
                 Pensato per chi lavora davvero il magazzino ma non deve avere
@@ -213,7 +218,12 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/archive" element={<Archive />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/events/:id/scan" element={<WorkerScanner />} />
-          <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/settings" element={<Settings />} />
+          <Route path="/admin/settings/profile" element={<SettingsProfile />} />
+          <Route path="/admin/settings/modules" element={<SettingsModules />} />
+          <Route path="/admin/settings/billing" element={<SettingsBilling />} />
+          <Route path="/admin/settings/users" element={<SettingsUsers />} />
+          <Route path="/admin/settings/integrations" element={<SettingsIntegrations />} />
           <Route path="/super" element={<SuperAdmin />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/vehicles" element={<Vehicles />} />

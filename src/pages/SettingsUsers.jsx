@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { formatDate } from '../utils/formatDate'
@@ -9,16 +8,12 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import { Check, Save, Trash, Edit, User, Warn, Box } from '../components/Icon'
-import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
+import BackHomeButton from '../components/BackHomeButton'
 import FabButton from '../components/FabButton'
-import { connectGoogleCalendar, disconnectGoogleCalendar } from '../utils/googleCalendar'
-import { trialDaysLeft } from '../utils/billing'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updatePassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
   signOut
 } from 'firebase/auth'
 
@@ -112,24 +107,11 @@ function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
   )
 }
 
-export default function AdminUsers() {
+export default function SettingsUsers() {
   const { t, i18n } = useTranslation()
-  const { user, profile, team, teamId, updateTeamData } = useAuth()
+  const { user, teamId } = useAuth()
   const confirm = useConfirm()
-  const navigate = useNavigate()
-  const location = useLocation()
   const [users, setUsers]             = useState([])
-  const [logoUploading, setLogoUploading] = useState(false)
-  const [logoError, setLogoError]     = useState('')
-  const [gLoading, setGLoading]       = useState(false)
-  const [gError, setGError]           = useState('')
-  const [gCalId, setGCalId]           = useState('')
-  const [gCalSaving, setGCalSaving]   = useState(false)
-  const [websiteUrl, setWebsiteUrl]       = useState('')
-  const [websiteSaving, setWebsiteSaving] = useState(false)
-  const [websiteError, setWebsiteError]   = useState('')
-  const [billingLoading, setBillingLoading] = useState(false)
-  const [billingError, setBillingError]     = useState('')
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
   const createDrag = useModalDrag(() => setShowCreate(false))
@@ -180,117 +162,6 @@ export default function AdminUsers() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
-
-  // Ritorno da Stripe Checkout (vedi success_url in api/create-checkout-session.js).
-  // Il webhook aggiorna già billingStatus da solo: qui è solo il messaggio di
-  // conferma — puliamo subito l'URL per non ri-mostrarlo a un refresh/back.
-  useEffect(() => {
-    if (new URLSearchParams(location.search).get('billing') === 'success') {
-      showToast(t('adminUsers.billingSuccessToast'))
-      navigate('/admin/users', { replace: true })
-    }
-  }, [])
-
-  // ── Logo squadra — sostituisce "The Service Group" nella UI e nei PDF ──
-  const handleLogoChange = async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !team?.id) return
-    if (!ALLOWED_LOGO_TYPES.includes(file.type)) { setLogoError(t('adminUsers.errorLogoType')); return }
-    if (file.size > 3 * 1024 * 1024) { setLogoError(t('adminUsers.errorLogoSize')); return }
-    setLogoError(''); setLogoUploading(true)
-    try {
-      const oldPath = team.logoPath
-      const { url, path } = await uploadTeamLogo(file, team.id)
-      await updateTeamData({ logoUrl: url, logoPath: path })
-      if (oldPath) await deleteTeamLogo(oldPath)
-      showToast(t('adminUsers.logoUpdatedToast'))
-    } catch (e) {
-      setLogoError(t('adminUsers.errorLogoUpload'))
-    } finally { setLogoUploading(false) }
-  }
-
-  const removeLogo = async () => {
-    if (!(await confirm({ title: t('adminUsers.confirmRemoveLogoTitle'), message: t('adminUsers.confirmRemoveLogoMessage'), confirmLabel: t('adminUsers.confirmRemoveLogoLabel'), danger: true }))) return
-    const oldPath = team?.logoPath
-    await updateTeamData({ logoUrl: null, logoPath: null })
-    if (oldPath) await deleteTeamLogo(oldPath)
-    showToast(t('adminUsers.logoRemovedToast'))
-  }
-
-  // ── Google Calendar ───────────────────────────────────────────
-  // Sync client-only: il token vive solo in questa sessione browser, non su
-  // Firestore — va riottenuto (di solito senza popup se sei già collegato con
-  // Google) ogni volta che si riapre l'app.
-  useEffect(() => { setGCalId(team?.googleCalendarId || '') }, [team?.googleCalendarId])
-  useEffect(() => { setWebsiteUrl(team?.websiteUrl || '') }, [team?.websiteUrl])
-
-  const connectGoogle = async () => {
-    setGLoading(true); setGError('')
-    try {
-      await connectGoogleCalendar()
-      // Non sovrascrive un calendario già scelto in precedenza (es. al "Riconnetti")
-      if (!team?.googleCalendarId) await updateTeamData({ googleCalendarId: 'primary' })
-      showToast(t('adminUsers.googleCalendarConnectedToast'))
-    } catch {
-      setGError(t('adminUsers.errorGoogleCalendarConnect'))
-    } finally { setGLoading(false) }
-  }
-
-  const disconnectGoogle = async () => {
-    disconnectGoogleCalendar()
-    await updateTeamData({ googleCalendarId: null })
-    showToast(t('adminUsers.googleCalendarDisconnectedToast'))
-  }
-
-  const saveCalendarId = async () => {
-    const id = gCalId.trim() || 'primary'
-    setGCalSaving(true)
-    try {
-      await updateTeamData({ googleCalendarId: id })
-      showToast(t('adminUsers.googleCalendarIdSavedToast'))
-    } finally { setGCalSaving(false) }
-  }
-
-  // ── Sito web (destinazione dei QR scansionati fuori dall'app) ──────────
-  const saveWebsiteUrl = async () => {
-    let raw = websiteUrl.trim()
-    // Chi scrive "esempio.it" senza protocollo non deve ricevere un errore:
-    // lo normalizziamo noi invece di pretendere l'https:// esplicito.
-    if (raw && !/^https?:\/\//i.test(raw)) raw = `https://${raw}`
-    if (raw) {
-      try { new URL(raw) } catch { setWebsiteError(t('adminUsers.errorWebsiteUrlInvalid')); return }
-    }
-    setWebsiteError('')
-    setWebsiteSaving(true)
-    try {
-      await updateTeamData({ websiteUrl: raw || null })
-      setWebsiteUrl(raw)
-      showToast(t('adminUsers.websiteUrlSavedToast'))
-    } finally { setWebsiteSaving(false) }
-  }
-
-  // ── Abbonamento ────────────────────────────────────────────────
-  // portal=true → Stripe Billing Portal (gestisci/annulla un abbonamento
-  // esistente); portal=false → Stripe Checkout (sottoscrivi per la prima volta,
-  // o dopo una cancellazione). Entrambi reindirizzano a una pagina Stripe: le
-  // carte non passano mai dal nostro codice.
-  const manageBilling = async (portal) => {
-    setBillingLoading(true); setBillingError('')
-    try {
-      const idToken = await user.getIdToken()
-      const res = await fetch(portal ? '/api/create-portal-session' : '/api/create-checkout-session', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
-      const data = await res.json()
-      if (res.ok && data.url) window.location.href = data.url
-      else { setBillingError(data.error || t('adminUsers.errorBillingGeneric')); setBillingLoading(false) }
-    } catch {
-      setBillingError(t('adminUsers.errorBillingGeneric'))
-      setBillingLoading(false)
-    }
-  }
 
   // ── Crea account ──────────────────────────────────────────────
   const createAccount = async () => {
@@ -549,7 +420,7 @@ export default function AdminUsers() {
     const roleColor = ROLE_COLORS[u.role]
     return (
       <div className="item-row" onClick={() => {
-        setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setAdminPw(''); setRoleMenuOpen(false)
+        setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setRoleMenuOpen(false)
         setOrgConfig(u.organizerConfig || EMPTY_ORG_CONFIG)
         setAssignedEventId(u.assignedEventId || '')
       }} style={{ cursor:'pointer' }}>
@@ -584,84 +455,23 @@ export default function AdminUsers() {
 
   return (
     <div className="page users-page">
-      {/* Toast globale */}
       {toast && (
         <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
           {toast}
         </div>
       )}
 
-      <div className="page-header">
-        <h1>{t('adminUsers.title')}</h1>
-        <p>{t('adminUsers.totalAccounts', { count: users.length })}</p>
+      <div className="page-header" style={{ display:'flex', alignItems:'center', gap:12 }}>
+        <BackHomeButton to="/admin/settings" />
+        <div>
+          <h1>{t('adminUsers.title')}</h1>
+          <p>{t('adminUsers.totalAccounts', { count: users.length })}</p>
+        </div>
       </div>
 
       <FabButton onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} ariaLabel={t('adminUsers.newButton')} />
 
-      {/* Logo squadra — mostrato al posto del logo di default nell'app e nei PDF */}
-      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px', display:'flex', alignItems:'center', gap:14 }}>
-        <div style={{
-          width:56, height:56, borderRadius:14, flexShrink:0, overflow:'hidden',
-          background:'var(--bg3)', border:'1px solid var(--border)',
-          display:'flex', alignItems:'center', justifyContent:'center',
-        }}>
-          {team?.logoUrl
-            ? <img src={team.logoUrl} alt={team?.name || ''} style={{ width:'100%', height:'100%', objectFit:'contain' }} />
-            : <img src="/logo-default.svg" alt="" style={{ width:'70%', height:'70%', objectFit:'contain', opacity:0.5 }} />
-          }
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontWeight:700, fontSize:14 }}>{t('adminUsers.teamLogoTitle')}</p>
-          <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>{t('adminUsers.teamLogoDesc')}</p>
-          {logoError && <p style={{ color:'var(--red)', fontSize:12, marginTop:4, fontWeight:600 }}>{logoError}</p>}
-        </div>
-        <div style={{ display:'flex', flexDirection:'column', gap:6, flexShrink:0 }}>
-          <label className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:12, textAlign:'center', cursor: logoUploading ? 'default' : 'pointer', opacity: logoUploading ? 0.6 : 1 }}>
-            {logoUploading ? t('adminUsers.uploadingLogo') : team?.logoUrl ? t('adminUsers.changeLogo') : t('adminUsers.uploadLogo')}
-            <input type="file" accept={ACCEPT_LOGO_ATTR} onChange={handleLogoChange} disabled={logoUploading} style={{ display:'none' }} />
-          </label>
-          {team?.logoUrl && (
-            <button onClick={removeLogo} style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700, padding:'4px' }}>
-              {t('adminUsers.removeLogo')}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Abbonamento */}
-      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-        <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.billingTitle')}</p>
-        {team?.billingStatus === 'trialing' ? (
-          <>
-            <div style={{ display:'flex', alignItems:'baseline', gap:7, marginTop:6, marginBottom:5 }}>
-              <span style={{ fontSize:30, fontWeight:800, color:'var(--accent)', lineHeight:1 }}>{Math.max(trialDaysLeft(team) ?? 0, 0)}</span>
-              <span style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>{t('adminUsers.billingTrialingDaysLabel', { count: Math.max(trialDaysLeft(team) ?? 0, 0) })}</span>
-            </div>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.billingTrialingDesc')}</p>
-          </>
-        ) : (
-          <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>
-            {team?.billingStatus === 'exempt' ? t('adminUsers.billingExempt')
-              : team?.billingStatus === 'active' ? t('adminUsers.billingActive')
-              : team?.billingStatus === 'past_due' ? t('adminUsers.billingPastDue')
-              : t('adminUsers.billingCanceled')}
-          </p>
-        )}
-        {billingError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{billingError}</p>}
-        {team?.billingStatus !== 'exempt' && (
-          team?.stripeSubscriptionId ? (
-            <button onClick={() => manageBilling(true)} className="btn btn-secondary btn-full" disabled={billingLoading}>
-              {billingLoading ? t('common.redirecting') : t('adminUsers.manageBillingButton')}
-            </button>
-          ) : (
-            <button onClick={() => manageBilling(false)} className="btn btn-primary btn-full" disabled={billingLoading}>
-              {billingLoading ? t('common.redirecting') : t('adminUsers.subscribeButton')}
-            </button>
-          )
-        )}
-      </div>
-
-      <div style={{ padding:'16px 0 0' }}>
+      <div style={{ padding:'8px 0 0' }}>
         {pending.length > 0 && (
           <>
             <p style={{ padding:'0 16px 10px', color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.pendingApprovalSection')}</p>
@@ -680,12 +490,11 @@ export default function AdminUsers() {
           </>
         )}
 
+        <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.workersSection')}</p>
         <div style={{ margin:'0 16px 16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
           <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>{t('adminUsers.howLoginWorksTitle')}</p>
           <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
         </div>
-
-        <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.workersSection')}</p>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
           {workers.length === 0
             ? <div className="empty-state" style={{ padding:'30px' }}>
@@ -704,65 +513,6 @@ export default function AdminUsers() {
               {organizers.map(u => <UserRow key={u.id} u={u} />)}
             </div>
           </>
-        )}
-
-        {/* Sito web — dove finisce chi scansiona un QR di magazzino SENZA
-            l'app (fotocamera normale del telefono): se non impostato, il QR
-            reindirizza al sito di Roadcase invece che a una pagina a caso
-            (vedi src/utils/generateCode.js + src/pages/QrRedirect.jsx). */}
-        <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-          <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.websiteUrlTitle')}</p>
-          <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.websiteUrlDesc')}</p>
-          {websiteError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{websiteError}</p>}
-          <div style={{ display:'flex', gap:8 }}>
-            <input value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder={t('adminUsers.websiteUrlPlaceholder')} style={{ flex:1, fontSize:13 }} />
-            <button onClick={saveWebsiteUrl} className="btn btn-secondary" disabled={websiteSaving || websiteUrl.trim() === (team?.websiteUrl || '')} style={{ flexShrink:0, padding:'0 16px' }}>
-              {websiteSaving ? t('common.saving') : t('adminUsers.save')}
-            </button>
-          </div>
-        </div>
-
-        {/* Google Calendar — sync one-way (app → Google), best-effort finché chi
-            l'ha collegato ha l'app aperta con la sessione attiva. Visibile solo
-            per i team con il flag abilitato: l'app Google OAuth resta in modalità
-            "Testing" (solo account autorizzati a mano dal developer possono
-            collegarsi), quindi mostrarla a tutti darebbe solo un bottone rotto
-            con un 403 a chiunque non sia già stato aggiunto come tester. Ultima
-            voce della pagina apposta, per tenerla fuori dai piedi. */}
-        {team?.googleCalendarFeatureEnabled && (
-          <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-            <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.googleCalendarTitle')}</p>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.googleCalendarDesc')}</p>
-            {gError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{gError}</p>}
-            {team?.googleCalendarId ? (
-              <>
-                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12, color:'#15803d', fontSize:13, fontWeight:700 }}>
-                  <Check size={16} /> {t('adminUsers.googleCalendarConnected')}
-                </div>
-                <div className="form-group" style={{ marginBottom:10 }}>
-                  <label>{t('adminUsers.googleCalendarIdLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.googleCalendarIdHint')}</span></label>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <input value={gCalId} onChange={e => setGCalId(e.target.value)} placeholder="primary" style={{ flex:1, fontFamily:'monospace', fontSize:13 }} />
-                    <button onClick={saveCalendarId} className="btn btn-secondary" disabled={gCalSaving || gCalId.trim() === (team.googleCalendarId || '')} style={{ flexShrink:0, padding:'0 16px' }}>
-                      {gCalSaving ? t('common.saving') : t('adminUsers.save')}
-                    </button>
-                  </div>
-                </div>
-                <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={connectGoogle} className="btn btn-secondary" style={{ flex:1 }} disabled={gLoading}>
-                    {gLoading ? t('common.saving') : t('adminUsers.googleCalendarReconnect')}
-                  </button>
-                  <button onClick={disconnectGoogle} style={{ flex:1, background:'transparent', border:'1px solid var(--border)', borderRadius:'var(--radius-sm, 10px)', color:'var(--red)', fontWeight:700, fontSize:13 }}>
-                    {t('adminUsers.googleCalendarDisconnect')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button onClick={connectGoogle} className="btn btn-primary btn-full" disabled={gLoading}>
-                {gLoading ? t('common.saving') : t('adminUsers.googleCalendarConnectButton')}
-              </button>
-            )}
-          </div>
         )}
       </div>
 

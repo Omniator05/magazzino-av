@@ -33,8 +33,8 @@ export default async function handler(req, res) {
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       allow_promotion_codes: true,
       client_reference_id: teamId,
-      success_url: `${origin}/admin/users?billing=success`,
-      cancel_url: `${origin}/admin/users?billing=cancel`,
+      success_url: `${origin}/admin/settings/billing?billing=success`,
+      cancel_url: `${origin}/admin/settings/billing?billing=cancel`,
     })
     res.status(200).json({ url: session.url })
   } catch (e) {

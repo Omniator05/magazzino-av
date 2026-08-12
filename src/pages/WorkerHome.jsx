@@ -9,6 +9,7 @@ import LogoutButton from '../components/LogoutButton'
 import TutorialModal from '../components/TutorialModal'
 import { Unload, Recurring, Pin, Box, Gear } from '../components/Icon'
 import { formatDate, capitalize } from '../utils/formatDate'
+import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
 
 const greetingKey = () => {
@@ -21,7 +22,8 @@ const greetingKey = () => {
 
 export default function WorkerHome() {
   const { t, i18n } = useTranslation()
-  const { profile, logout, teamId, showOverlay } = useAuth()
+  const { profile, logout, team, teamId, showOverlay } = useAuth()
+  const loadListsOn = isModuleEnabled(team, 'loadLists')
   const [showProfile, setShowProfile] = useState(false)
   const [events, setEvents] = useState([])
   const [weather, setWeather] = useState(() => {
@@ -299,14 +301,14 @@ export default function WorkerHome() {
 
       <div style={{ padding:'16px 0' }}>
 
-        {/* DA SCARICARE — in evidenza */}
-        {daScaricare.length > 0 && (
+        {/* DA SCARICARE — in evidenza, solo se il modulo liste di carico è attivo */}
+        {loadListsOn && daScaricare.length > 0 && (
           <div id="sec-dascaricare" style={{ margin:'0 0 8px', scrollMarginTop:16 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px' }}>
               <p style={{ color:'#ea580c', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Unload size={15} /> {t('workerHome.toUnload')}</p>
               <div style={{ flex:1, height:1, background:'rgba(234,88,12,0.25)' }} />
             </div>
-            {daScaricare.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} forceState="daScaricare" />)}
+            {daScaricare.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} forceState="daScaricare" loadListsOn={loadListsOn} />)}
           </div>
         )}
 
@@ -325,7 +327,7 @@ export default function WorkerHome() {
                   <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={15} /> {t('workerHome.recurring')}</p>
                   <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
                 </div>
-                {pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} />)}
+                {pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
                 {upcomingSingle.length > 0 && <div style={{ height:1, background:'var(--border)', margin:'4px 16px 12px' }} />}
               </>
             )}
@@ -336,7 +338,7 @@ export default function WorkerHome() {
                 {pinnedRecurring.length > 0 && (
                   <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'0 16px 8px' }}>{t('workerHome.upcoming')}</p>
                 )}
-                {upcomingSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} />)}
+                {upcomingSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
               </div>
             )}
           </>
@@ -350,14 +352,14 @@ export default function WorkerHome() {
   )
 }
 
-function EventCard({ ev, today, navigate, forceState }) {
+function EventCard({ ev, today, navigate, forceState, loadListsOn }) {
   const { t, i18n } = useTranslation()
   const items    = ev.items || []
-  const loaded   = items.filter(i => i.loaded).length
-  const returned = items.filter(i => i.returned).length
-  const total    = items.length
+  const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
+  const returned = loadListsOn ? items.filter(i => i.returned).length : 0
+  const total    = loadListsOn ? items.length : 0
   const isToday  = ev.date === today
-  const daScaricare = forceState === 'daScaricare'
+  const daScaricare = loadListsOn && forceState === 'daScaricare'
 
   let phase = 'prep'
   if (total > 0 && returned === total)  phase = 'done'

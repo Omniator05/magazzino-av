@@ -9,13 +9,15 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import DeleteButton from '../components/DeleteButton'
 import BackHomeButton from '../components/BackHomeButton'
+import { isModuleEnabled } from '../utils/modules'
 
 const PAGE_SIZE = 30
 
 export default function Archive() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { user, teamId } = useAuth()
+  const { user, team, teamId } = useAuth()
+  const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const [events, setEvents]           = useState([])
   const [search, setSearch]           = useState('')
@@ -144,7 +146,7 @@ export default function Archive() {
                         <p style={{ color:'var(--text2)', fontSize:13 }}>
                           <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
                         </p>
-                        {total > 0 && (
+                        {loadListsOn && total > 0 && (
                           <p style={{ color:'var(--text2)', fontSize:12, marginTop:4 }}>
                             {t('archive.itemsCount', { count: total })} · {returned === total ? t('archive.allReturned') : t('archive.partialReturned', { returned, total })}
                           </p>
@@ -167,7 +169,7 @@ export default function Archive() {
                       </div>
                     </div>
 
-                    {total > 0 && (
+                    {loadListsOn && total > 0 && (
                       <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
                         <p style={{ color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:6 }}>{t('archive.loadingListTitle')}</p>
                         <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>

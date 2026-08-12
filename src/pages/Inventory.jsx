@@ -18,6 +18,15 @@ import FabButton from '../components/FabButton'
 import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
 
+// Colori pallino per la sezione Cronologia (dettaglio oggetto) — stessa
+// mappa azione→colore usata nel modale modifica riga di EventDetail.jsx.
+const ACTIVITY_COLORS = {
+  added:'var(--blue)', removed:'var(--red)',
+  pronto:'#059669', unpronto:'var(--text3)',
+  loaded:'var(--accent2)', unloaded:'var(--text3)',
+  returned:'var(--green)', unreturned:'var(--text3)',
+  missing:'#ea580c', unmissing:'var(--text3)',
+}
 const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const KIT_CATEGORIES = CATEGORIES
 // Ordine di visualizzazione nella lista raggruppata
@@ -107,6 +116,12 @@ export default function Inventory() {
   // Per i kit: filtra "dove si trova" a un baule fisico specifico invece
   // dell'aggregato di tutto il kit — null = tutti i bauli insieme.
   const [historyInstanceFilter, setHistoryInstanceFilter] = useState(null)
+  const [itemActivityLog, setItemActivityLog] = useState([])
+  // Popup "cronologia per evento" — evita di rimandare fuori da Magazzino
+  // verso la lista di carico (che potrebbe essere archiviata, o non avere
+  // più questo oggetto se nel frattempo è stato rimosso): i dati sono già
+  // tutti caricati in itemActivityLog, qui si filtra solo per evento.
+  const [showEventActivity, setShowEventActivity] = useState(null) // { id, name } | null
   const [qrUrl, setQrUrl] = useState(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showPrintPopup, setShowPrintPopup] = useState(false)
@@ -174,6 +189,17 @@ export default function Inventory() {
     const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [teamId])
+
+  // Cronologia "chi ha fatto cosa" sull'oggetto selezionato, attraverso TUTTI
+  // gli eventi in cui è comparso — non solo quello corrente, che può anche
+  // averlo già rimosso dalla propria lista (vedi src/utils/itemActivity.js).
+  // Query solo quando il dettaglio è aperto: non serve caricarla per ogni
+  // riga dell'intero magazzino.
+  useEffect(() => {
+    if (!showDetail?.id) { setItemActivityLog([]); return }
+    const q = query(collection(db, 'itemActivity'), where('catalogItemId', '==', showDetail.id), orderBy('createdAt', 'desc'))
+    return onSnapshot(q, snap => setItemActivityLog(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [showDetail?.id])
 
   // Riga evento che corrisponde all'oggetto selezionato — se è un kit e un
   // baule specifico è filtrato, deve anche essere tra quelli assegnati a
@@ -1038,6 +1064,49 @@ export default function Inventory() {
                       })}
                     </div>
                   )}
+
+                  {/* Cronologia "chi ha fatto cosa" — attraverso TUTTI gli
+                      eventi (anche quelli che nel frattempo hanno rimosso
+                      l'oggetto dalla propria lista di carico, o sono stati
+                      archiviati/eliminati), non solo quelli sopra. Toccare
+                      una voce apre un popup con la cronologia di QUEL solo
+                      evento, invece di rimandare alla sua lista di carico —
+                      che potrebbe non esistere più, o non avere più questo
+                      oggetto. I dati sono già tutti in itemActivityLog: si
+                      filtra client-side, nessuna query in più. */}
+                  {itemActivityLog.length > 0 && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
+                      <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.activityTitle')}</p>
+                      <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:260, overflowY:'auto' }}>
+                        {itemActivityLog.map(entry => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            className="btn-no-anim"
+                            disabled={!entry.eventId}
+                            onClick={() => entry.eventId && setShowEventActivity({ id: entry.eventId, name: entry.eventName })}
+                            style={{ display:'flex', alignItems:'flex-start', gap:9, width:'100%', textAlign:'left', background:'transparent', padding:'6px 4px', borderRadius:8, cursor: entry.eventId ? 'pointer' : 'default' }}
+                          >
+                            <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <p style={{ fontSize:13, fontWeight:600 }}>
+                                {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
+                              </p>
+                              <p style={{ fontSize:11, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                {entry.eventName && (
+                                  <span style={{ color: entry.eventId ? 'var(--blue)' : 'var(--text2)', fontWeight:600 }}>{entry.eventName}</span>
+                                )}
+                                <span style={{ color:'var(--text2)' }}>
+                                  {entry.eventName ? ' · ' : ''}
+                                  {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
+                                </span>
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -1080,6 +1149,46 @@ export default function Inventory() {
                   {t('inventory.printAllUnits', { count: showDetail.totalQty })}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cronologia di un singolo evento, dalla sezione Cronologia sopra —
+          stesso stile "riquadro centrato" di showPrintPopup. Filtra
+          itemActivityLog già in memoria, nessuna nuova query. */}
+      {showEventActivity && (
+        <div
+          onClick={() => setShowEventActivity(null)}
+          style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position:'relative', width:'100%', maxWidth:360, maxHeight:'80vh', display:'flex', flexDirection:'column', background:'var(--card)', borderRadius:16, padding:20, boxShadow:'0 12px 40px rgba(0,0,0,0.3)' }}
+          >
+            <button
+              onClick={() => setShowEventActivity(null)}
+              aria-label={t('common.close')}
+              style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}
+            >
+              ✕
+            </button>
+            <h2 style={{ marginBottom:2, fontSize:17, paddingRight:36 }}>{showEventActivity.name || t('inventory.activityTitle')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:16 }}>{showDetail?.name}</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
+              {itemActivityLog.filter(entry => entry.eventId === showEventActivity.id).map(entry => (
+                <div key={entry.id} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:13, fontWeight:600 }}>
+                      {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
+                    </p>
+                    <p style={{ fontSize:11, color:'var(--text2)', marginTop:1 }}>
+                      {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -70,7 +70,7 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
   const steps = [
     { key:'item',  label: t('dashboard.gettingStartedItem'),  icon: <IconBoxPlus />,      path:'/inventory',    done: items.length > 0 },
     { key:'event', label: t('dashboard.gettingStartedEvent'), icon: <IconCalendarPlus />, path:'/events',       done: events.length > 0 },
-    { key:'team',  label: t('dashboard.gettingStartedTeam'),  icon: <IconUsersPlus />,    path:'/admin/users',  done: (workerCount ?? 1) > 1 },
+    { key:'team',  label: t('dashboard.gettingStartedTeam'),  icon: <IconUsersPlus />,    path:'/admin/settings',  done: (workerCount ?? 1) > 1 },
   ]
   const doneCount = steps.filter(s => s.done).length
 

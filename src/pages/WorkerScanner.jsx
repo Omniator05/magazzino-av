@@ -9,6 +9,8 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 import { Check, Truck, Unload, Warn } from '../components/Icon'
+import { logItemActivity } from '../utils/itemActivity'
+import { syncKitAwareInventory } from '../utils/kitInventory'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -37,7 +39,7 @@ const ICONS = {
 export default function WorkerScanner() {
   const { t } = useTranslation()
   const { id } = useParams()
-  const { profile, teamId } = useAuth()
+  const { user, profile, teamId } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   // Se arriviamo da /events/:id/scan (admin) torniamo all'evento, altrimenti alla home worker
@@ -59,6 +61,56 @@ export default function WorkerScanner() {
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   const [error, setError] = useState(null)
   const [saveError, setSaveError] = useState('')
+  // Sovrascritture ottimistiche per pronto/carico/rientro/mancante: senza,
+  // il bottone resta fermo fino al giro di andata/ritorno della transazione
+  // Firestore (fino a un secondo con la connessione del magazzino) — con
+  // questa mappa il bottone cambia subito al tocco.
+  //
+  // La sovrascrittura NON si toglie appena la transazione risponde: il
+  // listener onSnapshot che aggiorna "event" arriva quasi subito dopo, ma
+  // non è garantito essere già arrivato in quell'istante — toglierla troppo
+  // presto faceva "sbattere" il bottone indietro al valore vecchio per un
+  // istante e poi di nuovo al nuovo. Si toglie invece quando il dato vero
+  // (dal listener) la raggiunge — vedi l'effect subito sotto — così sparisce
+  // senza che il valore visualizzato cambi.
+  const [pendingOverrides, setPendingOverrides] = useState({})
+  const setOptimistic = (itemId, fields) => {
+    setPendingOverrides(prev => ({ ...prev, [itemId]: { ...prev[itemId], ...fields } }))
+    // Rete di sicurezza: se il dato vero non dovesse mai convergere (evento
+    // rimosso nel frattempo, conflitto concorrente...) la sovrascrittura non
+    // resta bloccata per sempre.
+    setTimeout(() => clearOptimistic(itemId, Object.keys(fields)), 5000)
+  }
+  const clearOptimistic = (itemId, keys) => setPendingOverrides(prev => {
+    if (!prev[itemId]) return prev
+    const nextItem = { ...prev[itemId] }
+    keys.forEach(k => delete nextItem[k])
+    const next = { ...prev }
+    if (Object.keys(nextItem).length === 0) delete next[itemId]
+    else next[itemId] = nextItem
+    return next
+  })
+  // Riconciliazione: appena il valore vero (dal listener Firestore) coincide
+  // con quello mostrato in anteprima, la sovrascrittura sparisce — senza
+  // alcun cambiamento visibile, perché il valore era già quello giusto.
+  useEffect(() => {
+    setPendingOverrides(prev => {
+      if (Object.keys(prev).length === 0) return prev
+      const rawItems = event?.items || []
+      let changed = false
+      const next = {}
+      for (const [itemId, fields] of Object.entries(prev)) {
+        const raw = rawItems.find(i => i.id === itemId)
+        const remaining = {}
+        for (const [k, v] of Object.entries(fields)) {
+          if (raw && raw[k] === v) changed = true
+          else remaining[k] = v
+        }
+        if (Object.keys(remaining).length > 0) next[itemId] = remaining
+      }
+      return changed ? next : prev
+    })
+  }, [event])
   const [processing, setProcessing] = useState(false) // blocca scansioni doppie
   const [scanToast, setScanToast] = useState(null)
   const [showExtraWorker, setShowExtraWorker] = useState(false)
@@ -311,14 +363,22 @@ export default function WorkerScanner() {
     setTimeout(() => setScanToast(null), outcome.action === 'wrong_instance' ? 4000 : 3000)
 
     if (outcome.action === 'loaded' || outcome.action === 'returned') {
-      const invRef = doc(db, 'items', foundItem.id)
-      const invSnap = await getDoc(invRef)
-      if (invSnap.exists()) {
-        const inv = invSnap.data()
-        const qty = outcome.item.qty || 1
-        if (outcome.action === 'loaded') await updateDoc(invRef, { availableQty: Math.max(0, (inv.availableQty || 0) - qty) })
-        else await updateDoc(invRef, { availableQty: Math.min(inv.totalQty, (inv.availableQty || 0) + qty) })
-      }
+      // foundItem.id è già l'oggetto vero di magazzino (trovato per codice
+      // scansionato, non per id di riga evento) — nessun itemRef da risolvere qui.
+      await syncKitAwareInventory({
+        catalogItemId: foundItem.id, isBundle: outcome.item.isBundle, category: outcome.item.category,
+        qty: outcome.item.qty, sign: outcome.action === 'loaded' ? -1 : 1,
+      })
+    }
+
+    // Cronologia — solo sui completamenti veri (pronto/loaded/returned), non
+    // su "già fatto" o su un avanzamento parziale di un kit multi-unità.
+    if (outcome.action === 'pronto' || outcome.action === 'loaded' || outcome.action === 'returned') {
+      logItemActivity({
+        teamId, eventId: id, eventName: event?.name, itemId: outcome.item.id, itemName: outcome.item.name,
+        catalogItemId: outcome.item.isExtra ? null : (outcome.item.itemRef || outcome.item.id),
+        action: outcome.action, profile, userId: user?.uid,
+      })
     }
     } catch (e) {
       // La scansione non è stata registrata: niente vibrazione/suono di
@@ -396,7 +456,7 @@ export default function WorkerScanner() {
   }
 
   // Derivazioni items — calcolate sempre (prima del return anticipato)
-  const items = event ? event.items || [] : []
+  const items = event ? (event.items || []).map(i => pendingOverrides[i.id] ? { ...i, ...pendingOverrides[i.id] } : i) : []
   const prepared = items.filter(i => i.pronto).length
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
@@ -917,6 +977,11 @@ export default function WorkerScanner() {
                     // riprova automaticamente da una lettura fresca se qualcun
                     // altro ha scritto nel mezzo.
                     _onToggleLoaded: async (itemId) => {
+                      const newLoadedGuess = !item.loaded
+                      setOptimistic(itemId, {
+                        loaded: newLoadedGuess,
+                        pronto: newLoadedGuess ? true : item.pronto,
+                      })
                       let itm, newLoaded
                       try {
                         await runTransaction(db, async (tx) => {
@@ -940,18 +1005,34 @@ export default function WorkerScanner() {
                             ...(!newLoaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] } } : {}),
                           }) })
                         })
-                        if (!itm) return
-                        const invRef = doc(db, 'items', itemId)
-                        const invSnap = await getDoc(invRef)
-                        if (invSnap.exists()) {
-                          const delta = newLoaded ? -(itm.qty||1) : (itm.qty||1)
-                          await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
-                        }
                       } catch (e) {
                         setSaveError(t('workerScanner.saveErrorMessage'))
+                        clearOptimistic(itemId, ['loaded', 'pronto'])
+                        return
                       }
+                      if (!itm) { clearOptimistic(itemId, ['loaded', 'pronto']); return }
+                      // itm.itemRef risolve al vero oggetto di magazzino per le
+                      // righe duplicate (stesso oggetto aggiunto due volte
+                      // all'evento) — usare "itemId" (id della riga) da solo
+                      // qui puntava a un documento inesistente e la giacenza
+                      // non si aggiornava per niente, in silenzio.
+                      await syncKitAwareInventory({
+                        catalogItemId: itm.itemRef || itemId, isBundle: itm.isBundle, category: itm.category,
+                        qty: itm.qty, sign: newLoaded ? -1 : 1,
+                      })
+                      logItemActivity({
+                        teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
+                        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+                        action: newLoaded ? 'loaded' : 'unloaded', profile, userId: user?.uid,
+                      })
                     },
                     _onToggleReturned: async (itemId) => {
+                      const newReturnedGuess = !item.returned
+                      setOptimistic(itemId, {
+                        returned: newReturnedGuess,
+                        pronto: newReturnedGuess ? true : item.pronto,
+                        loaded: newReturnedGuess ? true : item.loaded,
+                      })
                       let itm, newReturned
                       try {
                         await runTransaction(db, async (tx) => {
@@ -970,18 +1051,25 @@ export default function WorkerScanner() {
                             ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
                           }) })
                         })
-                        if (!itm) return
-                        const invRef = doc(db, 'items', itemId)
-                        const invSnap = await getDoc(invRef)
-                        if (invSnap.exists()) {
-                          const delta = newReturned ? (itm.qty||1) : -(itm.qty||1)
-                          await updateDoc(invRef, { availableQty: Math.max(0, Math.min(invSnap.data().totalQty, (invSnap.data().availableQty||0) + delta)) })
-                        }
                       } catch (e) {
                         setSaveError(t('workerScanner.saveErrorMessage'))
+                        clearOptimistic(itemId, ['returned', 'pronto', 'loaded'])
+                        return
                       }
+                      if (!itm) { clearOptimistic(itemId, ['returned', 'pronto', 'loaded']); return }
+                      await syncKitAwareInventory({
+                        catalogItemId: itm.itemRef || itemId, isBundle: itm.isBundle, category: itm.category,
+                        qty: itm.qty, sign: newReturned ? 1 : -1,
+                      })
+                      logItemActivity({
+                        teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
+                        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+                        action: newReturned ? 'returned' : 'unreturned', profile, userId: user?.uid,
+                      })
                     },
                     _onTogglePronto: async (itemId) => {
+                      const newPronto = !item.pronto
+                      setOptimistic(itemId, { pronto: newPronto })
                       try {
                         await runTransaction(db, async (tx) => {
                           const snap = await tx.get(eventRef)
@@ -994,9 +1082,18 @@ export default function WorkerScanner() {
                         })
                       } catch (e) {
                         setSaveError(t('workerScanner.saveErrorMessage'))
+                        clearOptimistic(itemId, ['pronto'])
+                        return
                       }
+                      logItemActivity({
+                        teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
+                        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+                        action: newPronto ? 'pronto' : 'unpronto', profile, userId: user?.uid,
+                      })
                     },
                     _onToggleMancante: async (itemId) => {
+                      const newMancante = !item.mancante
+                      setOptimistic(itemId, { mancante: newMancante })
                       try {
                         await runTransaction(db, async (tx) => {
                           const snap = await tx.get(eventRef)
@@ -1006,7 +1103,14 @@ export default function WorkerScanner() {
                         })
                       } catch (e) {
                         setSaveError(t('workerScanner.saveErrorMessage'))
+                        clearOptimistic(itemId, ['mancante'])
+                        return
                       }
+                      logItemActivity({
+                        teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
+                        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+                        action: newMancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
+                      })
                     },
                   })
 
@@ -1091,7 +1195,6 @@ export default function WorkerScanner() {
                       {unassignedItems.filter(matchesSearch).length > 0 && (
                         <div>
                           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', background:'var(--bg2)' }}>
-                            <span style={{ fontSize:15 }}>📦</span>
                             <span style={{ fontSize:12.5, fontWeight:800, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{t('workerScanner.unassignedVehicle')}</span>
                             <div style={{ flex:1, height:1, background:'var(--border)' }} />
                             <span style={{ fontSize:11, fontWeight:700, color:'var(--text2)' }}>{unassignedItems.filter(matchesSearch).length}</span>

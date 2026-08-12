@@ -16,6 +16,7 @@ import FabButton from '../components/FabButton'
 import { syncEventToGoogle, deleteGoogleEvent, listUpcomingGoogleEvents, fromGoogleEvent, connectGoogleCalendar } from '../utils/googleCalendar'
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, getDoc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
+import { isModuleEnabled } from '../utils/modules'
 function addDays(dateStr, days) {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + days)
@@ -127,15 +128,19 @@ const IconCalendarSm = () => (
 // Definiti a livello di modulo (non dentro Events()) così React li riconosce
 // come lo stesso tipo di componente tra un render e l'altro invece di
 // smontare/rimontare ogni card a ogni tasto premuto nella ricerca.
-function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDelete }) {
+function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDelete, loadListsOn }) {
   const items    = event.items || []
-  const loaded   = items.filter(i => i.loaded).length
-  const returned = items.filter(i => i.returned).length
-  const total    = items.length
+  // Se il modulo liste di carico è disattivato, la riga di stato sotto il
+  // titolo non va mostrata: azzerare qui invece che nel JSX fa sì che anche
+  // i colori/bordo derivati (iconGradient, cardBorder) tornino da soli ai
+  // rami "non caricato" senza doverli duplicare.
+  const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
+  const returned = loadListsOn ? items.filter(i => i.returned).length : 0
+  const total    = loadListsOn ? items.length : 0
   const isToday  = event.date === today
   const evEnd    = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
   const isPast   = evEnd < today
-  const daScaricare = isPast && items.some(i => i.loaded && !i.returned)
+  const daScaricare = loadListsOn && isPast && items.some(i => i.loaded && !i.returned)
 
   let statusColor = 'var(--dash-muted)', statusText = t('events.statusEmptyList')
   if (total > 0) {
@@ -189,10 +194,12 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
           <h3 style={{ fontSize:15, fontWeight:700, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{event.name}</h3>
         </div>
-        <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
-          {(daScaricare || isToday) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
-          {daScaricare ? t('events.daScaricareCount', { count: total-returned }) : isToday ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
-        </p>
+        {loadListsOn && (
+          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
+            {(daScaricare || isToday) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
+            {daScaricare ? t('events.daScaricareCount', { count: total-returned }) : isToday ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
+          </p>
+        )}
         {(event.location || (event.phases && phaseConfig.some(p => event.phases[p.key]))) && (
           <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, flexWrap:'wrap' }}>
             {event.location && <span style={{ fontSize:11, color:'var(--dash-muted)', display:'inline-flex', alignItems:'center', gap:4 }}><Pin size={12} /> {event.location}</span>}
@@ -214,7 +221,7 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   )
 }
 
-function InstallationCard({ event: inst, today, t, navigate, onEdit, onDelete, onClose }) {
+function InstallationCard({ event: inst, today, t, navigate, onEdit, onDelete, onClose, loadListsOn }) {
   const items     = inst.items || []
   const loaded    = items.filter(i => i.loaded).length
   const total     = items.length
@@ -247,9 +254,11 @@ function InstallationCard({ event: inst, today, t, navigate, onEdit, onDelete, o
             <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
           </div>
           <DateBadge dateStr={inst.date} dateEndStr={inst.endDate} location={inst.location} today={today} />
-          <p style={{ color: loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)', fontSize:12, fontWeight:600, marginTop:4 }}>
-            {total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })}
-          </p>
+          {loadListsOn && (
+            <p style={{ color: loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)', fontSize:12, fontWeight:600, marginTop:4 }}>
+              {total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })}
+            </p>
+          )}
         </button>
         <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
           <EditButton onClick={e => onEdit(e, inst)} size={44} ariaLabel={t('events.editInstallationAria')} />
@@ -276,6 +285,7 @@ function InstallationCard({ event: inst, today, t, navigate, onEdit, onDelete, o
 export default function Events() {
   const { t, i18n } = useTranslation()
   const { user, team, teamId } = useAuth()
+  const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const RECURRENCE_OPTIONS = [
     { value:'never',   label:t('events.recurrenceNever') },
@@ -548,7 +558,7 @@ export default function Events() {
     }
   }
 
-  const cardProps = { today, t, i18n, navigate, phaseConfig: PHASE_CONFIG, onEdit: openEdit, onDelete: deleteEvent }
+  const cardProps = { today, t, i18n, navigate, phaseConfig: PHASE_CONFIG, onEdit: openEdit, onDelete: deleteEvent, loadListsOn }
 
   const createFromTemplate = (template) => {
     setShowTemplateMenu(false)
@@ -582,7 +592,7 @@ export default function Events() {
     await updateDoc(doc(db, 'events', installation.id), { archived: true })
   }
 
-  const instCardProps = { today, t, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: closeInstallation }
+  const instCardProps = { today, t, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: closeInstallation, loadListsOn }
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
@@ -648,8 +658,8 @@ export default function Events() {
           </>
         ) : (
           <>
-            {/* DA SCARICARE — collassabile */}
-            {daScaricareSingle.length > 0 && (
+            {/* DA SCARICARE — collassabile, solo se il modulo liste di carico è attivo */}
+            {loadListsOn && daScaricareSingle.length > 0 && (
               <div style={{ marginBottom:4 }}>
                 <button onClick={() => toggle('unload')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>

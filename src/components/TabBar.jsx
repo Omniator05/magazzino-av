@@ -17,7 +17,7 @@ const adminTabs = [
   { path:'/calendar',   label:'Calendario',icon:ICON_CALENDAR },
   { path:'/events',     label:'Eventi',    icon:ICON_EVENTS },
   { path:'/inventory',  label:'Magazzino', icon:ICON_WAREHOUSE },
-  { path:'/admin/users',label:'Utenti',    icon:ICON_USERS },
+  { path:'/admin/settings',label:'Impostazioni', icon:ICON_USERS },
 ]
 
 const workerTabs = [
