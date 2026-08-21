@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
@@ -42,6 +43,21 @@ export default function WorkerScanner() {
   const { user, profile, teamId } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  // Popup dedicato "pieno/consumato" per il rientro dei consumabili — non il
+  // confirm() generico dell'app (quello usa il rosso d'accento anche per la
+  // scelta positiva, qui invece il rosso deve restare riservato a
+  // eliminare/azioni negative: verde per "pieno", rosso tenue per "consumato".
+  const [consumableConfirm, setConsumableConfirm] = useState(null) // { name } | null
+  const consumableResolverRef = useRef(null)
+  const askConsumableIntact = (name) => new Promise(resolve => {
+    consumableResolverRef.current = resolve
+    setConsumableConfirm({ name })
+  })
+  const resolveConsumableConfirm = (intact) => {
+    setConsumableConfirm(null)
+    consumableResolverRef.current?.(intact)
+    consumableResolverRef.current = null
+  }
   // Se arriviamo da /events/:id/scan (admin) torniamo all'evento, altrimenti alla home worker
   const backPath = location.pathname.endsWith('/scan') ? `/events/${id}` : '/'
   const [event, setEvent] = useState(null)
@@ -74,12 +90,29 @@ export default function WorkerScanner() {
   // (dal listener) la raggiunge — vedi l'effect subito sotto — così sparisce
   // senza che il valore visualizzato cambi.
   const [pendingOverrides, setPendingOverrides] = useState({})
+  // Specchio in un ref (letto nel setTimeout di setOptimistic sotto): serve
+  // per sapere, quando scatta la rete di sicurezza, se la sovrascrittura è
+  // ANCORA lì (transazione mai risolta) invece di leggere lo stato con un
+  // altro setPendingOverrides — evitare effetti collaterali dentro un
+  // updater di stato, che in StrictMode può essere invocato due volte.
+  const pendingOverridesRef = useRef({})
+  useEffect(() => { pendingOverridesRef.current = pendingOverrides }, [pendingOverrides])
   const setOptimistic = (itemId, fields) => {
     setPendingOverrides(prev => ({ ...prev, [itemId]: { ...prev[itemId], ...fields } }))
-    // Rete di sicurezza: se il dato vero non dovesse mai convergere (evento
-    // rimosso nel frattempo, conflitto concorrente...) la sovrascrittura non
-    // resta bloccata per sempre.
-    setTimeout(() => clearOptimistic(itemId, Object.keys(fields)), 5000)
+    const keys = Object.keys(fields)
+    // Rete di sicurezza: la connessione di questo magazzino è spesso lenta —
+    // se dopo un tempo ragionevole il dato vero non è mai arrivato (né un
+    // successo dal listener né un errore esplicito della transazione, che
+    // mostra già il proprio avviso), la sovrascrittura non deve restare
+    // bloccata per sempre MA nemmeno sparire in silenzio: l'oggetto
+    // "segnato" sembrerebbe scomparire senza spiegazione. Avvisiamo che il
+    // salvataggio potrebbe non essere andato a buon fine.
+    setTimeout(() => {
+      const stillPending = pendingOverridesRef.current[itemId] && keys.some(k => k in pendingOverridesRef.current[itemId])
+      if (!stillPending) return
+      clearOptimistic(itemId, keys)
+      setSaveError(t('workerScanner.saveErrorMessage'))
+    }, 12000)
   }
   const clearOptimistic = (itemId, keys) => setPendingOverrides(prev => {
     if (!prev[itemId]) return prev
@@ -246,6 +279,22 @@ export default function WorkerScanner() {
 
     const foundItem = { id: itemSnap.docs[0].id, ...itemSnap.docs[0].data() }
 
+    // Per i consumabili il rientro non è mai scontato al 100%: chiediamo
+    // PRIMA della transazione (non si può aprire un popup e aspettare
+    // l'utente dentro una transazione Firestore, che deve restare pura e
+    // ripetibile) se questo scan porterà la riga a "rientrato" — solo in
+    // quel caso vale la pena chiedere. Nel raro caso di un consumabile con
+    // bauli tracciati singolarmente (scan parziale) saltiamo la domanda e si
+    // comporta come sempre: un'approssimazione accettabile per un caso limite.
+    let intact = true
+    if (mode === 'return' && foundItem.category === 'Consumabili') {
+      const localItem = event?.items?.find(i => i.id === foundItem.id)
+      const singleScanCompletes = localItem && localItem.loaded && !localItem.returned && (localItem.instanceNumbers || []).length <= 1
+      if (singleScanCompletes) {
+        intact = await askConsumableIntact(foundItem.name)
+      }
+    }
+
     // Tutto ciò che legge/scrive event.items va dentro una transazione: con
     // più magazzinieri sulla stessa lista, due scansioni quasi simultanee
     // basate su una lettura "vecchia" facevano sì che l'ultima scrittura
@@ -320,6 +369,7 @@ export default function WorkerScanner() {
             ...i, scannedInstances: updatedScanned, [doneFieldName]: isComplete,
             ...(isComplete ? cascadeFor(doneFieldName) : {}),
             ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
+            ...(doneFieldName === 'returned' && isComplete ? { returnedConsumed: !intact } : {}),
           } : i) })
           outcome = isComplete
             ? { action: doneAction, item: eventItem, ...extra }
@@ -329,6 +379,7 @@ export default function WorkerScanner() {
         tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
           ...i, [doneFieldName]: true, ...cascadeFor(doneFieldName),
           ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
+          ...(doneFieldName === 'returned' ? { returnedConsumed: !intact } : {}),
         } : i) })
         outcome = { action: doneAction, item: eventItem, ...extra }
       }
@@ -362,7 +413,7 @@ export default function WorkerScanner() {
     setScanToast({ ...outcome, ts: Date.now() })
     setTimeout(() => setScanToast(null), outcome.action === 'wrong_instance' ? 4000 : 3000)
 
-    if (outcome.action === 'loaded' || outcome.action === 'returned') {
+    if (outcome.action === 'loaded' || (outcome.action === 'returned' && intact)) {
       // foundItem.id è già l'oggetto vero di magazzino (trovato per codice
       // scansionato, non per id di riga evento) — nessun itemRef da risolvere qui.
       await syncKitAwareInventory({
@@ -628,6 +679,37 @@ export default function WorkerScanner() {
           <p style={{ color:'#fff', fontSize:13, fontWeight:600, lineHeight:1.4 }}>{saveError}</p>
           <button onClick={() => setSaveError('')} aria-label={t('common.close')} style={{ background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:16, fontWeight:700, flexShrink:0, padding:'0 2px' }}>✕</button>
         </div>
+      )}
+
+      {/* Popup rientro consumabile — verde per "pieno" (torna disponibile),
+          rosso tenue per "consumato" (non lo tocca): il rosso pieno resta
+          riservato alle azioni distruttive/negative del resto dell'app. */}
+      {consumableConfirm && createPortal(
+        <div
+          onClick={() => resolveConsumableConfirm(false)}
+          style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+        >
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true"
+            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>
+              {t('workerScanner.consumableReturnTitle')}
+            </h3>
+            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
+              {t('workerScanner.consumableReturnMessage', { name: consumableConfirm.name })}
+            </p>
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              <button onClick={() => resolveConsumableConfirm(false)}
+                style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'rgba(220,38,38,0.1)', color:'#dc2626', border:'none', cursor:'pointer' }}>
+                {t('workerScanner.consumableReturnConsumed')}
+              </button>
+              <button onClick={() => resolveConsumableConfirm(true)}
+                style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#16a34a', color:'#fff', border:'none', cursor:'pointer' }}>
+                {t('workerScanner.consumableReturnIntact')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Annunci per screen reader: il popup/il messaggio bloccato sono
@@ -1028,12 +1110,23 @@ export default function WorkerScanner() {
                     },
                     _onToggleReturned: async (itemId) => {
                       const newReturnedGuess = !item.returned
+                      // Per i consumabili il rientro non è mai scontato al
+                      // 100%: chiediamo se è tornato intero PRIMA di segnare,
+                      // così la giacenza in magazzino non si gonfia da sola
+                      // per pezzi in realtà consumati durante l'evento. La
+                      // lista va comunque completata (bisogna segnare
+                      // rientrato o niente), quindi qui non c'è un vero
+                      // "annulla": le due opzioni sono le uniche vie d'uscita.
+                      let intact = true
+                      if (newReturnedGuess && item.category === 'Consumabili') {
+                        intact = await askConsumableIntact(item.name)
+                      }
                       setOptimistic(itemId, {
                         returned: newReturnedGuess,
                         pronto: newReturnedGuess ? true : item.pronto,
                         loaded: newReturnedGuess ? true : item.loaded,
                       })
-                      let itm, newReturned
+                      let itm, newReturned, wasConsumed
                       try {
                         await runTransaction(db, async (tx) => {
                           const snap = await tx.get(eventRef)
@@ -1043,12 +1136,18 @@ export default function WorkerScanner() {
                           if (!current?.loaded) return
                           newReturned = !current.returned
                           itm = current
+                          wasConsumed = current.returnedConsumed || false
                           tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : {
                             ...i, returned: newReturned,
                             // Rientrato implica pronto E carico: serve anche a
                             // costruire correttamente la storia dei bauli in Inventory.
                             ...(newReturned ? { pronto: true, loaded: true } : {}),
                             ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
+                            // Ricordato sulla riga stessa: serve a sapere, se
+                            // il rientro viene poi annullato, se la giacenza
+                            // era stata davvero ripristinata (per togliergliela
+                            // di nuovo) o no (per non toglierla a vuoto).
+                            returnedConsumed: newReturned ? !intact : false,
                           }) })
                         })
                       } catch (e) {
@@ -1057,10 +1156,13 @@ export default function WorkerScanner() {
                         return
                       }
                       if (!itm) { clearOptimistic(itemId, ['returned', 'pronto', 'loaded']); return }
-                      await syncKitAwareInventory({
-                        catalogItemId: itm.itemRef || itemId, isBundle: itm.isBundle, category: itm.category,
-                        qty: itm.qty, sign: newReturned ? 1 : -1,
-                      })
+                      const shouldSyncInventory = newReturned ? intact : !wasConsumed
+                      if (shouldSyncInventory) {
+                        await syncKitAwareInventory({
+                          catalogItemId: itm.itemRef || itemId, isBundle: itm.isBundle, category: itm.category,
+                          qty: itm.qty, sign: newReturned ? 1 : -1,
+                        })
+                      }
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),

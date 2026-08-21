@@ -106,9 +106,9 @@ function PrivateRoutes({ toggleTheme, theme }) {
   // dopo: senza questa attesa comparirebbe per un secondo la pagina "errore
   // con questo account" prima della Dashboard.
   if (loading || (signupInProgress && !profile)) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16 }}>
-      <div style={{ width:40, height:40, border:'3px solid rgba(233,69,96,0.3)', borderTop:'3px solid #e94560', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
-      <p style={{ color:'#9090b0', fontSize:14 }}>Caricamento...</p>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16, background:'var(--bg)' }}>
+      <div style={{ width:40, height:40, border:'3px solid rgba(230,57,70,0.3)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+      <p style={{ color:'var(--text2)', fontSize:14 }}>Caricamento...</p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
@@ -238,13 +238,12 @@ function PrivateRoutes({ toggleTheme, theme }) {
 }
 
 export default function App() {
-  // Tema fisso chiaro (toggle modalità notturna rimosso)
+  // Tema fisso chiaro (toggle modalità notturna rimosso) — l'attributo
+  // data-theme="light" è impostato direttamente in index.html, non più qui:
+  // impostarlo a runtime lasciava un istante, prima del primo mount React,
+  // in cui valevano i token :root di default (scuri) invece di quelli
+  // [data-theme="light"], con un flash scuro prima del primo paint utile.
   const theme = 'light'
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'light')
-    localStorage.setItem('theme', 'light')
-  }, [])
-
   const toggleTheme = () => {}
 
   return (

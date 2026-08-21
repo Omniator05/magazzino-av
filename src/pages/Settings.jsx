@@ -5,8 +5,10 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-import { Image, Sliders, CreditCard, User, Calendar } from '../components/Icon'
+import { Image, Sliders, CreditCard, User, Calendar, Mail, Share } from '../components/Icon'
 import { trialDaysLeft } from '../utils/billing'
+
+const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
 
 // Home di "Impostazioni" — lista raggruppata in stile Impostazioni di iOS:
 // ogni riga apre una schermata dedicata (vedi le route /admin/settings/* in
@@ -18,7 +20,9 @@ export default function Settings() {
   const navigate = useNavigate()
   const [users, setUsers] = useState([])
   const [itemCount, setItemCount] = useState(null)
-  const [upcomingEventCount, setUpcomingEventCount] = useState(null)
+  const [totalEventCount, setTotalEventCount] = useState(null)
+  const [toast, setToast] = useState('')
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
   useEffect(() => {
     if (!teamId) return
@@ -32,14 +36,26 @@ export default function Settings() {
     return onSnapshot(q, snap => setItemCount(snap.size))
   }, [teamId])
 
+  // Numero totale di eventi mai creati con questa squadra — non solo quelli
+  // in programma: un numero che cresce nel tempo, più rappresentativo di
+  // "quanto usi l'app" per la card in cima a Impostazioni.
   useEffect(() => {
     if (!teamId) return
-    const todayStr = new Date().toISOString().slice(0, 10)
     const q = query(collection(db, 'events'), where('teamId', '==', teamId))
-    return onSnapshot(q, snap => setUpcomingEventCount(
-      snap.docs.filter(d => (d.data().dateEnd || d.data().date) >= todayStr).length
-    ))
+    return onSnapshot(q, snap => setTotalEventCount(snap.size))
   }, [teamId])
+
+  const shareApp = async () => {
+    const shareData = { title: 'Roadcase', text: t('adminUsers.shareAppText'), url: window.location.origin }
+    if (navigator.share) {
+      try { await navigator.share(shareData) } catch (e) {} // annullato dall'utente — nessun errore da mostrare
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(shareData.url)
+      showToast(t('adminUsers.linkCopiedToast'))
+    } catch (e) {}
+  }
 
   const pendingCount = users.filter(u => u.approved === false).length
   const loadListsEnabled = isModuleEnabled(team, 'loadLists')
@@ -82,6 +98,12 @@ export default function Settings() {
 
   return (
     <div className="page">
+      {toast && (
+        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
+          {toast}
+        </div>
+      )}
+
       <div className="page-header">
         <h1>{t('adminUsers.settingsHomeTitle')}</h1>
       </div>
@@ -110,7 +132,7 @@ export default function Settings() {
           {[
             { value: users.length, label: t('adminUsers.statUsers') },
             { value: itemCount, label: t('adminUsers.statItems') },
-            { value: upcomingEventCount, label: t('adminUsers.statUpcomingEvents') },
+            { value: totalEventCount, label: t('adminUsers.statTotalEvents') },
           ].map((stat, i) => (
             <div key={stat.label} style={{ flex:1, textAlign:'center', padding:'14px 8px', borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
               <p style={{ fontSize:22, fontWeight:800, color:'var(--accent)', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{stat.value ?? '–'}</p>
@@ -149,6 +171,37 @@ export default function Settings() {
             </button>
           )
         })}
+      </div>
+
+      {/* Assistenza — azioni dirette (contatta/condividi), non navigazione:
+          niente chevron, gruppo separato da quello sopra come fa Apple con
+          "Contatta il supporto"/"Condividi" in fondo alle sue Impostazioni. */}
+      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+        <a
+          href={`mailto:${SUPPORT_EMAIL}`}
+          style={{ display:'flex', alignItems:'center', gap:12, padding:'13px 16px', textDecoration:'none', color:'inherit' }}
+        >
+          <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background:'rgba(79,195,247,0.15)', color:'var(--blue)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Mail size={17} />
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ fontSize:14.5, fontWeight:600 }}>{t('adminUsers.contactUs')}</p>
+            <p style={{ color:'var(--text2)', fontSize:12, marginTop:1 }}>{SUPPORT_EMAIL}</p>
+          </div>
+        </a>
+        <button
+          onClick={shareApp}
+          className="btn-no-anim"
+          style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'13px 16px', borderTop:'1px solid var(--border)', textAlign:'left', background:'transparent' }}
+        >
+          <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background:'rgba(230,57,70,0.12)', color:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <Share size={17} />
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ fontSize:14.5, fontWeight:600 }}>{t('adminUsers.shareApp')}</p>
+            <p style={{ color:'var(--text2)', fontSize:12, marginTop:1 }}>{t('adminUsers.shareAppDesc')}</p>
+          </div>
+        </button>
       </div>
     </div>
   )

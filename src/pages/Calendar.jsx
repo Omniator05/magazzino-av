@@ -86,6 +86,8 @@ export default function Calendar() {
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
   const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'' })
   const [savingAbsence, setSavingAbsence] = useState(false)
+  // null = si sta creando una nuova assenza, altrimenti id di quella in modifica
+  const [editingAbsenceId, setEditingAbsenceId] = useState(null)
   const [myAbsencesOpen, setMyAbsencesOpen] = useState(false)
   const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
 
@@ -104,6 +106,7 @@ export default function Calendar() {
         const start = dStr <= rangeStart ? dStr : rangeStart
         const end = dStr <= rangeStart ? rangeStart : dStr
         setAbsenceForm({ startDate: start, endDate: end, reason: '' })
+        setEditingAbsenceId(null)
         setShowAbsenceModal(true)
         setReportMode(false)
         setRangeStart(null)
@@ -118,17 +121,34 @@ export default function Calendar() {
     if (!absenceForm.startDate) return
     setSavingAbsence(true)
     try {
-      await addDoc(collection(db, 'unavailability'), {
-        workerId: user.uid,
-        teamId,
+      const data = {
         startDate: absenceForm.startDate,
         endDate: absenceForm.endDate || absenceForm.startDate,
         reason: absenceForm.reason.trim(),
-        createdAt: serverTimestamp(),
-      })
+      }
+      if (editingAbsenceId) {
+        // Modifica: workerId/teamId/createdAt dell'originale restano invariati.
+        await updateDoc(doc(db, 'unavailability', editingAbsenceId), data)
+      } else {
+        await addDoc(collection(db, 'unavailability'), {
+          ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
+        })
+      }
       setAbsenceForm({ startDate:'', endDate:'', reason:'' })
+      setEditingAbsenceId(null)
       setShowAbsenceModal(false)
     } finally { setSavingAbsence(false) }
+  }
+
+  const openEditAbsence = (a) => {
+    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '' })
+    setEditingAbsenceId(a.id)
+    setShowAbsenceModal(true)
+  }
+
+  const closeAbsenceModal = () => {
+    setShowAbsenceModal(false)
+    setEditingAbsenceId(null)
   }
 
   const saveEdit = async () => {
@@ -171,7 +191,7 @@ export default function Calendar() {
 
   const editDrag = useModalDrag(() => setEditingEvent(null), undefined, saveEdit, !!editingEvent)
   const createDrag = useModalDrag(() => setShowCreate(false), undefined, createEvent, showCreate)
-  const absenceDrag = useModalDrag(() => setShowAbsenceModal(false), undefined, addAbsence, showAbsenceModal)
+  const absenceDrag = useModalDrag(closeAbsenceModal, undefined, addAbsence, showAbsenceModal)
 
   useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
 
@@ -620,10 +640,16 @@ export default function Calendar() {
                     </p>
                     {a.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{a.reason}</p>}
                   </div>
-                  <button onClick={() => removeAbsence(a.id)}
-                    style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 14px', fontSize:12, fontWeight:700 }}>
-                    {t('common.remove')}
-                  </button>
+                  <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                    <button onClick={() => openEditAbsence(a)}
+                      style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg3)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:8, padding:'5px 14px', fontSize:12, fontWeight:700 }}>
+                      {t('common.edit')}
+                    </button>
+                    <button onClick={() => removeAbsence(a.id)}
+                      style={{ minHeight:44, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(248,113,113,0.12)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', borderRadius:8, padding:'5px 14px', fontSize:12, fontWeight:700 }}>
+                      {t('common.remove')}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -747,7 +773,7 @@ export default function Calendar() {
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
             <button className="close-btn" onClick={absenceDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{t('calendar.absenceModalTitle')}</h2>
+            <h2>{editingAbsenceId ? t('calendar.absenceModalEditTitle') : t('calendar.absenceModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('calendar.absenceModalDesc')}</p>
             <div className="form-group">
               <label>{t('calendar.firstDay')}</label>
@@ -763,7 +789,7 @@ export default function Calendar() {
             </div>
             <button onClick={addAbsence} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               disabled={savingAbsence || !absenceForm.startDate}>
-              {savingAbsence ? t('common.saving') : <><Check size={16} /> {t('calendar.confirmAbsence')}</>}
+              {savingAbsence ? t('common.saving') : <><Check size={16} /> {editingAbsenceId ? t('common.save') : t('calendar.confirmAbsence')}</>}
             </button>
           </div>
         </div>

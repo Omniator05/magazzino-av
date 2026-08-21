@@ -81,6 +81,12 @@ export const CreditCard = ({ size }) => (
 export const Sliders = ({ size }) => (
   <svg {...base(size)}><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
 )
+export const Mail = ({ size }) => (
+  <svg {...base(size)}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+)
+export const Share = ({ size }) => (
+  <svg {...base(size)}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" x2="15.4" y1="10.5" y2="6.5"/><line x1="8.6" x2="15.4" y1="13.5" y2="17.5"/></svg>
+)
 
 /* Pallino colorato pieno (sostituisce 🟠🔴🟢🔵): passa `color` */
 export const Dot = ({ size = 9, color = 'currentColor', glow = false }) => (

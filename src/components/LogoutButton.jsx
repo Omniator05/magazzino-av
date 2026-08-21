@@ -14,10 +14,6 @@ export default function LogoutButton({ style, className, name }) {
   const [confirm, setConfirm] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const first = (name || '').split(' ')[0]
-  // Il badge (sfondo rosso pieno + simbolo nero) invece del solo simbolo
-  // trasparente: qui non c'è nessun contenitore attorno a incorniciarlo (a
-  // differenza del placeholder in AdminUsers.jsx), quindi la versione con
-  // sfondo è quella che si legge meglio da sola su un fondo scuro pieno.
   const logoSrc = team?.logoUrl || '/pwa-512x512.png'
 
   // Precarica il logo appena si apre il dialog di conferma: quando parte
@@ -59,7 +55,14 @@ export default function LogoutButton({ style, className, name }) {
         <div className="lo-overlay">
           <div className="lo-orb lo-orb-a" />
           <div className="lo-orb lo-orb-b" />
-          <img src={logoSrc} alt={team?.name || 'Gestione Magazzino'} className="lo-logo" />
+          {/* Medaglione come nella schermata di benvenuto: il logo su una
+              card bianca elevata resta leggibile anche se è chiaro/bianco. */}
+          <div className="lo-logo-wrap">
+            <div className="lo-logo-halo" />
+            <div className="lo-logo-card">
+              <img src={logoSrc} alt={team?.name || 'Gestione Magazzino'} className="lo-logo" />
+            </div>
+          </div>
           <p className="lo-bye">A presto{first ? `, ${first}` : ''}!</p>
           <div className="lo-spinner" />
         </div>, document.body)}
@@ -71,6 +74,11 @@ export default function LogoutButton({ style, className, name }) {
         @keyframes loByeIn { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)} }
         @keyframes loOrbA { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(28px,-40px) scale(1.08)} }
         @keyframes loOrbB { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-30px,26px) scale(0.92)} }
+        @keyframes loGradientShift {
+          0%   { background-position: 15% 20%; }
+          50%  { background-position: 85% 80%; }
+          100% { background-position: 15% 20%; }
+        }
 
         .lo-confirm-bg {
           position: fixed; inset: 0; z-index: 10000;
@@ -99,25 +107,37 @@ export default function LogoutButton({ style, className, name }) {
 
         .lo-overlay {
           position: fixed; inset: 0; z-index: 10000; overflow: hidden;
-          background: #07090f;
+          background-image: linear-gradient(120deg, #ffffff 0%, #ffd9d6 15%, #f28b86 32%, #ffffff 48%, #b9d2f5 64%, #6f9fe6 80%, #ffffff 100%);
+          background-size: 280% 280%;
+          animation: loFade 0.3s ease both, loGradientShift 15s ease-in-out infinite;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
-          animation: loFade 0.3s ease both;
         }
         .lo-orb { position: absolute; border-radius: 50%; pointer-events: none; }
-        .lo-orb-a { top:-15%; left:-8%; width:60vmax; height:60vmax; background: radial-gradient(circle, rgba(230,57,70,.18) 0%, transparent 65%); animation: loOrbA 13s ease-in-out infinite; }
-        .lo-orb-b { bottom:-18%; right:-10%; width:65vmax; height:65vmax; background: radial-gradient(circle, rgba(37,99,235,.12) 0%, transparent 65%); animation: loOrbB 17s ease-in-out infinite; }
-        .lo-logo { width: 120px; max-width: 34vw; height: 120px; object-fit: contain; z-index: 1;
-          filter: drop-shadow(0 0 26px rgba(230,57,70,0.35));
+        .lo-orb-a { top:-15%; left:-8%; width:60vmax; height:60vmax; background: radial-gradient(circle, rgba(230,57,70,.26) 0%, transparent 65%); animation: loOrbA 13s ease-in-out infinite; }
+        .lo-orb-b { bottom:-18%; right:-10%; width:65vmax; height:65vmax; background: radial-gradient(circle, rgba(37,99,235,.22) 0%, transparent 65%); animation: loOrbB 17s ease-in-out infinite; }
+        .lo-logo-wrap { position: relative; width: 120px; max-width: 34vw; height: 120px; z-index: 1;
           animation: loPop 0.6s cubic-bezier(0.34,1.4,0.64,1) both;
         }
-        .lo-bye { z-index: 1; margin-top: 26px; color: #fff; font-size: 24px; font-weight: 800;
+        .lo-logo-halo { position: absolute; inset: -24px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(230,57,70,0.18) 0%, transparent 70%);
+        }
+        .lo-logo-card { position: relative; width: 100%; height: 100%; border-radius: 28px;
+          background: #fff; border: 1px solid rgba(17,24,39,0.06);
+          box-shadow: 0 20px 46px rgba(230,57,70,0.14), 0 4px 14px rgba(17,24,39,0.06);
+          display: flex; align-items: center; justify-content: center; padding: 18px;
+        }
+        .lo-logo { width: 100%; height: 100%; object-fit: contain; }
+        .lo-bye { z-index: 1; margin-top: 26px; color: #111827; font-size: 24px; font-weight: 800;
           letter-spacing: -0.4px; animation: loByeIn 0.5s ease 0.25s both;
         }
         .lo-spinner { z-index: 1; margin-top: 30px; width: 24px; height: 24px;
-          border: 2px solid rgba(255,255,255,0.18); border-top: 2px solid rgba(255,255,255,0.7);
+          border: 2px solid rgba(230,57,70,0.16); border-top: 2px solid #e63946;
           border-radius: 50%; animation: loSpin 0.9s linear infinite;
         }
-        @media (prefers-reduced-motion:reduce){ .lo-orb{animation:none!important} }
+        @media (prefers-reduced-motion:reduce){
+          .lo-orb{animation:none!important}
+          .lo-overlay{animation:loFade 0.3s ease both!important}
+        }
       `}</style>
     </>
   )

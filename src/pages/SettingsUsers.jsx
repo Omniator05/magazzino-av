@@ -278,6 +278,11 @@ export default function SettingsUsers() {
 
   // ── Cambia ruolo (Admin / Magazziniere / Organizzatore) ──
   const ROLE_LABELS = { admin: t('profile.roleAdmin'), worker: t('adminUsers.roleMagazziniere'), 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieOption'), 'organizzatore-evento': t('adminUsers.roleOrgEventOption') }
+  // Versione corta SOLO per il badge compatto nella riga utente: "Organizzatore
+  // Brasserie/evento" per intero non ci sta su una riga su mobile e finisce
+  // per andare a capo/coprire l'email sotto. Altrove (conferme, dettaglio)
+  // resta l'etichetta piena di ROLE_LABELS.
+  const ROLE_BADGE_LABELS = { ...ROLE_LABELS, 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieBadge'), 'organizzatore-evento': t('adminUsers.roleOrgEventBadge') }
   const changeRole = async (newRole) => {
     if (newRole === showDetail.role) return
     if (!(await confirm({
@@ -432,10 +437,10 @@ export default function SettingsUsers() {
           {u.avatar || (u.name || u.username || '?').charAt(0).toUpperCase()}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)' }}>{u.name}</p>
-          <p style={{ color:'var(--text2)', fontSize:13 }}>{u.username ? `@${u.username}` : u.email}</p>
+          <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</p>
+          <p style={{ color:'var(--text2)', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.username ? `@${u.username}` : u.email}</p>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
           {u.role === 'worker' && u.canManageInventory && (
             <span title={t('adminUsers.canManageInventoryLabel')} style={{ color:'var(--accent2)', display:'flex', flexShrink:0 }}>
               <Box size={15} />
@@ -443,9 +448,10 @@ export default function SettingsUsers() {
           )}
           <span className="badge" style={{
             background: u.approved === false ? 'rgba(245,166,35,0.15)' : roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.15)',
-            color: u.approved === false ? 'var(--accent2)' : roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)'
+            color: u.approved === false ? 'var(--accent2)' : roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)',
+            whiteSpace:'nowrap', flexShrink:0,
           }}>
-            {u.approved === false ? t('adminUsers.waitingBadge') : u.role === 'admin' ? t('adminUsers.adminBadge') : roleColor ? ROLE_LABELS[u.role] : u.active !== false ? t('adminUsers.activeBadge') : t('adminUsers.deactivatedBadge')}
+            {u.approved === false ? t('adminUsers.waitingBadge') : u.role === 'admin' ? t('adminUsers.adminBadge') : roleColor ? ROLE_BADGE_LABELS[u.role] : u.active !== false ? t('adminUsers.activeBadge') : t('adminUsers.deactivatedBadge')}
           </span>
           <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
         </div>

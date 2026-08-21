@@ -919,7 +919,7 @@ export default function Inventory() {
                       }}
                       style={{ width:'100%', marginTop:10, background:'rgba(248,113,113,0.15)', border:'1px solid rgba(248,113,113,0.4)', color:'var(--red)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
                     >
-                      <Wrench size={15} /> {t('inventory.brokenCount', { count: showDetail.brokenQty })}
+                      <Wrench size={15} /> {t('inventory.repairOneButton')}
                     </button>
                   )}
                   {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
