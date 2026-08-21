@@ -22,20 +22,31 @@ export default function UpdateToast() {
   }, [])
 
   useEffect(() => {
+    // 7s, non 4: questo toast monta più o meno insieme alla schermata di
+    // benvenuto post-login (PageTransition, z-index più alto), che lo copre
+    // per i suoi ~3s minimi — con soli 4s totali il countdown finiva quasi
+    // subito, lasciando pochissimo tempo (a volte zero) per leggerlo una
+    // volta che la schermata di benvenuto sparisce.
     if (!show) return
-    const timer = setTimeout(() => setShow(false), 4000)
+    const timer = setTimeout(() => setShow(false), 7000)
     return () => clearTimeout(timer)
   }, [show])
 
   if (!show) return null
   return (
-    <div role="status" style={{
-      position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:999,
-      background:'var(--card)', border:'1.5px solid var(--green)', borderRadius:14,
-      padding:'10px 16px', boxShadow:'var(--shadow)', display:'flex', alignItems:'center', gap:8,
-    }}>
-      <span style={{ color:'var(--green)', fontSize:16, fontWeight:800 }}>✓</span>
-      <p style={{ color:'var(--text)', fontSize:13, fontWeight:700 }}>{t('common.appUpdated')}</p>
-    </div>
+    <>
+      <style>{`
+        @keyframes utIn { from{opacity:0; transform:translate(-50%,-8px)} to{opacity:1; transform:translate(-50%,0)} }
+      `}</style>
+      <div role="status" style={{
+        position:'fixed', top:16, left:'50%', transform:'translate(-50%,0)', zIndex:999,
+        background:'var(--card)', border:'1.5px solid var(--green)', borderRadius:14,
+        padding:'10px 16px', boxShadow:'var(--shadow)', display:'flex', alignItems:'center', gap:8,
+        animation:'utIn 0.3s ease both',
+      }}>
+        <span style={{ color:'var(--green)', fontSize:16, fontWeight:800 }}>✓</span>
+        <p style={{ color:'var(--text)', fontSize:13, fontWeight:700 }}>{t('common.appUpdated')}</p>
+      </div>
+    </>
   )
 }

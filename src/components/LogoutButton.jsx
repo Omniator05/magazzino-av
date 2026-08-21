@@ -106,10 +106,13 @@ export default function LogoutButton({ style, className, name }) {
         .lo-go { background: #e63946; color: #fff; box-shadow: 0 4px 16px rgba(230,57,70,0.35); }
 
         .lo-overlay {
+          /* Niente fade in entrata: opaca dal primissimo frame, per lo
+             stesso motivo della schermata di benvenuto — evita di
+             intravedere per un attimo la pagina sotto mentre sparisce. */
           position: fixed; inset: 0; z-index: 10000; overflow: hidden;
           background-image: linear-gradient(120deg, #ffffff 0%, #ffd9d6 15%, #f28b86 32%, #ffffff 48%, #b9d2f5 64%, #6f9fe6 80%, #ffffff 100%);
           background-size: 280% 280%;
-          animation: loFade 0.3s ease both, loGradientShift 15s ease-in-out infinite;
+          animation: loGradientShift 15s ease-in-out infinite;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         .lo-orb { position: absolute; border-radius: 50%; pointer-events: none; }
@@ -136,7 +139,7 @@ export default function LogoutButton({ style, className, name }) {
         }
         @media (prefers-reduced-motion:reduce){
           .lo-orb{animation:none!important}
-          .lo-overlay{animation:loFade 0.3s ease both!important}
+          .lo-overlay{animation:none!important}
         }
       `}</style>
     </>

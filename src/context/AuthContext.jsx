@@ -19,7 +19,13 @@ export function AuthProvider({ children }) {
   const [team, setTeam]             = useState(null)
   const [loading, setLoading]       = useState(true)
   const [loginName, setLoginName]   = useState('')   // nome da mostrare nell'overlay
-  const [showOverlay, setShowOverlay] = useState(false)
+  // true dal primissimo render: la schermata di benvenuto deve coprire TUTTO
+  // fin dal caricamento, non apparire dopo (altrimenti si vede per un attimo
+  // il contenuto vero — bottoni, tab bar — caricarsi sotto). Si toglie subito
+  // (bypassando l'animazione, vedi ramo "else" sotto) se scopriamo che non
+  // c'è nessun utente collegato: in quel caso non c'è nulla da mostrare e non
+  // ha senso far aspettare chi arriva sul login.
+  const [showOverlay, setShowOverlay] = useState(true)
   // Signup in corso: tra la creazione dell'utente Auth e la scrittura del
   // profilo su Firestore c'è una finestra in cui "utente sì, profilo no" —
   // senza questo flag App mostrerebbe PendingApproval("unknown") per errore.
@@ -94,6 +100,10 @@ export function AuthProvider({ children }) {
         hasExitedGhostRef.current = false
         sessionStorage.removeItem('__ghostTeam')
         setLoading(false)
+        // Nessun utente: niente da rivelare con la schermata di benvenuto
+        // (che partiva già visibile di default, vedi sopra) — la togliamo
+        // subito invece di far aspettare chi sta solo arrivando sul login.
+        setShowOverlay(false)
       }
     })
     return () => { if (unsubProfile) unsubProfile(); unsubAuth() }

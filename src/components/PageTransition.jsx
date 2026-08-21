@@ -143,8 +143,10 @@ export default function PageTransition() {
         }
         .flap-cell { transform-origin: center; }
         .flap-lock { animation: flapLock 0.32s cubic-bezier(0.36,0.07,0.19,0.97) both; }
-        @keyframes ptOverlayIn { from{opacity:0} to{opacity:1} }
-        .pt-wrap { animation: ptOverlayIn 0.4s ease both; }
+        /* Niente fade in entrata: deve essere opaca dal primissimo frame,
+           altrimenti per la durata del fade si intravede sotto il contenuto
+           vero che si carica (bottoni, tab bar). Solo l'uscita è animata,
+           quando c'è davvero qualcosa di pronto da rivelare. */
         .pt-wrap.exiting {
           animation: ptOverlayOut 0.75s cubic-bezier(0.4,0,1,1) forwards;
           pointer-events: none;
