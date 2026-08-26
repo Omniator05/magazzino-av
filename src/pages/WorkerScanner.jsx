@@ -998,12 +998,12 @@ export default function WorkerScanner() {
             </div>
           )}
 
-          {/* Contatore mancanti al completamento della fase corrente (pronto/carico) */}
-          {total > 0 && (mode === 'pronto' || mode === 'load') && (() => {
-            const done = mode === 'pronto' ? prepared : loaded
-            const allDoneMsg = mode === 'pronto' ? t('workerScanner.allPrepared') : t('workerScanner.allLoaded')
-            const missingMsg = mode === 'pronto' ? t('workerScanner.itemsMissingPrep', { count: total - done }) : t('workerScanner.itemsMissing', { count: total - done })
-            const ofTotalMsg = mode === 'pronto' ? t('workerScanner.preparedOfTotal', { prepared: done, total }) : t('workerScanner.loadedOfTotal', { loaded: done, total })
+          {/* Contatore mancanti al completamento della fase corrente (pronto/carico/rientro) */}
+          {total > 0 && (() => {
+            const done = mode === 'pronto' ? prepared : mode === 'load' ? loaded : returned
+            const allDoneMsg = mode === 'pronto' ? t('workerScanner.allPrepared') : mode === 'load' ? t('workerScanner.allLoaded') : t('workerScanner.allReturned')
+            const missingMsg = mode === 'pronto' ? t('workerScanner.itemsMissingPrep', { count: total - done }) : mode === 'load' ? t('workerScanner.itemsMissing', { count: total - done }) : t('workerScanner.itemsMissingReturn', { count: total - done })
+            const ofTotalMsg = mode === 'pronto' ? t('workerScanner.preparedOfTotal', { prepared: done, total }) : mode === 'load' ? t('workerScanner.loadedOfTotal', { loaded: done, total }) : t('workerScanner.returnedOfTotal', { returned: done, total })
             return (
               <div
                 onClick={() => firstUnloadedRef.current?.scrollIntoView({ behavior:'smooth', block:'center' })}
@@ -1052,6 +1052,12 @@ export default function WorkerScanner() {
                     ...item,
                     _vehicleColor: vehicleColor || null,
                     _details: itemDetails[item.itemRef || item.id] || null,
+                    // "Fatto" per la fase attualmente in vista (pronto/carico/
+                    // rientro) — usato per l'opacità della riga: prima era
+                    // sempre legata a `loaded`, quindi in fase di rientro ogni
+                    // riga risultava già sbiadita (tutte caricate) e non si
+                    // distingueva più cosa manca ancora da far rientrare.
+                    _phaseDone: mode === 'pronto' ? item.pronto : mode === 'load' ? item.loaded : item.returned,
                     // Ogni toggle rilegge e riscrive event.items dentro una
                     // transazione Firestore: con più persone sulla stessa lista,
                     // un semplice "leggi poi scrivi" perde in silenzio le
@@ -1108,7 +1114,14 @@ export default function WorkerScanner() {
                         action: newLoaded ? 'loaded' : 'unloaded', profile, userId: user?.uid,
                       })
                     },
-                    _onToggleReturned: async (itemId) => {
+                    // forceOut: dalla pressione lunga sul bottone Scarico —
+                    // segna comunque rientrato (per poter chiudere la lista)
+                    // ma senza ripristinare la giacenza, per un oggetto che in
+                    // realtà è rimasto fuori (perso, dimenticato sul posto,
+                    // lasciato in un'installazione...). Stessa logica dei
+                    // consumabili "consumati", ma disponibile per QUALSIASI
+                    // categoria e senza dover rispondere al popup.
+                    _onToggleReturned: async (itemId, forceOut = false) => {
                       const newReturnedGuess = !item.returned
                       // Per i consumabili il rientro non è mai scontato al
                       // 100%: chiediamo se è tornato intero PRIMA di segnare,
@@ -1118,7 +1131,9 @@ export default function WorkerScanner() {
                       // rientrato o niente), quindi qui non c'è un vero
                       // "annulla": le due opzioni sono le uniche vie d'uscita.
                       let intact = true
-                      if (newReturnedGuess && item.category === 'Consumabili') {
+                      if (forceOut) {
+                        intact = false
+                      } else if (newReturnedGuess && item.category === 'Consumabili') {
                         intact = await askConsumableIntact(item.name)
                       }
                       setOptimistic(itemId, {
@@ -1447,6 +1462,36 @@ function ChecklistRow({ item }) {
       item._onToggleMancante && item._onToggleMancante(item.id)
     }, MISSING_HOLD_MS)
   }
+  // Tenere premuto il bottone "Scarico" segna l'oggetto come rientrato (per
+  // poter chiudere la lista) ma SENZA ripristinare la giacenza — per un
+  // oggetto rimasto davvero fuori (perso, dimenticato, lasciato su
+  // un'installazione). Stesso schema del bottone Carico sopra.
+  const FORCE_OUT_HOLD_MS = 550
+  const FORCE_OUT_FILL_DELAY_MS = 200
+  const [pressingForceOut, setPressingForceOut] = useState(false)
+  const forceOutFillTimer = useRef(null)
+  const forceOutTriggerTimer = useRef(null)
+  const forceOutPressFired = useRef(false)
+  useEffect(() => () => {
+    if (forceOutFillTimer.current) clearTimeout(forceOutFillTimer.current)
+    if (forceOutTriggerTimer.current) clearTimeout(forceOutTriggerTimer.current)
+  }, [])
+  const startForceOutPress = () => {
+    if (!item.loaded || item.returned) return
+    forceOutPressFired.current = false
+    forceOutFillTimer.current = setTimeout(() => setPressingForceOut(true), FORCE_OUT_FILL_DELAY_MS)
+    forceOutTriggerTimer.current = setTimeout(() => {
+      forceOutPressFired.current = true
+      setPressingForceOut(false)
+      if (navigator.vibrate) navigator.vibrate([15, 40, 15, 40, 40])
+      item._onToggleReturned && item._onToggleReturned(item.id, true)
+    }, FORCE_OUT_HOLD_MS)
+  }
+  const cancelForceOutPress = () => {
+    setPressingForceOut(false)
+    if (forceOutFillTimer.current) { clearTimeout(forceOutFillTimer.current); forceOutFillTimer.current = null }
+    if (forceOutTriggerTimer.current) { clearTimeout(forceOutTriggerTimer.current); forceOutTriggerTimer.current = null }
+  }
   const cancelMissingPress = () => {
     setPressingMissing(false)
     if (missingFillTimer.current) { clearTimeout(missingFillTimer.current); missingFillTimer.current = null }
@@ -1475,17 +1520,23 @@ function ChecklistRow({ item }) {
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes
   const hasInfo = displayNote || isKit
+  // Rientrato tramite pressione lunga (fuori dal magazzino) — non per i
+  // consumabili: lì "consumato" è un esito normale, non un oggetto perso.
+  const isForgottenReturn = item.returned && item.returnedConsumed && item.category !== 'Consumabili'
 
   return (
     <>
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showInfo ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : item._vehicleColor ? `${item._vehicleColor}10` : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : item._vehicleColor ? `3px solid ${item._vehicleColor}` : '3px solid transparent' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item.loaded ? 0.45 : 1, transition:'opacity 0.3s' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item._phaseDone ? 0.45 : 1, transition:'opacity 0.3s' }}>
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
+            {isForgottenReturn && (
+              <span style={{ background:'rgba(107,114,128,0.15)', color:'var(--text2)', border:'1px solid rgba(107,114,128,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('workerScanner.leftOutBadge')}</span>
+            )}
             {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
             {(item.instanceNumbers || []).length > 0 && (
               <span style={{
@@ -1608,16 +1659,29 @@ function ChecklistRow({ item }) {
           )}
           <button
             disabled={!item.loaded}
-            style={{ minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+            style={{ position:'relative', overflow:'hidden', minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
               display:'flex', alignItems:'center', justifyContent:'center',
-              background: item.returned ? 'rgba(52,211,153,0.15)' : item.loaded ? 'var(--card2)' : 'var(--bg3)',
-              color: item.returned ? 'var(--green)' : item.loaded ? 'var(--text2)' : 'var(--text3)',
+              background: item.returned ? (isForgottenReturn ? 'rgba(107,114,128,0.15)' : 'rgba(52,211,153,0.15)') : item.loaded ? 'var(--card2)' : 'var(--bg3)',
+              color: item.returned ? (isForgottenReturn ? 'var(--text2)' : 'var(--green)') : item.loaded ? 'var(--text2)' : 'var(--text3)',
               opacity: item.loaded ? 1 : 0.4,
-              WebkitTapHighlightColor:'transparent',
+              WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
             }}
-            onClick={() => item._onToggleReturned && item._onToggleReturned(item.id)}
+            aria-label={!item.returned && item.loaded ? t('workerScanner.returnShort') + ' — ' + t('workerScanner.forceOutHint') : undefined}
+            onPointerDown={startForceOutPress}
+            onPointerUp={cancelForceOutPress}
+            onPointerLeave={cancelForceOutPress}
+            onPointerCancel={cancelForceOutPress}
+            onClick={() => {
+              if (forceOutPressFired.current) { forceOutPressFired.current = false; return }
+              item._onToggleReturned && item._onToggleReturned(item.id)
+            }}
           >
-            {item.returned ? t('workerScanner.returnedShort') : t('workerScanner.returnShort')}
+            {!item.returned && item.loaded && (
+              <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(107,114,128,0.35)', transform: pressingForceOut ? 'scaleX(1)' : 'scaleX(0)', transformOrigin:'left', transition: pressingForceOut ? `transform ${FORCE_OUT_HOLD_MS - FORCE_OUT_FILL_DELAY_MS}ms linear` : 'transform 120ms ease-out' }} />
+            )}
+            <span style={{ position:'relative' }}>
+              {item.returned ? (isForgottenReturn ? t('workerScanner.forgottenShort') : t('workerScanner.returnedShort')) : t('workerScanner.returnShort')}
+            </span>
           </button>
         </div>
       </div>

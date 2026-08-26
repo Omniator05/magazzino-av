@@ -13,7 +13,7 @@ import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useCenteredModal } from '../hooks/useCenteredModal'
-import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter } from '../components/Icon'
+import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck } from '../components/Icon'
 import FabButton from '../components/FabButton'
 import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
@@ -442,6 +442,20 @@ export default function Inventory() {
     return true
   })
 
+  // Per il filtro "Fuori": a quali eventi è dovuta la giacenza ridotta, a
+  // colpo d'occhio senza dover aprire ogni oggetto — riusa `events`, già
+  // caricato per l'intera pagina (stessa logica di "dove si trova" nel
+  // dettaglio), niente query aggiuntive.
+  // "Fuori" copre anche il caso "segnato rientrato ma lasciato fuori"
+  // (pressione lunga su Scarico in WorkerScanner, returnedConsumed:true):
+  // lì `returned` è true — solo `loaded && !returned` non basterebbe a
+  // farlo comparire qui, nonostante la giacenza resti comunque ridotta.
+  const getOutEventNames = (item) => events
+    .filter(ev => (ev.items || []).some(i =>
+      (i.id === item.id || i.itemRef === item.id) && i.loaded && (!i.returned || i.returnedConsumed)
+    ))
+    .map(ev => ev.name)
+
   const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)).length
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
   const countReorder = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock).length
@@ -467,13 +481,29 @@ export default function Inventory() {
   })
   const clearAdvancedFilters = () => { setSortBy(''); setFilterCategory(''); setFilterLocation(''); setFilterKitOnly(false) }
 
-  // Raggruppa per categoria — kit appaiono nel loro gruppo, non in 'Kit'
-  const groupedFiltered = CATEGORY_ORDER.map(cat => ({
-    cat,
-    catItems: cat === 'Altro'
-      ? filtered.filter(i => !MAIN_CATS.includes(i.category))
-      : filtered.filter(i => i.category === cat),
-  })).filter(g => g.catItems.length > 0)
+  // "Dimenticato": segnato rientrato con la pressione lunga in WorkerScanner
+  // (returnedConsumed) — in pratica lasciato fuori senza ripristinare la
+  // giacenza. Va isolato in un gruppo suo, in cima, invece di restare
+  // mescolato nella sua categoria normale dove passerebbe inosservato.
+  const isForgottenItem = (item) => events.some(ev => (ev.items || []).some(i =>
+    (i.id === item.id || i.itemRef === item.id) && i.returned && i.returnedConsumed
+  ))
+
+  // Raggruppa per categoria — kit appaiono nel loro gruppo, non in 'Kit';
+  // i "dimenticati" escono dalla loro categoria normale per finire nel
+  // gruppo dedicato in cima, ma SOLO quando si sta guardando il filtro
+  // "Fuori" — altrove restano nella loro categoria come tutti gli altri.
+  const showForgottenGroup = activeFilter === 'out'
+  const forgottenItems = showForgottenGroup ? filtered.filter(isForgottenItem) : []
+  const groupedFiltered = [
+    ...(forgottenItems.length > 0 ? [{ cat: '__forgotten__', catItems: forgottenItems, isForgottenGroup: true }] : []),
+    ...CATEGORY_ORDER.map(cat => ({
+      cat,
+      catItems: cat === 'Altro'
+        ? filtered.filter(i => !MAIN_CATS.includes(i.category) && !(showForgottenGroup && isForgottenItem(i)))
+        : filtered.filter(i => i.category === cat && !(showForgottenGroup && isForgottenItem(i))),
+    })).filter(g => g.catItems.length > 0),
+  ]
 
   return (
     <div className="page">
@@ -625,7 +655,6 @@ export default function Inventory() {
                       }}
                     >
                       <span style={{ display:'flex', alignItems:'center', gap:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {filterCategory && <span style={{ flexShrink:0 }}>{ICONS[filterCategory] || '📦'}</span>}
                         {filterCategory || t('inventory.filterAllCategories')}
                       </span>
                       <span style={{ flexShrink:0, fontSize:10, color:'var(--text2)', transition:'transform 0.15s', transform: categoryPickerOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
@@ -654,14 +683,13 @@ export default function Inventory() {
                             className="btn-no-anim"
                             style={{
                               padding:'7px 8px', borderRadius:8, fontSize:11.5, fontWeight:700,
-                              display:'flex', alignItems:'center', gap:5, overflow:'hidden',
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                               background: filterCategory === c ? 'var(--accent)' : 'var(--card2)',
                               color: filterCategory === c ? '#fff' : 'var(--text2)',
                               border: `1px solid ${filterCategory === c ? 'var(--accent)' : 'var(--border)'}`,
                             }}
                           >
-                            <span style={{ flexShrink:0 }}>{ICONS[c] || '📦'}</span>
-                            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c}</span>
+                            {c}
                           </button>
                         ))}
                       </div>
@@ -744,17 +772,17 @@ export default function Inventory() {
           </div>
         : advancedFiltersActive
         ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
-            {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} />)}
+            {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={activeFilter === 'out' ? getOutEventNames(item) : null} />)}
           </div>
-        : groupedFiltered.map(({ cat, catItems }) => (
-          <div key={cat} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
-            {/* Intestazione categoria */}
-            <div style={{ padding:'7px 14px', background:'var(--bg2)', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontSize:15 }}>{ICONS[cat] || '📦'}</span>
-              <span style={{ fontWeight:700, fontSize:12, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{cat}</span>
-              <span style={{ fontSize:12, color:'var(--text3)', marginLeft:'auto' }}>{catItems.length}</span>
+        : groupedFiltered.map(({ cat, catItems, isForgottenGroup }) => (
+          <div key={cat} style={{ background:'var(--card)', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
+            {/* Intestazione categoria (o gruppo "dimenticati", sempre in cima) */}
+            <div style={{ padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : 'var(--bg2)', borderBottom: isForgottenGroup ? '1px solid rgba(245,166,35,0.3)' : '1px solid var(--border)', display:'flex', alignItems:'center', gap:8 }}>
+              {isForgottenGroup && <span style={{ color:'var(--accent2)', display:'flex' }}><Warn size={14} /></span>}
+              <span style={{ fontWeight:700, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
+              <span style={{ fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text3)', marginLeft:'auto', fontWeight: isForgottenGroup ? 700 : 400 }}>{catItems.length}</span>
             </div>
-            {catItems.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} />)}
+            {catItems.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={isForgottenGroup || activeFilter === 'out' ? getOutEventNames(item) : null} />)}
           </div>
         ))
       }
@@ -1551,7 +1579,7 @@ export default function Inventory() {
 // Riga oggetto — estratta per essere riusata sia nella vista raggruppata per
 // categoria (default) sia nella lista piatta ordinata (quando un filtro
 // avanzato è attivo), senza duplicare tutto il markup nei due rami.
-function ItemRow({ item, onOpen, t }) {
+function ItemRow({ item, onOpen, t, outEvents }) {
   return (
     <button type="button" className="item-row btn-no-anim" onClick={() => onOpen(item)} aria-label={t('inventory.openItemAria', { name: item.name })}>
       <div className="item-icon">{ICONS[item.category] || '📦'}</div>
@@ -1564,6 +1592,16 @@ function ItemRow({ item, onOpen, t }) {
         </div>
         <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
         {item.location && <p style={{ color:'var(--blue)', fontSize:12, marginTop:2, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {item.location}</p>}
+        {/* Filtro "Fuori": a colpo d'occhio a quale evento è dovuta la
+            giacenza ridotta, senza dover aprire ogni oggetto. Giacenza ridotta
+            senza nessun evento corrispondente = probabilmente fuori a mano
+            (segnato "fuori" da un rientro forzato, o mai stato in una lista). */}
+        {outEvents && (
+          <p style={{ color:'var(--accent2)', fontSize:12, marginTop:2, display:'flex', alignItems:'center', gap:4 }}>
+            <Truck size={12} />
+            {outEvents.length > 0 ? outEvents.join(', ') : t('inventory.outNoEvent')}
+          </p>
+        )}
       </div>
       <div style={{ textAlign:'right', flexShrink:0 }}>
         <span className={`badge ${
