@@ -31,6 +31,11 @@ const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consum
 const KIT_CATEGORIES = CATEGORIES
 // Ordine di visualizzazione nella lista raggruppata
 const CATEGORY_ORDER = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
+// Unità di misura per i Consumabili — non tutti si contano allo stesso modo:
+// moquette/gonna palco a metri, nastro a rotoli, taniche/fascette/pile a pezzi.
+// "pezzi" resta il default per tutto il resto (retrocompatibile: gli oggetti
+// esistenti senza questo campo si comportano come prima, in pezzi).
+const CONSUMABLE_UNITS = ['pezzi', 'metri', 'rotoli']
 const MAIN_CATS = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti']
 const ICONS = {
   'Audio':       '🔊',
@@ -130,7 +135,7 @@ export default function Inventory() {
   const [importParsed, setImportParsed] = useState(null) // { items, warnings }
   const [importError, setImportError] = useState('')
   const [importProgress, setImportProgress] = useState(0)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi' })
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
@@ -234,7 +239,7 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0 }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi' }); setShowModal(true) }
   const openEdit = item => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
@@ -245,7 +250,7 @@ export default function Inventory() {
       setKitEditSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0 }); setShowModal(true)
+      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi' }); setShowModal(true)
     }
   }
 
@@ -280,12 +285,12 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0 })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
-        brokenQty:broken,
+        brokenQty:broken, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes,
         teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
@@ -800,12 +805,35 @@ export default function Inventory() {
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
+            {/* Unità di misura — solo Consumabili: non tutti si contano allo
+                stesso modo (moquette/gonna palco a metri, nastro a rotoli,
+                taniche a pezzi). Determina in cosa si esprime la giacenza
+                sotto, quindi va scelta PRIMA della quantità. */}
+            {form.category === 'Consumabili' && (
+              <div className="form-group">
+                <label>{t('inventory.consumableUnitLabel')}</label>
+                <div style={{ display:'flex', gap:8 }}>
+                  {CONSUMABLE_UNITS.map(u => (
+                    <button key={u} type="button" onClick={() => setForm({...form, consumableUnit:u})}
+                      aria-pressed={form.consumableUnit === u}
+                      style={{
+                        flex:1, padding:'10px 8px', borderRadius:8, fontSize:13, fontWeight:700,
+                        background: form.consumableUnit === u ? 'var(--accent)' : 'var(--card2)',
+                        color: form.consumableUnit === u ? '#fff' : 'var(--text2)',
+                        border: `1px solid ${form.consumableUnit === u ? 'var(--accent)' : 'var(--border)'}`,
+                      }}>
+                      {t(`inventory.consumableUnit_${u}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
               <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div className="form-group"><label>{t('inventory.totalQtyLabel')}</label>
+              <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})} aria-label={t('eventDetail.decreaseQtyAria')}
                     style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
@@ -856,7 +884,7 @@ export default function Inventory() {
                       style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                   </div>
                 </div>
-                {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock })}</p>}
+                {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
               </div>
             )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
@@ -899,7 +927,7 @@ export default function Inventory() {
                       <span style={{ color:'var(--text2)', fontSize:14 }}>{t('inventory.detailAvailable')}</span>
                       <span style={{ fontWeight:800, fontSize:18 }}>
                         {showDetail.category === 'Consumabili'
-                          ? (showDetail.availableQty ?? showDetail.totalQty)
+                          ? `${showDetail.availableQty ?? showDetail.totalQty} ${t(`inventory.unitShort_${showDetail.consumableUnit || 'pezzi'}`)}`
                           : `${showDetail.availableQty}/${showDetail.totalQty}`
                         }
                       </span>
@@ -1610,7 +1638,7 @@ function ItemRow({ item, onOpen, t, outEvents }) {
             : (item.availableQty === (item.totalQty - (item.brokenQty||0)) ? 'in' : item.availableQty === 0 ? 'out' : 'partial')
         }`}>
           {item.category === 'Consumabili'
-            ? (item.availableQty ?? item.totalQty)
+            ? `${item.availableQty ?? item.totalQty} ${t(`inventory.unitShort_${item.consumableUnit || 'pezzi'}`)}`
             : `${item.availableQty}/${item.totalQty}`
           }
         </span>

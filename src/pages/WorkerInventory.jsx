@@ -235,7 +235,7 @@ export default function WorkerInventory() {
                 </div>
                 <div style={{ textAlign:'right', flexShrink:0 }}>
                   <span style={{ fontWeight:800, fontSize:15, color: avail === item.totalQty ? 'var(--green)' : avail === 0 ? 'var(--red)' : 'var(--accent2)' }}>
-                    {avail}/{item.totalQty}
+                    {avail}/{item.totalQty}{item.category === 'Consumabili' ? ` ${t(`inventory.unitShort_${item.consumableUnit || 'pezzi'}`)}` : ''}
                   </span>
                   {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}</span></div>}
                   {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>{t('inventory.out')}</span></div>}
@@ -337,7 +337,7 @@ export default function WorkerInventory() {
                       style={{ width:48, height:48, borderRadius:12, background:'rgba(233,69,96,0.12)', border:'1px solid rgba(233,69,96,0.3)', color:'var(--accent)', fontSize:24, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, opacity:(detail.availableQty??detail.totalQty)<=0?0.35:1 }}>−</button>
                     <div style={{ textAlign:'center', minWidth:60 }}>
                       <p style={{ fontWeight:900, fontSize:32, color:'var(--text)', lineHeight:1 }}>{detail.availableQty ?? detail.totalQty}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>{t('workerInventory.available')}</p>
+                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>{t(`inventory.unitShort_${detail.consumableUnit || 'pezzi'}`)} {t('workerInventory.available')}</p>
                     </div>
                     <button onClick={() => adjustConsumable(detail, 1)}
                       style={{ width:48, height:48, borderRadius:12, background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.3)', color:'var(--green)', fontSize:24, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>

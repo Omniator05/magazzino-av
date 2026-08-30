@@ -799,7 +799,13 @@ export default function WorkerScanner() {
       `}</style>
       <div style={{ padding:'52px 16px 12px', background:'var(--bg2)', borderBottom:'1px solid var(--border)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <button onClick={() => { stopScanner(); navigate(backPath) }}
+          {/* replace, non push: altrimenti ogni volta che si entra qui
+              (da EventDetail admin o da WorkerHome) e si torna indietro con
+              questo bottone si aggiunge una voce IN PIÙ nella cronologia
+              invece di tornare a quella già esistente — il tasto indietro
+              del browser finiva per fare da avanti/indietro in loop tra
+              questa pagina e quella da cui si era arrivati. */}
+          <button onClick={() => { stopScanner(); navigate(backPath, { replace: true }) }}
             style={{ background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14, fontWeight:600 }}>
             ← {t('common.back')}
           </button>

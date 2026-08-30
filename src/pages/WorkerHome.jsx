@@ -61,6 +61,11 @@ export default function WorkerHome() {
 
   const daScaricare = events.filter(e => {
     if (e.seriesId) return false  // gli eventi ricorrenti sono gestiti nella sezione "Ricorrenti"
+    // Le installazioni restano caricate/non rientrate DI PROPOSITO, anche a
+    // lungo — non è materiale "da scaricare urgentemente" solo perché la
+    // data è passata, altrimenti ci resterebbero per settimane/mesi finché
+    // non vengono smontate e chiuse a mano dall'admin (chiudi installazione).
+    if (e.type === 'installation') return false
     if (effectiveEndDate(e) >= today) return false
     const items = e.items || []
     return items.length > 0 && items.some(i => i.loaded && !i.returned)
