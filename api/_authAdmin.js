@@ -40,3 +40,32 @@ export async function requireTeamAdmin(req) {
 
   return { db, teamRef, team: teamSnap.data(), teamId: profile.teamId }
 }
+
+// Come requireTeamAdmin ma per endpoint che qualunque membro approvato della
+// squadra può chiamare (es. un worker che segnala un'assenza) — non solo
+// l'admin. Stessa verifica del token, ruolo non filtrato.
+export async function requireTeamMember(req) {
+  const idToken = (req.headers.authorization || '').replace(/^Bearer /, '')
+  if (!idToken) { const e = new Error('Token mancante'); e.status = 401; throw e }
+
+  const fbAdmin = getAdmin()
+  let decoded
+  try {
+    decoded = await fbAdmin.auth().verifyIdToken(idToken)
+  } catch {
+    const e = new Error('Token non valido'); e.status = 401; throw e
+  }
+
+  const db = fbAdmin.firestore()
+  const profileSnap = await db.collection('profiles').doc(decoded.uid).get()
+  const profile = profileSnap.data()
+  if (!profile || profile.approved === false || profile.active === false) {
+    const e = new Error('Accesso non consentito'); e.status = 403; throw e
+  }
+
+  const teamRef = db.collection('teams').doc(profile.teamId)
+  const teamSnap = await teamRef.get()
+  if (!teamSnap.exists) { const e = new Error('Squadra non trovata'); e.status = 404; throw e }
+
+  return { db, teamRef, team: teamSnap.data(), teamId: profile.teamId, profile }
+}

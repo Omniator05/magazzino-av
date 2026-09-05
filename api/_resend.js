@@ -27,6 +27,13 @@ export async function sendEmail({ to, subject, html }) {
 
 const BRAND_RED = '#e63946'
 
+// Il nome del worker e il motivo dell'assenza sono testo libero digitato
+// dall'utente (non dall'admin, a differenza degli altri campi di queste
+// email) — vanno sempre passati da qui prima di finire nell'HTML.
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
+}
+
 // Guscio HTML condiviso dalle email transazionali — email client non
 // supportano <style>/CSS esterno in modo affidabile, quindi tutto inline; il
 // logo nell'intestazione usa una <table> (non flex/grid) per lo stesso
@@ -72,6 +79,27 @@ export function inviteEmailHtml({ workerName, teamName, username, password, logi
     `,
     ctaLabel: 'Accedi ora',
     ctaUrl: loginUrl,
+  })
+}
+
+export function absenceNotificationEmailHtml({ workerName, startDate, endDate, reason, appUrl }) {
+  const fmt = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'long' }) : ''
+  const dateRange = endDate && endDate !== startDate ? `${fmt(startDate)} → ${fmt(endDate)}` : fmt(startDate)
+  return emailShell({
+    logoUrl: `${appUrl}/logo-mark-white.png`,
+    title: 'Nuova assenza segnalata',
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        <strong>${esc(workerName)}</strong> ha segnalato un'assenza dal calendario di Roadcase.
+      </p>
+      <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
+        <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Periodo</p>
+        <p style="margin:0;color:#1a1a1a;font-size:14px;">${dateRange}</p>
+        ${reason ? `<p style="margin:8px 0 0;color:#6b7280;font-size:13px;font-style:italic;">"${esc(reason)}"</p>` : ''}
+      </div>
+    `,
+    ctaLabel: 'Apri il calendario',
+    ctaUrl: `${appUrl}/calendar`,
   })
 }
 

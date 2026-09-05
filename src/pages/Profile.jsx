@@ -5,6 +5,7 @@ import { auth } from '../firebase'
 import { reauthenticateWithCredential, EmailAuthProvider, updatePassword as fbUpdatePassword } from 'firebase/auth'
 import { useCenteredModal } from '../hooks/useCenteredModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import SegmentedControl from '../components/SegmentedControl'
 
 const AVATARS = [
   // Espressioni — le più usate come avatar
@@ -194,8 +195,8 @@ export default function Profile({ onClose }) {
           </div>
         </div>
 
-        {/* Gruppo: Account (nome + lingua) */}
-        <GroupCard label={t('profile.sectionInfo')}>
+        {/* Gruppo: Nome */}
+        <GroupCard label={t('profile.sectionName')}>
           <Row first>
             <div style={{ flex: 1, minWidth: 0 }}>
               <label htmlFor="prof-name" style={rowLabelStyle}>{t('profile.displayName')}</label>
@@ -219,29 +220,21 @@ export default function Profile({ onClose }) {
               </button>
             )}
           </Row>
-          <Row>
-            <span style={rowLabelStyle}>{t('profile.sectionLanguage')}</span>
-            <div style={{ display: 'flex', gap: 4, background: 'var(--card2)', borderRadius: 10, padding: 3, flexShrink: 0 }}>
-              {[
-                { code: 'it', label: t('profile.languageItalian') },
-                { code: 'en', label: t('profile.languageEnglish') },
-              ].map(l => (
-                <button
-                  key={l.code}
-                  onClick={() => selectLanguage(l.code)}
-                  disabled={savingLang}
-                  aria-pressed={(profile?.language || 'it') === l.code}
-                  style={{
-                    minHeight: 44, padding: '6px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 700, border: 'none',
-                    background: (profile?.language || 'it') === l.code ? 'var(--accent)' : 'transparent',
-                    color: (profile?.language || 'it') === l.code ? 'white' : 'var(--text2)',
-                  }}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-          </Row>
+        </GroupCard>
+
+        {/* Gruppo: Lingua — stesso controllo a scorrimento usato in Impostazioni */}
+        <GroupCard label={t('profile.sectionLanguage')}>
+          <div style={{ padding: 14 }}>
+            <SegmentedControl
+              options={[
+                { value: 'it', label: t('profile.languageItalian') },
+                { value: 'en', label: t('profile.languageEnglish') },
+              ]}
+              value={profile?.language || 'it'}
+              onChange={selectLanguage}
+              disabled={savingLang}
+            />
+          </div>
         </GroupCard>
 
         {/* Gruppo: Sicurezza — cambio password a comparsa, chiuso di default */}
@@ -257,35 +250,41 @@ export default function Profile({ onClose }) {
             {pwdOk && <span style={{ color: 'var(--green)', display: 'flex' }}><IconCheck /></span>}
             <span style={{ color: 'var(--text3)', display: 'flex' }}><IconChevronDown open={pwdOpen} /></span>
           </button>
-          {pwdOpen && (
-            <div style={{ padding: '2px 16px 16px', borderTop: '1px solid var(--border)' }}>
-              <div className="form-group" style={{ marginTop: 14 }}>
-                <label htmlFor="prof-pwd-current">{t('profile.currentPassword')}</label>
-                <input id="prof-pwd-current" type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="••••••••" />
+          {/* Animazione apertura/chiusura via grid-template-rows (0fr↔1fr)
+              invece di un mount/unmount secco: il contenuto resta nel DOM,
+              solo l'altezza della riga della grid anima. */}
+          <div style={{ display: 'grid', gridTemplateRows: pwdOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.32s cubic-bezier(0.32,0.72,0,1)' }}>
+            <div style={{ overflow: 'hidden', minHeight: 0 }} aria-hidden={!pwdOpen}>
+              <div style={{ padding: '2px 16px 16px', borderTop: '1px solid var(--border)' }}>
+                <div className="form-group" style={{ marginTop: 14 }}>
+                  <label htmlFor="prof-pwd-current">{t('profile.currentPassword')}</label>
+                  <input id="prof-pwd-current" type="password" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} placeholder="••••••••" tabIndex={pwdOpen ? 0 : -1} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="prof-pwd-new">{t('profile.newPassword')}</label>
+                  <input id="prof-pwd-new" type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder={t('profile.newPasswordPlaceholder')} tabIndex={pwdOpen ? 0 : -1} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label htmlFor="prof-pwd-confirm">{t('profile.confirmPassword')}</label>
+                  <input id="prof-pwd-confirm" type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder={t('profile.confirmPasswordPlaceholder')} tabIndex={pwdOpen ? 0 : -1} />
+                </div>
+                {pwdError && (
+                  <p style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600, marginTop: 10, lineHeight: 1.4 }}>{pwdError}</p>
+                )}
+                <button
+                  onClick={changePassword}
+                  disabled={savingPwd || !currentPwd || !newPwd || !confirmPwd}
+                  className="btn btn-primary btn-full"
+                  tabIndex={pwdOpen ? 0 : -1}
+                  style={{ marginTop: 14, opacity: (savingPwd || !currentPwd || !newPwd || !confirmPwd) ? 0.45 : 1 }}
+                >
+                  {pwdOk
+                    ? <><IconCheck /> {t('profile.passwordChanged')}</>
+                    : savingPwd ? t('profile.changingPassword') : t('profile.changePassword')}
+                </button>
               </div>
-              <div className="form-group">
-                <label htmlFor="prof-pwd-new">{t('profile.newPassword')}</label>
-                <input id="prof-pwd-new" type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} placeholder={t('profile.newPasswordPlaceholder')} />
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="prof-pwd-confirm">{t('profile.confirmPassword')}</label>
-                <input id="prof-pwd-confirm" type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} placeholder={t('profile.confirmPasswordPlaceholder')} />
-              </div>
-              {pwdError && (
-                <p style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600, marginTop: 10, lineHeight: 1.4 }}>{pwdError}</p>
-              )}
-              <button
-                onClick={changePassword}
-                disabled={savingPwd || !currentPwd || !newPwd || !confirmPwd}
-                className="btn btn-primary btn-full"
-                style={{ marginTop: 14, opacity: (savingPwd || !currentPwd || !newPwd || !confirmPwd) ? 0.45 : 1 }}
-              >
-                {pwdOk
-                  ? <><IconCheck /> {t('profile.passwordChanged')}</>
-                  : savingPwd ? t('profile.changingPassword') : t('profile.changePassword')}
-              </button>
             </div>
-          )}
+          </div>
         </GroupCard>
 
         {/* Emoji picker — stesso stile popup centrato, sopra al popup Profilo */}

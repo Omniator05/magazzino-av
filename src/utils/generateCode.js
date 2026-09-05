@@ -63,11 +63,12 @@ export async function generateQRDataURL(text, width = 256) {
   })
 }
 
-export function generateBarcodeSVG(code, elementId) {
-  if (typeof window !== 'undefined') {
-    import('jsbarcode').then(({ default: JsBarcode }) => {
-      const el = document.getElementById(elementId)
-      if (el) JsBarcode(el, code, { format: 'CODE128', width: 2, height: 60, displayValue: true, fontSize: 14, margin: 10 })
-    })
-  }
+// Barcode come immagine (data URL PNG), non legato a un elemento DOM — così
+// può essere disegnato dentro un canvas composito (vedi labelImage.js), allo
+// stesso modo in cui generateQRDataURL restituisce un'immagine caricabile.
+export async function generateBarcodeDataURL(code, { height = 100 } = {}) {
+  const { default: JsBarcode } = await import('jsbarcode')
+  const canvas = document.createElement('canvas')
+  JsBarcode(canvas, code, { format: 'CODE128', width: 2, height, displayValue: true, fontSize: Math.round(height * 0.22), margin: 8 })
+  return canvas.toDataURL('image/png')
 }

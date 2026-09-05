@@ -7,6 +7,7 @@ import DeleteButton from '../components/DeleteButton'
 import BackHomeButton from '../components/BackHomeButton'
 import FabButton from '../components/FabButton'
 import { Dot, Check, User } from '../components/Icon'
+import SaveButton from '../components/SaveButton'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -85,8 +86,10 @@ export default function Tasks() {
     setShowModal(true)
   }
 
+  // Ritorna true solo se ha davvero salvato — SaveButton mostra la spunta e
+  // chiude solo in quel caso (mai sul ramo che si ferma per titolo vuoto).
   const saveTask = async () => {
-    if (!form.title.trim()) return
+    if (!form.title.trim()) return false
     if (editingTask) {
       await updateDoc(doc(db, 'tasks', editingTask.id), {
         title: form.title.trim(),
@@ -110,10 +113,16 @@ export default function Tasks() {
     }
     setForm({ title:'', notes:'', priority:'media', assignee:'all' })
     setEditingTask(null)
-    setShowModal(false)
+    return true
   }
 
-  const taskDrag = useModalDrag(closeTaskModal, undefined, saveTask, showModal)
+  // Invio da tastiera (Enter): stesso salvataggio, ma senza passare dal
+  // bottone — chiude comunque con l'animazione invece che di scatto.
+  const submitTaskForm = async () => {
+    const ok = await saveTask()
+    if (ok) taskDrag.close()
+  }
+  const taskDrag = useModalDrag(closeTaskModal, undefined, submitTaskForm, showModal)
 
   const toggleDone = async (task) => {
     await updateDoc(doc(db, 'tasks', task.id), {
@@ -268,10 +277,10 @@ export default function Tasks() {
               </div>
             )}
 
-            <button onClick={saveTask} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+            <SaveButton onSave={saveTask} onDone={taskDrag.close} onError={taskDrag.triggerJiggle} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={!form.title.trim()}>
               <Check size={16} /> {editingTask ? t('tasks.saveChanges') : (isAdmin ? t('tasks.createTask') : t('tasks.addTask'))}
-            </button>
+            </SaveButton>
           </div>
         </div>
       )}

@@ -11,6 +11,8 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
+import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
+import { useConfirm } from '../context/ConfirmProvider'
 import { syncKitAwareInventory } from '../utils/kitInventory'
 
 const ICONS = {
@@ -40,8 +42,9 @@ const ICONS = {
 export default function WorkerScanner() {
   const { t } = useTranslation()
   const { id } = useParams()
-  const { user, profile, teamId } = useAuth()
+  const { user, profile, teamId, team } = useAuth()
   const navigate = useNavigate()
+  const confirm = useConfirm()
   const location = useLocation()
   // Popup dedicato "pieno/consumato" per il rientro dei consumabili — non il
   // confirm() generico dell'app (quello usa il rosso d'accento anche per la
@@ -57,6 +60,20 @@ export default function WorkerScanner() {
     setConsumableConfirm(null)
     consumableResolverRef.current?.(intact)
     consumableResolverRef.current = null
+  }
+  // Popup "oggetto già caricato altrove o rotto" — stesso pattern del popup
+  // consumabili sopra: chiede PRIMA di scrivere, non si può aprire un popup
+  // e aspettare dentro una transazione Firestore.
+  const [loadConflict, setLoadConflict] = useState(null) // { name, reason:'loaded'|'broken' } | null
+  const loadConflictResolverRef = useRef(null)
+  const askLoadConflict = (name, reason) => new Promise(resolve => {
+    loadConflictResolverRef.current = resolve
+    setLoadConflict({ name, reason })
+  })
+  const resolveLoadConflict = (choice) => {
+    setLoadConflict(null)
+    loadConflictResolverRef.current?.(choice)
+    loadConflictResolverRef.current = null
   }
   // Se arriviamo da /events/:id/scan (admin) torniamo all'evento, altrimenti alla home worker
   const backPath = location.pathname.endsWith('/scan') ? `/events/${id}` : '/'
@@ -295,6 +312,44 @@ export default function WorkerScanner() {
       }
     }
 
+    // Stesso pezzo fisico segnato su due liste diverse (o rotto): syncKitAwareInventory
+    // (vedi utils/kitInventory.js) scala availableQty solo quando un carico va davvero a
+    // buon fine, quindi se qui è già a zero significa che non c'è nessuna unità libera —
+    // o è già caricata altrove, o è rotta (brokenQty riduce il massimo disponibile). Vale
+    // anche per "pronto": segnarlo pronto senza controllare porterebbe a un risultato
+    // incoerente (pronto ma poi mancante al carico) — chiediamo PRIMA della transazione,
+    // stesso motivo del blocco sopra.
+    if (mode === 'load' || mode === 'pronto') {
+      const localItem = event?.items?.find(i => i.id === foundItem.id)
+      const alreadyDone = mode === 'load' ? localItem?.loaded : localItem?.pronto
+      if (!alreadyDone && (foundItem.availableQty ?? foundItem.totalQty ?? 0) <= 0) {
+        const reason = (foundItem.brokenQty || 0) >= (foundItem.totalQty || 0) ? 'broken' : 'loaded'
+        const choice = await askLoadConflict(foundItem.name, reason)
+        if (choice === 'cancel') { setProcessing(false); return }
+        if (choice === 'missing') {
+          try {
+            await runTransaction(db, async (tx) => {
+              const snap = await tx.get(eventRef)
+              if (!snap.exists()) return
+              const evItems = snap.data().items || []
+              tx.update(eventRef, { items: evItems.map(i => i.id === foundItem.id ? { ...i, mancante: true } : i) })
+            })
+            vibrate([100, 50, 100])
+            const result = { action: 'marked_missing', item: localItem || foundItem }
+            setLastScan(result)
+            setScanToast({ ...result, ts: Date.now() })
+            setTimeout(() => setScanToast(null), 3000)
+          } catch (e) {
+            setSaveError(t('workerScanner.saveErrorMessage'))
+          } finally {
+            setProcessing(false)
+          }
+          return
+        }
+        // choice === 'anyway' → prosegue normalmente qui sotto
+      }
+    }
+
     // Tutto ciò che legge/scrive event.items va dentro una transazione: con
     // più magazzinieri sulla stessa lista, due scansioni quasi simultanee
     // basate su una lettura "vecchia" facevano sì che l'ultima scrittura
@@ -529,6 +584,10 @@ export default function WorkerScanner() {
   const [confirmingExtra, setConfirmingExtra] = useState(false)
   const addExtraWorkerItem = async () => {
     if (!extraWorkerForm.name.trim() || confirmingExtra) return
+    if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsPerList) {
+      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
+      return
+    }
     const name = extraWorkerForm.name.trim()
     const qty = extraWorkerForm.qty
     setConfirmingExtra(true)
@@ -666,6 +725,7 @@ export default function WorkerScanner() {
     not_loaded:       { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'⚠️', title:t('workerScanner.notLoadedTitle'), msg: i => t('workerScanner.notLoadedMsg', { name: i?.name }) },
     wrong_instance:   { bg:'rgba(255,82,82,0.1)',   border:'rgba(255,82,82,0.3)',   color:'var(--red)',    icon:'🧳', title:t('workerScanner.wrongInstanceTitle'), msg: i => t('workerScanner.wrongInstanceMsg', { name: i?.name, scanned: lastScan?.scannedInstance, expected: (lastScan?.expectedInstances || []).join(', ') }) },
     instance_progress: { bg:'rgba(52,211,153,0.15)', border:'rgba(52,211,153,0.4)', color:'var(--green)', icon:'🧳', title:t('workerScanner.instanceProgressTitle', { done: lastScan?.doneCount, total: lastScan?.totalCount }), msg: i => t('workerScanner.instanceProgressMsg', { name: i?.name }) },
+    marked_missing:   { bg:'rgba(234,88,12,0.12)',   border:'rgba(234,88,12,0.3)',   color:'#ea580c',       icon:'⚠️', title:t('workerScanner.markedMissingTitle'), msg: i => t('workerScanner.markedMissingMsg', { name: i?.name }) },
   }
 
   const srOnlyStyle = { position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }
@@ -705,6 +765,38 @@ export default function WorkerScanner() {
               <button onClick={() => resolveConsumableConfirm(true)}
                 style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#16a34a', color:'#fff', border:'none', cursor:'pointer' }}>
                 {t('workerScanner.consumableReturnIntact')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Popup "già caricato altrove o rotto" — nessuna unità libera per
+          questo scan: il magazziniere sceglie se rinunciare a questa riga
+          (mancante) o forzare comunque il carico (es. errore di catalogo,
+          il pezzo è davvero lì in mano). */}
+      {loadConflict && createPortal(
+        <div
+          onClick={() => resolveLoadConflict('cancel')}
+          style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
+        >
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true"
+            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>
+              {t('workerScanner.loadConflictTitle')}
+            </h3>
+            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
+              {t(loadConflict.reason === 'broken' ? 'workerScanner.loadConflictBrokenMessage' : 'workerScanner.loadConflictLoadedMessage', { name: loadConflict.name })}
+            </p>
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:20 }}>
+              <button onClick={() => resolveLoadConflict('missing')}
+                style={{ padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'rgba(234,88,12,0.1)', color:'#ea580c', border:'none', cursor:'pointer' }}>
+                {t('workerScanner.loadConflictMarkMissing')}
+              </button>
+              <button onClick={() => resolveLoadConflict('anyway')}
+                style={{ padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'var(--accent2)', color:'#fff', border:'none', cursor:'pointer' }}>
+                {t('workerScanner.loadConflictAnyway')}
               </button>
             </div>
           </div>
@@ -1072,6 +1164,39 @@ export default function WorkerScanner() {
                     // altro ha scritto nel mezzo.
                     _onToggleLoaded: async (itemId) => {
                       const newLoadedGuess = !item.loaded
+                      // Stesso controllo di processCode (scanner a codice): anche
+                      // spuntando la riga a mano invece di scansionare, non deve
+                      // essere possibile "caricare" un pezzo già caricato su
+                      // un'altra lista o segnato rotto senza almeno un avviso.
+                      if (newLoadedGuess) {
+                        const catalogItemId = item.itemRef || itemId
+                        let catalogData = null
+                        try {
+                          const catalogSnap = await getDoc(doc(db, 'items', catalogItemId))
+                          if (catalogSnap.exists()) catalogData = catalogSnap.data()
+                        } catch (e) {}
+                        if (catalogData && (catalogData.availableQty ?? catalogData.totalQty ?? 0) <= 0) {
+                          const reason = (catalogData.brokenQty || 0) >= (catalogData.totalQty || 0) ? 'broken' : 'loaded'
+                          const choice = await askLoadConflict(item.name, reason)
+                          if (choice === 'cancel') return
+                          if (choice === 'missing') {
+                            setOptimistic(itemId, { mancante: true })
+                            try {
+                              await runTransaction(db, async (tx) => {
+                                const snap = await tx.get(eventRef)
+                                if (!snap.exists()) return
+                                const evItems = snap.data().items || []
+                                tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, mancante: true }) })
+                              })
+                            } catch (e) {
+                              setSaveError(t('workerScanner.saveErrorMessage'))
+                              clearOptimistic(itemId, ['mancante'])
+                            }
+                            return
+                          }
+                          // choice === 'anyway' → prosegue sotto come sempre
+                        }
+                      }
                       setOptimistic(itemId, {
                         loaded: newLoadedGuess,
                         pronto: newLoadedGuess ? true : item.pronto,
@@ -1192,6 +1317,39 @@ export default function WorkerScanner() {
                     },
                     _onTogglePronto: async (itemId) => {
                       const newPronto = !item.pronto
+                      // Stesso controllo di _onToggleLoaded: segnare "pronto" senza
+                      // verificare la disponibilità porterebbe a un risultato incoerente
+                      // (pronto ma poi mancante al carico, perché nel frattempo è stato
+                      // caricato su un'altra lista o segnato rotto).
+                      if (newPronto) {
+                        const catalogItemId = item.itemRef || itemId
+                        let catalogData = null
+                        try {
+                          const catalogSnap = await getDoc(doc(db, 'items', catalogItemId))
+                          if (catalogSnap.exists()) catalogData = catalogSnap.data()
+                        } catch (e) {}
+                        if (catalogData && (catalogData.availableQty ?? catalogData.totalQty ?? 0) <= 0) {
+                          const reason = (catalogData.brokenQty || 0) >= (catalogData.totalQty || 0) ? 'broken' : 'loaded'
+                          const choice = await askLoadConflict(item.name, reason)
+                          if (choice === 'cancel') return
+                          if (choice === 'missing') {
+                            setOptimistic(itemId, { mancante: true })
+                            try {
+                              await runTransaction(db, async (tx) => {
+                                const snap = await tx.get(eventRef)
+                                if (!snap.exists()) return
+                                const evItems = snap.data().items || []
+                                tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : { ...i, mancante: true }) })
+                              })
+                            } catch (e) {
+                              setSaveError(t('workerScanner.saveErrorMessage'))
+                              clearOptimistic(itemId, ['mancante'])
+                            }
+                            return
+                          }
+                          // choice === 'anyway' → prosegue sotto come sempre
+                        }
+                      }
                       setOptimistic(itemId, { pronto: newPronto })
                       try {
                         await runTransaction(db, async (tx) => {
@@ -1525,14 +1683,20 @@ function ChecklistRow({ item }) {
   // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes
-  const hasInfo = displayNote || isKit
+  // La nota è sempre visibile (non più dietro al tasto "i") finché la riga non
+  // è fatta per la fase corrente — chi la deve leggere è pigro e tende a dare
+  // per scontato cosa c'è scritto invece di controllare: nascosta dietro un
+  // tap veniva saltata. Una volta segnata pronto/carico/rientro non serve più
+  // e scompare da sola, lasciando il tasto "i" solo per il contenuto del kit.
+  const noteVisible = displayNote && !item._phaseDone
+  const hasInfo = isKit
   // Rientrato tramite pressione lunga (fuori dal magazzino) — non per i
   // consumabili: lì "consumato" è un esito normale, non un oggetto perso.
   const isForgottenReturn = item.returned && item.returnedConsumed && item.category !== 'Consumabili'
 
   return (
     <>
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: showInfo ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : item._vehicleColor ? `${item._vehicleColor}10` : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : item._vehicleColor ? `3px solid ${item._vehicleColor}` : '3px solid transparent' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: (showInfo || noteVisible) ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : item._vehicleColor ? `${item._vehicleColor}10` : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : item._vehicleColor ? `3px solid ${item._vehicleColor}` : '3px solid transparent' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item._phaseDone ? 0.45 : 1, transition:'opacity 0.3s' }}>
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
@@ -1559,9 +1723,9 @@ function ChecklistRow({ item }) {
                 aria-label={t('workerScanner.itemInfoToggle')}
                 aria-pressed={showInfo}
                 style={{
-                  background: showInfo ? ((eventNote||isKit) ? 'var(--accent2)' : 'var(--blue)') : ((eventNote||isKit) ? 'rgba(245,166,35,0.15)' : 'rgba(79,195,247,0.15)'),
-                  border: `1px solid ${(eventNote||isKit) ? 'rgba(245,166,35,0.4)' : 'rgba(79,195,247,0.3)'}`,
-                  color: showInfo ? 'white' : ((eventNote||isKit) ? 'var(--accent2)' : 'var(--blue)'),
+                  background: showInfo ? 'var(--blue)' : 'rgba(79,195,247,0.15)',
+                  border: '1px solid rgba(79,195,247,0.3)',
+                  color: showInfo ? 'white' : 'var(--blue)',
                   borderRadius:'50%', width:30, height:30, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
                 }}>
                 {showInfo ? '✕' : 'i'}
@@ -1691,15 +1855,18 @@ function ChecklistRow({ item }) {
           </button>
         </div>
       </div>
-      {/* Pannello info unificato: nota in alto, componenti kit sotto (se presenti) */}
+      {/* Nota sempre visibile (non più dietro al tasto "i") finché la riga non
+          è fatta per la fase corrente — scompare da sola appena segnata
+          pronto/carico/rientro, non serve più a quel punto. */}
+      {noteVisible && (
+        <div style={{ padding:'10px 16px 10px', background: eventNote ? 'rgba(245,166,35,0.05)' : 'rgba(79,195,247,0.04)', borderBottom: showInfo ? 'none' : '1px solid var(--border)', display:'flex', gap:8 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>{eventNote ? '📝' : '💡'}</span>
+          <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{displayNote}</p>
+        </div>
+      )}
+      {/* Pannello contenuto kit, dietro al tasto "i" */}
       {showInfo && hasInfo && (
         <div style={{ borderBottom:'1px solid var(--border)' }}>
-          {displayNote && (
-            <div style={{ padding:'10px 16px 10px', background: eventNote ? 'rgba(245,166,35,0.05)' : 'rgba(79,195,247,0.04)', display:'flex', gap:8 }}>
-              <span style={{ fontSize:16, flexShrink:0 }}>{eventNote ? '📝' : '💡'}</span>
-              <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{displayNote}</p>
-            </div>
-          )}
           {isKit && (
             <div style={{ background:'rgba(245,166,35,0.04)', padding:'10px 16px 12px' }}>
               <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('workerScanner.kitContents')}</p>

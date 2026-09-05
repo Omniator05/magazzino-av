@@ -7,6 +7,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
 import { Image, Sliders, CreditCard, User, Calendar, Mail, Share } from '../components/Icon'
 import { trialDaysLeft } from '../utils/billing'
+import Toast from '../components/Toast'
 
 const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
 
@@ -98,11 +99,7 @@ export default function Settings() {
 
   return (
     <div className="page">
-      {toast && (
-        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
-          {toast}
-        </div>
-      )}
+      <Toast message={toast} />
 
       <div className="page-header">
         <h1>{t('adminUsers.settingsHomeTitle')}</h1>

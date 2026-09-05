@@ -88,8 +88,11 @@ export default function Landing() {
         </div>
 
         <div className="landing-reveal" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 16, padding: '16px 20px', marginBottom: 24, animationDelay: `${CARDS_START_MS + FEATURES.length * REVEAL_STEP_MS}ms` }}>
-          <p style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>30 giorni di prova gratuita</p>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>Nessuna carta richiesta all'attivazione. Poi 35€/mese, per azienda. Disdici quando vuoi.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <p style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>30 giorni di prova gratuita</p>
+            <span style={{ background: 'rgba(230,57,70,0.18)', color: '#ff6b76', border: '1px solid rgba(230,57,70,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.4px', textTransform: 'uppercase' }}>Prezzo beta</span>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>Nessuna carta richiesta all'attivazione. Poi 35€/mese, per azienda — prezzo speciale finché l'app è in sviluppo. Disdici quando vuoi.</p>
         </div>
 
         <button onClick={() => navigate('/signup')} className="auth-btn landing-reveal" style={{ animationDelay: `${CARDS_START_MS + FEATURES.length * REVEAL_STEP_MS + 70}ms` }}>

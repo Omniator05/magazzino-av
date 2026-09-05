@@ -6,17 +6,22 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
-import { generateItemCode, generateQRDataURL, generateBarcodeSVG, generateUnitCode, qrPayloadForCode } from '../utils/generateCode'
+import { generateItemCode, generateUnitCode } from '../utils/generateCode'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import { formatDate } from '../utils/formatDate'
 import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useCenteredModal } from '../hooks/useCenteredModal'
-import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck } from '../components/Icon'
+import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download } from '../components/Icon'
 import FabButton from '../components/FabButton'
+import SaveButton from '../components/SaveButton'
+import Picker from '../components/Picker'
 import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
+import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
+import { getCodeDisplay } from '../utils/codeDisplay'
+import { QrCode, Barcode } from '../components/Icon'
 
 // Colori pallino per la sezione Cronologia (dettaglio oggetto) — stessa
 // mappa azione→colore usata nel modale modifica riga di EventDetail.jsx.
@@ -88,7 +93,7 @@ const CATEGORY_MIGRATION = {
 
 export default function Inventory() {
   const { t, i18n } = useTranslation()
-  const { user, teamId } = useAuth()
+  const { user, teamId, team, profile } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const { state: navState } = useLocation()
@@ -117,7 +122,6 @@ export default function Inventory() {
   const [kitSearch, setKitSearch]       = useState('')
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
-  const [showDetailEvents, setShowDetailEvents] = useState(false)
   // Per i kit: filtra "dove si trova" a un baule fisico specifico invece
   // dell'aggregato di tutto il kit — null = tutti i bauli insieme.
   const [historyInstanceFilter, setHistoryInstanceFilter] = useState(null)
@@ -127,9 +131,16 @@ export default function Inventory() {
   // più questo oggetto se nel frattempo è stato rimosso): i dati sono già
   // tutti caricati in itemActivityLog, qui si filtra solo per evento.
   const [showEventActivity, setShowEventActivity] = useState(null) // { id, name } | null
-  const [qrUrl, setQrUrl] = useState(null)
+  // Popup "storico completo" dal dettaglio oggetto — il dettaglio mostra solo
+  // un riepilogo (dove si trova ora, o l'ultima volta che è stato fuori);
+  // l'elenco completo/log attività si apre solo su richiesta.
+  const [showFullHistory, setShowFullHistory] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showPrintPopup, setShowPrintPopup] = useState(false)
+  // Formato scelto per il download etichetta corrente — null finché non si
+  // sceglie (solo se la squadra ha impostato "entrambi"; altrimenti è già
+  // deciso dall'impostazione, vedi il click che apre il popup più sotto).
+  const [printFormat, setPrintFormat] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [importStep, setImportStep] = useState('instructions') // instructions | preview | importing | done
   const [importParsed, setImportParsed] = useState(null) // { items, warnings }
@@ -138,6 +149,7 @@ export default function Inventory() {
   const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi' })
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
+  const historyDrag = useModalDrag(() => setShowFullHistory(false), undefined, undefined, showFullHistory)
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
   const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
   const kitDrag     = useModalDrag(() => setShowKitModal(false))
@@ -272,12 +284,19 @@ export default function Inventory() {
     })
   }
 
+  // Ritorna true solo se ha davvero scritto qualcosa — SaveButton mostra la
+  // spunta e chiude il modal solo in quel caso, mai sui rami che si fermano
+  // prima (validazione, limite piano gratuito, conferma rifiutata).
   const saveItem = async () => {
-    if (!form.name.trim()) return
+    if (!form.name.trim()) return false
     const qty = parseInt(form.qty) || 1
     if (!selected) {
+      if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsInWarehouse) {
+        await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: FREE_LIMITS.itemsInWarehouse }) })
+        return false
+      }
       const dup = items.find(i => i.name.trim().toLowerCase() === form.name.trim().toLowerCase())
-      if (dup && !(await confirm({ title: t('inventory.confirmDuplicateTitle'), message: t('inventory.confirmDuplicateMessage', { name: dup.name }), confirmLabel: t('inventory.confirmDuplicateLabel') }))) return
+      if (dup && !(await confirm({ title: t('inventory.confirmDuplicateTitle'), message: t('inventory.confirmDuplicateMessage', { name: dup.name }), confirmLabel: t('inventory.confirmDuplicateLabel') }))) return false
     }
     if (selected) {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
@@ -296,7 +315,7 @@ export default function Inventory() {
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
     }
-    setShowModal(false)
+    return true
   }
 
   const deleteItem = async id => {
@@ -306,31 +325,27 @@ export default function Inventory() {
     }
   }
 
-  const openDetail = async item => {
-    setShowDetail(item); setQrUrl(null); setHistoryInstanceFilter(null)
-    const code = item.code || generateItemCode(item.id)
-    const url = await generateQRDataURL(qrPayloadForCode(code, teamId))
-    setQrUrl(url)
-    setTimeout(() => generateBarcodeSVG(code, 'barcode-svg'), 100)
+  const openDetail = item => {
+    setShowDetail(item); setHistoryInstanceFilter(null); setShowFullHistory(false)
   }
 
   // Etichette come immagine PNG 680×180 pronta per il software della stampante
   // termica — niente dialogo di stampa del browser, che dipende da formato
   // pagina/margini ed è inaffidabile per etichette di quella dimensione.
-  const printCode = async () => {
+  const printCode = async (format) => {
     const code = showDetail.code || generateItemCode(showDetail.id)
-    const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId })
+    const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId, format })
     downloadDataUrl(png, labelFilename(showDetail.name, code))
   }
 
-  const printUnitLabels = async () => {
+  const printUnitLabels = async (format) => {
     const baseCode = showDetail.code || generateItemCode(showDetail.id)
     const totalUnits = showDetail.totalQty || 1
     const unitCodes = Array.from({ length: totalUnits }, (_, i) => generateUnitCode(baseCode, i + 1))
 
     const zip = new JSZip()
     for (const code of unitCodes) {
-      const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId })
+      const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId, format })
       zip.file(labelFilename(showDetail.name, code), png.split(',')[1], { base64: true })
     }
     const blob = await zip.generateAsync({ type: 'blob' })
@@ -339,6 +354,9 @@ export default function Inventory() {
 
   const printAllLabels = async () => {
     if (items.length === 0) return
+    // Nessuna scelta interattiva qui (esportazione di tutto il magazzino in
+    // blocco): se la squadra usa "entrambi" si stampa in QR, il default storico.
+    const format = getCodeDisplay(team) === 'barcode' ? 'barcode' : 'qr'
     const itemsWithCodes = items.map(i => ({ ...i, code: i.code || generateItemCode(i.id) }))
 
     const zip = new JSZip()
@@ -348,7 +366,7 @@ export default function Inventory() {
         ? Array.from({ length: totalUnits }, (_, i) => generateUnitCode(item.code, i + 1))
         : [item.code]
       for (const code of unitCodes) {
-        const png = await renderLabelPNG({ name: item.name, location: item.location, code, teamId })
+        const png = await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format })
         zip.file(labelFilename(item.name, code), png.split(',')[1], { base64: true })
       }
     }
@@ -419,7 +437,12 @@ export default function Inventory() {
     if (!importParsed) return
     setImportStep('importing')
     setImportProgress(0)
-    const toImport = importParsed.items
+    // Piano gratuito: un import CSV può portare ben oltre il limite in un
+    // colpo solo — si importa solo fino a riempire lo spazio rimasto, il
+    // resto va scartato con un avviso invece di sforare in silenzio.
+    const headroom = isProPlan(team) ? Infinity : Math.max(0, FREE_LIMITS.itemsInWarehouse - items.length)
+    const toImport = importParsed.items.slice(0, headroom)
+    const skipped = importParsed.items.length - toImport.length
     for (let i = 0; i < toImport.length; i++) {
       const it = toImport[i]
       const ref = await addDoc(collection(db, 'items'), {
@@ -431,6 +454,9 @@ export default function Inventory() {
       setImportProgress(i + 1)
     }
     setImportStep('done')
+    if (skipped > 0) {
+      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.importCappedMsg', { imported: toImport.length, limit: FREE_LIMITS.itemsInWarehouse, skipped }) })
+    }
   }
 
   const [activeFilter, setActiveFilter] = useState(navState?.filter || 'all')
@@ -801,9 +827,12 @@ export default function Inventory() {
             <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
             <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
             <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
-              <select value={form.category} onChange={e => setForm({...form,category:e.target.value})}>
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+              <Picker
+                value={form.category}
+                onChange={category => setForm({...form, category})}
+                ariaLabel={t('inventory.categoryLabel')}
+                options={CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
+              />
             </div>
             {/* Unità di misura — solo Consumabili: non tutti si contano allo
                 stesso modo (moquette/gonna palco a metri, nastro a rotoli,
@@ -839,6 +868,7 @@ export default function Inventory() {
                     style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
                   <input type="number" min="1" value={form.qty}
                     onChange={e => setForm({...form, qty:Math.max(1,parseInt(e.target.value)||1)})}
+                    onFocus={e => e.target.select()}
                     style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
                   <button onClick={() => setForm({...form, qty:form.qty+1})} aria-label={t('eventDetail.increaseQtyAria')}
                     style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
@@ -853,6 +883,7 @@ export default function Inventory() {
                     style={{ width:44, height:44, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
                   <input type="number" min="0" max={form.qty} value={form.brokenQty}
                     onChange={e => setForm({...form, brokenQty:Math.min(form.qty,Math.max(0,parseInt(e.target.value)||0))})}
+                    onFocus={e => e.target.select()}
                     style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1, color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }} />
                   <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})} aria-label={t('inventory.increaseBrokenAria')}
                     style={{ width:44, height:44, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
@@ -879,6 +910,7 @@ export default function Inventory() {
                       style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
                     <input type="number" min="0" value={form.minStock||0}
                       onChange={e => setForm({...form, minStock:Math.max(0,parseInt(e.target.value)||0)})}
+                      onFocus={e => e.target.select()}
                       style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
                     <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})} aria-label={t('inventory.increaseMinStockAria')}
                       style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
@@ -889,290 +921,316 @@ export default function Inventory() {
             )}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
-              <button onClick={saveItem} className="btn btn-primary" style={{ flex:2, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}><Save size={16} /> {t('inventory.save')}</button>
+              <SaveButton onSave={saveItem} onDone={myDrag.close} onError={myDrag.triggerJiggle} className="btn btn-primary" style={{ flex:2 }}><Save size={16} /> {t('inventory.save')}</SaveButton>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal dettaglio + QR */}
-      {showDetail && (
+      {/* Modal dettaglio — un solo flusso verticale: titolo e stato subito in
+          cima, storico subito sotto senza dover toccare nulla per vederlo,
+          codice/azioni in fondo (vedi feedback utente: prima lo storico stava
+          dietro un tap sulla disponibilità, in un pannello separato). */}
+      {showDetail && (() => {
+        const outCount = (showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)
+        // L'ultimo evento (per data) in cui l'oggetto risulta stato caricato,
+        // a prescindere dal fatto che sia già rientrato — usato per "Dove si
+        // trova" quando non è attualmente fuori da nessuna parte.
+        const lastOutEvent = detailEventHistory.find(ev => (ev.items || []).find(matchesDetailItem)?.loaded)
+        const hasFullHistory = detailEventHistory.length > 0 || itemActivityLog.length > 0
+        const row = (i) => ({ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14, padding:'12px 16px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' })
+        const rowLabel = { color:'var(--text2)', fontSize:13, flexShrink:0 }
+        const rowValue = { fontWeight:600, fontSize:13, color:'var(--text)', textAlign:'right' }
+        let r = 0
+        return (
         <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
           <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
             <button className="close-btn" onClick={detailDrag.close} aria-label={t("common.close")}>✕</button>
 
-            {/* Wrapper scorrevole: pannello principale + pannello "dove si trova" */}
-            <div style={{ overflow:'hidden' }}>
-              <div style={{
-                display:'flex', alignItems:'flex-start',
-                transform: showDetailEvents ? 'translateX(-100%)' : 'translateX(0)',
-                transition:'transform 0.32s cubic-bezier(0.32,0.72,0,1)',
-              }}>
-
-                {/* ── Pannello principale ── */}
-                <div style={{ width:'100%', flexShrink:0 }}>
-                  <div style={{ textAlign:'center', marginBottom:20 }}>
-                    <div style={{ fontSize:40, marginBottom:8 }}>{ICONS[showDetail.category] || '📦'}</div>
-                    <h2 style={{ margin:0 }}>{showDetail.name}</h2>
-                    {(showDetail.brand || showDetail.model) && <p style={{ color:'var(--text2)', marginTop:4 }}>{showDetail.brand} {showDetail.model}</p>}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-no-anim"
-                    onClick={() => setShowDetailEvents(true)}
-                    aria-label={t('inventory.whereItIsAria')}
-                    style={{ width:'100%', background:'var(--bg3)', border:'none', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16, cursor:'pointer', textAlign:'left', font:'inherit', color:'inherit' }}
-                  >
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                      <span style={{ color:'var(--text2)', fontSize:14 }}>{t('inventory.detailAvailable')}</span>
-                      <span style={{ fontWeight:800, fontSize:18 }}>
-                        {showDetail.category === 'Consumabili'
-                          ? `${showDetail.availableQty ?? showDetail.totalQty} ${t(`inventory.unitShort_${showDetail.consumableUnit || 'pezzi'}`)}`
-                          : `${showDetail.availableQty}/${showDetail.totalQty}`
-                        }
-                      </span>
-                    </div>
-                    {/* Barra segmentata: disponibili / fuori / rotti */}
-                    <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
-                      <div style={{ background:'var(--green)', width:`${((showDetail.availableQty||0)/(showDetail.totalQty||1))*100}%`, transition:'width 0.3s' }} />
-                      {showDetail.brokenQty > 0 && (
-                        <div style={{ background:'var(--red)', width:`${((showDetail.brokenQty||0)/(showDetail.totalQty||1))*100}%` }} />
-                      )}
-                    </div>
-                    <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
-                      <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} {t('inventory.available')}</span>
-                      {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
-                        <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)} {t('inventory.out')}</span>
-                      )}
-                      {showDetail.brokenQty > 0 && (
-                        <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: showDetail.brokenQty })}</span>
-                      )}
-                    </div>
-                    <p style={{ fontSize:11, color:'var(--accent)', marginTop:8, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
-                      🔍 {t('inventory.detailTapToSeeLocation')}
-                      <span style={{ marginLeft:'auto' }}>→</span>
-                    </p>
-                  </button>
-                  <div className="code-preview" style={{ marginBottom:14 }}>
-                    {qrUrl ? <img src={qrUrl} style={{ width:180 }} /> : <div style={{ width:180, height:180, background:'#f0f0f0', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center' }}><p style={{ color:'#999', fontSize:13 }}>{t('inventory.generating')}</p></div>}
-                    <p style={{ color:'#333', fontFamily:'monospace', fontWeight:700, fontSize:16 }}>{showDetail.code || generateItemCode(showDetail.id)}</p>
-                    <svg id="barcode-svg"></svg>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                    <button onClick={() => setShowPrintPopup(true)} className="btn btn-secondary">⬇ {t('inventory.downloadLabel')}</button>
-                    <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary">✏️ {t('inventory.edit')}</button>
-                  </div>
-                  {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
-                  {(showDetail.brokenQty||0) > 0 && (
-                    <button
-                      onClick={async () => {
-                        const currentBroken = showDetail.brokenQty || 0
-                        const newBroken = Math.max(0, currentBroken - 1)
-                        const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
-                        const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
-                        await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
-                        setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
-                      }}
-                      style={{ width:'100%', marginTop:10, background:'rgba(248,113,113,0.15)', border:'1px solid rgba(248,113,113,0.4)', color:'var(--red)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
-                    >
-                      <Wrench size={15} /> {t('inventory.repairOneButton')}
-                    </button>
-                  )}
-                  {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
-                  {((showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)) > 0 && (
-                    <button
-                      onClick={async () => {
-                        const newAvailable = (showDetail.totalQty||0) - (showDetail.brokenQty||0)
-                        await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
-                        setShowDetail(d => ({ ...d, availableQty: newAvailable }))
-                      }}
-                      style={{ width:'100%', marginTop:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
-                    >
-                      {t('inventory.restoreStock', { count: (showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0) })}
-                    </button>
-                  )}
-                  {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginTop:12, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
-                  {showDetail.location && (
-                    <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ color:'var(--blue)' }}><Pin size={17} /></span>
-                      <div>
-                        <p style={{ color:'var(--text2)', fontSize:11, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.4px' }}>{t('inventory.warehousePosition')}</p>
-                        <p style={{ color:'var(--blue)', fontWeight:700, fontSize:15, marginTop:2 }}>{showDetail.location}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Pannello "dove si trova" ── */}
-                <div style={{ width:'100%', flexShrink:0, paddingLeft:2 }}>
-                  <button
-                    onClick={() => setShowDetailEvents(false)}
-                    className="btn-no-anim"
-                    style={{ display:'flex', alignItems:'center', gap:6, background:'transparent', color:'var(--text2)', fontWeight:700, fontSize:14, marginBottom:16 }}
-                  >
-                    ← {t('common.back')}
-                  </button>
-                  <h2 style={{ marginBottom:4 }}>{t('inventory.whereItIs')}</h2>
-                  <p style={{ color:'var(--text2)', fontSize:13, marginBottom: showDetail.isBundle ? 12 : 16 }}>{showDetail.name}</p>
-
-                  {/* Filtro per baule — solo per i kit: lo storico aggregato
-                      del kit intero non dice quale ESEMPLARE fisico è stato
-                      dove, che è esattamente quello che serve sapere quando
-                      un baule specifico torna con qualcosa di rotto/mancante. */}
-                  {showDetail.isBundle && (
-                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
-                      <button
-                        onClick={() => setHistoryInstanceFilter(null)}
-                        className="btn-no-anim"
-                        aria-pressed={historyInstanceFilter === null}
-                        style={{
-                          padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
-                          background: historyInstanceFilter === null ? 'var(--accent)' : 'var(--card2)',
-                          color: historyInstanceFilter === null ? '#fff' : 'var(--text2)',
-                          border: `1px solid ${historyInstanceFilter === null ? 'var(--accent)' : 'var(--border)'}`,
-                        }}
-                      >
-                        {t('inventory.allInstancesFilter')}
-                      </button>
-                      {ensureInstanceList(showDetail.instances, showDetail.totalQty).map(inst => (
-                        <button
-                          key={inst.number}
-                          onClick={() => setHistoryInstanceFilter(n => n === inst.number ? null : inst.number)}
-                          className="btn-no-anim"
-                          aria-pressed={historyInstanceFilter === inst.number}
-                          style={{
-                            padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
-                            background: historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--card2)',
-                            color: historyInstanceFilter === inst.number ? '#fff' : ((inst.brokenComponents||[]).length > 0 ? 'var(--red)' : 'var(--text2)'),
-                            border: `1px solid ${historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--border)'}`,
-                          }}
-                        >
-                          {t('inventory.kitInstanceLabel', { number: inst.number })}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {detailEvents.length === 0 && detailEventHistory.length === 0 && (
-                    <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>{t('inventory.noHistoryAvailable')}</p>
-                  )}
-
-                  {detailEvents.length > 0 && (
-                    <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
-                      <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.currentlyOut')}</p>
-                      {detailEvents.map(ev => {
-                        const itm = (ev.items || []).find(matchesDetailItem)
-                        return (
-                        <button
-                          key={ev.id}
-                          onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
-                          style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
-                        >
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                              <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                              {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
-                                <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
-                              )}
-                            </div>
-                            <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                              {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
-                              {ev.location ? ` · ${ev.location}` : ''}
-                            </p>
-                          </div>
-                          <span style={{ color:'var(--text2)' }}>→</span>
-                        </button>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {detailEventHistory.length > 0 && (
-                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                      <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.history', { count: detailEventHistory.length })}</p>
-                      {detailEventHistory.map(ev => {
-                        const itm = (ev.items || []).find(matchesDetailItem)
-                        const stillOut = itm?.loaded && !itm?.returned
-                        return (
-                          <button
-                            key={ev.id}
-                            onClick={() => { setShowDetailEvents(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
-                            style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
-                          >
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                                <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                                {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
-                                  <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
-                                )}
-                              </div>
-                              <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                                {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
-                                {ev.location ? ` · ${ev.location}` : ''}
-                              </p>
-                            </div>
-                            {stillOut && (
-                              <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>{t('inventory.out')}</span>
-                            )}
-                            <span style={{ color:'var(--text2)' }}>→</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Cronologia "chi ha fatto cosa" — attraverso TUTTI gli
-                      eventi (anche quelli che nel frattempo hanno rimosso
-                      l'oggetto dalla propria lista di carico, o sono stati
-                      archiviati/eliminati), non solo quelli sopra. Toccare
-                      una voce apre un popup con la cronologia di QUEL solo
-                      evento, invece di rimandare alla sua lista di carico —
-                      che potrebbe non esistere più, o non avere più questo
-                      oggetto. I dati sono già tutti in itemActivityLog: si
-                      filtra client-side, nessuna query in più. */}
-                  {itemActivityLog.length > 0 && (
-                    <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
-                      <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.activityTitle')}</p>
-                      <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:260, overflowY:'auto' }}>
-                        {itemActivityLog.map(entry => (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            className="btn-no-anim"
-                            disabled={!entry.eventId}
-                            onClick={() => entry.eventId && setShowEventActivity({ id: entry.eventId, name: entry.eventName })}
-                            style={{ display:'flex', alignItems:'flex-start', gap:9, width:'100%', textAlign:'left', background:'transparent', padding:'6px 4px', borderRadius:8, cursor: entry.eventId ? 'pointer' : 'default' }}
-                          >
-                            <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <p style={{ fontSize:13, fontWeight:600 }}>
-                                {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
-                              </p>
-                              <p style={{ fontSize:11, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                                {entry.eventName && (
-                                  <span style={{ color: entry.eventId ? 'var(--blue)' : 'var(--text2)', fontWeight:600 }}>{entry.eventName}</span>
-                                )}
-                                <span style={{ color:'var(--text2)' }}>
-                                  {entry.eventName ? ' · ' : ''}
-                                  {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
-                                </span>
-                              </p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-              </div>
+            {/* ── Titolo documento ── */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+              <span style={{ fontSize:26, flexShrink:0 }}>{ICONS[showDetail.category] || '📦'}</span>
+              <h2 style={{ margin:0, fontSize:19 }}>{showDetail.name}</h2>
             </div>
+
+            {/* ── Scheda: una riga per campo, come un documento ── */}
+            <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden', marginBottom:14 }}>
+              {(showDetail.brand || showDetail.model) && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.brandModelLabel')}</span>
+                  <span style={rowValue}>{[showDetail.brand, showDetail.model].filter(Boolean).join(' ')}</span>
+                </div>
+              )}
+              {showDetail.location && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.warehousePosition')}</span>
+                  <span style={rowValue}>{showDetail.location}</span>
+                </div>
+              )}
+              <div style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14 }}>
+                  <span style={rowLabel}>{t('inventory.detailAvailable')}</span>
+                  <span style={rowValue}>
+                    {showDetail.category === 'Consumabili'
+                      ? `${showDetail.availableQty ?? showDetail.totalQty} ${t(`inventory.unitShort_${showDetail.consumableUnit || 'pezzi'}`)}`
+                      : `${showDetail.availableQty}/${showDetail.totalQty}`
+                    }
+                  </span>
+                </div>
+                {/* Barra segmentata: disponibili / fuori / rotti */}
+                <div style={{ background:'var(--card2)', borderRadius:4, height:8, overflow:'hidden', display:'flex' }}>
+                  <div style={{ background:'var(--green)', width:`${((showDetail.availableQty||0)/(showDetail.totalQty||1))*100}%` }} />
+                  {showDetail.brokenQty > 0 && (
+                    <div style={{ background:'var(--red)', width:`${((showDetail.brokenQty||0)/(showDetail.totalQty||1))*100}%` }} />
+                  )}
+                </div>
+                <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} {t('inventory.available')}</span>
+                  {outCount > 0 && (
+                    <span style={{ fontSize:12, color:'var(--accent2)' }}>● {outCount} {t('inventory.out')}</span>
+                  )}
+                  {showDetail.brokenQty > 0 && (
+                    <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: showDetail.brokenQty })}</span>
+                  )}
+                </div>
+              </div>
+              {hasFullHistory ? (
+                <button onClick={() => setShowFullHistory(true)} style={{ ...row(r++), width:'100%', textAlign:'left', cursor:'pointer' }}>
+                  <span style={rowLabel}>{t('inventory.whereItIs')}</span>
+                  <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={rowValue}>
+                      {detailEvents.length > 0
+                        ? t('inventory.whereItIsOutNow', { name: detailEvents[0].name, extra: detailEvents.length > 1 ? t('inventory.whereItIsOutNowMore', { count: detailEvents.length - 1 }) : '' })
+                        : lastOutEvent
+                        ? t('inventory.whereItIsLastOut', { name: lastOutEvent.name, date: formatDate(lastOutEvent.date + 'T12:00:00', { day:'numeric', month:'short' }, i18n.language) })
+                        : t('inventory.whereItIsNever')
+                      }
+                    </span>
+                    <span style={{ color:'var(--text2)', flexShrink:0 }}>→</span>
+                  </span>
+                </button>
+              ) : (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.whereItIs')}</span>
+                  <span style={rowValue}>{t('inventory.whereItIsNever')}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
+            {(showDetail.brokenQty||0) > 0 && (
+              <button
+                onClick={async () => {
+                  const currentBroken = showDetail.brokenQty || 0
+                  const newBroken = Math.max(0, currentBroken - 1)
+                  const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
+                  const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
+                  await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
+                  setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
+                }}
+                style={{ width:'100%', marginBottom:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+              >
+                <Wrench size={15} /> {t('inventory.repairOneButton')}
+              </button>
+            )}
+            {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
+            {outCount > 0 && (
+              <button
+                onClick={async () => {
+                  const newAvailable = (showDetail.totalQty||0) - (showDetail.brokenQty||0)
+                  await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
+                  setShowDetail(d => ({ ...d, availableQty: newAvailable }))
+                }}
+                style={{ width:'100%', marginBottom:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
+              >
+                {t('inventory.restoreStock', { count: outCount })}
+              </button>
+            )}
+            {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:14, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <button
+                onClick={() => {
+                  const display = getCodeDisplay(team)
+                  setPrintFormat(display === 'both' ? null : display)
+                  setShowPrintPopup(true)
+                }}
+                className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+              ><Download size={15} /> {t('inventory.downloadLabel')}</button>
+              <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}><Edit size={15} /> {t('inventory.edit')}</button>
+            </div>
+          </div>
+        </div>
+        )
+      })()}
+
+      {/* Modal "storico completo" — separato dal dettaglio, aperto solo su
+          richiesta (vedi "Vedi storia completa" sopra): filtro bauli (kit),
+          oggetti attualmente fuori, cronologia eventi, log attività. */}
+      {showFullHistory && showDetail && (
+        <div className={`modal-overlay${historyDrag.closing ? ' closing' : ''}`} onClick={historyDrag.onOverlayClick}>
+          <div className={`modal${historyDrag.jiggling ? ' modal-jiggle' : ''}${historyDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...historyDrag.props}>
+            <button className="close-btn" onClick={historyDrag.close} aria-label={t("common.close")}>✕</button>
+            <h2 style={{ marginBottom:4 }}>{t('inventory.whereItIs')}</h2>
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom: showDetail.isBundle ? 12 : 16 }}>{showDetail.name}</p>
+
+            {/* Filtro per baule — solo per i kit: lo storico aggregato
+                del kit intero non dice quale ESEMPLARE fisico è stato
+                dove, che è esattamente quello che serve sapere quando
+                un baule specifico torna con qualcosa di rotto/mancante. */}
+            {showDetail.isBundle && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                <button
+                  onClick={() => setHistoryInstanceFilter(null)}
+                  className="btn-no-anim"
+                  aria-pressed={historyInstanceFilter === null}
+                  style={{
+                    padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                    background: historyInstanceFilter === null ? 'var(--accent)' : 'var(--card2)',
+                    color: historyInstanceFilter === null ? '#fff' : 'var(--text2)',
+                    border: `1px solid ${historyInstanceFilter === null ? 'var(--accent)' : 'var(--border)'}`,
+                  }}
+                >
+                  {t('inventory.allInstancesFilter')}
+                </button>
+                {ensureInstanceList(showDetail.instances, showDetail.totalQty).map(inst => (
+                  <button
+                    key={inst.number}
+                    onClick={() => setHistoryInstanceFilter(n => n === inst.number ? null : inst.number)}
+                    className="btn-no-anim"
+                    aria-pressed={historyInstanceFilter === inst.number}
+                    style={{
+                      padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                      background: historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--card2)',
+                      color: historyInstanceFilter === inst.number ? '#fff' : ((inst.brokenComponents||[]).length > 0 ? 'var(--red)' : 'var(--text2)'),
+                      border: `1px solid ${historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--border)'}`,
+                    }}
+                  >
+                    {t('inventory.kitInstanceLabel', { number: inst.number })}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {detailEvents.length === 0 && detailEventHistory.length === 0 && (
+              <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>{t('inventory.noHistoryAvailable')}</p>
+            )}
+
+            {detailEvents.length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
+                <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.currentlyOut')}</p>
+                {detailEvents.map(ev => {
+                  const itm = (ev.items || []).find(matchesDetailItem)
+                  return (
+                  <button
+                    key={ev.id}
+                    onClick={() => { setShowFullHistory(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
+                    style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                  >
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                        <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                        {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
+                          <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
+                        )}
+                      </div>
+                      <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
+                        {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
+                        {ev.location ? ` · ${ev.location}` : ''}
+                      </p>
+                    </div>
+                    <span style={{ color:'var(--text2)' }}>→</span>
+                  </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {detailEventHistory.length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.history', { count: detailEventHistory.length })}</p>
+                {detailEventHistory.map(ev => {
+                  const itm = (ev.items || []).find(matchesDetailItem)
+                  const stillOut = itm?.loaded && !itm?.returned
+                  return (
+                    <button
+                      key={ev.id}
+                      onClick={() => { setShowFullHistory(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
+                      style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                    >
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                          <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                          {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
+                            <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
+                          )}
+                        </div>
+                        <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
+                          {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
+                          {ev.location ? ` · ${ev.location}` : ''}
+                        </p>
+                      </div>
+                      {stillOut && (
+                        <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>{t('inventory.out')}</span>
+                      )}
+                      <span style={{ color:'var(--text2)' }}>→</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Cronologia "chi ha fatto cosa" — attraverso TUTTI gli
+                eventi (anche quelli che nel frattempo hanno rimosso
+                l'oggetto dalla propria lista di carico, o sono stati
+                archiviati/eliminati), non solo quelli sopra. Toccare
+                una voce apre un popup con la cronologia di QUEL solo
+                evento, invece di rimandare alla sua lista di carico —
+                che potrebbe non esistere più, o non avere più questo
+                oggetto. I dati sono già tutti in itemActivityLog: si
+                filtra client-side, nessuna query in più. */}
+            {itemActivityLog.length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
+                <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.activityTitle')}</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:260, overflowY:'auto' }}>
+                  {itemActivityLog.map(entry => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className="btn-no-anim"
+                      disabled={!entry.eventId}
+                      onClick={() => entry.eventId && setShowEventActivity({ id: entry.eventId, name: entry.eventName })}
+                      style={{ display:'flex', alignItems:'flex-start', gap:9, width:'100%', textAlign:'left', background:'transparent', padding:'6px 4px', borderRadius:8, cursor: entry.eventId ? 'pointer' : 'default' }}
+                    >
+                      <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontSize:13, fontWeight:600 }}>
+                          {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
+                        </p>
+                        <p style={{ fontSize:11, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {entry.eventName && (
+                            <span style={{ color: entry.eventId ? 'var(--blue)' : 'var(--text2)', fontWeight:600 }}>{entry.eventName}</span>
+                          )}
+                          <span style={{ color:'var(--text2)' }}>
+                            {entry.eventName ? ' · ' : ''}
+                            {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
+                          </span>
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Popup scelta stampa: una etichetta o tutte le unità — volutamente
-          leggero (niente bottom-sheet/drag), solo un riquadro centrato fisso */}
+      {/* Popup scelta stampa — volutamente leggero (niente bottom-sheet/drag),
+          solo un riquadro centrato fisso. Due passaggi solo se la squadra usa
+          "entrambi" i formati (altrimenti il formato è già deciso e si vede
+          subito la scelta uno/tutti): 1) QR o Barcode, 2) una etichetta o
+          tutte le unità. */}
       {showPrintPopup && showDetail && (
         <div
           onClick={() => setShowPrintPopup(false)}
@@ -1185,27 +1243,48 @@ export default function Inventory() {
             <button
               onClick={() => setShowPrintPopup(false)}
               aria-label={t('common.close')}
+              className="btn-no-anim"
               style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}
             >
               ✕
             </button>
-            <h2 style={{ marginBottom:16, fontSize:17 }}>{t('inventory.downloadLabel')}</h2>
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              <button
-                onClick={() => { printCode(); setShowPrintPopup(false) }}
-                className="btn btn-secondary"
-              >
-                {t('inventory.printOneLabel')}
-              </button>
-              {(showDetail.totalQty || 1) > 1 && (
-                <button
-                  onClick={() => { printUnitLabels(); setShowPrintPopup(false) }}
-                  className="btn btn-secondary"
-                >
-                  {t('inventory.printAllUnits', { count: showDetail.totalQty })}
-                </button>
-              )}
-            </div>
+            {printFormat === null ? (
+              <>
+                <h2 style={{ marginBottom:16, fontSize:17 }}>{t('inventory.chooseCodeFormat')}</h2>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  <button onClick={() => setPrintFormat('qr')}
+                    style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:14, padding:'18px 10px', display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+                    <QrCode size={26} />
+                    <span style={{ fontWeight:700, fontSize:13 }}>{t('adminUsers.codeDisplayQr')}</span>
+                  </button>
+                  <button onClick={() => setPrintFormat('barcode')}
+                    style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:14, padding:'18px 10px', display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+                    <Barcode size={26} />
+                    <span style={{ fontWeight:700, fontSize:13 }}>{t('adminUsers.codeDisplayBarcode')}</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 style={{ marginBottom:16, fontSize:17 }}>{t('inventory.downloadLabel')}</h2>
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  <button
+                    onClick={() => { printCode(printFormat); setShowPrintPopup(false) }}
+                    className="btn btn-secondary"
+                  >
+                    {t('inventory.printOneLabel')}
+                  </button>
+                  {(showDetail.totalQty || 1) > 1 && (
+                    <button
+                      onClick={() => { printUnitLabels(printFormat); setShowPrintPopup(false) }}
+                      className="btn btn-secondary"
+                    >
+                      {t('inventory.printAllUnits', { count: showDetail.totalQty })}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1395,9 +1474,14 @@ export default function Inventory() {
               <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.editKitTitle')}</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholder')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholder')} style={{ fontSize:13, marginBottom:10 }} />
-              <select value={kitForm.category||'Altro'} onChange={e => setKitForm({...kitForm,category:e.target.value})} style={{ fontSize:13, fontWeight:600, marginBottom:10 }}>
-                {KIT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+              <div style={{ marginBottom:10 }}>
+                <Picker
+                  value={kitForm.category || 'Altro'}
+                  onChange={category => setKitForm({...kitForm, category})}
+                  ariaLabel={t('inventory.categoryLabel')}
+                  options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
+                />
+              </div>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -1532,9 +1616,14 @@ export default function Inventory() {
               <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.newKitTitle')}</h2>
               <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholderNew')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
               <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholderNew')} style={{ fontSize:13, marginBottom:10 }} />
-              <select value={kitForm.category} onChange={e => setKitForm({...kitForm,category:e.target.value})} style={{ marginBottom:10, fontSize:13, fontWeight:600 }}>
-                {KIT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+              <div style={{ marginBottom:10 }}>
+                <Picker
+                  value={kitForm.category}
+                  onChange={category => setKitForm({...kitForm, category})}
+                  ariaLabel={t('inventory.categoryLabel')}
+                  options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
+                />
+              </div>
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -1576,9 +1665,13 @@ export default function Inventory() {
               ))}
             </div>
             <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
-              <button
-                onClick={async () => {
-                  if (!kitForm.name.trim() || kitComponents.length === 0) return
+              <SaveButton
+                onSave={async () => {
+                  if (!kitForm.name.trim() || kitComponents.length === 0) return false
+                  if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsInWarehouse) {
+                    await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: FREE_LIMITS.itemsInWarehouse }) })
+                    return false
+                  }
                   const kitQty = kitForm.qty || 1
                   const ref = await addDoc(collection(db, 'items'), {
                     name: kitForm.name.trim(), location: kitForm.location.trim(),
@@ -1589,13 +1682,15 @@ export default function Inventory() {
                     teamId, createdAt: serverTimestamp(), createdBy: user.uid,
                   })
                   await updateDoc(ref, { code: generateItemCode(ref.id) })
-                  setShowKitModal(false)
+                  return true
                 }}
+                onDone={kitDrag.close}
+                onError={kitDrag.triggerJiggle}
                 className="btn btn-primary btn-full"
                 disabled={!kitForm.name.trim() || kitComponents.length === 0}
                 style={{ opacity: !kitForm.name.trim() || kitComponents.length === 0 ? 0.4 : 1 }}>
                 {t('inventory.createKit', { prefix: kitForm.qty > 1 ? `${kitForm.qty}x ` : '', count: kitComponents.length })}
-              </button>
+              </SaveButton>
             </div>
           </div>
         </div>

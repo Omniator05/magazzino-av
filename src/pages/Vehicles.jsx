@@ -8,6 +8,8 @@ import { db } from '../firebase'
 import { collection, onSnapshot, doc, addDoc, updateDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { Check, Edit, Warn, Truck } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
+import Toast from '../components/Toast'
+import SaveButton from '../components/SaveButton'
 import FabButton from '../components/FabButton'
 
 const COLOR_PALETTE = ['#e63946', '#2563eb', '#16a085', '#9b59e0', '#ea580c', '#059669', '#4285F4', '#d4820a']
@@ -27,7 +29,6 @@ export default function Vehicles() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState('')
 
   useEffect(() => {
@@ -38,28 +39,27 @@ export default function Vehicles() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
+  // Ritorna true solo se ha davvero scritto — SaveButton mostra la spunta e
+  // chiude/esce dalla modifica solo in quel caso, mai sul nome vuoto.
   const createVehicle = async () => {
-    if (!form.name.trim()) { setError(t('vehicles.errorNameRequired')); return }
-    setLoading(true); setError('')
-    try {
-      await addDoc(collection(db, 'vehicles'), {
-        name: form.name.trim(),
-        color: form.color || null,
-        emoji: form.emoji.trim() || null,
-        plate: form.plate.trim() || null,
-        teamId,
-        active: true,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-      })
-      setForm(EMPTY_FORM)
-      setShowCreate(false)
-      showToast(t('vehicles.toastAdded'))
-    } finally { setLoading(false) }
+    if (!form.name.trim()) { setError(t('vehicles.errorNameRequired')); return false }
+    setError('')
+    await addDoc(collection(db, 'vehicles'), {
+      name: form.name.trim(),
+      color: form.color || null,
+      emoji: form.emoji.trim() || null,
+      plate: form.plate.trim() || null,
+      teamId,
+      active: true,
+      createdAt: serverTimestamp(),
+      createdBy: user.uid,
+    })
+    setForm(EMPTY_FORM)
+    return true
   }
 
   const saveEdit = async () => {
-    if (!editForm.name.trim()) return
+    if (!editForm.name.trim()) return false
     await updateDoc(doc(db, 'vehicles', showDetail.id), {
       name: editForm.name.trim(),
       color: editForm.color || null,
@@ -67,8 +67,7 @@ export default function Vehicles() {
       plate: editForm.plate.trim() || null,
     })
     setShowDetail(d => ({ ...d, ...editForm }))
-    setEditMode(false)
-    showToast(t('vehicles.toastUpdated'))
+    return true
   }
 
   const toggleActive = async () => {
@@ -128,11 +127,7 @@ export default function Vehicles() {
 
   return (
     <div className="page users-page">
-      {toast && (
-        <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 20px', zIndex: 999, fontSize: 14, fontWeight: 600, color: 'var(--text)', boxShadow: 'var(--shadow)', whiteSpace: 'nowrap' }}>
-          {toast}
-        </div>
-      )}
+      <Toast message={toast} />
 
       <div className="page-header">
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
@@ -196,9 +191,9 @@ export default function Vehicles() {
               <ColorPicker value={form.color} onChange={c => setForm({ ...form, color: c })} />
             </div>
 
-            <button onClick={createVehicle} className="btn btn-primary btn-full" style={{ marginTop: 12 }} disabled={loading}>
-              {loading ? t('vehicles.creating') : <><Check size={16} /> {t('vehicles.createVehicle')}</>}
-            </button>
+            <SaveButton onSave={createVehicle} onDone={createDrag.close} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full" style={{ marginTop: 12 }}>
+              <Check size={16} /> {t('vehicles.createVehicle')}
+            </SaveButton>
           </div>
         </div>
       )}
@@ -264,9 +259,9 @@ export default function Vehicles() {
                   <label>{t('vehicles.colorLabel')}</label>
                   <ColorPicker value={editForm.color} onChange={c => setEditForm({ ...editForm, color: c })} />
                 </div>
-                <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop: 12 }} disabled={!editForm.name.trim()}>
+                <SaveButton onSave={saveEdit} onDone={() => setEditMode(false)} onError={detailDrag.triggerJiggle} className="btn btn-primary btn-full" style={{ marginTop: 12 }} disabled={!editForm.name.trim()}>
                   {t('vehicles.saveChanges')}
-                </button>
+                </SaveButton>
               </>
             )}
           </div>

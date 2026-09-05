@@ -1,34 +1,40 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
-import { useState, useEffect, useRef } from 'react'
-import Auth from './pages/Auth'
-import Landing from './pages/Landing'
-import Welcome from './pages/Welcome'
-import PendingApproval from './pages/PendingApproval'
-import Dashboard from './pages/Dashboard'
-import Inventory from './pages/Inventory'
-import Events from './pages/Events'
-import EventDetail from './pages/EventDetail'
-import Scanner from './pages/Scanner'
-import Settings from './pages/Settings'
-import SettingsProfile from './pages/SettingsProfile'
-import SettingsModules from './pages/SettingsModules'
-import SettingsBilling from './pages/SettingsBilling'
-import SettingsUsers from './pages/SettingsUsers'
-import SettingsIntegrations from './pages/SettingsIntegrations'
-import SuperAdmin from './pages/SuperAdmin'
-import Vehicles from './pages/Vehicles'
-import Archive from './pages/Archive'
-import Tasks from './pages/Tasks'
-import Templates from './pages/Templates'
-import Calendar from './pages/Calendar'
-import WorkerHome from './pages/WorkerHome'
-import WorkerScanner from './pages/WorkerScanner'
-import WorkerInventory from './pages/WorkerInventory'
-import WorkerCalendar from './pages/WorkerCalendar'
-import Brasserie from './pages/Brasserie'
-import EventOrganizerHome from './pages/EventOrganizerHome'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+// Pagine caricate on-demand (React.lazy), non tutte insieme in un unico
+// bundle da 900KB: prima ogni pagina — anche quelle che un dato utente non
+// aprirà mai (super admin, fatturazione, brasserie...) — veniva scaricata al
+// primo avvio dell'app. Ora ognuna diventa un proprio chunk, richiesto solo
+// quando si naviga davvero lì.
+const Auth = lazy(() => import('./pages/Auth'))
+const Landing = lazy(() => import('./pages/Landing'))
+const Welcome = lazy(() => import('./pages/Welcome'))
+const PendingApproval = lazy(() => import('./pages/PendingApproval'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Inventory = lazy(() => import('./pages/Inventory'))
+const Events = lazy(() => import('./pages/Events'))
+const EventDetail = lazy(() => import('./pages/EventDetail'))
+const Scanner = lazy(() => import('./pages/Scanner'))
+const Settings = lazy(() => import('./pages/Settings'))
+const SettingsProfile = lazy(() => import('./pages/SettingsProfile'))
+const SettingsModules = lazy(() => import('./pages/SettingsModules'))
+const SettingsBilling = lazy(() => import('./pages/SettingsBilling'))
+const SettingsUsers = lazy(() => import('./pages/SettingsUsers'))
+const SettingsIntegrations = lazy(() => import('./pages/SettingsIntegrations'))
+const SuperAdmin = lazy(() => import('./pages/SuperAdmin'))
+const Vehicles = lazy(() => import('./pages/Vehicles'))
+const Archive = lazy(() => import('./pages/Archive'))
+const Tasks = lazy(() => import('./pages/Tasks'))
+const Templates = lazy(() => import('./pages/Templates'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const WorkerHome = lazy(() => import('./pages/WorkerHome'))
+const WorkerScanner = lazy(() => import('./pages/WorkerScanner'))
+const WorkerInventory = lazy(() => import('./pages/WorkerInventory'))
+const WorkerCalendar = lazy(() => import('./pages/WorkerCalendar'))
+const Brasserie = lazy(() => import('./pages/Brasserie'))
+const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
@@ -36,7 +42,19 @@ import OnboardingReveal from './components/OnboardingReveal'
 import BillingGate from './components/BillingGate'
 import QrRedirect from './components/QrRedirect'
 import UpdateToast from './components/UpdateToast'
-import { isBillingValid } from './utils/billing'
+import AbsenceNotifications from './components/AbsenceNotifications'
+
+// Riusato sia mentre si aspettano i dati di login sia come fallback di
+// Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
+function RouteLoadingFallback() {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16, background:'var(--bg)' }}>
+      <div style={{ width:40, height:40, border:'3px solid rgba(230,57,70,0.3)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+      <p style={{ color:'var(--text2)', fontSize:14 }}>Caricamento...</p>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+}
 
 // Barra sempre visibile mentre un super admin sta "dentro" un'altra azienda
 // (vedi enterGhostTeam in AuthContext) — promemoria costante di dove si è,
@@ -105,13 +123,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
   // Durante il signup l'utente Auth esiste già ma il profilo arriva un attimo
   // dopo: senza questa attesa comparirebbe per un secondo la pagina "errore
   // con questo account" prima della Dashboard.
-  if (loading || (signupInProgress && !profile)) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16, background:'var(--bg)' }}>
-      <div style={{ width:40, height:40, border:'3px solid rgba(230,57,70,0.3)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
-      <p style={{ color:'var(--text2)', fontSize:14 }}>Caricamento...</p>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  if (loading || (signupInProgress && !profile)) return <RouteLoadingFallback />
 
   // Chi arriva sulla home senza essere loggato vede la pagina pubblica
   // (presentazione prodotto/prezzo — serve sia ai clienti che a chi deve
@@ -131,10 +143,14 @@ function PrivateRoutes({ toggleTheme, theme }) {
   const KNOWN_ROLES = ['admin', 'worker', 'organizzatore-brasserie', 'organizzatore-evento']
   if (!KNOWN_ROLES.includes(profile.role)) return <PendingApproval reason="unknown" />
 
-  // Abbonamento scaduto/non pagato → blocca TUTTA l'app (qualunque ruolo),
-  // tranne il super admin che deve poter sempre entrare per assistere/sbloccare
-  // (stessa eccezione delle regole Firestore, vedi hasValidBilling).
-  if (!profile.superAdmin && !isBillingValid(team)) return <BillingGate />
+  // Pagamento fallito (era abbonato, la carta non è passata) → blocca TUTTA
+  // l'app finché non lo sistema, tranne il super admin che deve poter sempre
+  // entrare per assistere/sbloccare (stessa eccezione delle regole Firestore,
+  // vedi hasValidBilling). Prova scaduta o abbonamento cancellato NON
+  // bloccano più: da qui in poi la squadra opera nella versione gratuita
+  // (limiti applicati punto per punto, vedi src/utils/planLimits.js) invece
+  // di restare fuori dall'app del tutto.
+  if (!profile.superAdmin && team?.billingStatus === 'past_due') return <BillingGate />
 
   // Worker view
   if (profile?.role === 'worker') {
@@ -154,7 +170,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </AnimatedPage>
         {!onScannerRoute && <TabBar />}
@@ -170,7 +186,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<Brasserie />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </AnimatedPage>
       </>
@@ -185,7 +201,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<EventOrganizerHome />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </AnimatedPage>
       </>
@@ -207,6 +223,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
   return (
     <>
       <UpdateToast />
+      <AbsenceNotifications />
       <GhostBanner />
       <AnimatedPage>
         <Routes>
@@ -229,7 +246,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/vehicles" element={<Vehicles />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/templates" element={<Templates />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AnimatedPage>
       {!onScannerRoute && !onSuperAdminRoute && !onWelcomeRoute && <TabBar toggleTheme={toggleTheme} theme={theme} />}
@@ -253,11 +270,16 @@ export default function App() {
           <LoadingBar />
           <PageTransition />
           <OnboardingReveal />
-          <Routes>
-            <Route path="/login" element={<Auth initialMode="login" />} />
-            <Route path="/signup" element={<Auth initialMode="signup" />} />
-            <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
-          </Routes>
+          {/* Un solo confine Suspense in cima basta: cattura il caricamento
+              lazy di QUALSIASI pagina, anche quelle annidate nelle <Routes>
+              interne di PrivateRoutes più sotto — non serve ripeterlo lì. */}
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
+              <Route path="/login" element={<Auth initialMode="login" />} />
+              <Route path="/signup" element={<Auth initialMode="signup" />} />
+              <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </ConfirmProvider>
     </AuthProvider>

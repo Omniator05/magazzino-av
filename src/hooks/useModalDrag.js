@@ -162,5 +162,9 @@ export function useModalDrag(onClose, guard, onSubmit, isOpen) {
     jiggling,
     closing,
     close: animatedClose,
+    // Esposto anche da solo (non solo dietro onOverlayClick): serve a un
+    // salvataggio fallito (errore/connessione) per scuotere il modal invece
+    // di lasciarlo lì muto — stessa animazione di "non chiudo, guardami".
+    triggerJiggle,
   }
 }

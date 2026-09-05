@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
+import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
-import { Check, Save, Trash, Edit, User, Warn, Box } from '../components/Icon'
+import { Check, Save, Trash, Edit, User, Warn, Box, Calendar } from '../components/Icon'
+import Toast from '../components/Toast'
+import SaveButton from '../components/SaveButton'
 import BackHomeButton from '../components/BackHomeButton'
 import FabButton from '../components/FabButton'
+import Picker from '../components/Picker'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -109,8 +114,9 @@ function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
 
 export default function SettingsUsers() {
   const { t, i18n } = useTranslation()
-  const { user, teamId } = useAuth()
+  const { user, teamId, team } = useAuth()
   const confirm = useConfirm()
+  const navigate = useNavigate()
   const [users, setUsers]             = useState([])
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
@@ -164,16 +170,33 @@ export default function SettingsUsers() {
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
 
   // ── Crea account ──────────────────────────────────────────────
+  // Ritorna true solo se l'account è stato davvero creato — SaveButton
+  // mostra la spunta e chiude solo in quel caso, mai sui rami di validazione/
+  // limite piano gratuito che si fermano prima.
   const createAccount = async () => {
     if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
-      setError(t('adminUsers.errorFillAllFields')); return
+      setError(t('adminUsers.errorFillAllFields')); return false
     }
     if (form.role === 'organizzatore-evento' && !assignedEventId) {
-      setError(t('adminUsers.errorOrgLinkedEvent')); return
+      setError(t('adminUsers.errorOrgLinkedEvent')); return false
     }
     const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
     if (users.some(u => u.username === username)) {
-      setError(t('adminUsers.errorUsernameTaken')); return
+      setError(t('adminUsers.errorUsernameTaken')); return false
+    }
+    // Piano gratuito: 1 admin, 3 magazzinieri — chi crea account qui è
+    // sempre l'admin stesso (pagina admin-only), niente da controllare oltre
+    // al ruolo scelto.
+    if (!isProPlan(team)) {
+      const role = form.role || 'worker'
+      if (role === 'admin' && users.filter(u => u.role === 'admin').length >= FREE_LIMITS.admins) {
+        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.adminsMsg', { limit: FREE_LIMITS.admins }) })
+        return false
+      }
+      if (role === 'worker' && users.filter(u => u.role === 'worker').length >= FREE_LIMITS.workers) {
+        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.workersMsg', { limit: FREE_LIMITS.workers }) })
+        return false
+      }
     }
     setLoading(true); setError('')
 
@@ -207,7 +230,6 @@ export default function SettingsUsers() {
       })
 
       await signOut(secondaryAuth)
-      showToast(t('adminUsers.accountCreatedFor', { name: form.name }))
 
       // Email di invito best-effort: solo se è stata data un'email vera, e
       // non deve mai far sembrare fallita una creazione account già riuscita.
@@ -226,7 +248,7 @@ export default function SettingsUsers() {
       setForm({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
       setOrgConfig(EMPTY_ORG_CONFIG)
       setAssignedEventId('')
-      setShowCreate(false)
+      return true
     } catch(e) {
       // Il profilo non si è salvato: se l'account Auth era stato creato,
       // ripulisci — altrimenti resta orfano e blocca per sempre quello username.
@@ -461,11 +483,7 @@ export default function SettingsUsers() {
 
   return (
     <div className="page users-page">
-      {toast && (
-        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
-          {toast}
-        </div>
-      )}
+      <Toast message={toast} />
 
       <div className="page-header" style={{ display:'flex', alignItems:'center', gap:12 }}>
         <BackHomeButton to="/admin/settings" />
@@ -540,7 +558,7 @@ export default function SettingsUsers() {
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('adminUsers.fullNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>{t('adminUsers.usernameLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.usernameHint')}</span></label>
+              <label>{t('adminUsers.usernameLabel')}</label>
               <input
                 value={form.username}
                 onChange={e => setForm({...form, username: e.target.value.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')})}
@@ -554,7 +572,7 @@ export default function SettingsUsers() {
               )}
             </div>
             <div className="form-group">
-              <label>{t('adminUsers.emailLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.emailHint')}</span></label>
+              <label>{t('adminUsers.emailLabel')}</label>
               <input
                 type="email"
                 value={form.email}
@@ -565,10 +583,15 @@ export default function SettingsUsers() {
             </div>
             <div className="form-group">
               <label>{t('adminUsers.roleLabel')}</label>
-              <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
-                <option value="worker">{t('adminUsers.roleWorkerOption')}</option>
-                <option value="organizzatore-evento">{t('adminUsers.roleOrgEventOption')}</option>
-              </select>
+              <Picker
+                value={form.role}
+                onChange={role => setForm({...form, role})}
+                ariaLabel={t('adminUsers.roleLabel')}
+                options={[
+                  { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
+                  { value:'organizzatore-evento', label:t('adminUsers.roleOrgEventOption'), icon:<Calendar size={17} /> },
+                ]}
+              />
             </div>
 
             {form.role === 'organizzatore-evento' && (
@@ -598,20 +621,14 @@ export default function SettingsUsers() {
               </button>
             )}
 
-            <div className="form-group" style={{ marginBottom:6 }}>
+            <div className="form-group" style={{ marginBottom:22 }}>
               <label>{t('adminUsers.passwordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.passwordHint')}</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
             </div>
 
-            <div style={{ background:'rgba(79,195,247,0.06)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 12px', marginBottom:16 }}>
-              <p style={{ color:'var(--blue)', fontSize:12, lineHeight:1.6 }}>
-                {t('adminUsers.createAccountNote')}
-              </p>
-            </div>
-
-            <button onClick={createAccount} className="btn btn-primary btn-full" disabled={loading} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              {loading ? t('adminUsers.creatingAccount') : <><Check size={16} /> {t('adminUsers.createAccount')}</>}
-            </button>
+            <SaveButton onSave={createAccount} onDone={createDrag.close} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
+              <Check size={16} /> {t('adminUsers.createAccount')}
+            </SaveButton>
           </div>
         </div>
       )}

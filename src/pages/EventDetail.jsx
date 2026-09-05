@@ -1,4 +1,5 @@
 import { useModalDrag } from '../hooks/useModalDrag'
+import SaveButton from '../components/SaveButton'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -12,11 +13,12 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
-import { Warn } from '../components/Icon'
+import { Warn, Plus, Check } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
 import { syncKitAwareInventory } from '../utils/kitInventory'
+import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import JSZip from 'jszip'
 
 // Passata questa finestra di grazia dalla data dell'evento, i contenuti caricati
@@ -86,7 +88,6 @@ export default function EventDetail() {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showExtraModal, setShowExtraModal] = useState(false)
   const [cart, setCart] = useState([])
-  const [confirmingCart, setConfirmingCart] = useState(false)
   const [showDiscardCart, setShowDiscardCart] = useState(false)
   const addItemDrag   = useModalDrag(
     () => setShowAddItem(false),
@@ -510,11 +511,13 @@ export default function EventDetail() {
   }
 
   // Conferma e salva tutto il carrello sulla lista evento
+  // Ritorna true solo se ha davvero scritto — SaveButton mostra la spunta e
+  // chiude solo in quel caso; un errore lanciato (non catturato qui, vedi
+  // sotto) fa scuotere il modal invece di lasciarlo lì muto.
   const confirmCart = async () => {
-    if (cart.length === 0 || confirmingCart) return
+    if (cart.length === 0) return false
     const cartSnapshot = cart
     const addAsMancanteSnapshot = addAsMancante
-    setConfirmingCart(true)
     // Righe da scrivere calcolate UNA volta qui fuori (non dentro il transform,
     // che una transazione può rieseguire più volte in caso di conflitto) — così
     // l'id usato per la cronologia è garantito lo stesso scritto su Firestore.
@@ -551,25 +554,33 @@ export default function EventDetail() {
         mancante: addAsMancanteSnapshot || false,
       }
     })
-    try {
-      await updateEventItems(current => [...current, ...rowsToAdd])
-      await Promise.all(rowsToAdd.map(row => logItemActivity({
-        teamId, eventId, eventName: event?.name, itemId: row.id, itemName: row.name,
-        catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
-        action: 'added', profile, userId: user?.uid,
-      })))
-      // Solo se il salvataggio è andato a buon fine si svuota il carrello e
-      // si chiude il modale — altrimenti restano lì così l'admin può
-      // riprovare senza dover riselezionare tutto da capo.
-      setCart([])
-      setSearch('')
-      setAddAsMancante(false)
-      setShowAddItem(false)
-    } catch (e) {
-      // Errore già mostrato da updateEventItems (toast saveError)
-    } finally {
-      setConfirmingCart(false)
+    // Piano gratuito: si aggiunge solo fino a riempire lo spazio rimasto
+    // nella lista (20 righe), il resto del carrello viene scartato con un
+    // avviso invece di sforare il limite in silenzio.
+    const headroom = isProPlan(team) ? Infinity : Math.max(0, FREE_LIMITS.itemsPerList - eventItems.length)
+    const rowsCapped = rowsToAdd.slice(0, headroom)
+    const rowsSkipped = rowsToAdd.length - rowsCapped.length
+    if (rowsCapped.length === 0 && rowsSkipped > 0) {
+      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
+      return false
     }
+    // Non catturato qui apposta: updateEventItems mostra già il proprio
+    // toast d'errore (saveError), ma l'eccezione deve comunque risalire fino
+    // a SaveButton perché faccia scuotere il modal — un doppio segnale
+    // (toast + jiggle) invece di un fallimento silenzioso sul bottone.
+    await updateEventItems(current => [...current, ...rowsCapped])
+    await Promise.all(rowsCapped.map(row => logItemActivity({
+      teamId, eventId, eventName: event?.name, itemId: row.id, itemName: row.name,
+      catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
+      action: 'added', profile, userId: user?.uid,
+    })))
+    setCart([])
+    setSearch('')
+    setAddAsMancante(false)
+    if (rowsSkipped > 0) {
+      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
+    }
+    return true
   }
 
   const openAddModal = () => {
@@ -693,14 +704,42 @@ export default function EventDetail() {
     const origin = window.location.origin
     const genDate = new Date().toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
 
-    const rows = list.map((i, n) =>
-      `<tr>
-        <td class="num">${n + 1}</td>
+    const rows = list.map((i, n) => {
+      // Contenuto del kit (se presente) risolto dal vivo dal catalogo — con
+      // fallback ai componenti congelati sulla riga se il catalogo non è
+      // ancora stato caricato — così su carta si vede subito cosa c'è dentro
+      // senza dover aprire l'app. Stessa fonte (allItems) già usata dalla
+      // riga in lista e dal modal di modifica, non itemDetails (che qui
+      // contiene solo posizione/note, non i componenti).
+      const catalogItem = allItems.find(ci => ci.id === (i.itemRef || i.id))
+      const liveComponents = catalogItem?.components || i.components || null
+      const isKit = i.isBundle || (liveComponents && liveComponents.length > 0)
+      const num = n + 1
+
+      const mainRow = `<tr>
+        <td class="num">${num}</td>
         <td class="art">${esc(i.name)}${i.isExtra ? ' <span class="tag">EXTRA</span>' : ''}${i.eventNote ? `<div class="note">${esc(i.eventNote)}</div>` : ''}</td>
         <td class="qty">${i.qty || 1}</td>
         <td class="chk${i.loaded ? ' checked' : ''}"></td>
       </tr>`
-    ).join('')
+
+      // Il kit fa da titolo (riga sopra): ogni componente è una riga a sé,
+      // numerata come sottovoce (2.1, 2.2...) e con la quantità totale reale
+      // (componente × quante unità del kit), esattamente come un oggetto
+      // singolo — nessun colore, solo un rientro per leggerla come sottovoce.
+      const componentRows = isKit && liveComponents?.length
+        ? liveComponents.map((c, ci) =>
+            `<tr>
+              <td class="num sub">${num}.${ci + 1}</td>
+              <td class="art sub">${esc(c.name)}</td>
+              <td class="qty">${c.qty * (i.qty || 1)}</td>
+              <td class="chk${i.loaded ? ' checked' : ''}"></td>
+            </tr>`
+          ).join('')
+        : ''
+
+      return mainRow + componentRows
+    }).join('')
 
     const metaRow = (label, val) => val ? `<div class="mrow"><span class="mlabel">${label}</span><span class="mval">${esc(val)}</span></div>` : ''
 
@@ -725,7 +764,7 @@ export default function EventDetail() {
       thead th.qty { width: 60px; text-align:center; }
       thead th.chk { width: 44px; text-align:center; }
       tbody td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; vertical-align: top; }
-      tbody td.num { text-align:center; color:#9ca3af; font-weight:700; }
+      tbody td.num { text-align:left; color:#9ca3af; font-weight:700; }
       tbody td.art { font-weight: 600; }
       tbody td.qty { text-align:center; font-weight: 800; color:#e63946; }
       tbody td.chk { text-align:center; }
@@ -734,6 +773,8 @@ export default function EventDetail() {
       tbody tr:nth-child(even) { background:#fafafa; }
       .tag { background:#fef3c7; color:#92400e; border-radius:4px; padding:0 5px; font-size:9px; font-weight:800; vertical-align:middle; }
       .note { color:#6b7280; font-size:11px; font-weight:400; margin-top:2px; }
+      td.num.sub { color:#9ca3af; font-weight:600; font-size:12px; padding-left:28px; }
+      td.art.sub { padding-left: 28px; font-weight:400; color:#374151; }
       .tot { margin-top:12px; text-align:right; font-size:13px; color:#374151; }
       .tot strong { color:#111827; }
       .sign { display:flex; gap:40px; margin-top:54px; }
@@ -1301,19 +1342,19 @@ export default function EventDetail() {
 
             {/* Pulsante conferma fisso in basso */}
             <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
-              <button
-                onClick={confirmCart}
-                disabled={cart.length === 0 || confirmingCart}
+              <SaveButton
+                onSave={confirmCart}
+                onDone={addItemDrag.close}
+                onError={addItemDrag.triggerJiggle}
+                disabled={cart.length === 0}
                 className="btn btn-primary btn-full"
-                style={{ opacity: (cart.length === 0 || confirmingCart) ? 0.4 : 1, fontSize:16, padding:'14px' }}
+                style={{ opacity: cart.length === 0 ? 0.4 : 1, fontSize:16, padding:'14px' }}
               >
-                {confirmingCart
-                  ? t('common.saving')
-                  : cart.length === 0
-                    ? t('eventDetail.selectItemsPrompt')
-                    : t('eventDetail.confirmAddItems', { count: cart.length })
+                {cart.length === 0
+                  ? t('eventDetail.selectItemsPrompt')
+                  : t('eventDetail.confirmAddItems', { count: cart.length })
                 }
-              </button>
+              </SaveButton>
             </div>
           </div>
         </div>
@@ -1400,6 +1441,7 @@ export default function EventDetail() {
                   return (
                     <button
                       key={w.id}
+                      className="chip-no-press"
                       onClick={() => toggleWorkerAssignment(eventRef, event, w.id)}
                       style={{
                         display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12,
@@ -1442,20 +1484,39 @@ export default function EventDetail() {
             <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4 }}>{t('eventDetail.editItemTitle')}</p>
             <h2 style={{ fontSize:18, fontWeight:800, marginBottom:20 }}>{editItem.name}</h2>
 
-            <div className="form-group">
-              <label>{t('eventDetail.quantityLabel')}</label>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <button
-                  onClick={() => setEditItem(ei => ({ ...ei, qty: Math.max(1, ei.qty - 1) }))}
-                  aria-label={t('eventDetail.decreaseQtyAria')}
-                  style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>−</button>
-                <span style={{ flex:1, textAlign:'center', fontWeight:800, fontSize:24, color:'var(--text)' }}>{editItem.qty}</span>
-                <button
-                  onClick={() => setEditItem(ei => ({ ...ei, qty: ei.qty + 1 }))}
-                  aria-label={t('eventDetail.increaseQtyAria')}
-                  style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>
-              </div>
-            </div>
+            {(() => {
+              // Non si può assegnare a questa riga più di quanto esiste
+              // davvero in magazzino: totale posseduto, più quanto questa
+              // riga stessa ha già "riservato" caricandolo (altrimenti,
+              // modificando una riga già caricata, il tetto risulterebbe più
+              // basso di quanto dovrebbe — quella quota è già sua).
+              const catalogItem = allItems.find(i => i.id === (editItem.itemRef || editItem.id))
+              const maxQty = catalogItem
+                ? Math.max(1, (catalogItem.availableQty ?? catalogItem.totalQty ?? 1) + (editItem.loaded ? editItem.qty : 0))
+                : 999
+              return (
+                <div className="form-group">
+                  <label>{t('eventDetail.quantityLabel')}</label>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <button
+                      onClick={() => setEditItem(ei => ({ ...ei, qty: Math.max(1, ei.qty - 1) }))}
+                      aria-label={t('eventDetail.decreaseQtyAria')}
+                      style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>−</button>
+                    <input type="number" min="1" max={maxQty} value={editItem.qty}
+                      onFocus={e => e.target.select()}
+                      onChange={e => {
+                        const q = Math.min(maxQty, Math.max(1, parseInt(e.target.value) || 1))
+                        setEditItem(ei => ({ ...ei, qty: q }))
+                      }}
+                      style={{ flex:1, textAlign:'center', fontWeight:800, fontSize:24, color:'var(--text)', padding:'8px 4px' }} />
+                    <button
+                      onClick={() => setEditItem(ei => ({ ...ei, qty: Math.min(maxQty, ei.qty + 1) }))}
+                      aria-label={t('eventDetail.increaseQtyAria')}
+                      style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>+</button>
+                  </div>
+                </div>
+              )
+            })()}
 
             <div className="form-group">
               <label>{t('eventDetail.eventNoteLabel')}</label>
@@ -1679,19 +1740,25 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
       <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
         <div className="qty-ctrl">
           <button onClick={() => { const q = Math.max(1, qty-1); setQty(q); if (inCart) onAdd(item, q) }}>−</button>
-          <span>{qty}</span>
+          <input type="number" min="1" max={Math.max(1, max)} value={qty}
+            onFocus={e => e.target.select()}
+            onChange={e => {
+              const q = Math.min(Math.max(1, max), Math.max(1, parseInt(e.target.value) || 1))
+              setQty(q)
+              if (inCart) onAdd(item, q)
+            }} />
           <button onClick={() => { const q = Math.min(Math.max(1, max), qty+1); setQty(q); if (inCart) onAdd(item, q) }}>+</button>
         </div>
         <button
           onClick={handleAdd}
           style={{
-            width:34, height:34, borderRadius:'50%', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, flexShrink:0,
+            width:34, height:34, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
             background: inCart ? 'var(--green)' : 'var(--accent)',
             color: 'white',
             transition: 'all 0.15s'
           }}
         >
-          {inCart ? '✓' : '+'}
+          {inCart ? <Check size={16} /> : <Plus size={18} />}
         </button>
       </div>
     </div>

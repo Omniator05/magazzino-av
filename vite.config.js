@@ -37,8 +37,14 @@ export default defineConfig({
         name: 'Roadcase',
         short_name: 'Roadcase',
         description: 'Gestione attrezzatura audio/luci per eventi',
-        theme_color: '#0a0a14',
-        background_color: '#0a0a14',
+        lang: 'it',
+        // Tema chiaro (vedi index.html/App.jsx): questo manifest, generato da
+        // VitePWA a partire da questo oggetto, SOVRASCRIVE in build qualunque
+        // modifica fatta a mano su public/manifest.webmanifest — è l'unica
+        // fonte di verità reale per lo splash nativo mostrato all'avvio della
+        // PWA installata, prima che qualunque riga della nostra app parta.
+        theme_color: '#e63946',
+        background_color: '#f5f5f3',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

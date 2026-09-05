@@ -13,7 +13,9 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
+import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
 import { formatDate, capitalize } from '../utils/formatDate'
+import CreateEventFlow from '../components/CreateEventFlow'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -58,7 +60,7 @@ function toDateStr(d) {
 export default function Calendar() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { user, isWorker, teamId } = useAuth()
+  const { user, profile, isWorker, isAdmin, teamId } = useAuth()
   const confirm = useConfirm()
   const WEEKDAYS = getWeekdayLabels(i18n.language)
   const today = new Date()
@@ -79,8 +81,9 @@ export default function Calendar() {
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+  // Flusso unico di creazione evento, condiviso con Events.jsx — vedi
+  // src/components/CreateEventFlow.jsx.
   const [showCreate, setShowCreate] = useState(false)
-  const [creating, setCreating] = useState(false)
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
@@ -94,9 +97,10 @@ export default function Calendar() {
   // Selezione assenza tap-sul-calendario
   const [reportMode, setReportMode] = useState(false)
   const [rangeStart, setRangeStart] = useState(null)
+  const [hoverDate, setHoverDate] = useState(null) // anteprima range stile "booking" al passaggio del mouse
 
-  const startReportMode = () => { setReportMode(true); setRangeStart(null); setSelectedDate(null) }
-  const cancelReportMode = () => { setReportMode(false); setRangeStart(null); setSelectedDate(todayStr) }
+  const startReportMode = () => { setReportMode(true); setRangeStart(null); setHoverDate(null); setSelectedDate(null) }
+  const cancelReportMode = () => { setReportMode(false); setRangeStart(null); setHoverDate(null); setSelectedDate(todayStr) }
 
   const handleDayTap = (dStr) => {
     if (reportMode) {
@@ -110,6 +114,7 @@ export default function Calendar() {
         setShowAbsenceModal(true)
         setReportMode(false)
         setRangeStart(null)
+        setHoverDate(null)
       }
     } else {
       setSelectedDate(dStr)
@@ -133,6 +138,30 @@ export default function Calendar() {
         await addDoc(collection(db, 'unavailability'), {
           ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
         })
+        // Nuova assenza segnalata da un worker (non dall'admin stesso): avvisa
+        // l'admin al prossimo accesso, vedi AbsenceNotifications.jsx.
+        if (!isAdmin) {
+          await addDoc(collection(db, 'notifications'), {
+            teamId, type: 'absence',
+            workerName: profile?.name || profile?.username || t('common.noName'),
+            startDate: data.startDate, endDate: data.endDate, reason: data.reason,
+            seenBy: [], createdAt: serverTimestamp(),
+          })
+          // Email best-effort: l'admin la vede comunque in app al prossimo
+          // accesso (sopra), questa è solo un avviso più tempestivo — non deve
+          // mai far sembrare fallita una segnalazione già salvata.
+          try {
+            const idToken = await user.getIdToken()
+            await fetch('/api/send-absence-notification', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workerName: profile?.name || profile?.username || t('common.noName'),
+                startDate: data.startDate, endDate: data.endDate, reason: data.reason,
+              }),
+            })
+          } catch {}
+        }
       }
       setAbsenceForm({ startDate:'', endDate:'', reason:'' })
       setEditingAbsenceId(null)
@@ -168,29 +197,10 @@ export default function Calendar() {
   const deleteEvent = async (e, ev) => {
     e.stopPropagation()
     if (!(await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('calendar.confirmDeleteEventMessage', { name: ev.name }), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))) return
-    await deleteDoc(doc(db, 'events', ev.id))
-  }
-
-  const createEvent = async () => {
-    if (!editForm.name.trim() || !editForm.date) return
-    setCreating(true)
-    try {
-      await addDoc(collection(db, 'events'), {
-        name: editForm.name.trim(),
-        date: editForm.date,
-        dateEnd: editForm.dateEnd || null,
-        location: (editForm.location || '').trim(),
-        notes: (editForm.notes || '').trim(),
-        phases: editForm.phases || {},
-        teamId,
-        createdAt: serverTimestamp(),
-      })
-      setShowCreate(false)
-    } finally { setCreating(false) }
+    await deleteEventWithInventoryCheck({ event: ev, confirm, t })
   }
 
   const editDrag = useModalDrag(() => setEditingEvent(null), undefined, saveEdit, !!editingEvent)
-  const createDrag = useModalDrag(() => setShowCreate(false), undefined, createEvent, showCreate)
   const absenceDrag = useModalDrag(closeAbsenceModal, undefined, addAbsence, showAbsenceModal)
 
   useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
@@ -413,19 +423,23 @@ export default function Calendar() {
             const isPast = dStr < todayStr
             const isSelected = dStr === selectedDate
             const isRangeStart = reportMode && dStr === rangeStart
+            const isInPreviewRange = reportMode && rangeStart && hoverDate && !isRangeStart &&
+              dStr >= (rangeStart <= hoverDate ? rangeStart : hoverDate) &&
+              dStr <= (rangeStart <= hoverDate ? hoverDate : rangeStart)
             const otherAbsences = dayAbsences.filter(a => a.workerId !== user?.uid)
 
             return (
               <button
                 key={i}
                 onClick={() => handleDayTap(dStr)}
+                onMouseEnter={() => { if (reportMode && rangeStart) setHoverDate(dStr) }}
                 style={{
                   position:'relative',
-                  minHeight:70,
+                  minHeight:78,
                   borderRadius:10,
                   padding:'5px 3px 4px',
-                  background: isSelected ? 'rgba(216,56,63,0.10)' : isRangeStart ? 'rgba(216,56,63,0.12)' : cell.current ? 'var(--card)' : 'transparent',
-                  border: isSelected ? '1.5px solid var(--accent)' : isRangeStart ? '1.5px solid var(--accent)' : isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)',
+                  background: isSelected ? 'rgba(216,56,63,0.10)' : isRangeStart ? 'rgba(216,56,63,0.12)' : isInPreviewRange ? 'rgba(216,56,63,0.07)' : cell.current ? 'var(--card)' : 'transparent',
+                  border: isSelected ? '1.5px solid var(--accent)' : isRangeStart ? '1.5px solid var(--accent)' : isInPreviewRange ? '1px solid rgba(216,56,63,0.3)' : isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)',
                   opacity: cell.current ? (isPast ? 0.5 : 1) : 0.3,
                   display:'flex',
                   flexDirection:'column',
@@ -433,10 +447,11 @@ export default function Calendar() {
                   gap:2,
                   overflow:'hidden',
                   cursor:'pointer',
+                  transition:'background 0.1s ease, border-color 0.1s ease',
                 }}
               >
                 <span style={{
-                  fontSize:13, fontWeight: isToday ? 800 : 600,
+                  fontSize:14, fontWeight: isToday ? 800 : 600,
                   color: isToday ? 'var(--accent)' : (cell.current ? 'var(--text)' : 'var(--text3)'),
                 }}>
                   {cell.day}
@@ -444,11 +459,11 @@ export default function Calendar() {
                 {/* Assenze personale (diverse dalla mia), in rosso al posto del vecchio triangolino */}
                 {otherAbsences.length > 0 && (
                   <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
-                    <span style={{ fontSize:8, fontWeight:800, lineHeight:1.2, color:'var(--red)', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <span style={{ fontSize:9.5, fontWeight:800, lineHeight:1.2, color:'var(--red)', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {t('calendar.absencePrefix', { name: otherAbsences[0].workerName })}
                     </span>
                     {otherAbsences.length > 1 && (
-                      <span style={{ fontSize:8, fontWeight:700, color:'var(--red)' }}>{t('common.moreCount', { count: otherAbsences.length - 1 })}</span>
+                      <span style={{ fontSize:9, fontWeight:700, color:'var(--red)' }}>{t('common.moreCount', { count: otherAbsences.length - 1 })}</span>
                     )}
                   </div>
                 )}
@@ -461,7 +476,7 @@ export default function Calendar() {
                       return (
                         <span key={ev.id} style={{
                           display:'flex', alignItems:'center', gap:3,
-                          fontSize:8.5, fontWeight:700, lineHeight:1.2, color:'var(--text)',
+                          fontSize:10, fontWeight:700, lineHeight:1.2, color:'var(--text)',
                           maxWidth:'100%', opacity: isPast ? 0.55 : 1,
                         }}>
                           <span style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:dotColor }} />
@@ -470,7 +485,7 @@ export default function Calendar() {
                       )
                     })}
                     {dayEvents.length > 2 && (
-                      <span style={{ fontSize:8, fontWeight:700, color:'var(--text3)' }}>+{dayEvents.length - 2}</span>
+                      <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{dayEvents.length - 2}</span>
                     )}
                   </div>
                 )}
@@ -672,8 +687,22 @@ export default function Calendar() {
                 const isSelected = selectedWorkerId === w.id
                 return (
                   <button key={w.id}
+                    className="chip-no-press"
                     draggable
-                    onDragStart={e => e.dataTransfer.setData('text/plain', w.id)}
+                    onDragStart={e => {
+                      e.dataTransfer.setData('text/plain', w.id)
+                      // Il ghost di drag nativo del browser a volte ignora il border-radius
+                      // sui <button> e mostra un rettangolo: forziamo un clone ovale come immagine.
+                      const ghost = e.currentTarget.cloneNode(true)
+                      ghost.style.position = 'absolute'
+                      ghost.style.top = '-1000px'
+                      ghost.style.left = '-1000px'
+                      ghost.style.borderRadius = '20px'
+                      ghost.style.overflow = 'hidden'
+                      document.body.appendChild(ghost)
+                      e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2)
+                      setTimeout(() => ghost.remove(), 0)
+                    }}
                     onClick={() => setSelectedWorkerId(id => id === w.id ? null : w.id)}
                     aria-pressed={isSelected}
                     style={{
@@ -709,7 +738,13 @@ export default function Calendar() {
                 <div key={ev.id}
                   onDragOver={e => e.preventDefault()}
                   onDragEnter={e => { e.preventDefault(); setDragOverEventId(ev.id) }}
-                  onDragLeave={() => setDragOverEventId(id => id === ev.id ? null : id)}
+                  onDragLeave={e => {
+                    // dragenter/dragleave scattano anche sui figli (testo, badge...): se il
+                    // mouse si sposta su un figlio interno alla card, relatedTarget resta
+                    // dentro currentTarget e non dobbiamo togliere l'evidenziazione.
+                    if (e.currentTarget.contains(e.relatedTarget)) return
+                    setDragOverEventId(id => id === ev.id ? null : id)
+                  }}
                   onDrop={e => { e.preventDefault(); setDragOverEventId(null); handleAssign(ev, e.dataTransfer.getData('text/plain')) }}
                   onClick={() => { if (selectedWorkerId) handleAssign(ev, selectedWorkerId) }}
                   style={{
@@ -749,10 +784,7 @@ export default function Calendar() {
       {/* FAB nuovo evento — solo in vista griglia, in "Assegna personale" lascia spazio alla lista */}
       {mode === 'grid' && (
       <button
-        onClick={() => {
-          setEditForm({ name:'', date: selectedDate || todayStr, dateEnd:'', location:'', notes:'', phases:{} })
-          setShowCreate(true)
-        }}
+        onClick={() => setShowCreate(true)}
         style={{
           position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
@@ -795,51 +827,13 @@ export default function Calendar() {
         </div>
       )}
 
-      {/* Modal crea evento */}
-      {showCreate && (
-        <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
-          <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
-            <button className="close-btn" onClick={createDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{t('calendar.newEventTitle')}</h2>
-            <div className="form-group">
-              <label htmlFor="cal-create-name">{t('calendar.eventNameLabel')}</label>
-              <input id="cal-create-name" value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.startDateLabel')}</label>
-              <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.endDateLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder={t('common.noneOption')} onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.phasesLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              {PHASE_FORM_CONFIG.map(p => (
-                <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
-                  <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <DateField value={editForm.phases?.[p.key]||''} clearable placeholder="—"
-                      onChange={v => setEditForm(f => { const ph={...(f.phases||{})}; if (v) ph[p.key]=v; else delete ph[p.key]; return {...f, phases:ph} })} />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="form-group">
-              <label htmlFor="cal-create-location">{t('calendar.locationLabel')}</label>
-              <input id="cal-create-location" value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cal-create-notes">{t('calendar.notesLabel')}</label>
-              <textarea id="cal-create-notes" value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
-            </div>
-            <button onClick={createEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
-              disabled={creating || !editForm.name?.trim() || !editForm.date}>
-              {creating ? t('calendar.creating') : t('calendar.createEvent')}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Creazione evento — flusso condiviso con Events.jsx, vedi CreateEventFlow.jsx */}
+      <CreateEventFlow
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        initialDate={selectedDate || todayStr}
+        onCreated={(eventId, { fromTemplate }) => { if (fromTemplate) navigate(`/events/${eventId}`) }}
+      />
 
       {/* Modal modifica evento */}
       {editingEvent && (

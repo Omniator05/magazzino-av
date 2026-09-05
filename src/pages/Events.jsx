@@ -17,40 +17,8 @@ import { syncEventToGoogle, deleteGoogleEvent, listUpcomingGoogleEvents, fromGoo
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, getDoc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-function addDays(dateStr, days) {
-  const d = new Date(dateStr + 'T12:00:00')
-  d.setDate(d.getDate() + days)
-  return d.toISOString().split('T')[0]
-}
-function addMonths(dateStr, months) {
-  const d = new Date(dateStr + 'T12:00:00')
-  d.setMonth(d.getMonth() + months)
-  return d.toISOString().split('T')[0]
-}
-function addYears(dateStr, years) {
-  const d = new Date(dateStr + 'T12:00:00')
-  d.setFullYear(d.getFullYear() + years)
-  return d.toISOString().split('T')[0]
-}
-function generateDates(startDate, recurrence, endDate) {
-  if (recurrence === 'never' || !endDate || endDate <= startDate) return []
-  const dates = []
-  let current = startDate
-  let count = 0
-  while (count < 500) {
-    let next
-    if      (recurrence === 'daily')   next = addDays(current, 1)
-    else if (recurrence === 'weekly')  next = addDays(current, 7)
-    else if (recurrence === 'monthly') next = addMonths(current, 1)
-    else if (recurrence === 'yearly')  next = addYears(current, 1)
-    else break
-    if (next > endDate) break
-    dates.push(next)
-    current = next
-    count++
-  }
-  return dates
-}
+import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
+import CreateEventFlow from '../components/CreateEventFlow'
 
 const EVENT_CAP = 5
 
@@ -58,20 +26,9 @@ const EVENT_CAP = 5
 const IconAlertDot = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
 )
-const IconRepeat = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-  </svg>
-)
 const IconWrench = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-  </svg>
-)
-const IconChevronSm = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 18 15 12 9 6"/>
   </svg>
 )
 const IconChevronSection = ({ open }) => (
@@ -106,22 +63,6 @@ const IconSync = ({ spinning }) => (
 const IconPlus = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-  </svg>
-)
-const IconDoc = () => (
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-  </svg>
-)
-const IconList = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-  </svg>
-)
-const IconCalendarSm = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
   </svg>
 )
 
@@ -287,13 +228,6 @@ export default function Events() {
   const { user, team, teamId } = useAuth()
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
-  const RECURRENCE_OPTIONS = [
-    { value:'never',   label:t('events.recurrenceNever') },
-    { value:'daily',   label:t('events.recurrenceDaily') },
-    { value:'weekly',  label:t('events.recurrenceWeekly') },
-    { value:'monthly', label:t('events.recurrenceMonthly') },
-    { value:'yearly',  label:t('events.recurrenceYearly') },
-  ]
   const PHASE_CONFIG = [
     { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
     { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
@@ -305,7 +239,6 @@ export default function Events() {
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const [showModal, setShowModal] = useState(false)
   const eventDrag = useModalDrag(() => setShowModal(false))
-  const templateDrag = useModalDrag(() => setShowTemplateMenu(false))
   const [showSearch, setShowSearch]     = useState(false)
   const [openSections, setOpenSections] = useState(() => {
     try {
@@ -313,27 +246,29 @@ export default function Events() {
       return saved ? JSON.parse(saved) : { recurring: true, unload: true, upcoming: true, installations: false }
     } catch { return { recurring: true, unload: true, upcoming: true } }
   })
-  const [showTemplateMenu, setShowTemplateMenu] = useState(false)
-  const [templates, setTemplates] = useState([])
   const [search, setSearch]       = useState('')
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
-  const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
-  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
+  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{} })
+  // Flusso unico di creazione evento (Calendar.jsx monta lo stesso componente):
+  // vedi src/components/CreateEventFlow.jsx.
+  const [createFlowOpen, setCreateFlowOpen] = useState(false)
+  const [createFlowSkip, setCreateFlowSkip] = useState(null)
   const navigate = useNavigate()
   const { state: navState } = useLocation()
-  const anyModalOpen = showModal || showTemplateMenu
+  const anyModalOpen = showModal || createFlowOpen
   useModalScrollLock(anyModalOpen)
 
-  // Se arrivo dall'archivio con un template, apro subito il form
+  // Se arrivo dall'archivio con un template, o dalla home con "crea evento",
+  // apro subito il flusso di creazione saltando la schermata di scelta.
   useEffect(() => {
     if (navState?.templateItems) {
-      setForm({ name: navState.templateName || '', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
-      setPendingTemplateItems(navState.templateItems)
-      setShowModal(true)
+      setCreateFlowSkip({ name: navState.templateName || '', items: navState.templateItems })
+      setCreateFlowOpen(true)
       window.history.replaceState({}, '')
     } else if (navState?.openNewEvent) {
-      openNew()
+      setCreateFlowSkip('blank')
+      setCreateFlowOpen(true)
       window.history.replaceState({}, '')
     }
   }, [navState])
@@ -342,12 +277,6 @@ export default function Events() {
     if (!teamId) return
     const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => { setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false) })
-  }, [teamId])
-
-  useEffect(() => {
-    if (!teamId) return
-    const q = query(collection(db, 'templates'), where('teamId', '==', teamId), orderBy('name'))
-    return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
   }, [teamId])
 
   // ── Import da Google Calendar (i collaboratori scrivono lì, non in app) ──
@@ -477,69 +406,32 @@ export default function Events() {
       )
     : []
 
-  const openNew = () => {
-    setEditing(null)
-    setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
-    setPendingTemplateItems(null)
-    setShowModal(true)
-  }
-
   const openEdit = (e, event) => {
     e.stopPropagation()
     setEditing(event)
-    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', recurrence:'never', endDate:'', type: event.type||'event', phases: event.phases||{} })
-    setPendingTemplateItems(null)
+    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{} })
     setShowModal(true)
   }
 
-  const futureDates = form.recurrence !== 'never' && form.date && form.endDate
-    ? generateDates(form.date, form.recurrence, form.endDate) : []
-
+  // Solo modifica: la creazione (vuota, da template, ricorrente) passa tutta
+  // da CreateEventFlow, montato più sotto — vedi src/components/CreateEventFlow.jsx.
   const saveEvent = async () => {
     if (!form.name.trim() || !form.date) return
     setSaving(true)
     try {
-      if (editing) {
-        const updated = {
-          name: form.name.trim(), date: form.date,
-          dateEnd: form.dateEnd || null,
-          location: form.location.trim(), notes: form.notes.trim(),
-          type: form.type || 'event',
-          phases: form.phases || {},
-        }
-        await updateDoc(doc(db, 'events', editing.id), updated)
-        const gId = await syncEventToGoogle({ ...updated, googleEventId: editing.googleEventId }, team?.googleCalendarId)
-        if (gId && gId !== editing.googleEventId) await updateDoc(doc(db, 'events', editing.id), { googleEventId: gId })
-        setShowModal(false)
-        setEditing(null)
-        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
-      } else {
-        const seriesId = form.recurrence !== 'never' && futureDates.length > 0
-          ? `${Date.now()}-${Math.random().toString(36).slice(2)}` : null
-        const base = {
-          name: form.name.trim(), location: form.location.trim(),
-          notes: form.notes.trim(), dateEnd: form.dateEnd || null,
-          items: pendingTemplateItems || [],
-          teamId,
-          createdAt: serverTimestamp(), createdBy: user.uid,
-          recurrence: form.recurrence, seriesId,
-          type: form.type || 'event',
-          phases: form.phases || {},
-        }
-        const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
-        const gId = await syncEventToGoogle({ ...base, date: form.date }, team?.googleCalendarId)
-        if (gId) await updateDoc(doc(db, 'events', ref.id), { googleEventId: gId })
-        for (const date of futureDates) {
-          const r = await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
-          const gId2 = await syncEventToGoogle({ ...base, date }, team?.googleCalendarId)
-          if (gId2) await updateDoc(doc(db, 'events', r.id), { googleEventId: gId2 })
-        }
-        setShowModal(false)
-        setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{} })
-        setPendingTemplateItems(null)
-        // Se creato da template, vai direttamente all'evento
-        if (pendingTemplateItems) navigate(`/events/${ref.id}`)
+      const updated = {
+        name: form.name.trim(), date: form.date,
+        dateEnd: form.dateEnd || null,
+        location: form.location.trim(), notes: form.notes.trim(),
+        type: form.type || 'event',
+        phases: form.phases || {},
       }
+      await updateDoc(doc(db, 'events', editing.id), updated)
+      const gId = await syncEventToGoogle({ ...updated, googleEventId: editing.googleEventId }, team?.googleCalendarId)
+      if (gId && gId !== editing.googleEventId) await updateDoc(doc(db, 'events', editing.id), { googleEventId: gId })
+      setShowModal(false)
+      setEditing(null)
+      setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{} })
     } finally { setSaving(false) }
   }
 
@@ -547,31 +439,18 @@ export default function Events() {
     e.stopPropagation()
     if (event.seriesId) {
       if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteSeriesMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
-        await deleteDoc(doc(db, 'events', event.id))
+        await deleteEventWithInventoryCheck({ event, confirm, t })
         await deleteGoogleEvent(event.googleEventId, team?.googleCalendarId)
       }
     } else {
       if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
-        await deleteDoc(doc(db, 'events', event.id))
+        await deleteEventWithInventoryCheck({ event, confirm, t })
         await deleteGoogleEvent(event.googleEventId, team?.googleCalendarId)
       }
     }
   }
 
   const cardProps = { today, t, i18n, navigate, phaseConfig: PHASE_CONFIG, onEdit: openEdit, onDelete: deleteEvent, loadListsOn }
-
-  const createFromTemplate = (template) => {
-    setShowTemplateMenu(false)
-    // Pre-compila il form con il template — l'utente sceglie nome/data/location
-    setEditing(null)
-    setForm({ name: template.name, date:'', dateEnd:'', location:'', notes:'', recurrence:'never', endDate:'' })
-    // Salva gli articoli del template per usarli al salvataggio
-    setPendingTemplateItems((template.components||[]).map(c => ({
-      id:c.id, name:c.name, category:c.category, qty:c.qty,
-      loaded:false, returned:false,
-    })))
-    setShowModal(true)
-  }
 
   const closeInstallation = async (installation) => {
     if (!(await confirm({ title: t('eventDetail.confirmCloseInstallationTitle'), message: t('events.confirmCloseInstallMessage', { name: installation.name }), confirmLabel: t('eventDetail.confirmCloseInstallationLabel') }))) return
@@ -631,7 +510,7 @@ export default function Events() {
         </div>
       </div>
 
-      <FabButton onClick={() => setShowTemplateMenu(true)} ariaLabel={t('events.newEventButton')} />
+      <FabButton onClick={() => { setCreateFlowSkip(null); setCreateFlowOpen(true) }} ariaLabel={t('events.newEventButton')} />
 
       {/* Search bar SEMPRE visibile */}
       <div style={{ padding:'0 16px 12px' }}>
@@ -722,101 +601,45 @@ export default function Events() {
               </div>
             )}
 
-            {events.length === 0 && (
-              <div style={{ textAlign:'center', padding:'60px 24px' }}>
-                <span style={{ color:'var(--dash-muted)' }}><svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg></span>
-                <h3 style={{ fontSize:17, fontWeight:700, color:'var(--dash-title)', marginTop:14 }}>{t('workerHome.emptyTitle')}</h3>
-                <p style={{ color:'var(--dash-muted)', fontSize:13, marginTop:4 }}>{t('events.emptyDesc')}</p>
-              </div>
+            {daScaricareSingle.length === 0 && pinnedRecurring.length === 0 && upcomingSingle.length === 0 && installations.length === 0 && (
+              <button
+                type="button"
+                onClick={() => { setCreateFlowSkip(null); setCreateFlowOpen(true) }}
+                className="btn-no-anim"
+                style={{ width:'calc(100% - 32px)', margin:'20px 16px', background:'var(--dash-card)', border:'1.5px dashed var(--dash-pill-border)', borderRadius:20, padding:'32px 20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:10, cursor:'pointer', font:'inherit', color:'inherit' }}
+              >
+                <div style={{ width:52, height:52, borderRadius:'50%', background:'var(--dash-pill-bg)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--dash-muted)' }}>
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+                </div>
+                <div>
+                  <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', marginBottom:4 }}>{t('events.noEventsFunTitle')}</p>
+                  <p style={{ fontSize:12.5, color:'var(--dash-muted)', maxWidth:260 }}>{t('events.noEventsFunDesc')}</p>
+                </div>
+                <span style={{ marginTop:6, display:'inline-flex', alignItems:'center', gap:6, padding:'10px 18px', borderRadius:14, background:'var(--accent)', color:'white', fontWeight:700, fontSize:13 }}>
+                  <IconPlus /> {t('dashboard.createFirstEvent')}
+                </span>
+              </button>
             )}
           </>
         )}
       </div>
 
-      {/* Modal scelta: template o vuoto */}
-      {showTemplateMenu && (
-        <div className={`modal-overlay${templateDrag.closing ? ' closing' : ''}`} onClick={templateDrag.onOverlayClick}>
-          <div className={`modal${templateDrag.jiggling ? ' modal-jiggle' : ''}${templateDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templateDrag.props}>
-            <button className="close-btn" onClick={templateDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{t('calendar.newEventTitle')}</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{t('events.newEventModalDesc')}</p>
+      {/* Creazione (vuota, da template, ricorrente, event/installazione):
+          flusso condiviso con Calendar.jsx, vedi CreateEventFlow.jsx. */}
+      <CreateEventFlow
+        open={createFlowOpen}
+        onClose={() => { setCreateFlowOpen(false); setCreateFlowSkip(null) }}
+        skipChoice={createFlowSkip}
+        onCreated={(eventId, { fromTemplate }) => { if (fromTemplate) navigate(`/events/${eventId}`) }}
+      />
 
-            {/* Evento vuoto */}
-            <button onClick={() => { setShowTemplateMenu(false); openNew() }}
-              style={{ width:'100%', padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'2px solid var(--border)', color:'var(--text)', fontWeight:600, fontSize:15, textAlign:'left', marginBottom:12, display:'flex', alignItems:'center', gap:12 }}>
-              <span style={{ color:'#6b7280', flexShrink:0 }}><IconDoc /></span>
-              <div>
-                <p style={{ fontWeight:700 }}>{t('events.blankEvent')}</p>
-                <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>{t('events.blankEventDesc')}</p>
-              </div>
-            </button>
-
-            {/* Template */}
-            {templates.length === 0 ? (
-              <div style={{ padding:'16px', background:'var(--card2)', borderRadius:10, textAlign:'center' }}>
-                <p style={{ color:'var(--text2)', fontSize:13 }}>{t('events.noTemplates')}</p>
-              </div>
-            ) : (
-              <>
-                <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('archive.useTemplate')}</p>
-                {templates.map(tpl => (
-                  <button key={tpl.id} onClick={() => createFromTemplate(tpl)}
-                    style={{ width:'100%', padding:'12px 16px', borderRadius:12, background:'rgba(79,195,247,0.07)', border:'1px solid rgba(79,195,247,0.25)', color:'var(--text)', fontWeight:600, fontSize:14, textAlign:'left', marginBottom:8, display:'flex', alignItems:'center', gap:12 }}>
-                    <span style={{ color:'var(--blue)', flexShrink:0 }}><IconList /></span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:700 }}>{tpl.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>
-                        {t('events.itemsCount', { count: (tpl.components||[]).length })}
-                        {tpl.notes ? ` · ${tpl.notes}` : ''}
-                      </p>
-                    </div>
-                    <span style={{ color:'var(--blue)' }}><IconChevronSm /></span>
-                  </button>
-                ))}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
+      {/* Modifica evento esistente — niente scelta template/tipo qui, quella
+          si decide solo in creazione. */}
       {showModal && (
         <div className={`modal-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={eventDrag.onOverlayClick}>
           <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
             <button className="close-btn" onClick={eventDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{editing ? t('calendar.editEventTitle') : pendingTemplateItems ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
-
-            {/* Toggle tipo: Evento / Installazione */}
-            {!editing && !pendingTemplateItems && (
-              <div style={{ display:'flex', gap:8, marginBottom:16, background:'var(--card2)', borderRadius:12, padding:4 }}>
-                <button
-                  onClick={() => setForm(f => ({...f, type:'event'}))}
-                  aria-pressed={form.type !== 'installation'}
-                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                    background: form.type !== 'installation' ? 'var(--card)' : 'transparent',
-                    color: form.type !== 'installation' ? 'var(--text)' : 'var(--text2)',
-                    boxShadow: form.type !== 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-                    border: 'none', transition:'all 0.15s'
-                  }}><IconCalendarSm /> {t('events.typeEvent')}</button>
-                <button
-                  onClick={() => setForm(f => ({...f, type:'installation', recurrence:'never', endDate:''}))}
-                  aria-pressed={form.type === 'installation'}
-                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                    background: form.type === 'installation' ? '#ede9fe' : 'transparent',
-                    color: form.type === 'installation' ? '#5b4fcf' : 'var(--text2)',
-                    boxShadow: form.type === 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-                    border: form.type === 'installation' ? '1px solid #ddd6fe' : '1px solid transparent',
-                    transition:'all 0.15s'
-                  }}><IconWrench /> {t('events.typeInstallation')}</button>
-              </div>
-            )}
-            {pendingTemplateItems && (
-              <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'8px 12px', marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ color:'var(--blue)' }}><IconCheckSm /></span>
-                <p style={{ color:'var(--blue)', fontSize:13, fontWeight:600 }}>
-                  {t('events.readyListMsg', { count: pendingTemplateItems.length })}
-                </p>
-              </div>
-            )}
+            <h2>{t('calendar.editEventTitle')}</h2>
             <div className="form-group">
               <label htmlFor="ev-name">{t('calendar.eventNameLabel')}</label>
               <input id="ev-name" value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('calendar.eventNamePlaceholder')} />
@@ -851,41 +674,9 @@ export default function Events() {
               <label htmlFor="ev-notes">{t('calendar.notesLabel')}</label>
               <textarea id="ev-notes" value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
             </div>
-            {!editing && form.type !== 'installation' && (
-              <>
-                <div className="form-group">
-                  <label htmlFor="ev-recurrence" style={{ display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.repeatLabel')}</label>
-                  <select id="ev-recurrence" value={form.recurrence} onChange={e => setForm({...form, recurrence:e.target.value, endDate:''})}>
-                    {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                {form.recurrence !== 'never' && (
-                  <div className="form-group">
-                    <label>{t('events.repeatEndLabel')}</label>
-                    <DateField value={form.endDate} min={form.date || today}
-                      onChange={v => setForm({...form, endDate:v})} />
-                  </div>
-                )}
-                {futureDates.length > 0 && (
-                  <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 14px', marginBottom:16 }}>
-                    <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.totalEventsCount', { count: futureDates.length + 1 })}</p>
-                    <p style={{ color:'var(--text2)', fontSize:12, marginTop:3 }}>
-                      {t('workerCalendar.dateRange', {
-                        start: formatDate(form.date+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language),
-                        end: formatDate(futureDates.at(-1)+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language),
-                      })}
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>
-              {saving ? t('common.saving')
-                : editing ? t('calendar.saveChanges')
-                : pendingTemplateItems ? t('events.createFromTemplateAndGo')
-                : futureDates.length > 0 ? t('events.createMultiple', { count: futureDates.length + 1 })
-                : t('calendar.createEvent')}
+              {saving ? t('common.saving') : t('calendar.saveChanges')}
             </button>
           </div>
         </div>

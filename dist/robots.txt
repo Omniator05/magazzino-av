@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /events/
+Disallow: /super
+
+Sitemap: https://magazzino-av.vercel.app/sitemap.xml

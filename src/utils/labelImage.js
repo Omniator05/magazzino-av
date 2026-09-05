@@ -1,4 +1,4 @@
-import { generateQRDataURL, qrPayloadForCode } from './generateCode'
+import { generateQRDataURL, qrPayloadForCode, generateBarcodeDataURL } from './generateCode'
 
 // Dimensioni richieste dal software della stampante termica: un'immagine
 // già pronta a questa risoluzione, niente dialogo di stampa del browser
@@ -64,10 +64,13 @@ function drawLines(ctx, lines, x, y, lineHeight) {
   lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight))
 }
 
-// Disegna l'etichetta (QR a sinistra, blocco titolo/posizione/codice centrato
-// verticalmente a destra, testo dimensionato per riempire lo spazio) e
-// restituisce un data URL PNG 680×180 pronto da scaricare/importare.
-export async function renderLabelPNG({ name, location, code, teamId }) {
+// Disegna l'etichetta e restituisce un data URL PNG 680×180 pronto da
+// scaricare/importare. Due layout secondo `format`: 'qr' (QR a sinistra,
+// blocco titolo/posizione/codice centrato verticalmente a destra — il
+// default storico) oppure 'barcode' (titolo/posizione sopra, barcode largo
+// sotto con il codice già inciso nell'immagine, perché un barcode è
+// naturalmente largo e basso, non quadrato come il QR).
+export async function renderLabelPNG({ name, location, code, teamId, format = 'qr' }) {
   const W = LABEL_W * SS, H = LABEL_H * SS, pad = PAD * SS
 
   const canvas = document.createElement('canvas')
@@ -77,6 +80,48 @@ export async function renderLabelPNG({ name, location, code, teamId }) {
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, W, H)
   ctx.fillStyle = '#000'
+  ctx.textBaseline = 'top'
+
+  if (format === 'barcode') {
+    const FAMILY = 'Arial'
+    const barcodeH = Math.round(H * 0.4)
+    const textW = W - pad * 2
+
+    let nameSize = fitFontSize(ctx, name, textW, FAMILY, 800, 56 * SS, 22 * SS)
+    ctx.font = `800 ${nameSize}px ${FAMILY}`
+    const nameLineHeight = Math.round(nameSize * 1.15)
+    const nameLines = ctx.measureText(name).width <= textW ? [name] : wrapLines(ctx, name, textW, 2)
+
+    let locLines = [], locSize = 0, locLineHeight = 0
+    if (location) {
+      const locText = `📍 ${location}`
+      locSize = fitFontSize(ctx, locText, textW, FAMILY, 700, 26 * SS, 14 * SS)
+      ctx.font = `700 ${locSize}px ${FAMILY}`
+      locLineHeight = Math.round(locSize * 1.2)
+      locLines = ctx.measureText(locText).width <= textW ? [locText] : wrapLines(ctx, locText, textW, 1)
+    }
+
+    let y = pad
+    ctx.font = `800 ${nameSize}px ${FAMILY}`
+    drawLines(ctx, nameLines, pad, y, nameLineHeight)
+    y += nameLines.length * nameLineHeight
+    if (locLines.length) {
+      y += 8 * SS
+      ctx.font = `700 ${locSize}px ${FAMILY}`
+      drawLines(ctx, locLines, pad, y, locLineHeight)
+    }
+
+    // Il codice è già disegnato dentro l'immagine del barcode (displayValue),
+    // non va ridisegnato separatamente come per il QR.
+    const barcodeDataUrl = await generateBarcodeDataURL(code, { height: Math.round(barcodeH * 0.85) })
+    const barcodeImg = await loadImage(barcodeDataUrl)
+    const scale = Math.min((W - pad * 2) / barcodeImg.width, barcodeH / barcodeImg.height)
+    const bw = barcodeImg.width * scale, bh = barcodeImg.height * scale
+    const barcodeY = H - pad - barcodeH + (barcodeH - bh) / 2
+    ctx.drawImage(barcodeImg, (W - bw) / 2, barcodeY, bw, bh)
+
+    return downscaleToFinal(canvas)
+  }
 
   const qrSize = H - pad * 2
   // Generiamo il QR già alla risoluzione finale di disegno: evita un
@@ -87,7 +132,6 @@ export async function renderLabelPNG({ name, location, code, teamId }) {
 
   const textX = pad * 2 + qrSize
   const textW = W - textX - pad
-  ctx.textBaseline = 'top'
 
   const FAMILY = 'Arial'
   let nameSize = fitFontSize(ctx, name, textW, FAMILY, 800, 64 * SS, 26 * SS)
@@ -150,7 +194,12 @@ export async function renderLabelPNG({ name, location, code, teamId }) {
   ctx.font = `600 ${codeSize}px monospace`
   ctx.fillText(code, textX, y)
 
-  // Rimpicciolisce dalla risoluzione di lavoro (2×) alla dimensione finale richiesta
+  return downscaleToFinal(canvas)
+}
+
+// Rimpicciolisce dalla risoluzione di lavoro (2×) alla dimensione finale
+// richiesta — condiviso dai due layout (qr/barcode) sopra.
+function downscaleToFinal(canvas) {
   const finalCanvas = document.createElement('canvas')
   finalCanvas.width = LABEL_W
   finalCanvas.height = LABEL_H
@@ -158,7 +207,6 @@ export async function renderLabelPNG({ name, location, code, teamId }) {
   finalCtx.imageSmoothingEnabled = true
   finalCtx.imageSmoothingQuality = 'high'
   finalCtx.drawImage(canvas, 0, 0, LABEL_W, LABEL_H)
-
   return finalCanvas.toDataURL('image/png')
 }
 

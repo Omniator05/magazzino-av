@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
-import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, deleteDoc, doc, serverTimestamp, where } from 'firebase/firestore'
+import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, serverTimestamp, where } from 'firebase/firestore'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -10,6 +10,7 @@ import DateBadge from '../components/DateBadge'
 import DeleteButton from '../components/DeleteButton'
 import BackHomeButton from '../components/BackHomeButton'
 import { isModuleEnabled } from '../utils/modules'
+import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
 
 const PAGE_SIZE = 30
 
@@ -95,7 +96,7 @@ export default function Archive() {
 
   const deleteArchiveEvent = async (event) => {
     if (!(await confirm({ title: t('archive.confirmDeleteTitle'), message: t('archive.confirmDeleteMessage', { name: event.name }), confirmLabel: t('archive.confirmDeleteLabel'), danger: true }))) return
-    await deleteDoc(doc(db, 'events', event.id))
+    await deleteEventWithInventoryCheck({ event, confirm, t })
     setEvents(prev => prev.filter(e => e.id !== event.id))
   }
 

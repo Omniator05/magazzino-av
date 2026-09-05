@@ -89,6 +89,17 @@ button:not(:disabled):active {
   filter: brightness(0.96);
   box-shadow: none;
 }
+/* Chip di selezione (es. lista magazzinieri in "Assegna personale"): con
+   più tap ravvicinati per scegliere/cambiare utente lo scale+rimbalzo (la
+   transizione bounce di sopra) sommato allo "schiacciato" di :active
+   risultava un saliscendi vistoso e poco controllato. Qui lo stato
+   selezionato deve leggersi SOLO dal colore, niente movimento. */
+button.chip-no-press:hover,
+button.chip-no-press:not(:disabled):active {
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Modal creazione/modifica utente: tante interazioni ravvicinate (menu
@@ -118,7 +129,31 @@ input:focus, textarea:focus, select:focus {
 }
 input::placeholder, textarea::placeholder { color: var(--text3); }
 
+/* Frecce su/giù native dei campi numerici: l'app ha già i suoi bottoni +/-
+   dedicati ovunque, quelle native sono solo rumore visivo al passaggio del mouse. */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 select option { background: var(--bg2); }
+/* Freccia nativa dei menu a tendina: quella di default del browser non segue
+   affatto lo stile dell'app — tolta e ridisegnata con una nostra icona. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  padding-right: 40px;
+}
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 3px; }
@@ -443,15 +478,6 @@ select option { background: var(--bg2); }
 .stat-box .val { font-size: 26px; font-weight: 800; letter-spacing: -1px; }
 .stat-box .lbl { font-size: 11px; color: var(--text2); margin-top: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
 
-/* ── QR code ──────────────────────────────────── */
-.code-preview {
-  background: white;
-  border-radius: var(--radius);
-  padding: 20px;
-  display: flex; flex-direction: column;
-  align-items: center; gap: 10px;
-}
-
 /* ── Event card ───────────────────────────────── */
 .event-card {
   background: var(--card);
@@ -494,6 +520,11 @@ select option { background: var(--bg2); }
   border: 1px solid var(--border);
 }
 .qty-ctrl span { min-width: 28px; text-align: center; font-weight: 700; font-size: 16px; }
+/* Quantità digitabile a mano (invece di spingere +/- decine di volte) */
+.qty-ctrl input[type=number] {
+  width: 40px; min-width: 40px; text-align: center; font-weight: 700; font-size: 16px;
+  padding: 4px 2px; border-radius: 6px;
+}
 
 /* ── Chip ─────────────────────────────────────── */
 .chip {

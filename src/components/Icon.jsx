@@ -39,6 +39,9 @@ export const Unload = ({ size }) => (
 export const Check = ({ size }) => (
   <svg {...base(size)}><path d="M20 6 9 17l-5-5"/></svg>
 )
+export const Plus = ({ size }) => (
+  <svg {...base(size)}><path d="M12 5v14M5 12h14"/></svg>
+)
 export const Warn = ({ size }) => (
   <svg {...base(size)}><path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
 )
@@ -86,6 +89,28 @@ export const Mail = ({ size }) => (
 )
 export const Share = ({ size }) => (
   <svg {...base(size)}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" x2="15.4" y1="10.5" y2="6.5"/><line x1="8.6" x2="15.4" y1="13.5" y2="17.5"/></svg>
+)
+export const Download = ({ size }) => (
+  <svg {...base(size)}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+)
+export const QrCode = ({ size }) => (
+  <svg {...base(size)}>
+    <rect width="5" height="5" x="3" y="3" rx="1"/>
+    <rect width="5" height="5" x="16" y="3" rx="1"/>
+    <rect width="5" height="5" x="3" y="16" rx="1"/>
+    <path d="M21 16h-3a2 2 0 0 0-2 2v3"/>
+    <path d="M21 21v.01"/>
+    <path d="M12 7v3a2 2 0 0 1-2 2H7"/>
+    <path d="M3 12h.01"/>
+    <path d="M12 3h.01"/>
+    <path d="M12 16v.01"/>
+    <path d="M16 12h1"/>
+    <path d="M21 12v.01"/>
+    <path d="M12 21v-1"/>
+  </svg>
+)
+export const Barcode = ({ size }) => (
+  <svg {...base(size)}><path d="M3 5v14M7 5v14M10 5v14M14 5v14M16 5v14M19 5v14M21 5v14"/></svg>
 )
 
 /* Pallino colorato pieno (sostituisce 🟠🔴🟢🔵): passa `color` */

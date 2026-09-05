@@ -34,28 +34,26 @@ service cloud.firestore {
     function isSuperAdmin() {
       return request.auth != null && myProfile().data.get('superAdmin', false) == true;
     }
-    // Abbonamento valido: esente (squadre "grandfathered" o la nostra),
-    // attivo, oppure ancora in prova gratuita e non scaduta. Le squadre create
-    // prima di questa feature vengono marcate 'exempt' una tantum (script di
-    // migrazione) — senza billingStatus impostato il default 'exempt' NON si
-    // applica qui apposta: una squadra nuova deve sempre avere trialing+data
-    // esplicite (impostate da Signup.jsx alla creazione), quindi un campo
-    // assente indica un bug di scrittura, non un caso da lasciar passare.
-    function hasValidBilling(teamId) {
+    // Blocco totale: SOLO pagamento fallito (past_due — era abbonata, la
+    // carta non è passata). Prova scaduta o abbonamento cancellato NON
+    // bloccano più l'accesso ai dati: quella squadra opera nel piano
+    // gratuito (limiti applicati lato client, vedi src/utils/planLimits.js —
+    // qui serve solo che i dati restino leggibili/scrivibili, altrimenti il
+    // piano gratuito non potrebbe funzionare affatto). Specchio di
+    // src/App.jsx (stessa condizione, `team?.billingStatus === 'past_due'`).
+    function isBillingBlocked(teamId) {
       let team = get(/databases/$(database)/documents/teams/$(teamId)).data;
-      let status = team.get('billingStatus', 'trialing');
-      return status == 'exempt' || status == 'active'
-        || (status == 'trialing' && team.get('trialEndsAt', request.time) > request.time);
+      return team.get('billingStatus', 'trialing') == 'past_due';
     }
     // Wrapper usati ovunque prima si usava isApprovedMember/isTeamAdmin per
     // decidere l'accesso a UNA squadra specifica: il super admin li supera
-    // sempre, qualunque sia teamId — anche a scadenza abbonamento, per poter
+    // sempre, qualunque sia teamId — anche a pagamento fallito, per poter
     // assistere/sbloccare un cliente.
     function canAccessTeam(teamId) {
-      return (isApprovedMember(teamId) && hasValidBilling(teamId)) || isSuperAdmin();
+      return (isApprovedMember(teamId) && !isBillingBlocked(teamId)) || isSuperAdmin();
     }
     function canAdminTeam(teamId) {
-      return (isTeamAdmin(teamId) && hasValidBilling(teamId)) || isSuperAdmin();
+      return (isTeamAdmin(teamId) && !isBillingBlocked(teamId)) || isSuperAdmin();
     }
 
     match /profiles/{uid} {
