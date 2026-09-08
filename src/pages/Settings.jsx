@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
@@ -200,6 +200,17 @@ export default function Settings() {
           </div>
         </button>
       </div>
+
+      {/* Link legali — testo semplice in fondo, non una riga cliccabile con
+          chevron come le altre: stessa convenzione delle Impostazioni Apple
+          per Privacy/Termini in coda alla pagina. */}
+      <p style={{ textAlign:'center', color:'var(--text3)', fontSize:12, margin:'4px 16px 0' }}>
+        <Link to="/privacy" style={{ color:'inherit' }}>{t('adminUsers.privacyLink')}</Link>
+        {' · '}
+        <Link to="/terms" style={{ color:'inherit' }}>{t('adminUsers.termsLink')}</Link>
+        {' · '}
+        <Link to="/cookie-policy" style={{ color:'inherit' }}>{t('adminUsers.cookieLink')}</Link>
+      </p>
     </div>
   )
 }

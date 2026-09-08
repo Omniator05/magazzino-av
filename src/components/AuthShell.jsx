@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import AuthBackground from './AuthBackground'
 
 // Guscio visivo condiviso dalle pagine pubbliche di autenticazione
@@ -199,6 +200,13 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
             </div>
           </div>
         </div>
+        <p style={{ textAlign:'center', color:'rgba(255,255,255,0.25)', fontSize:11.5, marginTop:16, maxWidth:430, lineHeight:1.6 }}>
+          <Link to="/privacy" style={{ color:'inherit' }}>Privacy</Link>
+          {' · '}
+          <Link to="/terms" style={{ color:'inherit' }}>Termini</Link>
+          {' · '}
+          <Link to="/cookie-policy" style={{ color:'inherit' }}>Cookie</Link>
+        </p>
       </AuthBackground>
     </>
   )

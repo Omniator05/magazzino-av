@@ -309,6 +309,9 @@ export default function WorkerScanner() {
       const singleScanCompletes = localItem && localItem.loaded && !localItem.returned && (localItem.instanceNumbers || []).length <= 1
       if (singleScanCompletes) {
         intact = await askConsumableIntact(foundItem.name)
+        // Cliccare fuori dal popup annulla lo scan: non deve comunque
+        // segnare la riga rientrata (vedi stesso motivo in _onToggleReturned).
+        if (intact === null) { setProcessing(false); return }
       }
     }
 
@@ -742,11 +745,17 @@ export default function WorkerScanner() {
       )}
 
       {/* Popup rientro consumabile — verde per "pieno" (torna disponibile),
-          rosso tenue per "consumato" (non lo tocca): il rosso pieno resta
-          riservato alle azioni distruttive/negative del resto dell'app. */}
+          rosso tenue per "vuoto" (non lo tocca): un consumabile che torna
+          parzialmente usato è normale (es. la tanica del fumo con un quarto
+          di liquido) e non è questo il caso da segnalare — solo se è vuoto
+          per davvero. Il rosso pieno resta riservato alle azioni
+          distruttive/negative del resto dell'app.
+          Cliccare fuori NON equivale a "vuoto": annulla l'intera spunta e
+          riporta la riga a non rientrata, così chi ha aperto il popup per
+          sbaglio può controllare con calma e ripetere la scelta giusta. */}
       {consumableConfirm && createPortal(
         <div
-          onClick={() => resolveConsumableConfirm(false)}
+          onClick={() => resolveConsumableConfirm(null)}
           style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
         >
           <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true"
@@ -1257,15 +1266,17 @@ export default function WorkerScanner() {
                       // Per i consumabili il rientro non è mai scontato al
                       // 100%: chiediamo se è tornato intero PRIMA di segnare,
                       // così la giacenza in magazzino non si gonfia da sola
-                      // per pezzi in realtà consumati durante l'evento. La
-                      // lista va comunque completata (bisogna segnare
-                      // rientrato o niente), quindi qui non c'è un vero
-                      // "annulla": le due opzioni sono le uniche vie d'uscita.
+                      // per pezzi in realtà consumati durante l'evento.
+                      // Cliccare fuori dal popup annulla la spunta (torna
+                      // "non rientrato") invece di essere trattato come
+                      // "consumato" — altrimenti un tocco per sbaglio
+                      // spediva l'oggetto dritto tra i "dimenticati".
                       let intact = true
                       if (forceOut) {
                         intact = false
                       } else if (newReturnedGuess && item.category === 'Consumabili') {
                         intact = await askConsumableIntact(item.name)
+                        if (intact === null) return // annullato: nessuna modifica
                       }
                       setOptimistic(itemId, {
                         returned: newReturnedGuess,

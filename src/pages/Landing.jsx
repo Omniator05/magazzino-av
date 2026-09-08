@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import AuthBackground from '../components/AuthBackground'
 import { Box, Calendar, Truck, Camera } from '../components/Icon'
 
@@ -102,6 +102,13 @@ export default function Landing() {
 
         <p className="landing-reveal" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 30, animationDelay: `${CARDS_START_MS + FEATURES.length * REVEAL_STEP_MS + 140}ms` }}>
           Contatti: appmagazzinoav@gmail.com
+        </p>
+        <p className="landing-reveal" style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11.5, marginTop: 10, animationDelay: `${CARDS_START_MS + FEATURES.length * REVEAL_STEP_MS + 160}ms` }}>
+          <Link to="/privacy" style={{ color: 'inherit' }}>Privacy</Link>
+          {' · '}
+          <Link to="/terms" style={{ color: 'inherit' }}>Termini</Link>
+          {' · '}
+          <Link to="/cookie-policy" style={{ color: 'inherit' }}>Cookie</Link>
         </p>
       </div>
     </AuthBackground>

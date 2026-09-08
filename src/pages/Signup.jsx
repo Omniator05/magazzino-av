@@ -69,6 +69,7 @@ function useSignupForm() {
   const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
+  const [consent, setConsent]   = useState(false)
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
@@ -76,10 +77,35 @@ function useSignupForm() {
     if (!name.trim()) return t('signup.errorNameRequired')
     if (!email.trim()) return t('signup.errorEmailRequired')
     if (password.length < 6) return t('signup.errorPasswordLength')
+    if (!consent) return t('signup.errorConsentRequired')
     return ''
   }
 
-  return { name, setName, email, setEmail, password, setPassword, error, setError, loading, setLoading, validateCommon }
+  return { name, setName, email, setEmail, password, setPassword, consent, setConsent, error, setError, loading, setLoading, validateCommon }
+}
+
+// Spunta obbligatoria di accettazione Termini/Privacy, identica nei due
+// passi di registrazione (crea squadra / unisciti) — i link aprono in una
+// nuova scheda apposta: perdere lo stato del form per andare a leggerli
+// sarebbe un difetto, non solo un fastidio.
+function ConsentCheckbox({ checked, onChange }) {
+  const { t } = useTranslation()
+  return (
+    <label style={{ display:'flex', alignItems:'flex-start', gap:9, marginBottom:20, cursor:'pointer' }}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={e => onChange(e.target.checked)}
+        style={{ marginTop:2, width:16, height:16, flexShrink:0, accentColor:'#e63946', cursor:'pointer' }}
+      />
+      <span style={{ fontSize:12.5, color:'rgba(255,255,255,0.45)', lineHeight:1.5 }}>
+        {t('signup.consentPrefix')}{' '}
+        <a href="/terms" target="_blank" rel="noreferrer" style={{ color:'rgba(255,255,255,0.75)', fontWeight:600 }}>{t('signup.consentTerms')}</a>
+        {' '}{t('signup.consentAnd')}{' '}
+        <a href="/privacy" target="_blank" rel="noreferrer" style={{ color:'rgba(255,255,255,0.75)', fontWeight:600 }}>{t('signup.consentPrivacy')}</a>.
+      </span>
+    </label>
+  )
 }
 
 function CreateTeamStep({ onBack, onDone }) {
@@ -138,6 +164,11 @@ function CreateTeamStep({ onBack, onDone }) {
         approved: true,
         active: true,
         createdAt: new Date().toISOString(),
+        // Prova di consenso a Termini/Privacy (spunta obbligatoria sopra) —
+        // versione registrata così, se cambiano in futuro, si sa a quale
+        // testo l'utente ha effettivamente acconsentito.
+        consentAcceptedAt: new Date().toISOString(),
+        consentVersion: 'v1',
       })
 
       // Email di benvenuto best-effort: non deve mai far sembrare fallito un
@@ -185,9 +216,11 @@ function CreateTeamStep({ onBack, onDone }) {
         <Field label={t('signup.emailLabel')}>
           <input className="auth-input" type="email" value={f.email} onChange={e => f.setEmail(e.target.value)} placeholder={t('signup.emailPlaceholder')} required autoComplete="email" />
         </Field>
-        <Field label={t('signup.passwordLabel')} marginBottom={28}>
+        <Field label={t('signup.passwordLabel')} marginBottom={20}>
           <input className="auth-input" type="password" value={f.password} onChange={e => f.setPassword(e.target.value)} placeholder="••••••••" required autoComplete="new-password" />
         </Field>
+
+        <ConsentCheckbox checked={f.consent} onChange={f.setConsent} />
 
         <button className="auth-btn" type="submit" disabled={f.loading}>
           {f.loading ? t('signup.creatingTeam') : t('signup.createTeam')}
@@ -256,6 +289,8 @@ function JoinTeamStep({ onBack, onDone }) {
         approved: false,
         active: true,
         createdAt: new Date().toISOString(),
+        consentAcceptedAt: new Date().toISOString(),
+        consentVersion: 'v1',
       })
 
       onDone()
@@ -318,9 +353,11 @@ function JoinTeamStep({ onBack, onDone }) {
         <Field label={t('signup.emailLabel')}>
           <input className="auth-input" type="email" value={f.email} onChange={e => f.setEmail(e.target.value)} placeholder={t('signup.emailPlaceholder')} required autoComplete="email" />
         </Field>
-        <Field label={t('signup.passwordLabel')} marginBottom={28}>
+        <Field label={t('signup.passwordLabel')} marginBottom={20}>
           <input className="auth-input" type="password" value={f.password} onChange={e => f.setPassword(e.target.value)} placeholder="••••••••" required autoComplete="new-password" />
         </Field>
+
+        <ConsentCheckbox checked={f.consent} onChange={f.setConsent} />
 
         <button className="auth-btn" type="submit" disabled={f.loading}>
           {f.loading ? t('signup.sendingRequest') : t('signup.requestAccess')}

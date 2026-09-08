@@ -9,7 +9,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
-import { Check, Save, Trash, Edit, User, Warn, Box, Calendar } from '../components/Icon'
+import { Check, Save, Trash, Edit, User, Warn, Box, Calendar, Mail } from '../components/Icon'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import BackHomeButton from '../components/BackHomeButton'
@@ -17,8 +17,6 @@ import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
 import {
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updatePassword,
   signOut
 } from 'firebase/auth'
 
@@ -126,6 +124,7 @@ export default function SettingsUsers() {
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
   const [newPw, setNewPw]             = useState('')
+  const [sendingResetEmail, setSendingResetEmail] = useState(false)
   const [newUsername, setNewUsername]   = useState('')
   const [error, setError]             = useState('')
   const [detailMsg, setDetailMsg]     = useState({ text:'', type:'' })
@@ -360,39 +359,52 @@ export default function SettingsUsers() {
   }
 
   // ── Cambia password ───────────────────────────────────────────
-  // Login temporaneo come utente target su un'app Firebase secondaria:
-  // non tocca mai la sessione admin principale (stesso pattern di createAccount).
+  // Reset "per davvero" via Admin SDK lato server (api/reset-user-password):
+  // a differenza del vecchio meccanismo client-side, funziona subito anche
+  // se l'utente target è bloccato fuori e non è mai riuscito ad autenticarsi
+  // altrove — non serve conoscere la password attuale.
   const changePassword = async () => {
     if (newPw.length < 6) { setDetailMsg({ text:t('adminUsers.errorPasswordLength'), type:'error' }); return }
 
     setLoading(true); clearDetailMsg()
-
     try {
-      // 1. Entra come utente target (su secondaryAuth)
-      const targetCred = await signInWithEmailAndPassword(secondaryAuth, showDetail.internalEmail, showDetail._currentPw || '??')
-      // Se arriviamo qui la password era già quella — caso raro
-      await updatePassword(targetCred.user, newPw)
-      await signOut(secondaryAuth)
-    } catch(loginErr) {
-      // Non conosciamo la password attuale → non possiamo cambiarla via client SDK
-      // (servirebbero le Firebase Admin SDK / Cloud Functions). Come alternativa
-      // pratica, salviamo la nuova password come "richiesta di cambio" e la
-      // applichiamo al prossimo login dell'utente.
-      await updateDoc(doc(db, 'profiles', showDetail.id), {
-        pendingPassword: btoa(newPw),
-        pendingPasswordSetAt: new Date().toISOString(),
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/reset-user-password', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUid: showDetail.id, newPassword: newPw }),
       })
+      if (!res.ok) throw new Error()
       clearDetailMsg()
       setNewPw('')
+      showToast(t('adminUsers.passwordUpdatedToast', { name: showDetail.name }))
+    } catch {
+      setDetailMsg({ text:t('adminUsers.errorPasswordUpdate'), type:'error' })
+    } finally {
       setLoading(false)
-      showToast(t('adminUsers.passwordPendingToast', { name: showDetail.name }))
-      return
     }
+  }
 
-    clearDetailMsg()
-    setNewPw('')
-    setLoading(false)
-    showToast(t('adminUsers.passwordUpdatedToast', { name: showDetail.name }))
+  // ── Invia email di reset password (self-service) ────────────────
+  // Genera un vero link di reset Firebase e lo spedisce con Resend alla
+  // email REALE dell'utente — disponibile solo se ne ha salvata una,
+  // l'internalEmail finta non è una casella di posta esistente.
+  const sendResetEmail = async () => {
+    setSendingResetEmail(true); clearDetailMsg()
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/send-password-reset-email', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUid: showDetail.id }),
+      })
+      if (!res.ok) throw new Error()
+      showToast(t('adminUsers.resetEmailSentToast', { email: showDetail.email }))
+    } catch {
+      setDetailMsg({ text:t('adminUsers.errorSendResetEmail'), type:'error' })
+    } finally {
+      setSendingResetEmail(false)
+    }
   }
 
   // ── Modifica username ─────────────────────────────────────────
@@ -758,6 +770,23 @@ export default function SettingsUsers() {
                   <button onClick={changePassword} className="btn btn-secondary" style={{ width:'100%', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, marginTop:10 }} disabled={loading}>
                     {loading ? t('common.saving') : <><Save size={16} /> {t('adminUsers.saveNewPassword')}</>}
                   </button>
+
+                  {showDetail.email ? (
+                    <button
+                      onClick={sendResetEmail}
+                      className="btn-no-anim"
+                      disabled={sendingResetEmail}
+                      style={{
+                        width:'100%', display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7, marginTop:8,
+                        padding:'10px', borderRadius:'var(--radius-sm)', background:'transparent', border:'1px solid var(--border2)',
+                        color:'var(--text2)', fontWeight:600, fontSize:13.5,
+                      }}
+                    >
+                      <Mail size={15} /> {sendingResetEmail ? t('adminUsers.sendingResetEmail') : t('adminUsers.sendResetEmailButton')}
+                    </button>
+                  ) : (
+                    <p style={{ fontSize:12, color:'var(--text3)', marginTop:8, lineHeight:1.4 }}>{t('adminUsers.sendResetEmailNoEmailHint')}</p>
+                  )}
                 </div>
 
                 {/* Cambio ruolo — menu ad hamburger */}

@@ -103,6 +103,21 @@ export function absenceNotificationEmailHtml({ workerName, startDate, endDate, r
   })
 }
 
+export function passwordResetEmailHtml({ workerName, resetUrl, appUrl }) {
+  return emailShell({
+    logoUrl: `${appUrl}/logo-mark-white.png`,
+    title: 'Reimposta la tua password',
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        Ciao <strong>${esc(workerName)}</strong>, hai ricevuto un link per reimpostare la password del tuo account Roadcase. Il link è valido per un tempo limitato.
+      </p>
+      <p style="margin:0;color:#9ca3af;font-size:12.5px;">Se non hai richiesto tu questo reset, ignora pure questa email: la password attuale resterà invariata.</p>
+    `,
+    ctaLabel: 'Imposta nuova password',
+    ctaUrl: resetUrl,
+  })
+}
+
 export function welcomeEmailHtml({ adminName, teamName, appUrl }) {
   return emailShell({
     logoUrl: `${appUrl}/logo-mark-white.png`,

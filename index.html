@@ -15,7 +15,13 @@
     <meta name="twitter:card" content="summary" />
     <title>Roadcase</title>
     <link rel="manifest" href="/manifest.webmanifest" />
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Lo script Google Identity (accounts.google.com/gsi/client) NON è più
+         caricato qui: prima veniva scaricato su OGNI pagina, anche da chi non
+         ha mai usato l'integrazione Google Calendar (privacy/performance
+         inutili). Ora viene iniettato on-demand solo quando un admin la
+         attiva davvero — vedi loadGoogleIdentityScript in
+         src/utils/googleCalendar.js — e questo è anche quanto dichiarato
+         nella Cookie Policy (/cookie-policy). -->
   </head>
   <body>
     <div id="root"></div>

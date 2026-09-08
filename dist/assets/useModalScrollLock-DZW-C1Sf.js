@@ -1,0 +1,1 @@
+import{r as e}from"./react-vendor-Isi0SRxW.js";function s(o){e.useEffect(()=>{if(!o)return;const t=window.scrollY;return document.body.style.position="fixed",document.body.style.top=`-${t}px`,document.body.style.width="100%",()=>{document.body.style.position="",document.body.style.top="",document.body.style.width="",window.scrollTo(0,t)}},[o])}export{s as u};

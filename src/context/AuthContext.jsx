@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { auth, db } from '../firebase'
 import {
-  signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword
+  signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from 'firebase/auth'
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import i18n from '../i18n'
@@ -71,19 +71,6 @@ export function AuthProvider({ children }) {
             const profileData = snap.data()
             setProfile(profileData)
             if (profileData.name) setLoginName(profileData.name.split(' ')[0])
-
-            // Applica pendingPassword se presente (impostata dall'admin)
-            if (profileData.pendingPassword) {
-              const decoded = (() => { try { return atob(profileData.pendingPassword) } catch { return null } })()
-              if (decoded) {
-                updatePassword(firebaseUser, decoded)
-                  .then(() => updateDoc(doc(db, 'profiles', firebaseUser.uid), {
-                    pendingPassword: null,
-                    pendingPasswordSetAt: null,
-                  }))
-                  .catch(() => {}) // Ignora errori silenziosamente (es. token scaduto)
-              }
-            }
           } else {
             setProfile(null)
           }

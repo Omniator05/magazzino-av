@@ -35,6 +35,9 @@ const WorkerCalendar = lazy(() => import('./pages/WorkerCalendar'))
 const Brasserie = lazy(() => import('./pages/Brasserie'))
 const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
 const NotFound = lazy(() => import('./pages/NotFound'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
+const CookiePolicy = lazy(() => import('./pages/CookiePolicy'))
 import TabBar from './components/TabBar'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
@@ -277,6 +280,12 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Auth initialMode="login" />} />
               <Route path="/signup" element={<Auth initialMode="signup" />} />
+              {/* Pagine legali: sempre raggiungibili, loggati o no — stesso
+                  motivo per cui login/signup sono qui e non dentro
+                  PrivateRoutes (che richiederebbe di essere autenticati). */}
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/cookie-policy" element={<CookiePolicy />} />
               <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
             </Routes>
           </Suspense>

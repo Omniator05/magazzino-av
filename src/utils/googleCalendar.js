@@ -8,8 +8,29 @@ import { GOOGLE_CLIENT_ID, GOOGLE_CALENDAR_SCOPE } from '../config/googleCalenda
 
 let tokenClient = null
 let cachedToken = null // { accessToken, expiresAt }
+let gsiLoadPromise = null
 
-function ensureTokenClient(onToken) {
+// Lo script Google Identity Services non è più incluso in index.html (era
+// scaricato su OGNI pagina, anche da chi non usa questa integrazione — un
+// costo di privacy/performance non necessario). Lo iniettiamo qui, una sola
+// volta, solo quando un admin prova davvero a collegare Google Calendar.
+function loadGoogleIdentityScript() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve()
+  if (gsiLoadPromise) return gsiLoadPromise
+  gsiLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve()
+    script.onerror = () => { gsiLoadPromise = null; reject(new Error('google-identity-load-failed')) }
+    document.head.appendChild(script)
+  })
+  return gsiLoadPromise
+}
+
+async function ensureTokenClient() {
+  await loadGoogleIdentityScript()
   if (!window.google?.accounts?.oauth2) {
     throw new Error('google-identity-not-loaded')
   }
@@ -20,22 +41,25 @@ function ensureTokenClient(onToken) {
       callback: () => {}, // sovrascritto ad ogni richiesta, vedi sotto
     })
   }
-  tokenClient.callback = onToken
   return tokenClient
 }
 
 // Apre il flusso OAuth di Google (richiede un click utente per il gesture
-// requirement del browser). Risolve con l'access token, oppure rigetta se
-// l'utente annulla o c'è un errore.
-export function connectGoogleCalendar() {
+// requirement del browser — vale anche al primo utilizzo, quando questa
+// funzione deve prima scaricare lo script Google Identity: essendo
+// chiamata da un handler di click, il "gesture" resta valido abbastanza a
+// lungo da coprire anche quell'attesa). Risolve con l'access token, oppure
+// rigetta se l'utente annulla o c'è un errore.
+export async function connectGoogleCalendar() {
+  const client = await ensureTokenClient()
   return new Promise((resolve, reject) => {
     try {
-      const client = ensureTokenClient(resp => {
+      client.callback = resp => {
         if (resp.error) { reject(resp); return }
         // -60s di margine di sicurezza sulla scadenza dichiarata da Google
         cachedToken = { accessToken: resp.access_token, expiresAt: Date.now() + (resp.expires_in - 60) * 1000 }
         resolve(resp.access_token)
-      })
+      }
       client.requestAccessToken()
     } catch (e) { reject(e) }
   })

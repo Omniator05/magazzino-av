@@ -1,0 +1,1 @@
+import{r as o}from"./react-vendor-Isi0SRxW.js";function c(s){const[r,e]=o.useState(!1),t=()=>{e(!0),setTimeout(()=>{e(!1),s()},200)};return o.useEffect(()=>{const n=i=>{i.key==="Escape"&&t()};return window.addEventListener("keydown",n),()=>window.removeEventListener("keydown",n)},[]),{closing:r,close:t}}export{c as u};
