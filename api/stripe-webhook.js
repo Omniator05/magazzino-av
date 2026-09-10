@@ -26,6 +26,18 @@ async function findTeamRefByCustomerId(db, customerId) {
   return snap.empty ? null : snap.docs[0].ref
 }
 
+// Campi "premium" mostrati nella pagina Abbonamento quando il piano è attivo:
+// data del prossimo rinnovo e se l'abbonamento è già stato messo in disdetta
+// (resta attivo fino a fine periodo). `sub` è un oggetto Subscription di Stripe.
+function subscriptionFields(sub) {
+  const out = {}
+  if (sub?.current_period_end) {
+    out.currentPeriodEnd = new Date(sub.current_period_end * 1000).toISOString()
+  }
+  out.cancelAtPeriodEnd = sub?.cancel_at_period_end === true
+  return out
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -48,10 +60,14 @@ export default async function handler(req, res) {
         const session = event.data.object
         const teamId = session.client_reference_id
         if (teamId) {
+          const sub = session.subscription
+            ? await stripe.subscriptions.retrieve(session.subscription)
+            : null
           await db.collection('teams').doc(teamId).update({
             billingStatus: 'active',
             stripeCustomerId: session.customer,
             stripeSubscriptionId: session.subscription,
+            ...subscriptionFields(sub),
           })
         }
         break
@@ -63,7 +79,7 @@ export default async function handler(req, res) {
           const status = sub.status === 'active' || sub.status === 'trialing' ? 'active'
             : sub.status === 'past_due' || sub.status === 'unpaid' ? 'past_due'
             : 'canceled'
-          await teamRef.update({ billingStatus: status })
+          await teamRef.update({ billingStatus: status, ...subscriptionFields(sub) })
         }
         break
       }
@@ -80,10 +96,16 @@ export default async function handler(req, res) {
         break
       }
       case 'invoice.paid': {
-        // Rinnovo mensile riuscito dopo un past_due precedente: riattiva.
+        // Rinnovo mensile riuscito (o pagamento dopo un past_due): riattiva e
+        // aggiorna la data del prossimo rinnovo mostrata in pagina.
         const invoice = event.data.object
         const teamRef = await findTeamRefByCustomerId(db, invoice.customer)
-        if (teamRef) await teamRef.update({ billingStatus: 'active' })
+        if (teamRef) {
+          const sub = invoice.subscription
+            ? await stripe.subscriptions.retrieve(invoice.subscription)
+            : null
+          await teamRef.update({ billingStatus: 'active', ...subscriptionFields(sub) })
+        }
         break
       }
     }

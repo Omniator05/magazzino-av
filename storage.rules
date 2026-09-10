@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Regole di Firebase Storage — specchio della logica di firestore.rules per i
+// file caricati dall'app.
+//
+// LIMITE STRUTTURALE: le regole di Storage NON possono leggere Firestore,
+// quindi qui non si può verificare "questo file appartiene alla mia squadra"
+// incrociando i documenti. La protezione è: utente autenticato + vincoli su
+// tipo e dimensione del file. L'isolamento fine tra squadre resta garantito
+// dal fatto che gli URL di download sono tokenizzati e conservati solo in
+// Firestore (a sua volta protetto per squadra); gli URL tokenizzati già
+// salvati continuano a funzionare anche con `read` ristretto qui sotto.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    // Solo immagini, massimo 15 MB — loghi squadra e grafiche Brasserie.
+    function isSmallImage() {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < 15 * 1024 * 1024;
+    }
+
+    // --- Loghi squadra: teamLogos/{teamId}/logo-*.ext ---
+    // `list` serve al super admin per la cancellazione a cascata di una squadra
+    // (superAdminDelete.js fa listAll SOLO su teamLogos/{teamId}).
+    match /teamLogos/{teamId}/{allPaths=**} {
+      allow read, list: if signedIn();
+      allow write:      if signedIn() && isSmallImage();
+      allow delete:     if signedIn();
+    }
+
+    // --- Contenuti Brasserie: brasserie/artists/*, brasserie/next/* ---
+    match /brasserie/{allPaths=**} {
+      allow read:   if signedIn();
+      allow write:  if signedIn() && isSmallImage();
+      allow delete: if signedIn();
+    }
+
+    // --- Upload degli organizzatori evento: video/allegati anche grandi ---
+    // eventOrganizerContent/{eventId}/{categoria}/{timestamp}_{nome}
+    match /eventOrganizerContent/{allPaths=**} {
+      allow read, list: if signedIn();
+      allow write:      if signedIn() && request.resource.size < 6 * 1024 * 1024 * 1024;
+      allow delete:     if signedIn();
+    }
+
+    // --- Tutto il resto ---
+    // Lettura riservata agli utenti autenticati; nessun upload/list/delete
+    // fuori dai path noti qui sopra. Gli URL di download tokenizzati già
+    // salvati in Firestore restano validi comunque.
+    match /{allPaths=**} {
+      allow read: if signedIn();
+    }
+  }
+}

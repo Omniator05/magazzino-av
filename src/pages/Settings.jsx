@@ -5,11 +5,52 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-import { Image, Sliders, CreditCard, User, Calendar, Mail, Share } from '../components/Icon'
+import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck } from '../components/Icon'
 import { trialDaysLeft } from '../utils/billing'
 import Toast from '../components/Toast'
 
 const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
+
+const sectionLabelStyle = { padding:'0 16px 8px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }
+
+// Card di righe cliccabili (icona/titolo/sottotitolo/freccia) — stessa
+// markup riusata per il gruppo "Strumenti" e per quello "Impostazioni",
+// invece di duplicarla: la differenza tra i due sta solo in quali righe
+// contengono e nella label sopra, non nello stile della riga in sé.
+function SettingsRowsCard({ rows, navigate }) {
+  return (
+    <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+      {rows.map((row, i) => {
+        const RowIcon = row.icon
+        return (
+          <button
+            key={row.key}
+            onClick={() => navigate(row.to)}
+            className="btn-no-anim"
+            style={{
+              width:'100%', display:'flex', alignItems:'center', gap:12, padding:'13px 16px',
+              borderTop: i > 0 ? '1px solid var(--border)' : 'none', textAlign:'left', background:'transparent',
+            }}
+          >
+            <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background:row.bg, color:row.color, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <RowIcon size={17} />
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:14.5, fontWeight:600 }}>{row.title}</p>
+              <p style={{ color:'var(--text2)', fontSize:12, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.subtitle}</p>
+            </div>
+            {row.badge && (
+              <span style={{ background:'var(--accent)', color:'#fff', borderRadius:9, minWidth:18, height:18, padding:'0 5px', fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                {row.badge}
+              </span>
+            )}
+            <span style={{ color:'var(--text2)', fontSize:18, flexShrink:0 }}>›</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 // Home di "Impostazioni" — lista raggruppata in stile Impostazioni di iOS:
 // ogni riga apre una schermata dedicata (vedi le route /admin/settings/* in
@@ -59,7 +100,8 @@ export default function Settings() {
   }
 
   const pendingCount = users.filter(u => u.approved === false).length
-  const loadListsEnabled = isModuleEnabled(team, 'loadLists')
+  const workHoursEnabled = isModuleEnabled(team, 'workHours')
+  const allModulesOn = workHoursEnabled
 
   const billingSubtitle = team?.billingStatus === 'trialing'
     ? t('adminUsers.billingRowTrialing', { count: Math.max(trialDaysLeft(team) ?? 0, 0) })
@@ -67,6 +109,24 @@ export default function Settings() {
     : team?.billingStatus === 'active' ? t('adminUsers.billingRowActive')
     : team?.billingStatus === 'past_due' ? t('adminUsers.billingRowPastDue')
     : t('adminUsers.billingRowCanceled')
+
+  // Strumenti pratici — cose che si toccano spesso ma non sono davvero
+  // "impostazioni" (non c'è nulla da configurare, solo dati da gestire):
+  // i Furgoni sono stati spostati qui dalla Dashboard perché si usano poco;
+  // il resoconto Ore ci sta per lo stesso motivo di natura (un report, non
+  // un interruttore). Gruppo separato da quello sotto, con la sua label.
+  const toolRows = [
+    {
+      key: 'vehicles', to: '/vehicles', icon: Truck,
+      color: 'var(--accent2)', bg: 'rgba(245,166,35,0.15)',
+      title: t('vehicles.title'), subtitle: t('adminUsers.vehiclesRowDesc'),
+    },
+    ...(workHoursEnabled ? [{
+      key: 'workHours', to: '/admin/settings/work-hours', icon: Clock,
+      color: 'var(--blue)', bg: 'rgba(79,195,247,0.15)',
+      title: t('workHours.reportTitle'), subtitle: t('workHours.settingsRowDesc'),
+    }] : []),
+  ]
 
   const rows = [
     {
@@ -83,7 +143,7 @@ export default function Settings() {
     {
       key: 'modules', to: '/admin/settings/modules', icon: Sliders,
       color: 'var(--accent)', bg: 'rgba(230,57,70,0.12)',
-      title: t('adminUsers.modulesTitle'), subtitle: loadListsEnabled ? t('adminUsers.modulesRowAllOn') : t('adminUsers.modulesRowSomeOff'),
+      title: t('adminUsers.modulesTitle'), subtitle: allModulesOn ? t('adminUsers.modulesRowAllOn') : t('adminUsers.modulesRowSomeOff'),
     },
     ...(team?.googleCalendarFeatureEnabled ? [{
       key: 'integrations', to: '/admin/settings/integrations', icon: Calendar,
@@ -139,36 +199,14 @@ export default function Settings() {
         </div>
       </div>
 
-      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-        {rows.map((row, i) => {
-          const RowIcon = row.icon
-          return (
-            <button
-              key={row.key}
-              onClick={() => navigate(row.to)}
-              className="btn-no-anim"
-              style={{
-                width:'100%', display:'flex', alignItems:'center', gap:12, padding:'13px 16px',
-                borderTop: i > 0 ? '1px solid var(--border)' : 'none', textAlign:'left', background:'transparent',
-              }}
-            >
-              <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background:row.bg, color:row.color, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <RowIcon size={17} />
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontSize:14.5, fontWeight:600 }}>{row.title}</p>
-                <p style={{ color:'var(--text2)', fontSize:12, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.subtitle}</p>
-              </div>
-              {row.badge && (
-                <span style={{ background:'var(--accent)', color:'#fff', borderRadius:9, minWidth:18, height:18, padding:'0 5px', fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  {row.badge}
-                </span>
-              )}
-              <span style={{ color:'var(--text2)', fontSize:18, flexShrink:0 }}>›</span>
-            </button>
-          )
-        })}
-      </div>
+      {/* Strumenti pratici — Furgoni + resoconto Ore: dati da gestire, non
+          interruttori. Gruppo separato da "Impostazioni" sotto, con la sua
+          label, così le due nature restano distinguibili a colpo d'occhio. */}
+      <p style={sectionLabelStyle}>{t('adminUsers.toolsSectionLabel')}</p>
+      <SettingsRowsCard rows={toolRows} navigate={navigate} />
+
+      <p style={{ ...sectionLabelStyle, marginTop:8 }}>{t('adminUsers.generalSectionLabel')}</p>
+      <SettingsRowsCard rows={rows} navigate={navigate} />
 
       {/* Assistenza — azioni dirette (contatta/condividi), non navigazione:
           niente chevron, gruppo separato da quello sopra come fa Apple con

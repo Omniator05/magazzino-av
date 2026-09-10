@@ -131,7 +131,7 @@ export default function Vehicles() {
 
       <div className="page-header">
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-          <BackHomeButton />
+          <BackHomeButton to="/admin/settings" />
           <h1>{t('vehicles.title')}</h1>
         </div>
         <p style={{ marginTop:4, textAlign:'right' }}>{t('vehicles.totalCount', { count: vehicles.length })}</p>

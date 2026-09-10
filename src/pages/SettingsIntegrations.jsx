@@ -59,9 +59,9 @@ export default function SettingsIntegrations() {
         </div>
       )}
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', gap:12 }}>
+      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
         <BackHomeButton to="/admin/settings" />
-        <h1>{t('adminUsers.integrationsTitle')}</h1>
+        <h1 style={{ textAlign:'right' }}>{t('adminUsers.integrationsTitle')}</h1>
       </div>
 
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>

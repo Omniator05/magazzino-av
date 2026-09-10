@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
+import { isModuleEnabled } from '../utils/modules'
 import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
@@ -124,6 +125,7 @@ export default function SettingsUsers() {
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
   const [newPw, setNewPw]             = useState('')
+  const [maxHours, setMaxHours]       = useState('') // limite ore mensili (modulo Ore di lavoro)
   const [sendingResetEmail, setSendingResetEmail] = useState(false)
   const [newUsername, setNewUsername]   = useState('')
   const [error, setError]             = useState('')
@@ -407,6 +409,20 @@ export default function SettingsUsers() {
     }
   }
 
+  // ── Limite ore mensili (modulo Ore di lavoro) ─────────────────
+  // Vive qui, nella scheda dell'utente, e non nella pagina del resoconto:
+  // è un dato del contratto della persona, non del report — il resoconto lo
+  // legge soltanto, per segnalare chi sta per sforare.
+  const saveMaxHours = async () => {
+    const raw = String(maxHours).trim()
+    const num = raw === '' ? null : Math.max(0, Number(raw))
+    if (raw !== '' && !Number.isFinite(num)) { setDetailMsg({ text:t('workHours.capInvalid'), type:'error' }); return }
+    await updateDoc(doc(db, 'profiles', showDetail.id), { maxMonthlyHours: num })
+    setShowDetail(d => ({ ...d, maxMonthlyHours: num }))
+    clearDetailMsg()
+    showToast(num === null ? t('workHours.capRemovedToast') : t('workHours.capSavedToast', { hours: num }))
+  }
+
   // ── Modifica username ─────────────────────────────────────────
   const saveUsername = async () => {
     const cleaned = newUsername.toLowerCase().trim().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')
@@ -462,6 +478,7 @@ export default function SettingsUsers() {
         setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setRoleMenuOpen(false)
         setOrgConfig(u.organizerConfig || EMPTY_ORG_CONFIG)
         setAssignedEventId(u.assignedEventId || '')
+        setMaxHours(u.maxMonthlyHours ?? '')
       }} style={{ cursor:'pointer' }}>
         <div className="item-icon" style={{
           background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
@@ -497,9 +514,9 @@ export default function SettingsUsers() {
     <div className="page users-page">
       <Toast message={toast} />
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', gap:12 }}>
+      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
         <BackHomeButton to="/admin/settings" />
-        <div>
+        <div style={{ textAlign:'right' }}>
           <h1>{t('adminUsers.title')}</h1>
           <p>{t('adminUsers.totalAccounts', { count: users.length })}</p>
         </div>
@@ -861,6 +878,28 @@ export default function SettingsUsers() {
                       <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
                     </span>
                   </button>
+                )}
+
+                {/* Limite ore mensili — solo col modulo Ore di lavoro attivo e
+                    per chi può timbrare (worker e admin). Campo vuoto = nessun
+                    limite, non zero: azzerarlo toglie la soglia invece di
+                    imporne una a 0 ore. */}
+                {isModuleEnabled(team, 'workHours') && (showDetail.role === 'worker' || showDetail.role === 'admin') && (
+                  <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('workHours.capSettingTitle')}</p>
+                    <p style={{ fontSize:12, color:'var(--text2)', marginBottom:12, lineHeight:1.5 }}>{t('workHours.capSettingDesc')}</p>
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <input
+                        type="number" min="0" step="0.5" inputMode="decimal"
+                        value={maxHours}
+                        onChange={e => setMaxHours(e.target.value)}
+                        placeholder={t('workHours.capPlaceholder')}
+                        style={{ flex:1, minWidth:0 }}
+                      />
+                      <span style={{ fontSize:12.5, color:'var(--text2)', flexShrink:0 }}>{t('workHours.capUnit')}</span>
+                      <button onClick={saveMaxHours} className="btn btn-secondary" style={{ padding:'9px 16px', flexShrink:0 }}>{t('adminUsers.save')}</button>
+                    </div>
+                  </div>
                 )}
 
                 {/* Indisponibilità (solo worker) */}

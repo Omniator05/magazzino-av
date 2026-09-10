@@ -35,6 +35,8 @@ const WorkerCalendar = lazy(() => import('./pages/WorkerCalendar'))
 const Brasserie = lazy(() => import('./pages/Brasserie'))
 const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
 const NotFound = lazy(() => import('./pages/NotFound'))
+const WorkHours = lazy(() => import('./pages/WorkHours'))
+const SettingsWorkHours = lazy(() => import('./pages/SettingsWorkHours'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const CookiePolicy = lazy(() => import('./pages/CookiePolicy'))
@@ -46,6 +48,7 @@ import BillingGate from './components/BillingGate'
 import QrRedirect from './components/QrRedirect'
 import UpdateToast from './components/UpdateToast'
 import AbsenceNotifications from './components/AbsenceNotifications'
+import ActiveShiftBadge from './components/ActiveShiftBadge'
 
 // Riusato sia mentre si aspettano i dati di login sia come fallback di
 // Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
@@ -160,6 +163,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
     return (
       <>
         <UpdateToast />
+        <ActiveShiftBadge />
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<WorkerHome />} />
@@ -172,6 +176,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/inventory" element={profile?.canManageInventory ? <Inventory /> : <WorkerInventory />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
+            <Route path="/work-hours" element={<WorkHours />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -227,6 +232,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
     <>
       <UpdateToast />
       <AbsenceNotifications />
+      <ActiveShiftBadge />
       <GhostBanner />
       <AnimatedPage>
         <Routes>
@@ -244,11 +250,13 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/admin/settings/billing" element={<SettingsBilling />} />
           <Route path="/admin/settings/users" element={<SettingsUsers />} />
           <Route path="/admin/settings/integrations" element={<SettingsIntegrations />} />
+          <Route path="/admin/settings/work-hours" element={<SettingsWorkHours />} />
           <Route path="/super" element={<SuperAdmin />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/vehicles" element={<Vehicles />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/templates" element={<Templates />} />
+          <Route path="/work-hours" element={<WorkHours />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AnimatedPage>

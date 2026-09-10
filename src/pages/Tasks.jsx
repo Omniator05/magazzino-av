@@ -8,6 +8,7 @@ import BackHomeButton from '../components/BackHomeButton'
 import FabButton from '../components/FabButton'
 import { Dot, Check, User } from '../components/Icon'
 import SaveButton from '../components/SaveButton'
+import DailyQuip from '../components/DailyQuip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -168,6 +169,7 @@ export default function Tasks() {
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Check size={40} /></p>
             <h3>{t('tasks.emptyTitle')}</h3>
             <p>{isAdmin ? t('tasks.emptyDescAdmin') : t('tasks.emptyDescWorker')}</p>
+            <DailyQuip quips={t('tasks.emptyQuips', { returnObjects:true })} />
           </div>
         ) : (
           <>

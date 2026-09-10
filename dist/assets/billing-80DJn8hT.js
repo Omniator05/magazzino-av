@@ -1,1 +1,0 @@
-function l(t){if(!t)return!0;const n=t.billingStatus;if(n==="exempt"||n==="active")return!0;if(n==="trialing"){const i=r(t);return i!==null&&i>0}return!1}function r(t){if(!(t!=null&&t.trialEndsAt))return null;const n=t.trialEndsAt.toDate?t.trialEndsAt.toDate():new Date(t.trialEndsAt);return Math.ceil((n.getTime()-Date.now())/864e5)}export{l as i,r as t};

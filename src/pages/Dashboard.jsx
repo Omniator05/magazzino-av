@@ -8,6 +8,7 @@ import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import { Pin, Gear } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
+import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
 import TutorialModal from '../components/TutorialModal'
 import GettingStartedWidget from '../components/GettingStartedWidget'
@@ -79,6 +80,11 @@ const IconClipboard = () => (
     <line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="13" y2="15"/>
   </svg>
 )
+const IconClock = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+)
 const IconTruck = () => (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8Z"/>
@@ -97,7 +103,7 @@ const IconPlusSm = () => (
 )
 export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
-  const { profile, logout, teamId, showOverlay } = useAuth()
+  const { profile, logout, teamId, team, showOverlay } = useAuth()
   const navigate = useNavigate()
   const [showProfile, setShowProfile] = useState(false)
   const [items, setItems]   = useState([])
@@ -202,7 +208,11 @@ export default function Dashboard({ toggleTheme, theme }) {
 
   const todayLabel = formatDate(new Date(), { weekday:'long', day:'numeric', month:'long' }, i18n.language)
 
-  /* Tool cards config — icone monocromatiche, un solo colore per tutte le tile */
+  /* Tool cards config — icone monocromatiche, un solo colore per tutte le tile.
+     La 4ª tile è dinamica: "Ore di lavoro" quando il modulo è attivo,
+     altrimenti "Furgoni" al suo posto — così la griglia 2x2 resta sempre
+     piena invece di lasciare un buco / ridursi a 3 tile. La gestione furgoni
+     resta comunque anche in Impostazioni. */
   const tools = [
     {
       label: t('dashboard.tools.scanner'),
@@ -222,12 +232,9 @@ export default function Dashboard({ toggleTheme, theme }) {
       path:  '/templates',
       badge: null,
     },
-    {
-      label: t('dashboard.tools.vehicles'),
-      icon:  <IconTruck />,
-      path:  '/vehicles',
-      badge: null,
-    },
+    isModuleEnabled(team, 'workHours')
+      ? { label: t('dashboard.tools.workHours'), icon: <IconClock />, path: '/work-hours', badge: null }
+      : { label: t('dashboard.tools.vehicles'), icon: <IconTruck />, path: '/vehicles', badge: null },
   ]
 
   // Posizione corpo celeste basata sull'orario
@@ -420,37 +427,39 @@ export default function Dashboard({ toggleTheme, theme }) {
           {t('dashboard.toolsSection')}
         </p>
         <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, marginBottom:20 }}>
-          {tools.map(tool => (
-            <button
-              key={tool.path}
-              className="dash-tool-tile"
-              onClick={() => navigate(tool.path)}
-              style={{
-                position:'relative',
-                background: 'var(--card3)',
-                border:'1px solid var(--dash-pill-border)',
-                borderRadius:20,
-                padding:'20px 8px 16px',
-                display:'flex',
-                flexDirection:'column',
-                alignItems:'center',
-                gap:10,
-              }}
-            >
-              {tool.badge !== null && (
-                <span style={{
-                  position:'absolute', top:-9, right:-9,
-                  minWidth:28, height:28, padding:'0 7px',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  background:'var(--accent)', color:'white',
-                  borderRadius:14,
-                  fontSize:13, fontWeight:800, boxShadow:'0 2px 5px rgba(0,0,0,0.3)',
-                }}>{tool.badge}</span>
-              )}
-              <span style={{ color: 'var(--dash-title)' }}>{tool.icon}</span>
-              <span style={{ fontSize:13, fontWeight:700, color: 'var(--dash-title)' }}>{tool.label}</span>
-            </button>
-          ))}
+          {tools.map((tool) => {
+            return (
+              <button
+                key={tool.path}
+                className="dash-tool-tile"
+                onClick={() => navigate(tool.path)}
+                style={{
+                  position:'relative',
+                  background: 'var(--card3)',
+                  border:'1px solid var(--dash-pill-border)',
+                  borderRadius:20,
+                  padding:'20px 8px 16px',
+                  display:'flex',
+                  flexDirection:'column',
+                  alignItems:'center',
+                  gap:10,
+                }}
+              >
+                {tool.badge !== null && (
+                  <span style={{
+                    position:'absolute', top:-9, right:-9,
+                    minWidth:28, height:28, padding:'0 7px',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    background:'var(--accent)', color:'white',
+                    borderRadius:14,
+                    fontSize:13, fontWeight:800, boxShadow:'0 2px 5px rgba(0,0,0,0.3)',
+                  }}>{tool.badge}</span>
+                )}
+                <span style={{ color: 'var(--dash-title)' }}>{tool.icon}</span>
+                <span style={{ fontSize:13, fontWeight:700, color: 'var(--dash-title)' }}>{tool.label}</span>
+              </button>
+            )
+          })}
         </div>
 
         {/* ── Alert: oggetti rotti ─────────────── */}

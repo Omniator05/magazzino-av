@@ -49,6 +49,15 @@
     { "collectionGroup": "itemActivity", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "catalogItemId", "order": "ASCENDING" },
       { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "timeEntries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "teamId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "timeEntries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "teamId", "order": "ASCENDING" },
+      { "fieldPath": "workerId", "order": "ASCENDING" },
+      { "fieldPath": "date", "order": "DESCENDING" }
     ]}
   ],
   "fieldOverrides": []

@@ -42,6 +42,9 @@ export const Check = ({ size }) => (
 export const Plus = ({ size }) => (
   <svg {...base(size)}><path d="M12 5v14M5 12h14"/></svg>
 )
+export const Star = ({ size }) => (
+  <svg {...base(size)} fill="currentColor" stroke="none"><path d="M11.48 3.5a.6.6 0 0 1 1.04 0l2.42 4.9 5.4.79a.6.6 0 0 1 .33 1.02l-3.9 3.8.92 5.38a.6.6 0 0 1-.87.63L12 17.98l-4.83 2.54a.6.6 0 0 1-.87-.63l.92-5.38-3.9-3.8a.6.6 0 0 1 .33-1.02l5.4-.79Z"/></svg>
+)
 export const Warn = ({ size }) => (
   <svg {...base(size)}><path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
 )
@@ -111,6 +114,18 @@ export const QrCode = ({ size }) => (
 )
 export const Barcode = ({ size }) => (
   <svg {...base(size)}><path d="M3 5v14M7 5v14M10 5v14M14 5v14M16 5v14M19 5v14M21 5v14"/></svg>
+)
+export const Clock = ({ size }) => (
+  <svg {...base(size)}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+)
+export const Search = ({ size }) => (
+  <svg {...base(size)}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+)
+export const ChevronLeft = ({ size }) => (
+  <svg {...base(size)}><polyline points="15 18 9 12 15 6"/></svg>
+)
+export const ChevronRight = ({ size }) => (
+  <svg {...base(size)}><polyline points="9 18 15 12 9 6"/></svg>
 )
 
 /* Pallino colorato pieno (sostituisce 🟠🔴🟢🔵): passa `color` */

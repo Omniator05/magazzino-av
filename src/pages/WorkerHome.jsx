@@ -10,6 +10,7 @@ import TutorialModal from '../components/TutorialModal'
 import { Unload, Recurring, Pin, Box, Gear } from '../components/Icon'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
+import DailyQuip from '../components/DailyQuip'
 import Profile from './Profile'
 
 const greetingKey = () => {
@@ -317,11 +318,18 @@ export default function WorkerHome() {
           </div>
         )}
 
-        {events.length === 0 ? (
+        {/* "Niente da mostrare" va giudicato sulle sezioni che contano
+            davvero (da scaricare/ricorrenti/prossimi), non su events.length:
+            una squadra con solo eventi passati o archiviati in events.length
+            avrebbe superato questo controllo restando comunque a schermo
+            vuoto, senza nessun placeholder — pagina "morta" senza motivo
+            (stesso bug già corretto in Events.jsx). */}
+        {(!loadListsOn || daScaricare.length === 0) && pinnedRecurring.length === 0 && upcomingSingle.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={46} /></p>
             <h3>{t('workerHome.emptyTitle')}</h3>
             <p>{t('workerHome.emptyDesc')}</p>
+            <DailyQuip quips={t('workerHome.emptyQuips', { returnObjects:true })} />
           </div>
         ) : (
           <>

@@ -27,9 +27,10 @@ export async function sendEmail({ to, subject, html }) {
 
 const BRAND_RED = '#e63946'
 
-// Il nome del worker e il motivo dell'assenza sono testo libero digitato
-// dall'utente (non dall'admin, a differenza degli altri campi di queste
-// email) — vanno sempre passati da qui prima di finire nell'HTML.
+// Qualunque valore che finisce nel corpo HTML di un'email va passato da qui:
+// nome squadra, nome utente, credenziali e motivo assenza sono tutti testo
+// libero (digitato da un admin o da un worker) e senza escaping potrebbero
+// iniettare markup nell'email ricevuta dal destinatario.
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
 }
@@ -65,15 +66,15 @@ function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl }) {
 export function inviteEmailHtml({ workerName, teamName, username, password, loginUrl }) {
   return emailShell({
     logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,
-    title: `Ciao ${workerName},`,
+    title: `Ciao ${esc(workerName)},`,
     bodyHtml: `
       <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
-        Sei stato aggiunto alla squadra <strong>${teamName}</strong> su Roadcase, il gestionale per il magazzino e gli eventi.
+        Sei stato aggiunto alla squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi.
       </p>
       <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
         <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Le tue credenziali</p>
-        <p style="margin:0;color:#1a1a1a;font-size:14px;font-family:monospace;">Utente: ${username}</p>
-        <p style="margin:2px 0 0;color:#1a1a1a;font-size:14px;font-family:monospace;">Password: ${password}</p>
+        <p style="margin:0;color:#1a1a1a;font-size:14px;font-family:monospace;">Utente: ${esc(username)}</p>
+        <p style="margin:2px 0 0;color:#1a1a1a;font-size:14px;font-family:monospace;">Password: ${esc(password)}</p>
       </div>
       <p style="margin:10px 0 0;color:#9ca3af;font-size:12.5px;">Ti consigliamo di cambiare la password al primo accesso.</p>
     `,
@@ -121,10 +122,10 @@ export function passwordResetEmailHtml({ workerName, resetUrl, appUrl }) {
 export function welcomeEmailHtml({ adminName, teamName, appUrl }) {
   return emailShell({
     logoUrl: `${appUrl}/logo-mark-white.png`,
-    title: `Benvenuto, ${adminName}!`,
+    title: `Benvenuto, ${esc(adminName)}!`,
     bodyHtml: `
       <p style="margin:0;color:#4b5563;font-size:14.5px;line-height:1.6;">
-        Il tuo account e la squadra <strong>${teamName}</strong> sono pronti. Hai 30 giorni di prova gratuita per iniziare a organizzare magazzino ed eventi con Roadcase.
+        Il tuo account e la squadra <strong>${esc(teamName)}</strong> sono pronti. Hai 30 giorni di prova gratuita per iniziare a organizzare magazzino ed eventi con Roadcase.
       </p>
     `,
     ctaLabel: 'Vai alla dashboard',

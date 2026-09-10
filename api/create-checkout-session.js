@@ -2,8 +2,8 @@
 // i dati della carta non passano mai dal nostro codice) per abbonare la
 // squadra dell'admin che chiama. Il client fa POST qui e reindirizza il
 // browser all'URL restituito.
-import Stripe from 'stripe'
 import { requireTeamAdmin } from './_authAdmin.js'
+import { getStripe, resolveTeamStripeCustomer } from './_stripe.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -16,17 +16,10 @@ export default async function handler(req, res) {
   }
   const { teamRef, team, teamId } = ctx
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
-
-  let customerId = team.stripeCustomerId
-  if (!customerId) {
-    const customer = await stripe.customers.create({ name: team.name, metadata: { teamId } })
-    customerId = customer.id
-    await teamRef.update({ stripeCustomerId: customerId })
-  }
-
+  const stripe = getStripe()
   const origin = req.headers.origin || `https://${req.headers.host}`
   try {
+    const customerId = await resolveTeamStripeCustomer(stripe, teamRef, team)
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,

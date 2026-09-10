@@ -17,6 +17,7 @@ import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download 
 import FabButton from '../components/FabButton'
 import SaveButton from '../components/SaveButton'
 import Picker from '../components/Picker'
+import DailyQuip from '../components/DailyQuip'
 import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
@@ -799,7 +800,13 @@ export default function Inventory() {
 
       {(advancedFiltersActive ? sortedFlat.length === 0 : filtered.length === 0)
         ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
-            <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p></div>
+            <div className="empty-state">
+              <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p>
+              {/* Solo se il magazzino è VERAMENTE vuoto — non quando questo
+                  stesso blocco compare per un filtro/ricerca senza risultati,
+                  dove una battuta sarebbe fuori posto. */}
+              {items.length === 0 && <DailyQuip quips={t('inventory.emptyQuips', { returnObjects:true })} />}
+            </div>
           </div>
         : advancedFiltersActive
         ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>

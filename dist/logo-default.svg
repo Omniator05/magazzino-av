@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><g clip-path="url(#c2)">
-  <rect x="0" y="0" width="200" height="200" rx="44" fill="#e63946"></rect>
-  <rect x="34" y="-9" width="30" height="20" rx="7" fill="#1a1a1a"></rect>
-  <rect x="136" y="-9" width="30" height="20" rx="7" fill="#1a1a1a"></rect>
-  <rect x="58" y="68" width="84" height="16" rx="8" fill="#1a1a1a"></rect>
-  <text x="100" y="152" text-anchor="middle" font-family="&#39;Space Grotesk&#39;, Arial, sans-serif" font-size="84" font-weight="700" fill="#1a1a1a">R</text>
-</g><defs><clipPath id="c2"><rect x="0" y="0" width="200" height="200" rx="44"></rect></clipPath></defs></svg>

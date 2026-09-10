@@ -1,1 +1,0 @@
-import{u as i}from"./firebase-BOVU2fxa.js";async function c(d,a,s){const t=a.assignedWorkers||[],o=t.includes(s)?t.filter(r=>r!==s):[...t,s];await i(d,{assignedWorkers:o})}function e(d,a,s){if(!(a!=null&&a.date))return!1;const t=a.date,o=a.dateEnd&&a.dateEnd>=a.date?a.dateEnd:a.date;return s.some(r=>r.workerId===d&&t<=r.endDate&&o>=r.startDate)}export{e as i,c as t};

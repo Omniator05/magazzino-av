@@ -58,7 +58,7 @@ export default function SettingsModules() {
   const [toast, setToast] = useState('')
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
-  const loadListsEnabled = isModuleEnabled(team, 'loadLists')
+  const workHoursEnabled = isModuleEnabled(team, 'workHours')
   const toggleModule = async (key) => {
     const enabled = isModuleEnabled(team, key)
     setSaving(key)
@@ -89,18 +89,18 @@ export default function SettingsModules() {
         </div>
       )}
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', gap:12 }}>
+      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
         <BackHomeButton to="/admin/settings" />
-        <h1>{t('adminUsers.modulesTitle')}</h1>
+        <h1 style={{ textAlign:'right' }}>{t('adminUsers.modulesTitle')}</h1>
       </div>
       <p style={{ padding:'0 16px 14px', color:'var(--text2)', fontSize:13, lineHeight:1.5, marginTop:-8 }}>{t('adminUsers.modulesPageDesc')}</p>
 
-      <SettingRow title={t('adminUsers.loadListsModuleTitle')} desc={t('adminUsers.loadListsModuleDesc')}>
+      <SettingRow title={t('workHours.moduleTitle')} desc={t('workHours.moduleDesc')}>
         <Switch
-          enabled={loadListsEnabled}
-          disabled={saving === 'loadLists'}
-          onClick={() => toggleModule('loadLists')}
-          label={loadListsEnabled ? t('adminUsers.statusEnabled') : t('adminUsers.statusDisabled')}
+          enabled={workHoursEnabled}
+          disabled={saving === 'workHours'}
+          onClick={() => toggleModule('workHours')}
+          label={workHoursEnabled ? t('adminUsers.statusEnabled') : t('adminUsers.statusDisabled')}
         />
       </SettingRow>
 

@@ -6,6 +6,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 import { Pin, Cart, Box, Wrench, Warn, Check } from '../components/Icon'
 import { parseScannedCode } from '../utils/generateCode'
+import DailyQuip from '../components/DailyQuip'
 
 const CATEGORIES = ['Audio','Video','Luci','Rigging','Kit','Altro']
 const ICONS = {
@@ -220,7 +221,12 @@ export default function WorkerInventory() {
       {/* Lista */}
       <div style={{ paddingBottom:8 }}>
         {filtered.length === 0
-          ? <div className="empty-state"><p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('workerInventory.emptyTitle')}</h3></div>
+          ? <div className="empty-state">
+              <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('workerInventory.emptyTitle')}</h3>
+              {/* Stesso motivo dell'omologa in Inventory.jsx: solo a
+                  magazzino davvero vuoto, non su un filtro senza risultati. */}
+              {items.length === 0 && <DailyQuip quips={t('inventory.emptyQuips', { returnObjects:true })} />}
+            </div>
           : filtered.map(item => {
             const avail = item.availableQty ?? item.totalQty
             const isBroken = (item.brokenQty || 0) > 0

@@ -1,2 +1,23 @@
-# Chiave Admin SDK per gli script one-off in scripts/ — mai da committare
-scripts/serviceAccountKey.json
+# Dipendenze — reinstallate con `npm install`, mai da committare
+node_modules/
+
+# Build di produzione — Vercel la rigenera a ogni deploy con `vite build`
+dist/
+
+# Variabili d'ambiente e segreti — devono stare SOLO su Vercel (Project
+# Settings → Environment Variables), mai nel repo
+.env
+.env.*
+!.env.example
+
+# Chiavi service account Firebase Admin SDK — ovunque si trovino
+**/serviceAccountKey.json
+serviceAccountKey*.json
+firebase-service-account*.json
+
+# File di sistema / editor
+.DS_Store
+*.log
+npm-debug.log*
+.vscode/
+.idea/
