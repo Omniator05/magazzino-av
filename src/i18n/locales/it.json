@@ -34,6 +34,21 @@
     "desc": "Il link che hai seguito non esiste più o è stato scritto male.",
     "backHome": "Torna alla home"
   },
+  "proUpsell": {
+    "bannerTitle": "Sblocca tutto con Pro",
+    "bannerDesc": "Magazzinieri, oggetti e liste di carico senza limiti.",
+    "bannerEndingTitle_one": "La prova finisce tra {{count}} giorno",
+    "bannerEndingTitle_other": "La prova finisce tra {{count}} giorni",
+    "bannerExpiredTitle": "Sei sul piano gratuito",
+    "bannerExpiredDesc": "Alcune funzioni sono limitate — passa a Pro per riaverle tutte.",
+    "modalEndingTitle_one": "Ancora {{count}} giorno di prova",
+    "modalEndingTitle_other": "Ancora {{count}} giorni di prova",
+    "modalEndingBody": "Alla fine della prova la squadra resta sul piano gratuito, con alcuni limiti su magazzinieri, oggetti e liste. Passa a Pro per continuare senza.",
+    "modalExpiredTitle": "La prova è finita",
+    "modalExpiredBody": "La squadra ora è sul piano gratuito, con alcuni limiti su magazzinieri, oggetti e liste di carico. Puoi passare a Pro quando vuoi.",
+    "modalCta": "Vedi il piano Pro",
+    "modalLater": "Più tardi"
+  },
   "billing": {
     "trialExpiredTitle": "Prova terminata",
     "pastDueTitle": "Pagamento non riuscito",

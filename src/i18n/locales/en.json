@@ -34,6 +34,21 @@
     "desc": "The link you followed no longer exists or was mistyped.",
     "backHome": "Back to home"
   },
+  "proUpsell": {
+    "bannerTitle": "Unlock everything with Pro",
+    "bannerDesc": "Unlimited crew, items and load lists.",
+    "bannerEndingTitle_one": "Trial ends in {{count}} day",
+    "bannerEndingTitle_other": "Trial ends in {{count}} days",
+    "bannerExpiredTitle": "You're on the free plan",
+    "bannerExpiredDesc": "Some features are limited — go Pro to get them all back.",
+    "modalEndingTitle_one": "{{count}} day of trial left",
+    "modalEndingTitle_other": "{{count}} days of trial left",
+    "modalEndingBody": "When the trial ends the team stays on the free plan, with some limits on crew, items and lists. Go Pro to keep going without them.",
+    "modalExpiredTitle": "Your trial has ended",
+    "modalExpiredBody": "The team is now on the free plan, with some limits on crew, items and load lists. You can go Pro whenever you want.",
+    "modalCta": "See the Pro plan",
+    "modalLater": "Later"
+  },
   "billing": {
     "trialExpiredTitle": "Trial ended",
     "pastDueTitle": "Payment failed",

@@ -12,6 +12,7 @@ import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
 import TutorialModal from '../components/TutorialModal'
 import GettingStartedWidget from '../components/GettingStartedWidget'
+import ProUpsell from '../components/ProUpsell'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 const RECAP_SEEN_KEY = 'weeklyRecapSeenWeek'
@@ -517,6 +518,9 @@ export default function Dashboard({ toggleTheme, theme }) {
             </button>
           </div>
         )}
+
+        {/* ── Promemoria piano Pro (solo admin non abbonati) ── */}
+        <ProUpsell />
 
         {/* ── Prossimi eventi ──────────────────── */}
         <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:14 }}>
