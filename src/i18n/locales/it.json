@@ -2,6 +2,9 @@
   "common": {
     "back": "Indietro",
     "close": "Chiudi",
+    "offlineBar": "Sei offline",
+    "backOnlineBar": "Connessione ripristinata",
+    "savedOfflineToast": "Salvato — si sincronizza al ritorno della rete",
     "cancel": "Annulla",
     "saving": "Salvataggio...",
     "appUpdated": "App aggiornata all'ultima versione",

@@ -16,6 +16,9 @@ import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssi
 import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
 import { formatDate, capitalize } from '../utils/formatDate'
 import CreateEventFlow from '../components/CreateEventFlow'
+import Toast from '../components/Toast'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { awaitIfOnline } from '../utils/offlineSave'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -62,6 +65,9 @@ export default function Calendar() {
   const navigate = useNavigate()
   const { user, profile, isWorker, isAdmin, teamId } = useAuth()
   const confirm = useConfirm()
+  const isOnline = useOnlineStatus()
+  const [toast, setToast] = useState('')
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const WEEKDAYS = getWeekdayLabels(i18n.language)
   const today = new Date()
   const todayStr = toDateStr(today)
@@ -133,36 +139,43 @@ export default function Calendar() {
       }
       if (editingAbsenceId) {
         // Modifica: workerId/teamId/createdAt dell'originale restano invariati.
-        await updateDoc(doc(db, 'unavailability', editingAbsenceId), data)
+        // awaitIfOnline: offline non aspettiamo la conferma del server (che
+        // arriverebbe solo al ritorno della rete) — il dato è già in coda
+        // nella cache locale, il modal si chiude subito con un avviso.
+        await awaitIfOnline(updateDoc(doc(db, 'unavailability', editingAbsenceId), data), isOnline)
       } else {
-        await addDoc(collection(db, 'unavailability'), {
+        await awaitIfOnline(addDoc(collection(db, 'unavailability'), {
           ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
-        })
+        }), isOnline)
         // Nuova assenza segnalata da un worker (non dall'admin stesso): avvisa
         // l'admin al prossimo accesso, vedi AbsenceNotifications.jsx.
         if (!isAdmin) {
-          await addDoc(collection(db, 'notifications'), {
+          await awaitIfOnline(addDoc(collection(db, 'notifications'), {
             teamId, type: 'absence',
             workerName: profile?.name || profile?.username || t('common.noName'),
             startDate: data.startDate, endDate: data.endDate, reason: data.reason,
             seenBy: [], createdAt: serverTimestamp(),
-          })
-          // Email best-effort: l'admin la vede comunque in app al prossimo
-          // accesso (sopra), questa è solo un avviso più tempestivo — non deve
-          // mai far sembrare fallita una segnalazione già salvata.
-          try {
-            const idToken = await user.getIdToken()
-            await fetch('/api/send-absence-notification', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                workerName: profile?.name || profile?.username || t('common.noName'),
-                startDate: data.startDate, endDate: data.endDate, reason: data.reason,
-              }),
-            })
-          } catch {}
+          }), isOnline)
+          // Email best-effort, solo se online — offline non c'è comunque rete
+          // per inviarla, e aspettare getIdToken()/fetch senza connessione
+          // bloccherebbe la chiusura del modal. L'admin la vede in app al
+          // prossimo accesso (sopra) anche senza questa notifica extra.
+          if (isOnline) {
+            try {
+              const idToken = await user.getIdToken()
+              await fetch('/api/send-absence-notification', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  workerName: profile?.name || profile?.username || t('common.noName'),
+                  startDate: data.startDate, endDate: data.endDate, reason: data.reason,
+                }),
+              })
+            } catch {}
+          }
         }
       }
+      if (!isOnline) showToast(t('common.savedOfflineToast'))
       setAbsenceForm({ startDate:'', endDate:'', reason:'' })
       setEditingAbsenceId(null)
       setShowAbsenceModal(false)
@@ -184,12 +197,13 @@ export default function Calendar() {
     if (!editForm.name.trim() || !editForm.date) return
     setSaving(true)
     try {
-      await updateDoc(doc(db, 'events', editingEvent.id), {
+      await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), {
         name: editForm.name.trim(), date: editForm.date,
         dateEnd: editForm.dateEnd || null,
         location: editForm.location.trim(), notes: editForm.notes.trim(),
         phases: editForm.phases || {},
-      })
+      }), isOnline)
+      if (!isOnline) showToast(t('common.savedOfflineToast'))
       setEditingEvent(null)
     } finally { setSaving(false) }
   }
@@ -354,6 +368,7 @@ export default function Calendar() {
 
   return (
     <div className="page" style={{ paddingBottom:160 }}>
+      <Toast message={toast} />
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>

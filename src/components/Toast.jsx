@@ -16,9 +16,14 @@ export default function Toast({ message }) {
           from { opacity:0; transform:translate(-50%,-10px) scale(0.97); }
           to   { opacity:1; transform:translate(-50%,0) scale(1); }
         }
+        .rc-toast { top: 16px; transition: top 0.25s cubic-bezier(0.16,1,0.3,1); }
+        /* La barra "sei offline"/"connessione ripristinata" occupa la stessa
+           zona in cima — se è visibile il toast scende sotto invece di
+           sovrapporsi (vedi rc-offline-bar in OfflineIndicator.jsx). */
+        body.rc-offline-bar .rc-toast { top: calc(env(safe-area-inset-top) + 44px); }
       `}</style>
-      <div role="status" style={{
-        position:'fixed', top:16, left:'50%', transform:'translate(-50%,0)', zIndex:999,
+      <div role="status" className="rc-toast" style={{
+        position:'fixed', left:'50%', transform:'translate(-50%,0)', zIndex:999,
         background:'var(--card)', border:'1px solid var(--border)', borderRadius:12,
         padding:'10px 18px 10px 14px', boxShadow:'var(--shadow)',
         display:'flex', alignItems:'center', gap:8,

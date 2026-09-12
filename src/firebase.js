@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 import { getStorage } from 'firebase/storage'
 
@@ -13,7 +13,15 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-export const db = getFirestore(app)
+// Cache locale persistente (IndexedDB) invece del default in-memory: gli
+// onSnapshot (calendario, magazzino, task...) continuano a mostrare l'ultimo
+// dato conosciuto quando la connessione cade, invece di restare vuoti — vale
+// anche per la PWA installata su iOS/Android, nessuna app nativa richiesta.
+// `persistentMultipleTabManager` evita che aprire l'app in più schede
+// disattivi la cache su tutte tranne la prima.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+})
 export const auth = getAuth(app)
 export const storage = getStorage(app)
 

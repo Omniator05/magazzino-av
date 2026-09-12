@@ -49,6 +49,7 @@ import QrRedirect from './components/QrRedirect'
 import UpdateToast from './components/UpdateToast'
 import AbsenceNotifications from './components/AbsenceNotifications'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
+import OfflineIndicator from './components/OfflineIndicator'
 
 // Riusato sia mentre si aspettano i dati di login sia come fallback di
 // Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
@@ -279,6 +280,7 @@ export default function App() {
       <ConfirmProvider>
         <BrowserRouter>
           <LoadingBar />
+          <OfflineIndicator />
           <PageTransition />
           <OnboardingReveal />
           {/* Un solo confine Suspense in cima basta: cattura il caricamento

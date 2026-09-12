@@ -2,6 +2,9 @@
   "common": {
     "back": "Back",
     "close": "Close",
+    "offlineBar": "You're offline",
+    "backOnlineBar": "Back online",
+    "savedOfflineToast": "Saved — will sync once you're back online",
     "cancel": "Cancel",
     "saving": "Saving...",
     "appUpdated": "App updated to the latest version",

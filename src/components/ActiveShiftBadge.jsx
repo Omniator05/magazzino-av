@@ -73,6 +73,13 @@ export default function ActiveShiftBadge() {
         .active-shift-badge-wrap {
           position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 50%;
           transform: translateX(-50%); z-index: 150;
+          transition: top 0.25s cubic-bezier(0.16,1,0.3,1);
+        }
+        /* OfflineIndicator occupa la stessa zona in cima quando è visibile
+           (offline o "connessione ripristinata") — scende sotto invece di
+           sovrapporsi, vedi rc-offline-bar in OfflineIndicator.jsx. */
+        body.rc-offline-bar .active-shift-badge-wrap {
+          top: calc(env(safe-area-inset-top) + 44px);
         }
         .active-shift-badge {
           display: flex; align-items: center; gap: 7px;
