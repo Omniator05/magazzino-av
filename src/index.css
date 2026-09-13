@@ -858,6 +858,17 @@ select {
   color: white; gap: 0;
 }
 .delete-btn:hover .delete-bin-top { transform: rotate(160deg); }
+/* Stati asincroni (onDelete): stesso linguaggio dello spinner/spunta di
+   SaveButton, per non far sparire una riga di scatto senza alcun riscontro. */
+.delete-btn:disabled { cursor: default; }
+.delete-btn-spinner {
+  width: 15px; height: 15px; flex-shrink: 0;
+  border: 2px solid rgba(107,114,128,0.25); border-top: 2px solid currentColor;
+  border-radius: 50%; animation: deleteBtnSpin 0.7s linear infinite;
+}
+.delete-btn-check { display: flex; color: var(--green); animation: deleteBtnPop 0.28s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes deleteBtnSpin { to { transform: rotate(360deg); } }
+@keyframes deleteBtnPop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
 
 /* Scroll lock utility */
 .scroll-locked { overflow: hidden !important; position: fixed; width: 100%; }

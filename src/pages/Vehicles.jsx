@@ -5,15 +5,23 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
-import { collection, onSnapshot, doc, addDoc, updateDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
-import { Check, Edit, Warn, Truck } from '../components/Icon'
+import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
+import { Check, Edit, Trash, Truck } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import FabButton from '../components/FabButton'
 
 const COLOR_PALETTE = ['#e63946', '#2563eb', '#16a085', '#9b59e0', '#ea580c', '#059669', '#4285F4', '#d4820a']
+// Campo emoji vuoto per davvero: niente valore preimpostato che sembri
+// "bloccato" lì. Se resta vuoto, l'icona mostra l'iniziale del nome (vedi
+// vehicleIcon sotto) — stesso pattern già usato per l'avatar utente altrove
+// nell'app — non l'emoji generica di un furgone.
 const EMPTY_FORM = { name: '', color: COLOR_PALETTE[0], emoji: '', plate: '' }
+// Icona di un furgone: emoji/testo personalizzato se impostato, altrimenti
+// l'iniziale del nome (maiuscola), altrimenti l'icona furgone generica come
+// ultima risorsa (nome vuoto non dovrebbe capitare, è obbligatorio a salvare).
+const vehicleIcon = (v, size = 20) => v.emoji || v.name?.trim()?.charAt(0)?.toUpperCase() || <Truck size={size} />
 
 export default function Vehicles() {
   const { t } = useTranslation()
@@ -70,25 +78,24 @@ export default function Vehicles() {
     return true
   }
 
-  const toggleActive = async () => {
-    const isActive = showDetail.active !== false
+  // Un furgone non ha uno stato "in pausa" che abbia senso come un utente —
+  // o esiste o è stato tolto dalla flotta, non c'è via di mezzo. Eliminarlo
+  // non lascia riferimenti rotti: EventItemRow (EventDetail.jsx) già gestisce
+  // un vehicleId che non trova più corrispondenza, semplicemente non mostra
+  // più il badge del furgone su quell'oggetto.
+  // Ritorna true solo se ha davvero cancellato (SaveButton mostra spinner
+  // poi spunta solo in quel caso) — se la conferma viene rifiutata si ferma
+  // qui, il bottone torna semplicemente cliccabile senza nessuna animazione.
+  const deleteVehicle = async () => {
     if (!(await confirm({
-      title: isActive ? t('vehicles.confirmDeactivateTitle') : t('vehicles.confirmReactivateTitle'),
-      message: t('vehicles.confirmToggleMessage', {
-        action: isActive ? t('vehicles.deactivateAction') : t('vehicles.reactivateAction'),
-        name: showDetail.name,
-        note: isActive ? t('vehicles.deactivateNote') : '',
-      }),
-      confirmLabel: isActive ? t('vehicles.confirmDeactivateLabel') : t('vehicles.confirmReactivateLabel'),
-      danger: isActive,
-    }))) return
-    await updateDoc(doc(db, 'vehicles', showDetail.id), { active: !isActive })
-    setShowDetail(d => ({ ...d, active: !isActive }))
-    showToast(isActive ? t('vehicles.toastDeactivated') : t('vehicles.toastReactivated'))
+      title: t('vehicles.confirmDeleteTitle'),
+      message: t('vehicles.confirmDeleteMessage', { name: showDetail.name }),
+      confirmLabel: t('vehicles.confirmDeleteLabel'),
+      danger: true,
+    }))) return false
+    await deleteDoc(doc(db, 'vehicles', showDetail.id))
+    return true
   }
-
-  const active   = vehicles.filter(v => v.active !== false)
-  const inactive = vehicles.filter(v => v.active === false)
 
   const ColorPicker = ({ value, onChange }) => (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -110,16 +117,19 @@ export default function Vehicles() {
       <div className="item-icon" style={{
         background: v.active !== false ? `${v.color || 'var(--blue)'}22` : 'rgba(144,144,176,0.1)',
         color: v.active !== false ? (v.color || 'var(--blue)') : 'var(--text2)',
-        fontSize: 20,
+        fontSize: 20, fontWeight: 800,
       }}>
-        {v.emoji || <Truck size={20} />}
+        {vehicleIcon(v)}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontWeight: 700, fontSize: 15, color: v.active !== false ? 'var(--text)' : 'var(--text2)' }}>{v.name}</p>
         {v.plate && <p style={{ color: 'var(--text2)', fontSize: 13 }}>{v.plate}</p>}
       </div>
+      {/* Solo per eventuali furgoni già disattivati da prima di questo
+          cambio (non se ne creano più) — restano visibili nell'elenco
+          invece di sparire senza una via per eliminarli anche loro. */}
       {v.active === false && (
-        <span className="badge" style={{ background: 'rgba(144,144,176,0.15)', color: 'var(--text2)' }}>{t('vehicles.deactivatedBadge')}</span>
+        <span className="badge" style={{ background: 'rgba(144,144,176,0.15)', color: 'var(--text2)' }}>{t('vehicles.deactivated')}</span>
       )}
       <span style={{ color: 'var(--text2)', fontSize: 18 }}>›</span>
     </div>
@@ -139,24 +149,15 @@ export default function Vehicles() {
 
       <div style={{ padding: '16px 0 0' }}>
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', margin: '0 16px 16px', overflow: 'hidden' }}>
-          {active.length === 0
+          {vehicles.length === 0
             ? <div className="empty-state" style={{ padding: '30px' }}>
                 <p style={{ color: 'var(--text3)', marginBottom: 4 }}><Truck size={34} /></p>
                 <h3>{t('vehicles.emptyTitle')}</h3>
                 <p>{t('vehicles.emptyDesc')}</p>
               </div>
-            : active.map(v => <VehicleRow key={v.id} v={v} />)
+            : vehicles.map(v => <VehicleRow key={v.id} v={v} />)
           }
         </div>
-
-        {inactive.length > 0 && (
-          <>
-            <p style={{ padding: '0 16px 10px', color: 'var(--text2)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('vehicles.deactivatedSection')}</p>
-            <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', margin: '0 16px 16px', overflow: 'hidden' }}>
-              {inactive.map(v => <VehicleRow key={v.id} v={v} />)}
-            </div>
-          </>
-        )}
       </div>
 
       <FabButton onClick={() => { setShowCreate(true); setError(''); setForm(EMPTY_FORM) }} ariaLabel={t('vehicles.newButton')} />
@@ -209,36 +210,34 @@ export default function Vehicles() {
                 <div style={{ textAlign: 'center', marginBottom: 20 }}>
                   <div style={{
                     width: 64, height: 64, borderRadius: 20, margin: '0 auto 12px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
-                    background: `${showDetail.color || 'var(--blue)'}22`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 800,
+                    background: `${showDetail.color || 'var(--blue)'}22`, color: showDetail.color || 'var(--blue)',
                   }}>
-                    {showDetail.emoji || <Truck size={28} />}
+                    {vehicleIcon(showDetail, 28)}
                   </div>
                   <h2 style={{ margin: 0, fontSize: 22 }}>{showDetail.name}</h2>
                   {showDetail.plate && <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>{showDetail.plate}</p>}
-                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
-                    <span className="badge" style={{
-                      background: showDetail.active !== false ? 'rgba(105,240,174,0.15)' : 'rgba(144,144,176,0.15)',
-                      color: showDetail.active !== false ? 'var(--green)' : 'var(--text2)', fontSize: 13, padding: '5px 14px'
-                    }}>
-                      {showDetail.active !== false ? t('vehicles.active') : t('vehicles.deactivated')}
-                    </span>
-                  </div>
                 </div>
 
                 <button onClick={() => setEditMode(true)} className="btn btn-secondary btn-full"
                   style={{ marginBottom: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
                   <Edit size={16} /> {t('vehicles.edit')}
                 </button>
-                <button onClick={toggleActive} style={{
-                  width: '100%',
-                  background: showDetail.active !== false ? 'rgba(245,166,35,0.12)' : 'rgba(105,240,174,0.1)',
-                  color: showDetail.active !== false ? 'var(--accent2)' : 'var(--green)',
-                  borderRadius: 10, padding: '12px', fontWeight: 700, fontSize: 13,
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                }}>
-                  {showDetail.active !== false ? <><Warn size={15} /> {t('vehicles.deactivateVehicle')}</> : <><Check size={15} /> {t('vehicles.reactivateVehicle')}</>}
-                </button>
+                {/* SaveButton anche qui, non solo per i salvataggi: stesso
+                    spinner mentre si aspetta Firebase e stessa spunta verde
+                    alla riuscita, poi il modal si chiude con la sua
+                    dissolvenza (detailDrag.close) invece di sparire di
+                    scatto — .btn-red è una classe, non uno style inline,
+                    così non copre il verde del successo. */}
+                <SaveButton
+                  onSave={deleteVehicle}
+                  onDone={() => { showToast(t('vehicles.toastDeleted', { name: showDetail.name })); detailDrag.close() }}
+                  onError={detailDrag.triggerJiggle}
+                  className="btn btn-red btn-full"
+                  style={{ fontSize: 13, padding: 12 }}
+                >
+                  <Trash size={15} /> {t('vehicles.deleteVehicle')}
+                </SaveButton>
               </>
             ) : (
               <>

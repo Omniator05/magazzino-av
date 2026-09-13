@@ -32,6 +32,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Senza questo, in `npm run dev` il plugin non genera/serve
+      // manifest.webmanifest né il service worker: la richiesta del browser
+      // cade sul fallback SPA di Vite (index.html), e provare a parsare HTML
+      // come JSON dà il "Manifest: Line 1, column 1, Syntax error" in
+      // console — solo rumore in dev, la build reale non ne risente, ma
+      // abilitarlo qui lo elimina e permette di testare la PWA anche in locale.
+      devOptions: { enabled: true },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'Roadcase',

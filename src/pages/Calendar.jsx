@@ -19,6 +19,8 @@ import CreateEventFlow from '../components/CreateEventFlow'
 import Toast from '../components/Toast'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { awaitIfOnline } from '../utils/offlineSave'
+import SegmentedControl from '../components/SegmentedControl'
+import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -93,12 +95,15 @@ export default function Calendar() {
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
-  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'' })
+  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'', type:'ferie' })
   const [savingAbsence, setSavingAbsence] = useState(false)
   // null = si sta creando una nuova assenza, altrimenti id di quella in modifica
   const [editingAbsenceId, setEditingAbsenceId] = useState(null)
   const [myAbsencesOpen, setMyAbsencesOpen] = useState(false)
-  const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
+  // Solo quelle non ancora del tutto passate: un'assenza finita non ha più
+  // bisogno di restare elencata qui sotto a vita, altrimenti la lista cresce
+  // per sempre senza motivo.
+  const myAbsences = unavailability.filter(u => u.workerId === user?.uid && u.endDate >= todayStr)
 
   // Selezione assenza tap-sul-calendario
   const [reportMode, setReportMode] = useState(false)
@@ -115,7 +120,7 @@ export default function Calendar() {
       } else {
         const start = dStr <= rangeStart ? dStr : rangeStart
         const end = dStr <= rangeStart ? rangeStart : dStr
-        setAbsenceForm({ startDate: start, endDate: end, reason: '' })
+        setAbsenceForm({ startDate: start, endDate: end, reason: '', type: 'ferie' })
         setEditingAbsenceId(null)
         setShowAbsenceModal(true)
         setReportMode(false)
@@ -136,6 +141,7 @@ export default function Calendar() {
         startDate: absenceForm.startDate,
         endDate: absenceForm.endDate || absenceForm.startDate,
         reason: absenceForm.reason.trim(),
+        type: absenceForm.type || 'altro',
       }
       if (editingAbsenceId) {
         // Modifica: workerId/teamId/createdAt dell'originale restano invariati.
@@ -176,14 +182,14 @@ export default function Calendar() {
         }
       }
       if (!isOnline) showToast(t('common.savedOfflineToast'))
-      setAbsenceForm({ startDate:'', endDate:'', reason:'' })
+      setAbsenceForm({ startDate:'', endDate:'', reason:'', type:'ferie' })
       setEditingAbsenceId(null)
       setShowAbsenceModal(false)
     } finally { setSavingAbsence(false) }
   }
 
   const openEditAbsence = (a) => {
-    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '' })
+    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '', type: a.type || 'altro' })
     setEditingAbsenceId(a.id)
     setShowAbsenceModal(true)
   }
@@ -636,7 +642,9 @@ export default function Calendar() {
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ flexShrink:0, color:'var(--text2)' }}><User size={18} /></span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>{a.workerName}</p>
+                    <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', display:'flex', alignItems:'center', gap:7 }}>
+                      {a.workerName} <AbsenceTypeBadge type={a.type} />
+                    </p>
                     <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
                       {a.reason || t('calendar.noReasonSpecified')}
                     </p>
@@ -663,10 +671,11 @@ export default function Calendar() {
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
+                    <p style={{ fontWeight:700, fontSize:13, color:'var(--text)', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
                       {a.startDate === a.endDate
                         ? formatDate(a.startDate+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language)
                         : `${formatDate(a.startDate+'T12:00:00', {day:'numeric',month:'short'}, i18n.language)} → ${formatDate(a.endDate+'T12:00:00', {day:'numeric',month:'short',year:'numeric'}, i18n.language)}`}
+                      <AbsenceTypeBadge type={a.type} />
                     </p>
                     {a.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{a.reason}</p>}
                   </div>
@@ -829,6 +838,10 @@ export default function Calendar() {
             <div className="form-group">
               <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
               <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder={t('calendar.singleDayPlaceholder')} onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
+            </div>
+            <div className="form-group">
+              <label>{t('calendar.absenceTypeLabel')}</label>
+              <SegmentedControl options={absenceTypeOptions(t)} value={absenceForm.type} onChange={v => setAbsenceForm(f => ({...f, type:v}))} />
             </div>
             <div className="form-group">
               <label htmlFor="cal-absence-reason">{t('calendar.reason')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>

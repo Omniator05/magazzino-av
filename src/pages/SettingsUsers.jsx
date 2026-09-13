@@ -126,13 +126,13 @@ export default function SettingsUsers() {
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
   const [newPw, setNewPw]             = useState('')
   const [maxHours, setMaxHours]       = useState('') // limite ore mensili (modulo Ore di lavoro)
+  const [vacationDays, setVacationDays] = useState('') // giorni di ferie annuali
   const [sendingResetEmail, setSendingResetEmail] = useState(false)
   const [newUsername, setNewUsername]   = useState('')
   const [error, setError]             = useState('')
   const [detailMsg, setDetailMsg]     = useState({ text:'', type:'' })
   const [loading, setLoading]         = useState(false)
   const [toast, setToast]             = useState('')
-  const [detailUnavail, setDetailUnavail] = useState([])
   const [roleMenuOpen, setRoleMenuOpen] = useState(false)
   const [orgConfig, setOrgConfig]     = useState(EMPTY_ORG_CONFIG)
   const [newCustomDate, setNewCustomDate] = useState('')
@@ -156,16 +156,6 @@ export default function SettingsUsers() {
         .filter(e => (e.dateEnd || e.date) >= todayStr)
     ))
   }, [teamId])
-
-  useEffect(() => {
-    if (!showDetail || !teamId) { setDetailUnavail([]); return }
-    // Le regole Firestore valutano "list" sulla query stessa: senza un filtro
-    // di uguaglianza su teamId corrispondente alla regola (resource.data.teamId),
-    // l'intera richiesta viene rifiutata con permission-denied, anche se il
-    // worker non ha alcuna indisponibilità registrata.
-    const q = query(collection(db, 'unavailability'), where('teamId', '==', teamId), where('workerId', '==', showDetail.id))
-    return onSnapshot(q, snap => setDetailUnavail(snap.docs.map(d => ({ id:d.id, ...d.data() }))))
-  }, [showDetail?.id, teamId])
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
@@ -354,12 +344,6 @@ export default function SettingsUsers() {
     showToast(t('adminUsers.linkedEventSavedToast'))
   }
 
-  // ── Rimuovi indisponibilità ────────────────────────────────────
-  const removeUnavailability = async (id) => {
-    if (!(await confirm({ title: t('adminUsers.confirmRemoveUnavailTitle'), message: t('adminUsers.confirmRemoveUnavailMessage'), confirmLabel: t('adminUsers.confirmRemoveUnavailLabel'), danger: true }))) return
-    await deleteDoc(doc(db, 'unavailability', id))
-  }
-
   // ── Cambia password ───────────────────────────────────────────
   // Reset "per davvero" via Admin SDK lato server (api/reset-user-password):
   // a differenza del vecchio meccanismo client-side, funziona subito anche
@@ -423,6 +407,20 @@ export default function SettingsUsers() {
     showToast(num === null ? t('workHours.capRemovedToast') : t('workHours.capSavedToast', { hours: num }))
   }
 
+  // ── Giorni di ferie annuali ────────────────────────────────────
+  // Stesso principio del limite ore qui sopra: un dato del contratto della
+  // persona, non del resoconto — vive nella sua scheda, non nella pagina
+  // "Ore di lavoro" (che lo legge soltanto, nel dettaglio del singolo).
+  const saveVacationDays = async () => {
+    const raw = String(vacationDays).trim()
+    const num = raw === '' ? null : Math.max(0, Math.round(Number(raw)))
+    if (raw !== '' && !Number.isFinite(num)) { setDetailMsg({ text:t('adminUsers.vacationInvalid'), type:'error' }); return }
+    await updateDoc(doc(db, 'profiles', showDetail.id), { vacationDaysPerYear: num })
+    setShowDetail(d => ({ ...d, vacationDaysPerYear: num }))
+    clearDetailMsg()
+    showToast(num === null ? t('adminUsers.vacationRemovedToast') : t('adminUsers.vacationSavedToast'))
+  }
+
   // ── Modifica username ─────────────────────────────────────────
   const saveUsername = async () => {
     const cleaned = newUsername.toLowerCase().trim().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')
@@ -479,6 +477,7 @@ export default function SettingsUsers() {
         setOrgConfig(u.organizerConfig || EMPTY_ORG_CONFIG)
         setAssignedEventId(u.assignedEventId || '')
         setMaxHours(u.maxMonthlyHours ?? '')
+        setVacationDays(u.vacationDaysPerYear ?? '')
       }} style={{ cursor:'pointer' }}>
         <div className="item-icon" style={{
           background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
@@ -902,24 +901,26 @@ export default function SettingsUsers() {
                   </div>
                 )}
 
-                {/* Indisponibilità (solo worker) */}
-                {showDetail.role === 'worker' && detailUnavail.length > 0 && (
+                {/* Giorni di ferie annuali — stesso identico principio del
+                    limite ore qui sopra (dato del contratto, non del
+                    resoconto): accanto ad esso, non nella pagina "Ore di
+                    lavoro" — quella si limita a mostrare quanti ne sono già
+                    stati presi. */}
+                {(showDetail.role === 'worker' || showDetail.role === 'admin') && (
                   <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
-                    <p style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>{t('adminUsers.reportedUnavailabilityTitle')}</p>
-                    {[...detailUnavail].sort((a,b) => a.startDate.localeCompare(b.startDate)).map(u => (
-                      <div key={u.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
-                        <div>
-                          <p style={{ fontWeight:700, fontSize:13 }}>
-                            {u.startDate === u.endDate
-                              ? formatDate(u.startDate, { day:'numeric', month:'long', year:'numeric' }, i18n.language)
-                              : `${formatDate(u.startDate, { day:'numeric', month:'short' }, i18n.language)} → ${formatDate(u.endDate, { day:'numeric', month:'short', year:'numeric' }, i18n.language)}`
-                            }
-                          </p>
-                          {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
-                        </div>
-                        <button onClick={() => removeUnavailability(u.id)} className="btn-no-anim" style={{ background:'transparent', color:'var(--red)', fontSize:12, fontWeight:700, flexShrink:0 }}>{t('common.remove')}</button>
-                      </div>
-                    ))}
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.vacationSettingTitle')}</p>
+                    <p style={{ fontSize:12, color:'var(--text2)', marginBottom:12, lineHeight:1.5 }}>{t('adminUsers.vacationSettingDesc')}</p>
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <input
+                        type="number" min="0" step="1" inputMode="numeric"
+                        value={vacationDays}
+                        onChange={e => setVacationDays(e.target.value)}
+                        placeholder={t('adminUsers.vacationPlaceholder')}
+                        style={{ flex:1, minWidth:0 }}
+                      />
+                      <span style={{ fontSize:12.5, color:'var(--text2)', flexShrink:0 }}>{t('adminUsers.vacationUnit')}</span>
+                      <button onClick={saveVacationDays} className="btn btn-secondary" style={{ padding:'9px 16px', flexShrink:0 }}>{t('adminUsers.save')}</button>
+                    </div>
                   </div>
                 )}
 

@@ -5,11 +5,17 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
-import { Pin, User, Calendar, Wrench, Check } from '../components/Icon'
+import { Pin, User, Calendar, Wrench, Check, List } from '../components/Icon'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import DateField from '../components/DateField'
+import Toast from '../components/Toast'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import { awaitIfOnline } from '../utils/offlineSave'
+import SegmentedControl from '../components/SegmentedControl'
+import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -48,9 +54,10 @@ function toDateStr(d) {
 
 export default function WorkerCalendar() {
   const { t, i18n } = useTranslation()
-  const { user, teamId } = useAuth()
+  const { user, profile, teamId } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
+  const isOnline = useOnlineStatus()
   const today = new Date()
   const todayStr = toDateStr(today)
   const WEEKDAYS = getWeekdayLabels(i18n.language)
@@ -59,13 +66,19 @@ export default function WorkerCalendar() {
   const [googleEvents, setGoogleEvents] = useState([])
   const [unavailability, setUnavailability] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [toast, setToast] = useState('')
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
   // Flusso "Segnala assenza"
   const [reportMode, setReportMode] = useState(false)
   const [rangeStart, setRangeStart] = useState(null)
+  const [hoverDate, setHoverDate] = useState(null) // anteprima range stile "booking" al passaggio del mouse
   const [pendingRange, setPendingRange] = useState(null)
   const [reasonInput, setReasonInput] = useState('')
+  const [typeInput, setTypeInput] = useState('ferie')
   const [editingId, setEditingId] = useState(null)
+  const [savingUnavail, setSavingUnavail] = useState(false)
+  const [unavailOpen, setUnavailOpen] = useState(false)
   useModalScrollLock(!!pendingRange)
 
   useEffect(() => {
@@ -114,21 +127,26 @@ export default function WorkerCalendar() {
   }
 
   // Tutti gli "elementi" che toccano un giorno: l'evento (data inizio) + le fasi
-  // (montaggio/smontaggio). Colore ROSSO se l'evento è assegnato a questo worker,
-  // altrimenti blu (evento azienda) o il colore della fase.
+  // (montaggio/smontaggio). Per un magazziniere il colore del PUNTINO conta
+  // una cosa sola — rosso se assegnato a lui, blu altrimenti — anche nei
+  // giorni di sola fase: niente colori extra per montaggio/smontaggio senza
+  // una legenda che li spieghi. `phaseLabel`/`phaseColor` restano comunque
+  // sull'item: servono al badge testuale (già autoesplicativo, ha la scritta)
+  // nel pannello del giorno selezionato più sotto, non al puntino nella griglia.
   const dayItems = (dStr) => {
     const items = []
     allEvents.forEach(e => {
       if (!e.date) return
       const assigned = isAssignedToMe(e)
+      const color = assigned ? 'var(--accent)' : 'var(--blue)'
       const end = e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
       if (dStr >= e.date && dStr <= end) {
-        items.push({ event: e, assigned, color: assigned ? 'var(--accent)' : 'var(--blue)' })
+        items.push({ event: e, assigned, color })
       }
       if (e.phases) {
         Object.entries(e.phases).forEach(([k, v]) => {
           if (v === dStr && PHASE_META[k]) {
-            items.push({ event: e, assigned, color: assigned ? 'var(--accent)' : PHASE_META[k].color, phaseLabel: PHASE_META[k].label, phaseColor: PHASE_META[k].color })
+            items.push({ event: e, assigned, color, phaseLabel: PHASE_META[k].label, phaseColor: PHASE_META[k].color })
           }
         })
       }
@@ -151,11 +169,13 @@ export default function WorkerCalendar() {
   const startReportMode = () => {
     setReportMode(true)
     setRangeStart(null)
+    setHoverDate(null)
     setSelectedDate(null)
   }
   const cancelReportMode = () => {
     setReportMode(false)
     setRangeStart(null)
+    setHoverDate(null)
     setSelectedDate(todayStr)
   }
 
@@ -169,6 +189,7 @@ export default function WorkerCalendar() {
         setPendingRange({ start, end })
         setReportMode(false)
         setRangeStart(null)
+        setHoverDate(null)
       }
     } else {
       setSelectedDate(dStr)
@@ -177,37 +198,71 @@ export default function WorkerCalendar() {
 
   const confirmUnavailability = async () => {
     if (!pendingRange || !user) return
-    if (editingId) {
-      await updateDoc(doc(db, 'unavailability', editingId), {
+    setSavingUnavail(true)
+    try {
+      const data = {
         startDate: pendingRange.start,
         endDate: pendingRange.end,
-        reason: reasonInput.trim() || null,
-      })
-    } else {
-      await addDoc(collection(db, 'unavailability'), {
-        workerId: user.uid,
-        teamId,
-        startDate: pendingRange.start,
-        endDate: pendingRange.end,
-        reason: reasonInput.trim() || null,
-        createdAt: serverTimestamp(),
-      })
-    }
-    setPendingRange(null)
-    setReasonInput('')
-    setEditingId(null)
-    setSelectedDate(todayStr)
+        reason: reasonInput.trim(),
+        type: typeInput || 'altro',
+      }
+      if (editingId) {
+        // awaitIfOnline: offline non aspettiamo la conferma del server
+        // (arriva solo al ritorno della rete) — il dato è già in coda in
+        // locale, il modal si chiude subito con un avviso invece di
+        // restare bloccato.
+        await awaitIfOnline(updateDoc(doc(db, 'unavailability', editingId), data), isOnline)
+      } else {
+        await awaitIfOnline(addDoc(collection(db, 'unavailability'), {
+          ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
+        }), isOnline)
+        // Avvisa l'admin (badge in-app + email best-effort) — stesso
+        // meccanismo di Calendar.jsx (lì serve solo quando è un worker a
+        // segnalare, qui siamo sempre un worker).
+        await awaitIfOnline(addDoc(collection(db, 'notifications'), {
+          teamId, type: 'absence',
+          workerName: profile?.name || profile?.username || t('common.noName'),
+          startDate: data.startDate, endDate: data.endDate, reason: data.reason,
+          seenBy: [], createdAt: serverTimestamp(),
+        }), isOnline)
+        // Email best-effort, solo se online — offline non c'è comunque
+        // rete per inviarla, e aspettare getIdToken()/fetch senza
+        // connessione bloccherebbe la chiusura del modal. L'admin la vede
+        // in app al prossimo accesso (sopra) anche senza questa email.
+        if (isOnline) {
+          try {
+            const idToken = await user.getIdToken()
+            await fetch('/api/send-absence-notification', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workerName: profile?.name || profile?.username || t('common.noName'),
+                startDate: data.startDate, endDate: data.endDate, reason: data.reason,
+              }),
+            })
+          } catch {}
+        }
+      }
+      if (!isOnline) showToast(t('common.savedOfflineToast'))
+      setPendingRange(null)
+      setReasonInput('')
+      setTypeInput('ferie')
+      setEditingId(null)
+      setSelectedDate(todayStr)
+    } finally { setSavingUnavail(false) }
   }
 
   const openEditAbsence = (u) => {
     setEditingId(u.id)
     setPendingRange({ start: u.startDate, end: u.endDate })
     setReasonInput(u.reason || '')
+    setTypeInput(u.type || 'altro')
   }
 
   const closeAbsenceModal = () => {
     setPendingRange(null)
     setReasonInput('')
+    setTypeInput('ferie')
     setEditingId(null)
   }
 
@@ -218,7 +273,12 @@ export default function WorkerCalendar() {
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
-  const sortedUnavailability = [...unavailability].sort((a,b) => a.startDate.localeCompare(b.startDate))
+  // Solo quelle non ancora del tutto passate: un'assenza finita non ha più
+  // bisogno di restare elencata qui sotto a vita — stesso criterio di
+  // Calendar.jsx (myAbsences) lato admin.
+  const sortedUnavailability = unavailability
+    .filter(u => u.endDate >= todayStr)
+    .sort((a,b) => a.startDate.localeCompare(b.startDate))
   const selectedItems = selectedDate ? dayItems(selectedDate) : []
   const selectedEvents = (() => {
     const m = new Map()
@@ -234,6 +294,7 @@ export default function WorkerCalendar() {
 
   return (
     <div className="page" style={{ paddingBottom:90 }}>
+      <Toast message={toast} />
       <div className="page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
@@ -263,7 +324,11 @@ export default function WorkerCalendar() {
             <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4, display:'flex', alignItems:'center', gap:7 }}>
               <Calendar size={15} /> {!rangeStart ? t('calendar.tapFirstDay') : t('calendar.tapLastDay')}
             </p>
-            <button onClick={cancelReportMode} style={{ color:'var(--text2)', fontSize:13, fontWeight:700, flexShrink:0 }}>{t('common.cancel')}</button>
+            {/* Stessa pillola (sfondo + angoli arrotondati) del bottone admin
+                equivalente in Calendar.jsx: senza background/border-radius
+                propri, l'hover globale ci disegnava sopra un'ombra ad angoli
+                vivi — "quadrata" — invece di seguire una forma arrotondata. */}
+            <button onClick={cancelReportMode} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'6px 12px', fontSize:13, fontWeight:700, flexShrink:0 }}>{t('common.cancel')}</button>
           </div>
         )}
       </div>
@@ -286,17 +351,24 @@ export default function WorkerCalendar() {
             const isPast = dStr < todayStr
             const isSelected = !reportMode && dStr === selectedDate
             const isRangeStart = reportMode && dStr === rangeStart
+            // Anteprima range stile "booking" mentre passi il mouse dopo aver
+            // scelto il primo giorno — stessa logica di Calendar.jsx lato admin.
+            const isInPreviewRange = reportMode && rangeStart && hoverDate && !isRangeStart &&
+              dStr >= (rangeStart <= hoverDate ? rangeStart : hoverDate) &&
+              dStr <= (rangeStart <= hoverDate ? hoverDate : rangeStart)
 
             let bg = cell.current ? 'var(--card)' : 'transparent'
             let border = isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)'
             if (hasMyEvent) { bg = 'rgba(216,56,63,0.12)'; border = '1.5px solid var(--accent)' }
             if (isSelected) { bg = 'rgba(79,195,247,0.10)'; border = '1.5px solid var(--blue)' }
+            if (isInPreviewRange) { bg = 'rgba(216,56,63,0.07)'; border = '1px solid rgba(216,56,63,0.3)' }
             if (isRangeStart) { border = '1.5px solid var(--accent)' }
 
             return (
               <button
                 key={i}
                 onClick={() => handleDayTap(dStr)}
+                onMouseEnter={() => { if (reportMode && rangeStart) setHoverDate(dStr) }}
                 style={{
                   position:'relative',
                   minHeight:52,
@@ -319,17 +391,22 @@ export default function WorkerCalendar() {
                 }}>
                   {cell.day}
                 </span>
+                {/* Un puntino per elemento, tutti uguali (rosso/blu) — anche
+                    gli eventi importati da Google diventano un puntino blu
+                    come gli altri, non serve distinguerli qui. Container a
+                    tutta larghezza invece di un max-width stretto: prima ci
+                    stavano 3 puntini per riga, c'è spazio per il doppio. */}
                 {(items.length > 0 || googleItems.length > 0) && (
-                  <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', maxWidth:32 }}>
-                    {googleItems.length > 0 && (
-                      <span style={{ width:7, height:7, borderRadius:2, flexShrink:0, background:'#4285F4', opacity: isPast ? 0.55 : 1 }} />
-                    )}
-                    {items.slice(0, 4).map((it, i) => (
-                      <span key={i} style={{
-                        width:7, height:7, borderRadius:'50%', flexShrink:0,
+                  <div style={{ display:'flex', gap:2, flexWrap:'wrap', justifyContent:'center', width:'100%' }}>
+                    {items.map((it, i) => (
+                      <span key={`e${i}`} style={{
+                        width:5, height:5, borderRadius:'50%', flexShrink:0,
                         background: it.color,
                         opacity: isPast ? 0.55 : 1,
                       }} />
+                    ))}
+                    {googleItems.map((_, i) => (
+                      <span key={`g${i}`} style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:'var(--blue)', opacity: isPast ? 0.55 : 1 }} />
                     ))}
                   </div>
                 )}
@@ -355,20 +432,8 @@ export default function WorkerCalendar() {
             <span style={{ fontSize:12, color:'var(--text2)' }}>{t('workerCalendar.legendAssignedToYou')}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:'50%', background:'#2563eb', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendAssembly')}</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:'50%', background:'#ea580c', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.legendDisassembly')}</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:10, height:10, borderRadius:2, background:'repeating-linear-gradient(-50deg, rgba(144,144,176,0.45) 0px, rgba(144,144,176,0.45) 1.5px, transparent 1.5px, transparent 5px)', border:'1px solid rgba(144,144,176,0.3)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>{t('workerCalendar.legendUnavailable')}</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:8, height:8, borderRadius:2, background:'#4285F4', display:'inline-block' }} />
-            <span style={{ fontSize:12, color:'var(--text2)' }}>{t('calendar.fromGoogleCalendar')}</span>
           </div>
         </div>
       </div>
@@ -431,19 +496,31 @@ export default function WorkerCalendar() {
         </div>
       )}
 
-      {/* Lista indisponibilità */}
+      {/* Lista indisponibilità — retraibile come "Le mie assenze" lato admin
+          (Calendar.jsx): sono già filtrate a quelle non ancora passate, ma
+          restando comunque chiusa di default non allunga la pagina ad ogni
+          apertura del calendario. */}
       {sortedUnavailability.length > 0 && (
         <div style={{ padding:'8px 16px 24px' }}>
-          <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>{t('workerCalendar.myUnavailability')}</p>
-          {sortedUnavailability.map(u => (
+          <button onClick={() => setUnavailOpen(o => !o)} className="btn-no-anim" aria-expanded={unavailOpen}
+            style={{ width:'auto', display:'inline-flex', alignItems:'center', gap:6, marginBottom: unavailOpen ? 10 : 0, background:'transparent', border:'none', padding:0 }}>
+            <span style={{ color:'var(--text2)', display:'flex' }}><List size={13} /></span>
+            <span style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('workerCalendar.myUnavailability')}</span>
+            <span style={{ background:'var(--bg3)', borderRadius:10, padding:'1px 7px', fontSize:11, fontWeight:700, color:'var(--text2)' }}>{sortedUnavailability.length}</span>
+            <span style={{ color:'var(--text2)', display:'flex', transition:'transform 0.2s', transform: unavailOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+          {unavailOpen && sortedUnavailability.map(u => (
             <div key={u.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
               <span style={{ fontSize:18, flexShrink:0 }}>🚫</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>
+                <p style={{ fontWeight:700, fontSize:13, color:'var(--text)', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
                   {u.startDate === u.endDate
                     ? formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)
                     : `${formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language)} → ${formatDate(u.endDate+'T12:00:00', { day:'numeric', month:'short', year:'numeric' }, i18n.language)}`
                   }
+                  <AbsenceTypeBadge type={u.type} />
                 </p>
                 {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
               </div>
@@ -466,38 +543,31 @@ export default function WorkerCalendar() {
       {pendingRange && (
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
-            <button className="close-btn" onClick={absenceDrag.close}>✕</button>
+            <button className="close-btn" onClick={absenceDrag.close} aria-label={t('common.close')}>✕</button>
             <h2>{editingId ? t('workerCalendar.editAbsenceTitle') : t('calendar.absenceModalTitle')}</h2>
-            {editingId ? (
-              <>
-                <div className="form-group">
-                  <label>{t('workerCalendar.startDateLabel')}</label>
-                  <input type="date" value={pendingRange.start}
-                    onChange={e => setPendingRange(r => ({ start: e.target.value, end: r.end < e.target.value ? e.target.value : r.end }))} />
-                </div>
-                <div className="form-group">
-                  <label>{t('workerCalendar.endDateLabel')}</label>
-                  <input type="date" value={pendingRange.end} min={pendingRange.start}
-                    onChange={e => setPendingRange(r => ({ ...r, end: e.target.value }))} />
-                </div>
-              </>
-            ) : (
-              <p style={{ color:'var(--text2)', fontSize:14, marginBottom:16 }}>
-                {pendingRange.start === pendingRange.end
-                  ? formatDate(pendingRange.start, { day:'numeric', month:'long', year:'numeric' }, i18n.language)
-                  : t('workerCalendar.dateRange', {
-                      start: formatDate(pendingRange.start, { day:'numeric', month:'short' }, i18n.language),
-                      end: formatDate(pendingRange.end, { day:'numeric', month:'short', year:'numeric' }, i18n.language),
-                    })
-                }
-              </p>
-            )}
+            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('calendar.absenceModalDesc')}</p>
+            {/* Stesso DateField (e stessa possibilità di correggere le date
+                prima di confermare) sia per una nuova assenza sia in
+                modifica — identico al flusso admin in Calendar.jsx. */}
+            <div className="form-group">
+              <label>{t('calendar.firstDay')}</label>
+              <DateField value={pendingRange.start} onChange={v => setPendingRange(r => ({ start:v, end: r.end < v ? v : r.end }))} />
+            </div>
+            <div className="form-group">
+              <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
+              <DateField value={pendingRange.end} min={pendingRange.start} onChange={v => setPendingRange(r => ({ ...r, end:v }))} />
+            </div>
+            <div className="form-group">
+              <label>{t('calendar.absenceTypeLabel')}</label>
+              <SegmentedControl options={absenceTypeOptions(t)} value={typeInput} onChange={setTypeInput} />
+            </div>
             <div className="form-group">
               <label>{t('calendar.reason')} {t('common.optional')}</label>
               <input value={reasonInput} onChange={e => setReasonInput(e.target.value)} placeholder={t('workerCalendar.reasonPlaceholder')} />
             </div>
-            <button onClick={confirmUnavailability} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-              <Check size={16} /> {editingId ? t('common.save') : t('workerCalendar.confirmAbsence')}
+            <button onClick={confirmUnavailability} className="btn btn-primary btn-full" style={{ marginTop:8, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+              disabled={savingUnavail || !pendingRange.start}>
+              {savingUnavail ? t('common.saving') : <><Check size={16} /> {editingId ? t('common.save') : t('workerCalendar.confirmAbsence')}</>}
             </button>
           </div>
         </div>

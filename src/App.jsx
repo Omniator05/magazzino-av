@@ -37,6 +37,7 @@ const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const WorkHours = lazy(() => import('./pages/WorkHours'))
 const SettingsWorkHours = lazy(() => import('./pages/SettingsWorkHours'))
+const SettingsWorkHoursWorker = lazy(() => import('./pages/SettingsWorkHoursWorker'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const CookiePolicy = lazy(() => import('./pages/CookiePolicy'))
@@ -46,8 +47,9 @@ import PageTransition from './components/PageTransition'
 import OnboardingReveal from './components/OnboardingReveal'
 import BillingGate from './components/BillingGate'
 import QrRedirect from './components/QrRedirect'
-import UpdateToast from './components/UpdateToast'
+import WhatsNewModal from './components/WhatsNewModal'
 import AbsenceNotifications from './components/AbsenceNotifications'
+import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
 
@@ -63,29 +65,30 @@ function RouteLoadingFallback() {
   )
 }
 
-// Barra sempre visibile mentre un super admin sta "dentro" un'altra azienda
-// (vedi enterGhostTeam in AuthContext) — promemoria costante di dove si è,
-// con uscita immediata a un tap.
+// Pallino sempre visibile (angolo alto a destra) mentre un super admin sta
+// "dentro" un'altra azienda (vedi enterGhostTeam in AuthContext) — un tap
+// torna subito al menu con tutte le aziende. Volutamente minimo: chi lo vede
+// sa già cosa significa, non serve una barra a piena larghezza con nome
+// azienda e scritta "Esci" per ricordarglielo ad ogni pagina.
 function GhostBanner() {
   const { ghostTeamId, exitGhostTeam, team } = useAuth()
   const navigate = useNavigate()
   if (!ghostTeamId) return null
   return (
-    <div style={{
-      position:'fixed', top:0, left:0, right:0, zIndex:2000,
-      background:'#111827', color:'white',
-      padding:'calc(env(safe-area-inset-top) + 8px) 14px 8px',
-      display:'flex', alignItems:'center', justifyContent:'center', gap:10,
-      fontSize:12.5, fontWeight:700, boxShadow:'0 2px 12px rgba(0,0,0,0.3)',
-    }}>
-      <span>👻 {team?.name || '…'}</span>
-      <button onClick={() => { exitGhostTeam(); navigate('/super') }} style={{
-        background:'rgba(255,255,255,0.15)', color:'white', border:'none',
-        borderRadius:8, padding:'3px 10px', fontSize:11.5, fontWeight:700, cursor:'pointer',
-      }}>
-        Esci
-      </button>
-    </div>
+    <button
+      onClick={() => { exitGhostTeam(); navigate('/super') }}
+      aria-label={`Esci dalla modalità ghost (${team?.name || '…'}) e torna al menu aziende`}
+      title={`Ghost: ${team?.name || '…'} — tocca per uscire`}
+      style={{
+        position:'fixed', top:'calc(env(safe-area-inset-top) + 10px)', right:12, zIndex:2000,
+        width:32, height:32, borderRadius:'50%',
+        background:'rgba(17,24,39,0.85)', color:'white',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:15, border:'none', boxShadow:'0 2px 10px rgba(0,0,0,0.3)', cursor:'pointer',
+      }}
+    >
+      👻
+    </button>
   )
 }
 
@@ -163,8 +166,9 @@ function PrivateRoutes({ toggleTheme, theme }) {
   if (profile?.role === 'worker') {
     return (
       <>
-        <UpdateToast />
+        <WhatsNewModal />
         <ActiveShiftBadge />
+        <AbsenceEditedNotification />
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<WorkerHome />} />
@@ -191,7 +195,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
   if (profile?.role === 'organizzatore-brasserie') {
     return (
       <>
-        <UpdateToast />
+        <WhatsNewModal />
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<Brasserie />} />
@@ -206,7 +210,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
   if (profile?.role === 'organizzatore-evento') {
     return (
       <>
-        <UpdateToast />
+        <WhatsNewModal />
         <AnimatedPage>
           <Routes>
             <Route path="/" element={<EventOrganizerHome />} />
@@ -231,8 +235,9 @@ function PrivateRoutes({ toggleTheme, theme }) {
 
   return (
     <>
-      <UpdateToast />
+      <WhatsNewModal />
       <AbsenceNotifications />
+      <AbsenceEditedNotification />
       <ActiveShiftBadge />
       <GhostBanner />
       <AnimatedPage>
@@ -252,6 +257,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/admin/settings/users" element={<SettingsUsers />} />
           <Route path="/admin/settings/integrations" element={<SettingsIntegrations />} />
           <Route path="/admin/settings/work-hours" element={<SettingsWorkHours />} />
+          <Route path="/admin/settings/work-hours/:workerId" element={<SettingsWorkHoursWorker />} />
           <Route path="/super" element={<SuperAdmin />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/vehicles" element={<Vehicles />} />

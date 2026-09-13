@@ -1,53 +1,27 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
-import { useConfirm } from '../context/ConfirmProvider'
-import { useModalDrag } from '../hooks/useModalDrag'
-import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
-import { collection, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
-import { Clock, Check, Download, Calendar as CalendarIcon, Warn, ChevronLeft, ChevronRight } from '../components/Icon'
+import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore'
+import { Clock, Download, ChevronLeft, ChevronRight } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
-import DeleteButton from '../components/DeleteButton'
-import SaveButton from '../components/SaveButton'
-import DateField from '../components/DateField'
-import TimeField from '../components/TimeField'
 import Picker from '../components/Picker'
 import { formatDate, capitalize } from '../utils/formatDate'
-
-const timeStr = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-const computeHours = (startISO, endISO) => Math.max(0, Math.round(((new Date(endISO) - new Date(startISO)) / 3600000) * 100) / 100)
-const fmtHours = (h) => (h == null ? '—' : `${h.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')}h`)
-
-// "YYYY-MM" dai componenti LOCALI della data, mai da toISOString(): a est di
-// Greenwich il primo del mese alle 00:00 locali è ancora il mese precedente
-// in UTC, e il filtro finiva sul mese sbagliato.
-const monthKeyOf = (year, month) => `${year}-${String(month + 1).padStart(2, '0')}`
-const monthKey = (d = new Date()) => monthKeyOf(d.getFullYear(), d.getMonth())
-
-// Stato del limite ore (contratto) — stessa scala good/warning/critical già
-// usata nel resto dell'app (var(--green)/var(--accent2)/var(--red)), non
-// colori nuovi inventati per l'occasione.
-function capStatus(total, max) {
-  if (!max) return null
-  const ratio = total / max
-  if (ratio >= 1) return 'over'
-  if (ratio >= 0.85) return 'near'
-  return 'ok'
-}
-const CAP_COLOR = { ok: 'var(--green)', near: 'var(--accent2)', over: 'var(--red)' }
+import { timeStr, fmtHours, monthKeyOf, monthKey, capStatus, CAP_COLOR } from '../utils/workHours'
 
 // Barre orizzontali (nome a sinistra, ok su schermi stretti senza ruotare
 // testo) — colore neutro di base, che scala verso il colore del limite solo
-// per chi ha un tetto ore impostato e lo sta avvicinando/superando: non è
-// un confronto categorico tra persone, è un unico valore (ore) con un
-//'emphasis' su chi merita attenzione — vedi skill dataviz, "emphasis" invece
-// di colorare ogni barra in modo diverso senza motivo.
+// per chi ha un tetto ore impostato e lo sta avvicinando/superando: non è un
+// confronto categorico tra persone, è un unico valore (ore) con un
+// 'emphasis' su chi merita attenzione — vedi skill dataviz. Include SOLO chi
+// ha davvero registrato ore nel periodo: un roster intero di barre a zero
+// non aggiunge informazione, la lista sotto copre già chiunque a zero ore.
 //
 // La transizione anima `width` (non `transform:scaleX`, di solito preferito
-// per le performance): con un arrotondamento solo sull'estremità destra,
-// uno scaleX distorcerebbe quel raggio in modo ellittico alle percentuali
-// basse — su una barra di 14px non c'è comunque alcun impatto reale.
+// per le performance): con un arrotondamento solo sull'estremità destra, uno
+// scaleX distorcerebbe quel raggio in modo ellittico alle percentuali basse —
+// su una barra di 14px non c'è comunque alcun impatto reale.
 function HoursBarChart({ rows, maxScale }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
@@ -100,52 +74,19 @@ function HoursTrendChart({ days }) {
   )
 }
 
-// Meter del limite ore, sola lettura: il tetto si imposta dalla scheda
-// dell'utente (Impostazioni → Utenti), perché è un dato del suo contratto —
-// qui il resoconto lo legge soltanto. Chi non ha un limite non mostra
-// nulla, invece di riempire la lista di inviti a impostarlo.
-function CapMeter({ worker, t }) {
-  if (!worker.maxMonthlyHours) return null
-
-  const status = capStatus(worker.total, worker.maxMonthlyHours)
-  const pct = Math.min(100, (worker.total / worker.maxMonthlyHours) * 100)
-  return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, height: 6, background: 'var(--card2)', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: CAP_COLOR[status], borderRadius: 3, transition: 'width 0.4s ease' }} />
-        </div>
-        <span style={{ fontSize: 11, fontWeight: 700, color: CAP_COLOR[status], fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-          {fmtHours(worker.total)} / {worker.maxMonthlyHours}h
-        </span>
-      </div>
-      {status === 'over' && (
-        <p style={{ fontSize: 11, color: 'var(--red)', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Warn size={11} /> {t('workHours.capExceededHint')}
-        </p>
-      )}
-    </div>
-  )
-}
-
-// Resoconto ore per tutta la squadra — solo admin. L'auto-registrazione
-// (timbratura/inserimento manuale, proprie voci) resta in WorkHours.jsx,
-// raggiunta anche dall'admin per sé stesso da una card in Dashboard; qui si
-// vede e corregge il lavoro di tutti.
+// Resoconto ore per tutta la squadra — solo admin. Pagina indice: panoramica
+// del periodo + un elenco di tutte le persone, che porta al dettaglio del
+// singolo (SettingsWorkHoursWorker.jsx) dove vivono le voci, le assenze e il
+// contatore ferie di quella persona — questa pagina non modifica più nulla
+// lei stessa, solo naviga.
 export default function SettingsWorkHours() {
   const { t, i18n } = useTranslation()
   const { teamId } = useAuth()
-  const confirm = useConfirm()
+  const navigate = useNavigate()
   const [entries, setEntries] = useState([])
-  const [events, setEvents] = useState([])
   const [workers, setWorkers] = useState([])
   // 'YYYY-MM' per un mese preciso, oppure 'all' per tutto lo storico.
   const [periodKey, setPeriodKey] = useState(() => monthKey())
-  const [showModal, setShowModal] = useState(false)
-  const [editingEntry, setEditingEntry] = useState(null)
-  const [form, setForm] = useState({ date: '', startTime: '', endTime: '', eventId: '', notes: '' })
-  const [formError, setFormError] = useState('')
-  useModalScrollLock(showModal)
 
   useEffect(() => {
     if (!teamId) return
@@ -153,16 +94,9 @@ export default function SettingsWorkHours() {
     return onSnapshot(q, snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [teamId])
 
-  useEffect(() => {
-    if (!teamId) return
-    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date', 'desc'))
-    return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [teamId])
-
   // Serve la rosa completa (non solo chi ha già una voce ore) per due motivi:
   // mostrare il limite anche a chi non ha ancora timbrato nulla questo
-  // periodo, e far notare — informazione utile di per sé — chi non ha
-  // registrato ore affatto.
+  // periodo, e poter elencare — utile di per sé — anche chi è a zero ore.
   useEffect(() => {
     if (!teamId) return
     const q = query(collection(db, 'profiles'), where('teamId', '==', teamId))
@@ -205,35 +139,34 @@ export default function SettingsWorkHours() {
   const canGoNext = !isAllTime && periodKey < monthKey()
 
   // Un gruppo per lavoratore, ordinato per totale ore decrescente — chi ha
-  // lavorato di più salta subito all'occhio nel resoconto. Parte dalla rosa
-  // della squadra (non dalle sole voci) così anche chi è a zero ore compare.
+  // lavorato di più salta subito all'occhio. Parte dalla rosa della squadra
+  // (non dalle sole voci) così anche chi è a zero ore compare nell'elenco
+  // sotto (da cui si apre comunque il suo dettaglio).
   const byWorker = useMemo(() => {
     const map = new Map()
     for (const w of workers) {
-      map.set(w.id, { workerId: w.id, workerName: w.name || w.username || t('common.noName'), total: 0, entries: [], maxMonthlyHours: w.maxMonthlyHours || null })
+      map.set(w.id, { workerId: w.id, workerName: w.name || w.username || t('common.noName'), total: 0, maxMonthlyHours: w.maxMonthlyHours || null })
     }
     for (const e of filtered) {
-      if (!map.has(e.workerId)) map.set(e.workerId, { workerId: e.workerId, workerName: e.workerName || t('common.noName'), total: 0, entries: [], maxMonthlyHours: null })
+      if (!map.has(e.workerId)) map.set(e.workerId, { workerId: e.workerId, workerName: e.workerName || t('common.noName'), total: 0, maxMonthlyHours: null })
       const g = map.get(e.workerId)
       if (e.hours != null) g.total += e.hours
-      g.entries.push(e)
     }
     return [...map.values()].sort((a, b) => b.total - a.total)
   }, [filtered, workers, t])
 
+  const activeWorkers = byWorker.filter(w => w.total > 0)
   const grandTotal = byWorker.reduce((sum, g) => sum + g.total, 0)
-  const activeWorkersCount = byWorker.filter(w => w.total > 0).length
 
   const chartMaxScale = useMemo(() => {
-    const values = byWorker.flatMap(w => [w.total, w.maxMonthlyHours || 0])
+    const values = activeWorkers.flatMap(w => [w.total, w.maxMonthlyHours || 0])
     return Math.ceil(Math.max(1, ...values) * 1.1)
-  }, [byWorker])
+  }, [activeWorkers])
 
   // Il limite ore è un concetto mensile: confrontarlo con "tutto lo storico"
-  // (che copre più mesi) non avrebbe senso, quindi meter e tacca del limite
-  // compaiono solo su un mese preciso. Il grafico ad area per lo stesso
-  // motivo, più perché lo storico può coprire anni — una curva a
-  // granularità giornaliera diventerebbe illeggibile.
+  // (che copre più mesi) non avrebbe senso, quindi il grafico giornaliero
+  // compare solo su un mese preciso — anche perché lo storico può coprire
+  // anni, e una curva a granularità giornaliera diventerebbe illeggibile.
   const trendDays = useMemo(() => {
     if (isAllTime) return []
     const [y, m1] = periodKey.split('-').map(Number)
@@ -271,41 +204,6 @@ export default function SettingsWorkHours() {
     URL.revokeObjectURL(url)
   }
 
-  const openEditEntry = (entry) => {
-    setForm({
-      date: entry.date,
-      startTime: entry.clockIn ? timeStr(new Date(entry.clockIn)) : '',
-      endTime: entry.clockOut ? timeStr(new Date(entry.clockOut)) : '',
-      eventId: entry.eventId || '', notes: entry.notes || '',
-    })
-    setEditingEntry(entry); setFormError('')
-    setShowModal(true)
-  }
-  const closeModal = () => { setShowModal(false); setEditingEntry(null); setFormError('') }
-
-  const saveEntry = async () => {
-    setFormError('')
-    if (!form.startTime || !form.endTime) { setFormError(t('workHours.errorTimesRequired')); return false }
-    const clockInISO = new Date(`${form.date}T${form.startTime}:00`).toISOString()
-    const clockOutISO = new Date(`${form.date}T${form.endTime}:00`).toISOString()
-    const hours = computeHours(clockInISO, clockOutISO)
-    if (hours <= 0) { setFormError(t('workHours.errorEndBeforeStart')); return false }
-    const ev = events.find(e => e.id === form.eventId)
-    await updateDoc(doc(db, 'timeEntries', editingEntry.id), {
-      date: form.date, clockIn: clockInISO, clockOut: clockOutISO, hours,
-      eventId: ev?.id || null, eventName: ev?.name || null,
-      notes: form.notes.trim(), source: 'manual', updatedAt: serverTimestamp(),
-    })
-    return true
-  }
-  const submitForm = async () => { if (await saveEntry()) entryDrag.close() }
-  const entryDrag = useModalDrag(closeModal, undefined, submitForm, showModal)
-
-  const deleteEntry = async (id) => {
-    if (!(await confirm({ title: t('workHours.confirmDeleteTitle'), message: t('workHours.confirmDeleteMessage'), confirmLabel: t('workHours.confirmDeleteLabel'), danger: true }))) return
-    await deleteDoc(doc(db, 'timeEntries', id))
-  }
-
   return (
     <div className="page">
       <div className="page-header">
@@ -317,7 +215,7 @@ export default function SettingsWorkHours() {
 
       {/* Periodo: frecce per scorrere i mesi + elenco per saltare a uno
           preciso (o a tutto lo storico) senza premere la freccia dieci volte. */}
-      <div style={{ margin: '0 16px 16px', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="period-nav" style={{ margin: '0 16px 16px', display: 'flex', gap: 8, alignItems: 'center' }}>
         <button
           onClick={() => shiftMonth(-1)} disabled={isAllTime} aria-label={t('workHours.prevMonthAria')}
           className="btn-no-anim period-arrow"
@@ -349,9 +247,21 @@ export default function SettingsWorkHours() {
           display: flex; align-items: center; justify-content: center;
         }
         .period-arrow:disabled { opacity: 0.35; }
+        .wh-worker-row:hover { background: var(--card2); }
+        /* Il rimbalzo globale al click (scale + molla) su un mouse desktop
+           resta visibile più a lungo che su un tap ed è più marcato su un
+           controllo largo come questo — stesso identico problema già
+           risolto altrove in .admin-user-modal, qui solo attenuato invece
+           di eliminato del tutto (le frecce restano comunque cliccabili
+           "a raffica" per scorrere i mesi). */
+        .period-nav button:not(:disabled):active {
+          transform: scale(0.99);
+          filter: none;
+          box-shadow: none;
+        }
       `}</style>
 
-      {filtered.length === 0 ? (
+      {workers.length === 0 ? (
         <div className="empty-state">
           <p style={{ color: 'var(--text3)', marginBottom: 4 }}><Clock size={40} /></p>
           <h3>{t('workHours.reportEmptyTitle')}</h3>
@@ -360,23 +270,26 @@ export default function SettingsWorkHours() {
       ) : (
         <>
           {/* Panoramica: il totale è la didascalia del grafico, non una card
-              a sé — il numero isolato in un cerchio con etichetta sotto è
-              il default che si vuole evitare qui. */}
+              a sé — il numero isolato in un cerchio con etichetta sotto è il
+              default che si vuole evitare qui. Il grafico compare solo se
+              qualcuno ha davvero lavorato in questo periodo. */}
           <div style={{ margin: '0 16px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 16px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: activeWorkers.length > 0 ? 16 : 0 }}>
               <div style={{ minWidth: 0 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
                   {isAllTime ? t('workHours.periodAll') : monthLabel(periodKey)}
                 </p>
                 <p style={{ fontSize: 21, fontWeight: 800, color: 'var(--text)' }}>
-                  {fmtHours(grandTotal)} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{t('workHours.totalAcrossTeam', { count: activeWorkersCount })}</span>
+                  {fmtHours(grandTotal)} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{t('workHours.totalAcrossTeam', { count: activeWorkers.length })}</span>
                 </p>
               </div>
-              <button onClick={exportCSV} className="btn-no-anim" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'var(--text2)', padding: '4px 2px', background: 'transparent', border: 'none' }}>
-                <Download size={14} /> CSV
-              </button>
+              {filtered.length > 0 && (
+                <button onClick={exportCSV} className="btn-no-anim" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'var(--text2)', padding: '4px 2px', background: 'transparent', border: 'none' }}>
+                  <Download size={14} /> CSV
+                </button>
+              )}
             </div>
-            <HoursBarChart rows={byWorker} maxScale={chartMaxScale} />
+            {activeWorkers.length > 0 && <HoursBarChart rows={activeWorkers} maxScale={chartMaxScale} />}
           </div>
 
           {!isAllTime && trendDays.some(d => d.total > 0) && (
@@ -386,91 +299,30 @@ export default function SettingsWorkHours() {
             </div>
           )}
 
-          {byWorker.map(g => (
-            <div key={g.workerId} style={{ margin: '0 16px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-              <details>
-                <summary style={{ padding: '14px 16px', cursor: 'pointer', listStyle: 'none', display: 'block' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--text)' }}>{g.workerName}</span>
-                    <span style={{ fontWeight: 800, fontSize: 15, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtHours(g.total)}</span>
-                  </div>
-                  {!isAllTime && <CapMeter worker={g} t={t} />}
-                </summary>
-                {g.entries.length > 0 && (
-                  <div style={{ borderTop: '1px solid var(--border)' }}>
-                    {g.entries.map(entry => (
-                      <div key={entry.id} onClick={() => openEditEntry(entry)} style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                            {new Date(entry.date + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
-                            {entry.clockIn && <span style={{ color: 'var(--text2)', fontWeight: 400 }}> · {timeStr(new Date(entry.clockIn))}{entry.clockOut ? `–${timeStr(new Date(entry.clockOut))}` : '…'}</span>}
-                          </p>
-                          {entry.eventName && (
-                            <span style={{ color: 'var(--blue)', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                              <CalendarIcon size={10} /> {entry.eventName}
-                            </span>
-                          )}
-                        </div>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text2)', flexShrink: 0 }}>{fmtHours(entry.hours)}</span>
-                        <DeleteButton onClick={e => { e.stopPropagation(); deleteEntry(entry.id) }} size={28} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </details>
-            </div>
-          ))}
-        </>
-      )}
-
-      {showModal && (
-        <div className={`modal-overlay${entryDrag.closing ? ' closing' : ''}`} onClick={entryDrag.onOverlayClick}>
-          <div className={`modal${entryDrag.jiggling ? ' modal-jiggle' : ''}${entryDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...entryDrag.props}>
-            <button className="close-btn" onClick={entryDrag.close}>✕</button>
-            <h2>{t('workHours.editEntryTitle')}</h2>
-            {editingEntry && <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 14 }}>{editingEntry.workerName}</p>}
-
-            {formError && <p style={{ color: 'var(--red)', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{formError}</p>}
-
-            <div className="form-group">
-              <label>{t('workHours.dateLabel')}</label>
-              <DateField value={form.date} onChange={date => setForm({ ...form, date })} />
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label>{t('workHours.startTimeLabel')}</label>
-                <TimeField value={form.startTime} onChange={startTime => setForm({ ...form, startTime })} />
-              </div>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label>{t('workHours.endTimeLabel')}</label>
-                <TimeField value={form.endTime} onChange={endTime => setForm({ ...form, endTime })} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>{t('workHours.eventLabel')} <span style={{ color: 'var(--text2)', fontWeight: 400, fontSize: 12 }}>{t('common.optional')}</span></label>
-              <Picker
-                value={form.eventId}
-                onChange={eventId => setForm({ ...form, eventId })}
-                ariaLabel={t('workHours.eventLabel')}
-                searchable
-                searchPlaceholder={t('workHours.eventSearchPlaceholder')}
-                noResultsLabel={t('workHours.eventNoResults')}
-                options={[
-                  { value: '', label: t('workHours.noEventOption') },
-                  ...events.map(ev => ({ value: ev.id, label: ev.name, icon: <CalendarIcon size={15} /> })),
-                ]}
-              />
-            </div>
-            <div className="form-group">
-              <label>{t('workHours.notesLabel')} <span style={{ color: 'var(--text2)', fontWeight: 400, fontSize: 12 }}>{t('common.optional')}</span></label>
-              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder={t('workHours.notesPlaceholder')} />
-            </div>
-
-            <SaveButton onSave={saveEntry} onDone={entryDrag.close} onError={entryDrag.triggerJiggle} className="btn btn-primary btn-full" style={{ marginTop: 8 }}>
-              <Check size={16} /> {t('workHours.saveChanges')}
-            </SaveButton>
+          {/* Tutta la squadra, non solo chi ha lavorato — un tap apre il
+              dettaglio della persona (voci, assenze, ferie), questa riga non
+              fa altro che navigare lì. */}
+          <div style={{ margin: '0 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+            {byWorker.map((g, i) => (
+              <button
+                key={g.workerId}
+                onClick={() => navigate(`/admin/settings/work-hours/${g.workerId}`)}
+                className="wh-worker-row"
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  padding: '13px 16px', borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                  background: 'transparent', textAlign: 'left',
+                }}
+              >
+                <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.workerName}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, fontVariantNumeric: 'tabular-nums', color: g.total > 0 ? 'var(--accent)' : 'var(--text3)' }}>{fmtHours(g.total)}</span>
+                  <span style={{ color: 'var(--text3)', fontSize: 17 }}>›</span>
+                </span>
+              </button>
+            ))}
           </div>
-        </div>
+        </>
       )}
     </div>
   )
