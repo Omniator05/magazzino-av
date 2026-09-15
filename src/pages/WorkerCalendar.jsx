@@ -273,11 +273,11 @@ export default function WorkerCalendar() {
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
-  // Solo quelle non ancora del tutto passate: un'assenza finita non ha più
-  // bisogno di restare elencata qui sotto a vita — stesso criterio di
-  // Calendar.jsx (myAbsences) lato admin.
-  const sortedUnavailability = unavailability
-    .filter(u => u.endDate >= todayStr)
+  // Anche quelle passate: altrimenti non c'è più modo di correggere data o
+  // motivo di un'assenza sbagliata una volta finita — stesso motivo di
+  // Calendar.jsx (myAbsences) lato admin. La lista resta comunque chiusa di
+  // default (unavailOpen), quindi non allunga la pagina.
+  const sortedUnavailability = [...unavailability]
     .sort((a,b) => a.startDate.localeCompare(b.startDate))
   const selectedItems = selectedDate ? dayItems(selectedDate) : []
   const selectedEvents = (() => {

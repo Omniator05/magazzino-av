@@ -14,6 +14,7 @@ import { logItemActivity } from '../utils/itemActivity'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
 import { syncKitAwareInventory } from '../utils/kitInventory'
+import { todayStr } from '../utils/workHours'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -84,12 +85,13 @@ export default function WorkerScanner() {
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
   const [manualCode, setManualCode] = useState('')
-  // Fase di default 'pronto', ma se questo evento era già più avanti (carico
-  // o scarico) si riparte da lì invece di tornare sempre a pronto — vedi i
-  // due useEffect più sotto che leggono/scrivono 'ws_phase_' + id.
-  const [mode, setMode] = useState(() => {
-    try { return localStorage.getItem('ws_phase_' + id) || 'pronto' } catch { return 'pronto' }
-  }) // 'pronto' | 'load' | 'return'
+  // Fase di partenza 'pronto' — corretta appena arrivano i dati reali
+  // dell'evento (vedi l'effetto "fase iniziale" più sotto): NON è più
+  // ricordata per dispositivo (era in localStorage, quindi un magazziniere
+  // diverso da chi aveva finito il carico si ritrovava sempre a ripartire da
+  // capo e a rivedere i popup "tutto pronto/caricato" anche a lavoro già
+  // fatto). Ora si deriva da dati condivisi (Firestore), uguale per tutti.
+  const [mode, setMode] = useState('pronto') // 'pronto' | 'load' | 'return'
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   const [error, setError] = useState(null)
@@ -176,6 +178,10 @@ export default function WorkerScanner() {
   const prevPreparedRef = useRef(0)
   const prevLoadedRef = useRef(0)
   const prevReturnedRef = useRef(0)
+  // Evita che l'effetto "fase iniziale" sotto (e la prima lettura dei
+  // prevXRef sopra) scattino ad ogni aggiornamento degli item — solo una
+  // volta per evento, quando i dati veri arrivano la prima volta.
+  const phaseInitRef = useRef(null)
   useModalScrollLock(showExtraWorker || showAllPreparedPopup || showAllLoadedPopup || showAllReturnedPopup)
 
   const fireConfetti = () => {
@@ -246,18 +252,10 @@ export default function WorkerScanner() {
     })
   }, [id])
 
-  // Ripristina la fase salvata se si cambia evento senza smontare il
-  // componente (raro, ma copre anche quel caso oltre al mount iniziale).
-  useEffect(() => {
-    try { setMode(localStorage.getItem('ws_phase_' + id) || 'pronto') } catch { setMode('pronto') }
-  }, [id])
-
-  // Ricorda la fase raggiunta per QUESTO evento: si riapre da lì la prossima
-  // volta invece di ripartire sempre da "pronto".
-  useEffect(() => {
-    if (!id) return
-    try { localStorage.setItem('ws_phase_' + id, mode) } catch {}
-  }, [mode, id])
+  // Se si cambia evento senza smontare il componente (raro, ma capita dal
+  // link diretto /events/:id/scan), riparti da 'pronto' finché l'effetto
+  // "fase iniziale" più sotto non corregge con i dati del nuovo evento.
+  useEffect(() => { setMode('pronto') }, [id])
 
   // Solo visualizzazione (badge): quale furgone va caricato/rientrato per ogni oggetto
   useEffect(() => {
@@ -573,6 +571,32 @@ export default function WorkerScanner() {
   // "pronto"/"caricato": escluderli dal totale evita che la lista resti
   // bloccata al 90% per sempre quando un pezzo non si trova o è danneggiato.
   const total    = items.filter(i => !i.mancante).length
+
+  // Fase iniziale, derivata dai dati condivisi dell'evento invece che
+  // ricordata per dispositivo: se l'evento è già passato e c'è ancora
+  // roba caricata non rientrata ("da scaricare", stessa definizione usata
+  // in Events.jsx/WorkerHome.jsx) si riparte direttamente dallo scarico —
+  // chi arriva a leggere i codici li segna rientrati senza dover cambiare
+  // fase a mano. Altrimenti si riparte dalla fase più avanzata già
+  // completata (tutto pronto → carico, tutto caricato → scarico). Gira
+  // una sola volta per evento, appena arrivano i dati veri da Firestore —
+  // anche i prevXRef dei popup sotto partono da qui, non da 0, altrimenti
+  // un lavoro già finito da qualcun altro riaprirebbe i popup "tutto
+  // pronto/caricato" a chiunque apra lo scanner dopo.
+  useEffect(() => {
+    if (!event || items.length === 0 || phaseInitRef.current === id) return
+    phaseInitRef.current = id
+    prevPreparedRef.current = prepared
+    prevLoadedRef.current = loaded
+    prevReturnedRef.current = items.filter(i => i.loaded && i.returned).length
+    const evEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+    const isPast = evEnd < todayStr()
+    const anyToReturn = items.some(i => i.loaded && !i.returned)
+    if (isPast && anyToReturn) setMode('return')
+    else if (total > 0 && loaded === total) setMode('return')
+    else if (total > 0 && prepared === total) setMode('load')
+  }, [event, items, id, total, loaded, prepared])
+
   // Campo "fatto" della fase corrente — usato per ordinamento liste, scroll
   // al primo da fare, e contatore di completamento: unica fonte invece di
   // ripetere lo stesso ternario in ogni punto che dipende dalla fase.
@@ -628,7 +652,11 @@ export default function WorkerScanner() {
 
   // Popup quando tutto è pronto — passa in automatico al carico, così
   // riscansionando gli stessi codici finiscono dritti su "caricato" invece di
-  // dover cambiare fase a mano ogni volta.
+  // dover cambiare fase a mano ogni volta. Il popup scatta solo se il
+  // completamento avviene DURANTE questa sessione (prevPreparedRef parte già
+  // dal valore reale, seminato dall'effetto "fase iniziale" sopra) — non più
+  // "mostrato una volta per dispositivo" via localStorage: chi apre lo
+  // scanner con una lista già completata da un collega non lo vede più.
   useEffect(() => {
     if (
       mode === 'pronto' &&
@@ -636,17 +664,13 @@ export default function WorkerScanner() {
       prepared === total &&
       prevPreparedRef.current < total
     ) {
-      const key = 'prepared_popup_shown_' + id
-      if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, '1')
-        setShowAllPreparedPopup(true)
-      }
+      setShowAllPreparedPopup(true)
       setMode('load')
     }
     prevPreparedRef.current = prepared
   }, [prepared, total, mode])
 
-  // Popup quando tutto è caricato — non ripetere se già mostrato per questo evento
+  // Popup quando tutto è caricato — stesso principio del popup sopra.
   useEffect(() => {
     if (
       mode === 'load' &&
@@ -654,18 +678,14 @@ export default function WorkerScanner() {
       loaded === total &&
       prevLoadedRef.current < total
     ) {
-      const key = 'loaded_popup_shown_' + id
-      if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, '1')
-        setShowAllLoadedPopup(true)
-        fireConfetti()
-      }
+      setShowAllLoadedPopup(true)
+      fireConfetti()
       setMode('return')
     }
     prevLoadedRef.current = loaded
   }, [loaded, total, mode])
 
-  // Popup quando tutto è rientrato
+  // Popup quando tutto è rientrato — stesso principio.
   useEffect(() => {
     const loadedItems = items.filter(i => i.loaded)
     if (
@@ -674,12 +694,8 @@ export default function WorkerScanner() {
       loadedItems.every(i => i.returned) &&
       prevReturnedRef.current < loadedItems.length
     ) {
-      const key = 'returned_popup_shown_' + id
-      if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, '1')
-        setShowAllReturnedPopup(true)
-        fireConfetti()
-      }
+      setShowAllReturnedPopup(true)
+      fireConfetti()
     }
     prevReturnedRef.current = loadedItems.filter(i => i.returned).length
   }, [returned, mode, items, id])

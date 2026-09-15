@@ -85,6 +85,7 @@ export default function Calendar() {
   const [mode, setMode] = useState('grid') // 'grid' | 'assign'
   const [selectedWorkerId, setSelectedWorkerId] = useState(null) // tap-tap mobile
   const [dragOverEventId, setDragOverEventId] = useState(null)   // feedback drag desktop
+  const [draggedWorkerId, setDraggedWorkerId] = useState(null)   // chi si sta trascinando, per l'anteprima "non disponibile"
   const [showPastAssign, setShowPastAssign] = useState(false)    // includi eventi già passati
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
@@ -100,10 +101,10 @@ export default function Calendar() {
   // null = si sta creando una nuova assenza, altrimenti id di quella in modifica
   const [editingAbsenceId, setEditingAbsenceId] = useState(null)
   const [myAbsencesOpen, setMyAbsencesOpen] = useState(false)
-  // Solo quelle non ancora del tutto passate: un'assenza finita non ha più
-  // bisogno di restare elencata qui sotto a vita, altrimenti la lista cresce
-  // per sempre senza motivo.
-  const myAbsences = unavailability.filter(u => u.workerId === user?.uid && u.endDate >= todayStr)
+  // Anche quelle passate: altrimenti non c'è più modo di correggere data o
+  // motivo di un'assenza sbagliata una volta finita. La lista resta comunque
+  // chiusa di default (myAbsencesOpen), quindi non allunga la pagina.
+  const myAbsences = unavailability.filter(u => u.workerId === user?.uid)
 
   // Selezione assenza tap-sul-calendario
   const [reportMode, setReportMode] = useState(false)
@@ -488,37 +489,43 @@ export default function Calendar() {
                     )}
                   </div>
                 )}
-                {/* Nomi evento (fino a 2 righe, troncati) invece dei puntini */}
-                {dayEvents.length > 0 && (
-                  <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
-                    {dayEvents.slice(0, 2).map(ev => {
+                {/* Nomi evento (fino a 2 righe, troncati) invece dei puntini — include
+                    anche le fasi (montaggio/smontaggio) che cadono in un giorno diverso
+                    da quello dell'evento vero e proprio: altrimenti lì restava solo il
+                    puntino colorato qui sotto, senza dire di quale lavoro si tratta. */}
+                {(() => {
+                  const dayPhasesOnly = (phasesByDate[dStr] || []).filter(p => !dayEvents.some(e => e.id === p.event.id))
+                  const titleRows = [
+                    ...dayEvents.map(ev => {
                       const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
-                      const dotColor = ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)'
-                      return (
-                        <span key={ev.id} style={{
+                      return { key: ev.id, name: ev.name, color: ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)' }
+                    }),
+                    ...dayPhasesOnly.map(p => ({ key: `${p.event.id}-${p.key}`, name: p.event.name, color: p.color })),
+                  ]
+                  if (titleRows.length === 0) return null
+                  return (
+                    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
+                      {titleRows.slice(0, 2).map(row => (
+                        <span key={row.key} style={{
                           display:'flex', alignItems:'center', gap:3,
                           fontSize:10, fontWeight:700, lineHeight:1.2, color:'var(--text)',
                           maxWidth:'100%', opacity: isPast ? 0.55 : 1,
                         }}>
-                          <span style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:dotColor }} />
-                          <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</span>
+                          <span style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:row.color }} />
+                          <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.name}</span>
                         </span>
-                      )
-                    })}
-                    {dayEvents.length > 2 && (
-                      <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{dayEvents.length - 2}</span>
-                    )}
-                  </div>
-                )}
-                {/* Puntini secondari: fasi + eventi Google Calendar */}
-                {((phasesByDate[dStr]?.length > 0) || dayGoogleEvents.length > 0) && (
+                      ))}
+                      {titleRows.length > 2 && (
+                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - 2}</span>
+                      )}
+                    </div>
+                  )
+                })()}
+                {/* Puntino secondario: solo eventi Google Calendar (le fasi ora hanno
+                    la propria voce col titolo sopra, non serve più ripeterle qui). */}
+                {dayGoogleEvents.length > 0 && (
                   <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center', marginTop:'auto' }}>
-                    {dayGoogleEvents.length > 0 && (
-                      <span style={{ width:6, height:6, borderRadius:2, flexShrink:0, background:'#4285F4', opacity: isPast ? 0.55 : 1 }} />
-                    )}
-                    {(phasesByDate[dStr] || []).slice(0, 2).map((p, i) => (
-                      <span key={`ph${i}`} style={{ width:6, height:6, borderRadius:'50%', flexShrink:0, background: p.color, opacity: isPast ? 0.55 : 1 }} />
-                    ))}
+                    <span style={{ width:6, height:6, borderRadius:2, flexShrink:0, background:'#4285F4', opacity: isPast ? 0.55 : 1 }} />
                   </div>
                 )}
                 {/* Striscia solo per la mia assenza */}
@@ -715,6 +722,7 @@ export default function Calendar() {
                     draggable
                     onDragStart={e => {
                       e.dataTransfer.setData('text/plain', w.id)
+                      setDraggedWorkerId(w.id)
                       // Il ghost di drag nativo del browser a volte ignora il border-radius
                       // sui <button> e mostra un rettangolo: forziamo un clone ovale come immagine.
                       const ghost = e.currentTarget.cloneNode(true)
@@ -727,6 +735,7 @@ export default function Calendar() {
                       e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2)
                       setTimeout(() => ghost.remove(), 0)
                     }}
+                    onDragEnd={() => setDraggedWorkerId(null)}
                     onClick={() => setSelectedWorkerId(id => id === w.id ? null : w.id)}
                     aria-pressed={isSelected}
                     style={{
@@ -758,6 +767,14 @@ export default function Calendar() {
             ) : monthEvents.map(ev => {
               const assigned = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)).filter(Boolean)
               const isDragOver = dragOverEventId === ev.id
+              // Chi si sta per assegnare — trascinato (desktop) o già selezionato
+              // col tap (mobile, dove non esiste un vero "hover"): se quella
+              // persona risulta assente in questi giorni, la card lo mostra
+              // subito (grigia + avviso), prima ancora del conferma-comunque
+              // che scatta al drop/tap in handleAssign.
+              const previewWorkerId = draggedWorkerId || selectedWorkerId
+              const previewUnavail = !!previewWorkerId && isWorkerUnavailable(previewWorkerId, ev, unavailability)
+              const previewWorker = previewUnavail ? workers.find(w => w.id === previewWorkerId) : null
               return (
                 <div key={ev.id}
                   onDragOver={e => e.preventDefault()}
@@ -769,14 +786,15 @@ export default function Calendar() {
                     if (e.currentTarget.contains(e.relatedTarget)) return
                     setDragOverEventId(id => id === ev.id ? null : id)
                   }}
-                  onDrop={e => { e.preventDefault(); setDragOverEventId(null); handleAssign(ev, e.dataTransfer.getData('text/plain')) }}
+                  onDrop={e => { e.preventDefault(); setDragOverEventId(null); setDraggedWorkerId(null); handleAssign(ev, e.dataTransfer.getData('text/plain')) }}
                   onClick={() => { if (selectedWorkerId) handleAssign(ev, selectedWorkerId) }}
                   style={{
-                    background: isDragOver ? 'rgba(216,56,63,0.06)' : 'var(--card)',
-                    border: isDragOver ? '2px dashed var(--accent)' : '1px solid var(--border)',
+                    background: previewUnavail ? 'rgba(144,144,176,0.12)' : (isDragOver ? 'rgba(216,56,63,0.06)' : 'var(--card)'),
+                    border: previewUnavail ? `2px dashed ${isDragOver ? 'var(--red)' : 'var(--border2)'}` : (isDragOver ? '2px dashed var(--accent)' : '1px solid var(--border)'),
+                    opacity: previewUnavail && !isDragOver ? 0.65 : 1,
                     borderRadius:14, padding:'13px 14px', marginBottom:8,
                     cursor: selectedWorkerId ? 'pointer' : 'default',
-                    transition:'background 0.15s, border-color 0.15s',
+                    transition:'background 0.15s, border-color 0.15s, opacity 0.15s',
                   }}
                 >
                   <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', display:'flex', alignItems:'center', gap:6 }}>
@@ -786,6 +804,11 @@ export default function Calendar() {
                     {formatDate(ev.date + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
                     {ev.dateEnd && ev.dateEnd !== ev.date ? ` → ${formatDate(ev.dateEnd + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}` : ''}
                   </p>
+                  {previewUnavail && (
+                    <p style={{ fontSize:12, fontWeight:700, color:'var(--red)', marginTop:5, display:'flex', alignItems:'center', gap:4 }}>
+                      {t('calendar.dragUnavailableWarning', { name: previewWorker?.name || t('calendar.thisWorker') })}
+                    </p>
+                  )}
                   <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:8 }}>
                     {assigned.length === 0 && <span style={{ fontSize:12, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</span>}
                     {assigned.map(w => {

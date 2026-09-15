@@ -20,7 +20,7 @@ import SegmentedControl from '../components/SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
 import CapMeter from '../components/CapMeter'
 import { formatDate, capitalize } from '../utils/formatDate'
-import { timeStr, computeHours, fmtHours, monthKey, todayStr } from '../utils/workHours'
+import { timeStr, computeHours, fmtHours, monthKey } from '../utils/workHours'
 
 // Dettaglio di un singolo lavoratore, raggiunto dall'elenco in
 // SettingsWorkHours.jsx: le sue voci ore (con un filtro periodo proprio,
@@ -106,15 +106,18 @@ export default function SettingsWorkHoursWorker() {
   }
   const canGoNext = !isAllTime && periodKey < monthKey()
 
-  // Assenze non ancora del tutto passate — stesso criterio delle liste
-  // equivalenti nel calendario, altrimenti resterebbero elencate a vita.
-  const today = todayStr()
-  const activeAbsences = useMemo(() => (
-    absences.filter(u => u.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))
-  ), [absences, today])
+  // Qui, a differenza della lista rapida nel calendario, le assenze restano
+  // visibili anche a distanza di mesi: questa è la pagina di storico/report
+  // di una persona, con un proprio filtro periodo per tornare indietro nel
+  // tempo — nasconderle una volta passate impedirebbe di correggerne data o
+  // motivo dopo il fatto (es. una ferie di agosto vista/modificata a settembre).
+  const sortedAbsences = useMemo(() => (
+    [...absences].sort((a, b) => a.startDate.localeCompare(b.startDate))
+  ), [absences])
 
   // Ferie usate quest'anno: su TUTTE le assenze (anche passate, non solo
-  // activeAbsences sopra) — una ferie già presa a marzo deve continuare a
+  // sortedAbsences sopra, che già le include tutte — il commento resta per
+  // chiarire l'intento) — una ferie già presa a marzo deve continuare a
   // scalare dal monte anche a dicembre.
   const currentYear = new Date().getFullYear()
   const usedVacationDays = useMemo(() => (
@@ -232,9 +235,9 @@ export default function SettingsWorkHoursWorker() {
   // Stesso motivo di displayEntries sopra: tiene l'assenza appena cancellata
   // visibile per la sola durata della dissolvenza.
   const displayAbsences = useMemo(() => {
-    const liveIds = new Set(activeAbsences.map(a => a.id))
-    return [...activeAbsences, ...Object.values(fadingAbsences).filter(a => !liveIds.has(a.id))]
-  }, [activeAbsences, fadingAbsences])
+    const liveIds = new Set(sortedAbsences.map(a => a.id))
+    return [...sortedAbsences, ...Object.values(fadingAbsences).filter(a => !liveIds.has(a.id))]
+  }, [sortedAbsences, fadingAbsences])
 
   const submitAbsenceForm = async () => {
     if (await saveAbsenceEdit()) { showToast(t('workHours.absenceSavedToast')); absenceDrag.close() }
@@ -353,11 +356,11 @@ export default function SettingsWorkHoursWorker() {
       {/* Assenze — modificabili (non solo cancellabili): vedi
           saveAbsenceEdit per l'avviso al worker quando le date cambiano
           davvero. Sempre visibili, indipendenti dal periodo qui sopra. */}
-      {activeAbsences.length > 0 && (
+      {sortedAbsences.length > 0 && (
         <div style={{ margin: '0 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>{t('workHours.absencesTitle')}</p>
           {displayAbsences.map(u => {
-            const isLeaving = !!fadingAbsences[u.id] && !activeAbsences.some(a => a.id === u.id)
+            const isLeaving = !!fadingAbsences[u.id] && !sortedAbsences.some(a => a.id === u.id)
             return (
               <div key={u.id} style={{
                 display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg3)', borderRadius: 10, padding: '9px 10px', marginBottom: 6,

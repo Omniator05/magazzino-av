@@ -7,6 +7,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateUnitCode } from '../utils/generateCode'
+import { eventRowIncludesItem } from '../utils/kitInventory'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import { formatDate } from '../utils/formatDate'
 import JSZip from 'jszip'
@@ -223,8 +224,12 @@ export default function Inventory() {
   // baule specifico è filtrato, deve anche essere tra quelli assegnati a
   // quella riga (instanceNumbers), non solo lo stesso kit in generale.
   const matchesDetailItem = i => {
-    if (i.id !== showDetail.id && i.itemRef !== showDetail.id) return false
+    if (!eventRowIncludesItem(i, showDetail.id, items)) return false
+    // Il filtro per numero di unità ha senso solo quando la riga referenzia
+    // l'oggetto direttamente (unità fisiche tracciate) — un componente
+    // "trovato" perché dentro un kit non ha instanceNumbers propri sulla riga.
     if (historyInstanceFilter == null) return true
+    if (i.id !== showDetail.id && i.itemRef !== showDetail.id) return true
     return (i.instanceNumbers || []).includes(historyInstanceFilter)
   }
 
@@ -484,7 +489,7 @@ export default function Inventory() {
   // farlo comparire qui, nonostante la giacenza resti comunque ridotta.
   const getOutEventNames = (item) => events
     .filter(ev => (ev.items || []).some(i =>
-      (i.id === item.id || i.itemRef === item.id) && i.loaded && (!i.returned || i.returnedConsumed)
+      eventRowIncludesItem(i, item.id, items) && i.loaded && (!i.returned || i.returnedConsumed)
     ))
     .map(ev => ev.name)
 
@@ -1119,38 +1124,13 @@ export default function Inventory() {
               </div>
             )}
 
-            {detailEvents.length === 0 && detailEventHistory.length === 0 && (
+            {/* Niente più sezione "Attualmente fuori" separata qui sopra: era
+                lo stesso elenco già coperto dallo storico subito sotto, dove
+                le voci ancora fuori portano comunque la targhetta arancione
+                "Fuori" (vedi stillOut più in basso) — ridondante mostrarle
+                anche qui, specie su telefono dove si accumulava tutto. */}
+            {detailEventHistory.length === 0 && (
               <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>{t('inventory.noHistoryAvailable')}</p>
-            )}
-
-            {detailEvents.length > 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
-                <p style={{ fontSize:11, fontWeight:700, color:'var(--accent2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.currentlyOut')}</p>
-                {detailEvents.map(ev => {
-                  const itm = (ev.items || []).find(matchesDetailItem)
-                  return (
-                  <button
-                    key={ev.id}
-                    onClick={() => { setShowFullHistory(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
-                    style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
-                  >
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                        <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                        {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
-                          <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
-                        )}
-                      </div>
-                      <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                        {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
-                        {ev.location ? ` · ${ev.location}` : ''}
-                      </p>
-                    </div>
-                    <span style={{ color:'var(--text2)' }}>→</span>
-                  </button>
-                  )
-                })}
-              </div>
             )}
 
             {detailEventHistory.length > 0 && (

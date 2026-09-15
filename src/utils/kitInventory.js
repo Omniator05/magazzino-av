@@ -44,6 +44,26 @@ export const syncKitAwareInventory = async ({ catalogItemId, isBundle, category,
   }
 }
 
+// Una riga evento "riguarda" un dato oggetto di magazzino se lo referenzia
+// direttamente (id/itemRef), OPPURE se la riga è un kit e quell'oggetto è
+// uno dei suoi componenti — la giacenza del componente si riduce insieme a
+// quella del kit (vedi syncKitAwareInventory sopra) ma la riga evento porta
+// solo l'id del kit, mai quello dei singoli componenti. Senza questo, la
+// pagina Magazzino non risale più all'evento che ha causato la riduzione di
+// un componente, e lo mostra come "ridotto manualmente" pur essendo dovuto
+// a un kit caricato regolarmente. catalogItems è il catalogo (items.jsx),
+// serve a leggere la composizione ATTUALE del kit (row.components è solo lo
+// snapshot congelato al momento in cui la riga fu aggiunta all'evento).
+export const eventRowIncludesItem = (row, itemId, catalogItems) => {
+  if (row.id === itemId || row.itemRef === itemId) return true
+  if (row.isBundle || row.category === 'Kit') {
+    const kitCatalog = catalogItems?.find(x => x.id === (row.itemRef || row.id))
+    const components = kitCatalog?.components || row.components || []
+    return components.some(c => c.itemId === itemId)
+  }
+  return false
+}
+
 // Righe di un evento ancora "fuori" (caricate, mai rientrate) — la giacenza
 // di questi oggetti è scalata e nessun'altra azione la restituirà mai se
 // l'evento viene eliminato così com'è: vanno gestite esplicitamente prima

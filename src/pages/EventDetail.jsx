@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
-import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
+import { toggleWorkerAssignment, isWorkerUnavailable, isVehicleUnavailable } from '../utils/workerAssignment'
 import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
@@ -175,6 +175,7 @@ export default function EventDetail() {
   const [itemDetails, setItemDetails] = useState({}) // id/itemRef → { location, notes } dal catalogo
   const resolvedItemDetailIdsRef = useRef(new Set())
   const [unavailability, setUnavailability] = useState([])
+  const [otherEvents, setOtherEvents] = useState([]) // per il controllo furgone già occupato su un altro carico in quei giorni
   const [activityLog, setActivityLog] = useState([])
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
@@ -249,6 +250,14 @@ export default function EventDetail() {
     if (!teamId) return
     const q = query(collection(db, 'vehicles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [teamId])
+
+  // Tutti gli eventi della squadra (con i rispettivi item/furgoni), per
+  // sapere se un furgone è già sul carico di un altro evento in quei giorni.
+  useEffect(() => {
+    if (!teamId) return
+    const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
+    return onSnapshot(q, snap => setOtherEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [teamId])
 
   useEffect(() => {
@@ -469,6 +478,16 @@ export default function EventDetail() {
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
   // non stato di avanzamento: passa da updateEventItems per propagarsi alla serie.
   const setItemVehicle = async (itemId, vehicleId) => {
+    if (vehicleId && isVehicleUnavailable(vehicleId, event, otherEvents)) {
+      const v = vehicles.find(x => x.id === vehicleId)
+      const ok = await confirm({
+        title: t('eventDetail.confirmVehicleBusyTitle'),
+        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle') }),
+        confirmLabel: t('eventDetail.confirmVehicleBusyLabel'),
+        danger: true,
+      })
+      if (!ok) return
+    }
     await updateEventItems(current => current.map(i => i.id !== itemId ? i : { ...i, vehicleId: vehicleId || null }))
   }
 
@@ -491,6 +510,16 @@ export default function EventDetail() {
   const applyBulkVehicle = async () => {
     if (bulkSelectedIds.size === 0 || !bulkVehicleId) return
     const vehicleId = bulkVehicleId === '__none__' ? null : bulkVehicleId
+    if (vehicleId && isVehicleUnavailable(vehicleId, event, otherEvents)) {
+      const v = vehicles.find(x => x.id === vehicleId)
+      const ok = await confirm({
+        title: t('eventDetail.confirmVehicleBusyTitle'),
+        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle') }),
+        confirmLabel: t('eventDetail.confirmVehicleBusyLabel'),
+        danger: true,
+      })
+      if (!ok) return
+    }
     await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId } : i))
     exitBulkVehicleMode()
   }
@@ -692,7 +721,6 @@ export default function EventDetail() {
     // segnato caricato appare con la spunta piena, per un doppio controllo
     // rispetto a quanto risulta sull'app.
     const list = [...items.filter(i => !i.isExtra), ...items.filter(i => i.isExtra)]
-    const loadedCount = list.filter(i => i.loaded).length
     const totPezzi = list.reduce((s, i) => s + (i.qty || 1), 0)
 
     const fmt = (d, opt) => d ? new Date(d + 'T12:00:00').toLocaleDateString('it-IT', opt) : ''
@@ -703,6 +731,11 @@ export default function EventDetail() {
     if (event.phases?.smontaggio) phases.push('Smontaggio: ' + fmt(event.phases.smontaggio, { day:'numeric', month:'long' }))
     const origin = window.location.origin
     const genDate = new Date().toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric' })
+    // Riferimento leggibile del documento — NON una numerazione fiscale
+    // progressiva (qui non c'è un registro DDT né dati P.IVA mittente/
+    // destinatario): serve solo a poter citare "quel documento" a colpo
+    // d'occhio (email, telefonata), non ha valore legale di per sé.
+    const docRef = `${(event.date || '').replace(/-/g, '')}-${event.id.slice(0, 5).toUpperCase()}`
 
     const rows = list.map((i, n) => {
       // Contenuto del kit (se presente) risolto dal vivo dal catalogo — con
@@ -743,16 +776,19 @@ export default function EventDetail() {
 
     const metaRow = (label, val) => val ? `<div class="mrow"><span class="mlabel">${label}</span><span class="mval">${esc(val)}</span></div>` : ''
 
-    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Lista di Carico – ${esc(event.name)}</title>
+    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Documento di Trasporto – ${esc(event.name)}</title>
     <style>
       * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 40px; }
-      .head { display:flex; align-items:center; justify-content:space-between; border-bottom: 3px solid #e63946; padding-bottom: 16px; margin-bottom: 22px; }
+      .head { display:flex; align-items:flex-start; justify-content:space-between; border-bottom: 3px solid #e63946; padding-bottom: 16px; margin-bottom: 6px; }
       .head img { height: 46px; width:auto; }
       .head .org { text-align:right; }
-      .head .org .name { font-weight: 800; font-size: 15px; letter-spacing: 0.3px; }
-      .head .org .sub  { color: #6b7280; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
-      .doctitle { font-size: 12px; font-weight: 700; color: #e63946; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+      .head .org .name { font-weight: 800; font-size: 15px; letter-spacing: 0.3px; margin-top: 2px; }
+      .head .org .sub  { color: #6b7280; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+      .head .docref { text-align:right; margin-top:8px; }
+      .head .docref .lbl { color: #9ca3af; font-size: 9px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+      .head .docref .val { color: #111827; font-size: 13px; font-weight:800; font-variant-numeric: tabular-nums; }
+      .doctitle { font-size: 12px; font-weight: 700; color: #e63946; letter-spacing: 2px; text-transform: uppercase; margin: 18px 0 2px; }
       h1 { font-size: 24px; font-weight: 800; margin: 0 0 14px; letter-spacing: -0.4px; }
       .meta { background:#f5f5f3; border:1px solid #e5e7eb; border-radius:10px; padding:12px 16px; margin-bottom:22px; }
       .mrow { display:flex; gap:10px; font-size:13px; padding:3px 0; }
@@ -785,18 +821,20 @@ export default function EventDetail() {
     </style></head><body>
       <div class="head">
         <img src="${team?.logoUrl || origin + '/logo-default.svg'}" alt="${esc(team?.name || 'Gestione Magazzino')}" onerror="this.style.display='none'" />
-        <div class="org"><div class="name">${esc(team?.name || 'Gestione Magazzino')}</div><div class="sub">Gestione Magazzino</div></div>
+        <div>
+          <div class="org"><div class="sub">Mittente</div><div class="name">${esc(team?.name || 'Gestione Magazzino')}</div></div>
+          <div class="docref"><div class="lbl">Rif. documento</div><div class="val">${esc(docRef)}</div></div>
+        </div>
       </div>
 
-      <div class="doctitle">Lista di Carico</div>
+      <div class="doctitle">Documento di Trasporto</div>
       <h1>${esc(event.name)}</h1>
 
       <div class="meta">
-        ${metaRow('Data evento', dateFull + dateEnd)}
-        ${metaRow('Luogo', event.location)}
+        ${metaRow('Data noleggio', dateFull + dateEnd)}
+        ${metaRow('Luogo di consegna', event.location)}
         ${phases.length ? metaRow('Fasi', phases.join('  ·  ')) : ''}
-        ${metaRow('Articoli', `${list.length} voci · ${totPezzi} pezzi totali`)}
-        ${list.length ? metaRow('Già caricati', `${loadedCount} di ${list.length}`) : ''}
+        ${metaRow('Colli/articoli', `${list.length} voci · ${totPezzi} pezzi totali`)}
       </div>
 
       <table>
@@ -806,12 +844,12 @@ export default function EventDetail() {
       <p class="tot">Totale: <strong>${list.length} voci · ${totPezzi} pezzi</strong></p>
 
       <div class="sign">
-        <div class="sigbox"><div class="sigline">Firma magazziniere</div></div>
-        <div class="sigbox"><div class="sigline">Firma caricatore / autista</div></div>
+        <div class="sigbox"><div class="sigline">Firma Mittente</div></div>
+        <div class="sigbox"><div class="sigline">Firma Cliente</div></div>
       </div>
 
       <div class="footer">
-        <span>Documento generato il ${genDate}</span>
+        <span>Documento generato il ${genDate} · Rif. ${esc(docRef)}</span>
         <span>${esc(team?.name || 'Gestione Magazzino')} — Gestione Magazzino</span>
       </div>
     </body></html>`
@@ -852,7 +890,7 @@ export default function EventDetail() {
         </div>
       )}
       {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} />
+        <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
       ))}
     </div>
   ))
@@ -1123,7 +1161,7 @@ export default function EventDetail() {
                 >
                   <option value="">{t('eventDetail.chooseVehicle')}</option>
                   {vehicles.filter(v => v.active !== false).map(v => (
-                    <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}</option>
+                    <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{isVehicleUnavailable(v.id, event, otherEvents) ? ` ${t('eventDetail.vehicleBusySuffix')}` : ''}</option>
                   ))}
                   <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
                 </select>
@@ -1766,9 +1804,10 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems }) {
+function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems, event, otherEvents }) {
   const { t } = useTranslation()
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
+  const vehicleBusy = vehicle ? isVehicleUnavailable(vehicle.id, event, otherEvents) : false
   // Stato di sola lettura pronto/carico/rientro — si aggiorna dallo scanner
   // (Avvia carico), qui è solo un riepilogo, non un controllo.
   const itemStatus = item.returned
@@ -1830,7 +1869,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
               <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>
             )}
             {vehicle && (
-              <span style={{ background:`${vehicle.color || 'var(--blue)'}22`, color: vehicle.color || 'var(--blue)', border:`1px solid ${vehicle.color || 'var(--blue)'}55`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicle.emoji || '🚐'} {vehicle.name}</span>
+              <span style={{ background: vehicleBusy ? 'rgba(216,56,63,0.12)' : `${vehicle.color || 'var(--blue)'}22`, color: vehicleBusy ? 'var(--red)' : (vehicle.color || 'var(--blue)'), border: `1px solid ${vehicleBusy ? 'rgba(216,56,63,0.35)' : `${vehicle.color || 'var(--blue)'}55`}`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicleBusy ? '⚠️' : (vehicle.emoji || vehicle.name?.trim()?.charAt(0)?.toUpperCase() || '🚐')} {vehicle.name}</span>
             )}
             {(item.instanceNumbers || []).length > 0 && (
               <span style={{
@@ -1878,7 +1917,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
           >
             <option value="">{t('eventDetail.vehicleSelectPlaceholder')}</option>
             {vehicleOptions.map(v => (
-              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}</option>
+              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}{isVehicleUnavailable(v.id, event, otherEvents) ? ` ${t('eventDetail.vehicleBusySuffix')}` : ''}</option>
             ))}
           </select>
           {/* Sola lettura: pronto/carico/rientro si spuntano dallo scanner

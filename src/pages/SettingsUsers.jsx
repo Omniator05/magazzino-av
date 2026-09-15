@@ -10,7 +10,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
-import { Check, Save, Trash, Edit, User, Warn, Box, Calendar, Mail } from '../components/Icon'
+import { Check, Save, Trash, Edit, User, Warn, Box, Mail } from '../components/Icon'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import BackHomeButton from '../components/BackHomeButton'
@@ -611,13 +611,19 @@ export default function SettingsUsers() {
             </div>
             <div className="form-group">
               <label>{t('adminUsers.roleLabel')}</label>
+              {/* "Organizzatore evento" (generico) tolto dalle opzioni per i
+                  nuovi utenti: era un'idea mai realmente adottata da un
+                  cliente (a differenza di "Organizzatore Brasserie", usato
+                  ogni settimana). Il codice del ruolo resta intatto — vedi
+                  EventOrganizerFields sotto e EventOrganizerHome.jsx — così
+                  un profilo già impostato così continua a funzionare, e
+                  basta riaggiungere l'opzione qui se un giorno serve di nuovo. */}
               <Picker
                 value={form.role}
                 onChange={role => setForm({...form, role})}
                 ariaLabel={t('adminUsers.roleLabel')}
                 options={[
                   { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
-                  { value:'organizzatore-evento', label:t('adminUsers.roleOrgEventOption'), icon:<Calendar size={17} /> },
                 ]}
               />
             </div>
@@ -818,7 +824,6 @@ export default function SettingsUsers() {
                         {[
                           { key:'worker', label:t('adminUsers.roleMagazziniere') },
                           { key:'admin', label:t('adminUsers.roleAdminOption') },
-                          { key:'organizzatore-evento', label:t('adminUsers.roleOrgEventOption') },
                         ].map(r => (
                           <button key={r.key} onClick={() => changeRole(r.key)} className="btn-no-anim" style={{
                             width:'100%', textAlign:'left', padding:'11px 14px', fontSize:14, fontWeight:600,
