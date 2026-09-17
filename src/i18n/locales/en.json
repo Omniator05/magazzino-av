@@ -10,6 +10,7 @@
     "appUpdated": "App updated to the latest version",
     "updateAvailableBanner": "New version available",
     "updateAvailableReload": "Reload",
+    "updateAvailableReloading": "Reloading…",
     "whatsNewLabel": "What's new",
     "whatsNewNext": "Next",
     "whatsNewDone": "Got it",

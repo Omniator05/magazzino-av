@@ -17,6 +17,7 @@ export default function UpdateAvailableBanner() {
   const { t } = useTranslation()
   const [needRefresh, setNeedRefresh] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const [reloading, setReloading] = useState(false)
   const updateSWRef = useRef(null)
 
   useEffect(() => {
@@ -35,6 +36,19 @@ export default function UpdateAvailableBanner() {
     return () => { cancelled = true }
   }, [])
 
+  // updateSW(true) manda "skip waiting" al nuovo worker e ricarica quando
+  // prende il controllo (evento controllerchange) — ma se quell'evento non
+  // arriva mai (un worker rimasto bloccato, o il primo giro dopo il cambio
+  // da autoUpdate a prompt, con un worker vecchio ancora in mezzo) il
+  // bottone non deve restare senza effetto visibile: un margine, poi
+  // ricarica comunque a mano. Nel caso peggiore è un ricaricamento normale,
+  // che rifà comunque il controllo aggiornamento da capo.
+  const handleReload = () => {
+    setReloading(true)
+    updateSWRef.current?.(true)
+    setTimeout(() => window.location.reload(), 2500)
+  }
+
   if (!needRefresh || dismissed) return null
 
   return (
@@ -42,8 +56,8 @@ export default function UpdateAvailableBanner() {
       <div role="status" className="rc-update-banner">
         <span style={{ display:'flex', flexShrink:0 }}><Recurring size={14} /></span>
         <span style={{ flex:1, minWidth:0 }}>{t('common.updateAvailableBanner')}</span>
-        <button onClick={() => updateSWRef.current?.(true)} className="rc-update-banner-btn">
-          {t('common.updateAvailableReload')}
+        <button onClick={handleReload} disabled={reloading} className="rc-update-banner-btn">
+          {reloading ? t('common.updateAvailableReloading') : t('common.updateAvailableReload')}
         </button>
         <button onClick={() => setDismissed(true)} aria-label={t('common.close')} className="rc-update-banner-close">✕</button>
       </div>
@@ -64,6 +78,7 @@ export default function UpdateAvailableBanner() {
           flex-shrink: 0; background: #fff; color: #222c42; border: none;
           border-radius: 8px; padding: 6px 12px; font-size: 12.5px; font-weight: 800;
         }
+        .rc-update-banner-btn:disabled { opacity: 0.6; }
         .rc-update-banner-close {
           flex-shrink: 0; background: transparent; color: rgba(255,255,255,0.7);
           border: none; font-size: 14px; width: 30px; height: 30px;
