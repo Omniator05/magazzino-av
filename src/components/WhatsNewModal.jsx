@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Star, Check } from './Icon'
+import { Check } from './Icon'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { CHANGELOG } from '../changelog'
 
@@ -90,15 +90,19 @@ export default function WhatsNewModal() {
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
-          style={{ background: '#fff', borderRadius: 24, padding: '28px 24px 22px', width: '100%', maxWidth: 360, boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'wnPopOut 0.15s ease forwards' : 'wnPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
+          style={{
+            background: '#fff', borderRadius: 24, padding: '24px 24px 22px', width: '100%', maxWidth: 360,
+            maxHeight: 'calc(100dvh - 48px)', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'wnPopOut 0.15s ease forwards' : 'wnPopIn 0.28s cubic-bezier(0.32,0.72,0,1)',
+          }}
         >
-          <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(230,57,70,0.12)', color: 'var(--accent)' }}>
-            <Star size={24} />
-          </div>
-          <p style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>{t('common.whatsNewLabel')}</p>
-          <h2 style={{ textAlign: 'center', fontSize: 19, fontWeight: 800, color: '#111827', margin: '0 0 18px', letterSpacing: '-0.3px' }}>{entry.title}</h2>
+          <p style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4, flexShrink: 0 }}>{t('common.whatsNewLabel')}</p>
+          <h2 style={{ textAlign: 'center', fontSize: 19, fontWeight: 800, color: '#111827', margin: '0 0 16px', letterSpacing: '-0.3px', flexShrink: 0 }}>{entry.title}</h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
+          {/* Tante voci in una volta stanno scomode su un solo schermo —
+              scorre solo questa lista, non tutto il popup: titolo, pallini e
+              bottone restano sempre a vista invece di sparire scorrendo. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18, overflowY: 'auto', minHeight: 0 }}>
             {entry.items.map((it, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1, background: 'rgba(52,211,153,0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -110,14 +114,14 @@ export default function WhatsNewModal() {
           </div>
 
           {pending.length > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 16, flexShrink: 0 }}>
               {pending.map((_, i) => (
                 <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === step ? 'var(--accent)' : '#e5e7eb' }} />
               ))}
             </div>
           )}
 
-          <button onClick={next} style={{ width: '100%', padding: 13, borderRadius: 13, fontWeight: 700, fontSize: 14, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+          <button onClick={next} style={{ width: '100%', padding: 13, borderRadius: 13, fontWeight: 700, fontSize: 14, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             {step < pending.length - 1 ? t('common.whatsNewNext') : t('common.whatsNewDone')}
           </button>
         </div>

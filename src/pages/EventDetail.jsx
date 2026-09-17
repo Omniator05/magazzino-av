@@ -7,17 +7,17 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
-import { toggleWorkerAssignment, isWorkerUnavailable, isVehicleUnavailable } from '../utils/workerAssignment'
+import { toggleWorkerAssignment, isWorkerUnavailable, vehicleConflictEvent } from '../utils/workerAssignment'
 import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
-import { Warn, Plus, Check } from '../components/Icon'
+import { Warn, Plus, Check, Kit } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
-import { syncKitAwareInventory } from '../utils/kitInventory'
+import { syncKitAwareInventory, itemCommittedElsewhere } from '../utils/kitInventory'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import JSZip from 'jszip'
 
@@ -478,11 +478,12 @@ export default function EventDetail() {
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
   // non stato di avanzamento: passa da updateEventItems per propagarsi alla serie.
   const setItemVehicle = async (itemId, vehicleId) => {
-    if (vehicleId && isVehicleUnavailable(vehicleId, event, otherEvents)) {
+    const conflict = vehicleId ? vehicleConflictEvent(vehicleId, event, otherEvents) : null
+    if (conflict) {
       const v = vehicles.find(x => x.id === vehicleId)
       const ok = await confirm({
         title: t('eventDetail.confirmVehicleBusyTitle'),
-        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle') }),
+        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle'), eventName: conflict.name }),
         confirmLabel: t('eventDetail.confirmVehicleBusyLabel'),
         danger: true,
       })
@@ -510,11 +511,12 @@ export default function EventDetail() {
   const applyBulkVehicle = async () => {
     if (bulkSelectedIds.size === 0 || !bulkVehicleId) return
     const vehicleId = bulkVehicleId === '__none__' ? null : bulkVehicleId
-    if (vehicleId && isVehicleUnavailable(vehicleId, event, otherEvents)) {
+    const conflict = vehicleId ? vehicleConflictEvent(vehicleId, event, otherEvents) : null
+    if (conflict) {
       const v = vehicles.find(x => x.id === vehicleId)
       const ok = await confirm({
         title: t('eventDetail.confirmVehicleBusyTitle'),
-        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle') }),
+        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle'), eventName: conflict.name }),
         confirmLabel: t('eventDetail.confirmVehicleBusyLabel'),
         danger: true,
       })
@@ -545,7 +547,80 @@ export default function EventDetail() {
   // sotto) fa scuotere il modal invece di lasciarlo lì muto.
   const confirmCart = async () => {
     if (cart.length === 0) return false
-    const cartSnapshot = cart
+
+    // Disponibilità: controllo "in fase di pianificazione", non sullo stato
+    // fisico del magazzino — guarda quanto di ogni oggetto è già impegnato
+    // su ALTRI eventi con date sovrapposte (caricato o no), indipendentemente
+    // da availableQty. Chi conferma può scegliere se aggiungere comunque la
+    // quantità richiesta, ridurla automaticamente a quella davvero libera,
+    // o annullare per sistemare a mano.
+    const conflicts = []
+    for (const c of cart) {
+      if (c.isExtra) continue
+      const catalogItem = allItems.find(x => x.id === c.id)
+      if (!catalogItem) continue
+      const maxAvail = (catalogItem.totalQty || 0) - (catalogItem.brokenQty || 0)
+      const { events: committedEvents } = itemCommittedElsewhere(c.id, event, otherEvents)
+      const committedQty = committedEvents.reduce((s, e) => s + e.qty, 0)
+      if (committedQty + c.qty > maxAvail) {
+        conflicts.push({
+          id: c.id, name: c.name, free: Math.max(0, maxAvail - committedQty),
+          firstEventQty: committedEvents[0]?.qty || 0, eventName: committedEvents[0]?.name || '',
+          extraCount: committedEvents.length - 1,
+        })
+      }
+    }
+
+    let cartSnapshot = cart
+    if (conflicts.length > 0) {
+      const single = conflicts.length === 1
+      const title = single
+        ? t('eventDetail.confirmAvailabilityTitleFor', { name: conflicts[0].name })
+        : t('eventDetail.confirmAvailabilityTitle')
+      const message = conflicts.slice(0, 4).map(cf => {
+        const body = t('eventDetail.availabilityConflictBody', {
+          count: cf.firstEventQty, eventName: cf.eventName,
+          extra: cf.extraCount > 0 ? t('eventDetail.availabilityConflictMore', { count: cf.extraCount }) : '',
+        })
+        return single ? body : `${cf.name}\n${body}`
+      }).join('\n\n') + (conflicts.length > 4 ? '\n\n' + t('eventDetail.availabilityConflictMoreItems', { count: conflicts.length - 4 }) : '')
+
+      // Due bottoni, non tre. Il sinistro non è mai un vero "non fare
+      // niente": toglie SEMPRE dal carrello gli oggetti/quantità non
+      // disponibili (così non tocca ritrovarli a mano in mezzo a una lista
+      // lunga per poi eliminarli) e prosegue con quello che resta. L'etichetta
+      // cambia solo a seconda che ci sia qualcosa di davvero aggiungibile:
+      // "Aggiungi solo il disponibile" se almeno un oggetto in conflitto ha
+      // margine libero, altrimenti resta "Annulla" (togliere l'unico oggetto
+      // possibile equivale comunque ad annullare quella riga). Chi vuole
+      // lasciare il carrello intatto e non toccare nulla tocca fuori dal
+      // popup o preme Esc — quello resta il vero annulla (resolve false).
+      const anyFree = conflicts.some(cf => cf.free > 0)
+      const result = await confirm({
+        title, message,
+        cancelLabel: anyFree ? t('eventDetail.confirmAvailabilityReduceLabel') : t('common.cancel'),
+        cancelValue: 'reduce',
+        confirmLabel: t('eventDetail.confirmAvailabilityLabel'),
+        danger: true,
+      })
+      if (result === false) return false
+      if (result === 'reduce') {
+        const reduced = cart
+          .map(c => {
+            const cf = conflicts.find(x => x.id === c.id)
+            return cf ? { ...c, qty: cf.free } : c
+          })
+          .filter(c => c.qty > 0)
+        // Aggiorna subito il carrello vero, non solo lo snapshot locale: se
+        // sotto non scriviamo nulla (reduced vuoto) il modal resta aperto e
+        // l'oggetto non disponibile deve comunque essere già sparito dalla
+        // lista, pronto per cercarne uno alternativo.
+        setCart(reduced)
+        if (reduced.length === 0) return false
+        cartSnapshot = reduced
+      }
+    }
+
     const addAsMancanteSnapshot = addAsMancante
     // Righe da scrivere calcolate UNA volta qui fuori (non dentro il transform,
     // che una transazione può rieseguire più volte in caso di conflitto) — così
@@ -1160,9 +1235,12 @@ export default function EventDetail() {
                   style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
                 >
                   <option value="">{t('eventDetail.chooseVehicle')}</option>
-                  {vehicles.filter(v => v.active !== false).map(v => (
-                    <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{isVehicleUnavailable(v.id, event, otherEvents) ? ` ${t('eventDetail.vehicleBusySuffix')}` : ''}</option>
-                  ))}
+                  {vehicles.filter(v => v.active !== false).map(v => {
+                    const conflict = vehicleConflictEvent(v.id, event, otherEvents)
+                    return (
+                      <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
+                    )
+                  })}
                   <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
                 </select>
                 <button onClick={applyBulkVehicle} disabled={bulkSelectedIds.size === 0 || !bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: (bulkSelectedIds.size === 0 || !bulkVehicleId) ? 0.5 : 1 }}>
@@ -1739,7 +1817,12 @@ export default function EventDetail() {
 function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
   const { t } = useTranslation()
   const [qty, setQty] = useState(cartQty || 1)
-  const max = item.availableQty ?? item.totalQty ?? 1
+  // Tetto = quantità TOTALE in magazzino, non quella disponibile ora: la
+  // disponibilità in tempo reale può essere già ridotta da un altro evento
+  // in corso, ma questo non deve impedire di pianificarne uno futuro — a
+  // quello ci pensa l'avviso di disponibilità insufficiente al momento di
+  // confermare (vedi confirmCart), non un tetto rigido qui sullo stepper.
+  const max = item.totalQty ?? item.availableQty ?? 1
 
   // Sincronizza qty se l'utente cambia nel carrello
   useEffect(() => { if (cartQty) setQty(cartQty) }, [cartQty])
@@ -1754,8 +1837,13 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
           <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-          {item.isKit && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>KIT</span>}
-          {item.isBundle && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>🧰 BUNDLE</span>}
+          {/* Un solo badge, come nell'elenco Magazzino (Inventory.jsx): isBundle
+              è l'unico flag che un kit riceve davvero oggi (isKit/kitSize sono
+              di un vecchio sistema più semplice, mai più scritto da nessuna
+              UI attuale — vedi la nota su item.isKit qui sotto per l'unico
+              posto dove conta ancora) — avere anche il vecchio badge "🧰
+              BUNDLE" qui duplicava l'etichetta sugli stessi kit. */}
+          {item.isBundle && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, display:'inline-flex', alignItems:'center', gap:3 }}><Kit size={11} /> KIT</span>}
           {alreadyInList && !inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>{t('eventDetail.alreadyInListWillBeMissing')}</span>}
           {alreadyInList && inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>{t('eventDetail.alreadyInListSeparateRow')}</span>}
         </div>
@@ -1807,7 +1895,8 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
 function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems, event, otherEvents }) {
   const { t } = useTranslation()
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
-  const vehicleBusy = vehicle ? isVehicleUnavailable(vehicle.id, event, otherEvents) : false
+  const vehicleConflict = vehicle ? vehicleConflictEvent(vehicle.id, event, otherEvents) : null
+  const vehicleBusy = !!vehicleConflict
   // Stato di sola lettura pronto/carico/rientro — si aggiorna dallo scanner
   // (Avvia carico), qui è solo un riepilogo, non un controllo.
   const itemStatus = item.returned
@@ -1869,7 +1958,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
               <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>
             )}
             {vehicle && (
-              <span style={{ background: vehicleBusy ? 'rgba(216,56,63,0.12)' : `${vehicle.color || 'var(--blue)'}22`, color: vehicleBusy ? 'var(--red)' : (vehicle.color || 'var(--blue)'), border: `1px solid ${vehicleBusy ? 'rgba(216,56,63,0.35)' : `${vehicle.color || 'var(--blue)'}55`}`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicleBusy ? '⚠️' : (vehicle.emoji || vehicle.name?.trim()?.charAt(0)?.toUpperCase() || '🚐')} {vehicle.name}</span>
+              <span title={vehicleConflict ? t('eventDetail.vehicleBusyTooltip', { eventName: vehicleConflict.name }) : undefined} style={{ background: vehicleBusy ? 'rgba(216,56,63,0.12)' : `${vehicle.color || 'var(--blue)'}22`, color: vehicleBusy ? 'var(--red)' : (vehicle.color || 'var(--blue)'), border: `1px solid ${vehicleBusy ? 'rgba(216,56,63,0.35)' : `${vehicle.color || 'var(--blue)'}55`}`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicleBusy ? '⚠️' : (vehicle.emoji || vehicle.name?.trim()?.charAt(0)?.toUpperCase() || '🚐')} {vehicle.name}</span>
             )}
             {(item.instanceNumbers || []).length > 0 && (
               <span style={{
@@ -1916,9 +2005,12 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
             style={{ fontSize:11, fontWeight:700, borderRadius:8, padding:'4px 6px', border:'1.5px solid var(--border)', background:'var(--card2)', color: vehicle ? (vehicle.color || 'var(--text2)') : 'var(--text3)', maxWidth:120 }}
           >
             <option value="">{t('eventDetail.vehicleSelectPlaceholder')}</option>
-            {vehicleOptions.map(v => (
-              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}{isVehicleUnavailable(v.id, event, otherEvents) ? ` ${t('eventDetail.vehicleBusySuffix')}` : ''}</option>
-            ))}
+            {vehicleOptions.map(v => {
+              const conflict = vehicleConflictEvent(v.id, event, otherEvents)
+              return (
+              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
+              )
+            })}
           </select>
           {/* Sola lettura: pronto/carico/rientro si spuntano dallo scanner
               (Avvia carico), non più da qui — avere due punti che scrivono

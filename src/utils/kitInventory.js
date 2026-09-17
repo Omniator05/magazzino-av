@@ -64,6 +64,37 @@ export const eventRowIncludesItem = (row, itemId, catalogItems) => {
   return false
 }
 
+// Quanto di un oggetto è già impegnato su ALTRI eventi le cui date si
+// sovrappongono a questo — a prescindere dal fatto che sia già stato
+// caricato fisicamente o no (quello lo copre già availableQty/lo scanner,
+// questo è un controllo "in fase di pianificazione", per accorgersi di un
+// doppio impegno PRIMA del giorno del carico, non quando è già tardi).
+// Stesso principio di isVehicleUnavailable/isWorkerUnavailable in
+// workerAssignment.js, ma quantità-consapevole invece che booleano — un
+// oggetto ha più unità, un furgone/worker no. Non scende nei componenti dei
+// kit (stesso motivo di isVehicleUnavailable: un controllo di primo livello,
+// non serve replicare la logica di eventRowIncludesItem qui).
+export const itemCommittedElsewhere = (catalogItemId, event, otherEvents) => {
+  const result = { qty: 0, events: [] }
+  if (!catalogItemId || !event?.date) return result
+  const evStart = event.date
+  const evEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+  otherEvents.forEach(other => {
+    if (other.id === event.id || !other.date) return
+    const oStart = other.date
+    const oEnd = other.dateEnd && other.dateEnd >= other.date ? other.dateEnd : other.date
+    if (!(evStart <= oEnd && evEnd >= oStart)) return
+    const rowQty = (other.items || [])
+      .filter(i => !i.isExtra && (i.itemRef || i.id) === catalogItemId)
+      .reduce((s, i) => s + (i.qty || 1), 0)
+    if (rowQty > 0) {
+      result.qty += rowQty
+      result.events.push({ id: other.id, name: other.name, qty: rowQty })
+    }
+  })
+  return result
+}
+
 // Righe di un evento ancora "fuori" (caricate, mai rientrate) — la giacenza
 // di questi oggetti è scalata e nessun'altra azione la restituirà mai se
 // l'evento viene eliminato così com'è: vanno gestite esplicitamente prima

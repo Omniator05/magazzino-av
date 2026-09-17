@@ -124,19 +124,7 @@ export default function Inventory() {
   const [kitSearch, setKitSearch]       = useState('')
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
-  // Per i kit: filtra "dove si trova" a un baule fisico specifico invece
-  // dell'aggregato di tutto il kit — null = tutti i bauli insieme.
-  const [historyInstanceFilter, setHistoryInstanceFilter] = useState(null)
   const [itemActivityLog, setItemActivityLog] = useState([])
-  // Popup "cronologia per evento" — evita di rimandare fuori da Magazzino
-  // verso la lista di carico (che potrebbe essere archiviata, o non avere
-  // più questo oggetto se nel frattempo è stato rimosso): i dati sono già
-  // tutti caricati in itemActivityLog, qui si filtra solo per evento.
-  const [showEventActivity, setShowEventActivity] = useState(null) // { id, name } | null
-  // Popup "storico completo" dal dettaglio oggetto — il dettaglio mostra solo
-  // un riepilogo (dove si trova ora, o l'ultima volta che è stato fuori);
-  // l'elenco completo/log attività si apre solo su richiesta.
-  const [showFullHistory, setShowFullHistory] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showPrintPopup, setShowPrintPopup] = useState(false)
   // Formato scelto per il download etichetta corrente — null finché non si
@@ -148,10 +136,9 @@ export default function Inventory() {
   const [importParsed, setImportParsed] = useState(null) // { items, warnings }
   const [importError, setImportError] = useState('')
   const [importProgress, setImportProgress] = useState(0)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi' })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'' })
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
-  const historyDrag = useModalDrag(() => setShowFullHistory(false), undefined, undefined, showFullHistory)
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
   const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
   const kitDrag     = useModalDrag(() => setShowKitModal(false))
@@ -220,25 +207,21 @@ export default function Inventory() {
     return onSnapshot(q, snap => setItemActivityLog(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [showDetail?.id])
 
-  // Riga evento che corrisponde all'oggetto selezionato — se è un kit e un
-  // baule specifico è filtrato, deve anche essere tra quelli assegnati a
-  // quella riga (instanceNumbers), non solo lo stesso kit in generale.
-  const matchesDetailItem = i => {
-    if (!eventRowIncludesItem(i, showDetail.id, items)) return false
-    // Il filtro per numero di unità ha senso solo quando la riga referenzia
-    // l'oggetto direttamente (unità fisiche tracciate) — un componente
-    // "trovato" perché dentro un kit non ha instanceNumbers propri sulla riga.
-    if (historyInstanceFilter == null) return true
-    if (i.id !== showDetail.id && i.itemRef !== showDetail.id) return true
-    return (i.instanceNumbers || []).includes(historyInstanceFilter)
-  }
+  // Riga evento che corrisponde all'oggetto selezionato — usata solo per il
+  // riepilogo "Dove si trova" qui nel dettaglio compatto (dove/quando è
+  // fuori ora, o l'ultima volta). Il filtro per singolo baule di un kit vive
+  // ora nella pagina dedicata (InventoryItemHistory.jsx), non più qui.
+  const matchesDetailItem = i => eventRowIncludesItem(i, showDetail.id, items)
 
   // Eventi in cui l'oggetto attualmente selezionato è caricato e non ancora rientrato
   const detailEvents = showDetail
     ? events.filter(ev => (ev.items || []).some(i => matchesDetailItem(i) && i.loaded && !i.returned))
     : []
 
-  // Storico: ultimi 5 eventi (di qualunque stato) in cui è comparso l'oggetto
+  // Solo gli ultimi 5 (di qualunque stato) — qui serve giusto per il
+  // riepilogo "ultima volta fuori" del dettaglio compatto qui sotto, non
+  // per lo storico vero e proprio (quello, completo, sta nella pagina
+  // dedicata InventoryItemHistory.jsx).
   const detailEventHistory = showDetail
     ? events
         .filter(ev => (ev.items || []).some(matchesDetailItem))
@@ -257,7 +240,7 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi' }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'' }); setShowModal(true) }
   const openEdit = item => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
@@ -268,7 +251,7 @@ export default function Inventory() {
       setKitEditSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi' }); setShowModal(true)
+      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi', weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '' }); setShowModal(true)
     }
   }
 
@@ -296,6 +279,11 @@ export default function Inventory() {
   const saveItem = async () => {
     if (!form.name.trim()) return false
     const qty = parseInt(form.qty) || 1
+    // Entrambi opzionali (solo per gli oggetti "importanti" che vale la pena
+    // tracciare) — stringa vuota resta null, non 0, per distinguere "non
+    // compilato" da "davvero zero" e non sporcare la scheda di ogni oggetto.
+    const weightKg = form.weightKg !== '' ? (parseFloat(String(form.weightKg).replace(',', '.')) || null) : null
+    const peakPowerW = form.peakPowerW !== '' ? (parseInt(form.peakPowerW) || null) : null
     if (!selected) {
       if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsInWarehouse) {
         await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: FREE_LIMITS.itemsInWarehouse }) })
@@ -310,13 +298,13 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, weightKg, peakPowerW })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
-        brand:form.brand, model:form.model, location:form.location, notes:form.notes,
+        brand:form.brand, model:form.model, location:form.location, notes:form.notes, weightKg, peakPowerW,
         teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -873,6 +861,13 @@ export default function Inventory() {
               <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
               <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
             </div>
+            {/* Peso e consumo di picco — entrambi opzionali, pensati solo per
+                gli oggetti "importanti" che vale la pena tracciare (fari,
+                casse, amplificatori...), non richiesti per tutto il catalogo. */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
+              <div className="form-group"><label>{t('inventory.peakPowerLabel')}</label><input type="text" inputMode="numeric" value={form.peakPowerW} onChange={e => setForm({...form,peakPowerW:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.peakPowerPlaceholder')} /></div>
+            </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
@@ -979,6 +974,18 @@ export default function Inventory() {
                   <span style={rowValue}>{showDetail.location}</span>
                 </div>
               )}
+              {showDetail.weightKg != null && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.weightLabel')}</span>
+                  <span style={rowValue}>{t('inventory.weightValue', { value: showDetail.weightKg })}</span>
+                </div>
+              )}
+              {showDetail.peakPowerW != null && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.peakPowerLabel')}</span>
+                  <span style={rowValue}>{t('inventory.peakPowerValue', { value: showDetail.peakPowerW })}</span>
+                </div>
+              )}
               <div style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:8 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14 }}>
                   <span style={rowLabel}>{t('inventory.detailAvailable')}</span>
@@ -1007,7 +1014,7 @@ export default function Inventory() {
                 </div>
               </div>
               {hasFullHistory ? (
-                <button onClick={() => setShowFullHistory(true)} style={{ ...row(r++), width:'100%', textAlign:'left', cursor:'pointer' }}>
+                <button onClick={() => navigate(`/inventory/${showDetail.id}/history`)} style={{ ...row(r++), width:'100%', textAlign:'left', cursor:'pointer' }}>
                   <span style={rowLabel}>{t('inventory.whereItIs')}</span>
                   <span style={{ display:'flex', alignItems:'center', gap:6 }}>
                     <span style={rowValue}>
@@ -1076,143 +1083,6 @@ export default function Inventory() {
         )
       })()}
 
-      {/* Modal "storico completo" — separato dal dettaglio, aperto solo su
-          richiesta (vedi "Vedi storia completa" sopra): filtro bauli (kit),
-          oggetti attualmente fuori, cronologia eventi, log attività. */}
-      {showFullHistory && showDetail && (
-        <div className={`modal-overlay${historyDrag.closing ? ' closing' : ''}`} onClick={historyDrag.onOverlayClick}>
-          <div className={`modal${historyDrag.jiggling ? ' modal-jiggle' : ''}${historyDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...historyDrag.props}>
-            <button className="close-btn" onClick={historyDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2 style={{ marginBottom:4 }}>{t('inventory.whereItIs')}</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom: showDetail.isBundle ? 12 : 16 }}>{showDetail.name}</p>
-
-            {/* Filtro per baule — solo per i kit: lo storico aggregato
-                del kit intero non dice quale ESEMPLARE fisico è stato
-                dove, che è esattamente quello che serve sapere quando
-                un baule specifico torna con qualcosa di rotto/mancante. */}
-            {showDetail.isBundle && (
-              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
-                <button
-                  onClick={() => setHistoryInstanceFilter(null)}
-                  className="btn-no-anim"
-                  aria-pressed={historyInstanceFilter === null}
-                  style={{
-                    padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
-                    background: historyInstanceFilter === null ? 'var(--accent)' : 'var(--card2)',
-                    color: historyInstanceFilter === null ? '#fff' : 'var(--text2)',
-                    border: `1px solid ${historyInstanceFilter === null ? 'var(--accent)' : 'var(--border)'}`,
-                  }}
-                >
-                  {t('inventory.allInstancesFilter')}
-                </button>
-                {ensureInstanceList(showDetail.instances, showDetail.totalQty).map(inst => (
-                  <button
-                    key={inst.number}
-                    onClick={() => setHistoryInstanceFilter(n => n === inst.number ? null : inst.number)}
-                    className="btn-no-anim"
-                    aria-pressed={historyInstanceFilter === inst.number}
-                    style={{
-                      padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
-                      background: historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--card2)',
-                      color: historyInstanceFilter === inst.number ? '#fff' : ((inst.brokenComponents||[]).length > 0 ? 'var(--red)' : 'var(--text2)'),
-                      border: `1px solid ${historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--border)'}`,
-                    }}
-                  >
-                    {t('inventory.kitInstanceLabel', { number: inst.number })}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Niente più sezione "Attualmente fuori" separata qui sopra: era
-                lo stesso elenco già coperto dallo storico subito sotto, dove
-                le voci ancora fuori portano comunque la targhetta arancione
-                "Fuori" (vedi stillOut più in basso) — ridondante mostrarle
-                anche qui, specie su telefono dove si accumulava tutto. */}
-            {detailEventHistory.length === 0 && (
-              <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic', padding:'8px 0' }}>{t('inventory.noHistoryAvailable')}</p>
-            )}
-
-            {detailEventHistory.length > 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.history', { count: detailEventHistory.length })}</p>
-                {detailEventHistory.map(ev => {
-                  const itm = (ev.items || []).find(matchesDetailItem)
-                  const stillOut = itm?.loaded && !itm?.returned
-                  return (
-                    <button
-                      key={ev.id}
-                      onClick={() => { setShowFullHistory(false); setShowDetail(null); navigate(`/events/${ev.id}`) }}
-                      style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
-                    >
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                          <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                          {showDetail.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
-                            <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
-                          )}
-                        </div>
-                        <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                          {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
-                          {ev.location ? ` · ${ev.location}` : ''}
-                        </p>
-                      </div>
-                      {stillOut && (
-                        <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>{t('inventory.out')}</span>
-                      )}
-                      <span style={{ color:'var(--text2)' }}>→</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Cronologia "chi ha fatto cosa" — attraverso TUTTI gli
-                eventi (anche quelli che nel frattempo hanno rimosso
-                l'oggetto dalla propria lista di carico, o sono stati
-                archiviati/eliminati), non solo quelli sopra. Toccare
-                una voce apre un popup con la cronologia di QUEL solo
-                evento, invece di rimandare alla sua lista di carico —
-                che potrebbe non esistere più, o non avere più questo
-                oggetto. I dati sono già tutti in itemActivityLog: si
-                filtra client-side, nessuna query in più. */}
-            {itemActivityLog.length > 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
-                <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.activityTitle')}</p>
-                <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:260, overflowY:'auto' }}>
-                  {itemActivityLog.map(entry => (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className="btn-no-anim"
-                      disabled={!entry.eventId}
-                      onClick={() => entry.eventId && setShowEventActivity({ id: entry.eventId, name: entry.eventName })}
-                      style={{ display:'flex', alignItems:'flex-start', gap:9, width:'100%', textAlign:'left', background:'transparent', padding:'6px 4px', borderRadius:8, cursor: entry.eventId ? 'pointer' : 'default' }}
-                    >
-                      <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ fontSize:13, fontWeight:600 }}>
-                          {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
-                        </p>
-                        <p style={{ fontSize:11, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {entry.eventName && (
-                            <span style={{ color: entry.eventId ? 'var(--blue)' : 'var(--text2)', fontWeight:600 }}>{entry.eventName}</span>
-                          )}
-                          <span style={{ color:'var(--text2)' }}>
-                            {entry.eventName ? ' · ' : ''}
-                            {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
-                          </span>
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Popup scelta stampa — volutamente leggero (niente bottom-sheet/drag),
           solo un riquadro centrato fisso. Due passaggi solo se la squadra usa
           "entrambi" i formati (altrimenti il formato è già deciso e si vede
@@ -1272,46 +1142,6 @@ export default function Inventory() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Cronologia di un singolo evento, dalla sezione Cronologia sopra —
-          stesso stile "riquadro centrato" di showPrintPopup. Filtra
-          itemActivityLog già in memoria, nessuna nuova query. */}
-      {showEventActivity && (
-        <div
-          onClick={() => setShowEventActivity(null)}
-          style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ position:'relative', width:'100%', maxWidth:360, maxHeight:'80vh', display:'flex', flexDirection:'column', background:'var(--card)', borderRadius:16, padding:20, boxShadow:'0 12px 40px rgba(0,0,0,0.3)' }}
-          >
-            <button
-              onClick={() => setShowEventActivity(null)}
-              aria-label={t('common.close')}
-              style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}
-            >
-              ✕
-            </button>
-            <h2 style={{ marginBottom:2, fontSize:17, paddingRight:36 }}>{showEventActivity.name || t('inventory.activityTitle')}</h2>
-            <p style={{ color:'var(--text2)', fontSize:12, marginBottom:16 }}>{showDetail?.name}</p>
-            <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
-              {itemActivityLog.filter(entry => entry.eventId === showEventActivity.id).map(entry => (
-                <div key={entry.id} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
-                  <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:13, fontWeight:600 }}>
-                      {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
-                    </p>
-                    <p style={{ fontSize:11, color:'var(--text2)', marginTop:1 }}>
-                      {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}

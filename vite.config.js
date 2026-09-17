@@ -31,7 +31,13 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' invece di 'autoUpdate': con autoUpdate il nuovo service
+      // worker si attivava da solo e ricaricava la pagina senza preavviso —
+      // rischioso a metà di una lista di carico in magazzino. Con 'prompt'
+      // il nuovo SW resta in attesa finché UpdateAvailableBanner.jsx (montato
+      // in App.jsx) non lo dice esplicitamente, tramite updateSW(true) da
+      // virtual:pwa-register — l'utente decide quando ricaricare, non l'app.
+      registerType: 'prompt',
       // Senza questo, in `npm run dev` il plugin non genera/serve
       // manifest.webmanifest né il service worker: la richiesta del browser
       // cade sul fallback SPA di Vite (index.html), e provare a parsare HTML

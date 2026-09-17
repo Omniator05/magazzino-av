@@ -72,8 +72,15 @@ export function ConfirmProvider({ children }) {
             </div>
             {o.title && <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{o.title}</h3>}
             {o.message && <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45, whiteSpace:'pre-line' }}>{o.message}</p>}
+            {/* Il pulsante sinistro di norma annulla (resolve false, uguale a
+                backdrop/Esc). Passando cancelValue si può fargli risolvere
+                un valore diverso — es. un'azione intermedia tipo "aggiungi
+                solo il disponibile" — mentre backdrop/Esc restano SEMPRE il
+                vero annulla (false), così l'utente ha comunque un modo
+                ovvio per non fare nulla senza dover leggere le etichette.
+                Senza cancelValue il comportamento resta quello di sempre. */}
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
-              <button onClick={() => finish(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none', cursor:'pointer' }}>
+              <button onClick={() => finish(o.cancelValue !== undefined ? o.cancelValue : false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none', cursor:'pointer' }}>
                 {o.cancelLabel || 'Annulla'}
               </button>
               <button onClick={() => finish(true)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:accent, color:'#fff', border:'none', cursor:'pointer' }}>

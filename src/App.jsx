@@ -13,6 +13,7 @@ const Welcome = lazy(() => import('./pages/Welcome'))
 const PendingApproval = lazy(() => import('./pages/PendingApproval'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Inventory = lazy(() => import('./pages/Inventory'))
+const InventoryItemHistory = lazy(() => import('./pages/InventoryItemHistory'))
 const Events = lazy(() => import('./pages/Events'))
 const EventDetail = lazy(() => import('./pages/EventDetail'))
 const Scanner = lazy(() => import('./pages/Scanner'))
@@ -52,6 +53,7 @@ import AbsenceNotifications from './components/AbsenceNotifications'
 import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
+import UpdateAvailableBanner from './components/UpdateAvailableBanner'
 
 // Riusato sia mentre si aspettano i dati di login sia come fallback di
 // Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
@@ -179,6 +181,9 @@ function PrivateRoutes({ toggleTheme, theme }) {
                 Pensato per chi lavora davvero il magazzino ma non deve avere
                 accesso a utenti/fatturazione/impostazioni squadra. */}
             <Route path="/inventory" element={profile?.canManageInventory ? <Inventory /> : <WorkerInventory />} />
+            {profile?.canManageInventory && (
+              <Route path="/inventory/:itemId/history" element={<InventoryItemHistory />} />
+            )}
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
             <Route path="/work-hours" element={<WorkHours />} />
@@ -244,6 +249,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <Routes>
           <Route path="/" element={<Dashboard toggleTheme={toggleTheme} theme={theme} />} />
           <Route path="/inventory" element={<Inventory />} />
+          <Route path="/inventory/:itemId/history" element={<InventoryItemHistory />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/events" element={<Events />} />
           <Route path="/calendar" element={<Calendar />} />
@@ -287,6 +293,7 @@ export default function App() {
         <BrowserRouter>
           <LoadingBar />
           <OfflineIndicator />
+          <UpdateAvailableBanner />
           <PageTransition />
           <OnboardingReveal />
           {/* Un solo confine Suspense in cima basta: cattura il caricamento

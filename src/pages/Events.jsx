@@ -75,20 +75,26 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   // titolo non va mostrata: azzerare qui invece che nel JSX fa sì che anche
   // i colori/bordo derivati (iconGradient, cardBorder) tornino da soli ai
   // rami "non caricato" senza doverli duplicare.
+  const prepared = loadListsOn ? items.filter(i => i.pronto).length : 0
   const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
   const returned = loadListsOn ? items.filter(i => i.returned).length : 0
   const total    = loadListsOn ? items.length : 0
   const isToday  = event.date === today
   const evEnd    = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+  const isMultiDay = evEnd !== event.date
   const isPast   = evEnd < today
   const daScaricare = loadListsOn && isPast && items.some(i => i.loaded && !i.returned)
 
+  // Segue lo stadio più avanzato raggiunto da almeno un oggetto — appena i
+  // magazzinieri iniziano a lavorarci la dicitura passa da "N oggetti in
+  // lista" (nessuno ancora toccato) a "Pronti"/"Caricati"/"Rientrati" con il
+  // conteggio, nello stesso ordine in cui li segnano dallo scanner.
   let statusColor = 'var(--dash-muted)', statusText = t('events.statusEmptyList')
   if (total > 0) {
-    if (returned === total)    { statusColor = '#15803d'; statusText = t('events.statusAllReturned') }
-    else if (loaded === total) { statusColor = '#b45309'; statusText = t('events.statusInEventReturned', { returned, total }) }
-    else if (loaded > 0)       { statusColor = '#b45309'; statusText = t('events.statusLoading', { loaded, total }) }
-    else                       { statusColor = 'var(--dash-muted)'; statusText = t('events.statusInList', { count: total }) }
+    if (returned > 0)      { statusColor = '#15803d'; statusText = t('events.statusReturnedCount', { returned, total }) }
+    else if (loaded > 0)   { statusColor = '#b45309'; statusText = t('events.statusLoadedCount', { loaded, total }) }
+    else if (prepared > 0) { statusColor = 'var(--blue)'; statusText = t('events.statusReadyCount', { prepared, total }) }
+    else                    { statusColor = 'var(--dash-muted)'; statusText = t('events.statusInList', { count: total }) }
   }
 
   const iconGradient = daScaricare
@@ -106,10 +112,16 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
       className="event-card"
       style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)' }}
     >
-      {/* Icona gradiente con data */}
+      {/* Icona gradiente con data — se dura più giorni mostra l'intervallo
+          (es. "14-18") invece del solo primo giorno, che da solo lasciava
+          credere fosse un evento di un giorno. Font più piccolo per
+          l'intervallo: due numeri e un trattino non ci stanno alla stessa
+          taglia del singolo giorno nel riquadro da 52px. */}
       <div style={{ position:'relative', width:52, height:52, flexShrink:0 }}>
         <div style={{ width:52, height:52, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
-          <span style={{ fontSize:20, fontWeight:800 }}>{event.date ? new Date(event.date+'T12:00:00').getDate() : '?'}</span>
+          <span style={{ fontSize: isMultiDay ? 15 : 20, fontWeight:800 }}>
+            {event.date ? (isMultiDay ? `${new Date(event.date+'T12:00:00').getDate()}-${new Date(evEnd+'T12:00:00').getDate()}` : new Date(event.date+'T12:00:00').getDate()) : '?'}
+          </span>
           <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
             {event.date ? formatDate(event.date+'T12:00:00', {month:'short'}, i18n.language) : ''}
           </span>
