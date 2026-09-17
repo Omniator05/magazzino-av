@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Recurring } from './Icon'
 
@@ -11,24 +11,37 @@ import { Recurring } from './Icon'
 // avrebbe potuto interrompere un carico a metà.
 //
 // Per questo in vite.config.js registerType è 'prompt', non più
-// 'autoUpdate': il nuovo service worker resta in attesa finché non è
-// questo componente (tramite updateSW(true)) a dirgli di attivarsi.
+// 'autoUpdate': il nuovo service worker resta in attesa finché non lo si
+// dice esplicitamente.
+//
+// updateSW() di virtual:pwa-register (la funzione restituita da registerSW)
+// SEMBRA fatta apposta per questo, ma nella pratica (provato in produzione)
+// non ha affidabilmente fatto ricaricare la pagina — il parametro
+// "reloadPage" che sembra promettere il ricaricamento è di fatto IGNORATO
+// dalla libreria dalla versione 0.13.2 in poi (il ricaricamento vero
+// dipende da un evento "controlling" impostato internamente, che non
+// sempre arriva). Invece di inseguire quell'evento, qui si parla
+// DIRETTAMENTE con l'API Service Worker del browser: si prende il worker
+// "in attesa" dalla registration corrente e gli si manda il messaggio di
+// attivazione a mano — un solo percorso deterministico, non una corsa fra
+// due meccanismi che possono arrivare in disaccordo.
 export default function UpdateAvailableBanner() {
   const { t } = useTranslation()
   const [needRefresh, setNeedRefresh] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [reloading, setReloading] = useState(false)
-  const updateSWRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
     // Import dinamico: virtual:pwa-register esiste solo nella build PWA
     // (in dev con devOptions.enabled va comunque bene) — evitare un import
     // statico qui protegge da un crash se il plugin non è attivo per
-    // qualche motivo, non solo per pigrizia stilistica.
+    // qualche motivo, non solo per pigrizia stilistica. Qui serve solo per
+    // sapere QUANDO mostrare la barra (onNeedRefresh) — il ricaricamento
+    // vero e proprio, sotto, non passa più da questo modulo.
     import('virtual:pwa-register').then(({ registerSW }) => {
       if (cancelled) return
-      updateSWRef.current = registerSW({
+      registerSW({
         immediate: true,
         onNeedRefresh() { setNeedRefresh(true) },
       })
@@ -36,17 +49,15 @@ export default function UpdateAvailableBanner() {
     return () => { cancelled = true }
   }, [])
 
-  // updateSW(true) manda "skip waiting" al nuovo worker e ricarica quando
-  // prende il controllo (evento controllerchange) — ma se quell'evento non
-  // arriva mai (un worker rimasto bloccato, o il primo giro dopo il cambio
-  // da autoUpdate a prompt, con un worker vecchio ancora in mezzo) il
-  // bottone non deve restare senza effetto visibile: un margine, poi
-  // ricarica comunque a mano. Nel caso peggiore è un ricaricamento normale,
-  // che rifà comunque il controllo aggiornamento da capo.
-  const handleReload = () => {
+  const handleReload = async () => {
     setReloading(true)
-    updateSWRef.current?.(true)
-    setTimeout(() => window.location.reload(), 2500)
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration()
+      reg?.waiting?.postMessage({ type: 'SKIP_WAITING' })
+    } catch { /* procede comunque al ricaricamento sotto */ }
+    // Margine fisso per lasciare al worker il tempo di attivarsi prima di
+    // ricaricare — non un'attesa di un evento che potrebbe non arrivare mai.
+    setTimeout(() => window.location.reload(), 700)
   }
 
   if (!needRefresh || dismissed) return null
