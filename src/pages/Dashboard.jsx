@@ -12,6 +12,7 @@ import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
 import TutorialModal from '../components/TutorialModal'
 import GettingStartedWidget from '../components/GettingStartedWidget'
+import TodayReminderModal from '../components/TodayReminderModal'
 import ProUpsell from '../components/ProUpsell'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
@@ -693,6 +694,12 @@ export default function Dashboard({ toggleTheme, theme }) {
       {showProfile && <Profile onClose={() => setShowProfile(false)} />}
 
       {!showOverlay && !showRecapBanner && !showRecapModal && <TutorialModal role="admin" />}
+
+      {/* Non insieme al resoconto settimanale (si sovrapporrebbero il lunedì
+          mattina) — quello prevale, questo arriva al prossimo giro. */}
+      {!showOverlay && !showRecapBanner && !showRecapModal && (
+        <TodayReminderModal events={events} today={today} navigate={navigate} />
+      )}
 
       <GettingStartedWidget teamId={teamId} items={items} events={events} dataReady={itemsLoaded && eventsLoaded} />
 

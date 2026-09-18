@@ -14,7 +14,7 @@ import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useCenteredModal } from '../hooks/useCenteredModal'
-import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download } from '../components/Icon'
+import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download, Plus } from '../components/Icon'
 import FabButton from '../components/FabButton'
 import SaveButton from '../components/SaveButton'
 import Picker from '../components/Picker'
@@ -136,7 +136,8 @@ export default function Inventory() {
   const [importParsed, setImportParsed] = useState(null) // { items, warnings }
   const [importError, setImportError] = useState('')
   const [importProgress, setImportProgress] = useState(0)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'' })
+  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'', linkedItemIds:[] })
+  const [linkedSearch, setLinkedSearch] = useState('')
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
@@ -166,9 +167,17 @@ export default function Inventory() {
   // Più semplice e affidabile ricalcolare tutto: lo si chiude e basta. Ascolto
   // solo lo scroll della PAGINA (non capturing), così lo scroll interno del
   // pannello stesso (es. dentro la griglia categorie) non lo chiude da solo.
+  // Eccezione: su telefono, aprire la tastiera per scrivere nel campo
+  // posizione fa scorrere la pagina per portare il campo in vista — non è
+  // l'utente che sta scorrendo la pagina, quindi mentre si scrive lì dentro
+  // (l'input ha il focus) lo scroll non deve chiudere il pannello.
   useEffect(() => {
     if (!showFilterMenu) return
-    const closeOnScroll = () => setShowFilterMenu(false)
+    const closeOnScroll = () => {
+      const active = document.activeElement
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return
+      setShowFilterMenu(false)
+    }
     window.addEventListener('scroll', closeOnScroll)
     return () => window.removeEventListener('scroll', closeOnScroll)
   }, [showFilterMenu])
@@ -240,7 +249,7 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'' }); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'', linkedItemIds:[] }); setLinkedSearch(''); setShowModal(true) }
   const openEdit = item => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
@@ -251,7 +260,7 @@ export default function Inventory() {
       setKitEditSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi', weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '' }); setShowModal(true)
+      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi', weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', linkedItemIds:item.linkedItemIds||[] }); setLinkedSearch(''); setShowModal(true)
     }
   }
 
@@ -298,13 +307,13 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, weightKg, peakPowerW })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, weightKg, peakPowerW, linkedItemIds:form.linkedItemIds })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
-        brand:form.brand, model:form.model, location:form.location, notes:form.notes, weightKg, peakPowerW,
+        brand:form.brand, model:form.model, location:form.location, notes:form.notes, weightKg, peakPowerW, linkedItemIds:form.linkedItemIds,
         teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -926,6 +935,61 @@ export default function Inventory() {
                 {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
               </div>
             )}
+
+            {/* Oggetti collegati — si aggiungono da soli quando questo finisce
+                in una lista di carico (es. "tavolo dj" → gonna + gambe), per
+                non dimenticarseli. Solo al primo inserimento, mai al posto di
+                una quantità che chi carica ha già scelto di persona — vedi
+                addToCart in EventDetail.jsx. Facoltativo. */}
+            <div className="form-group">
+              <label>{t('inventory.linkedItemsLabel')}</label>
+              {form.linkedItemIds.length > 0 && (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
+                  {form.linkedItemIds.map(id => {
+                    const li = items.find(i => i.id === id)
+                    if (!li) return null
+                    return (
+                      <span key={id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'var(--card2)', border:'1px solid var(--border)', borderRadius:20, padding:'5px 6px 5px 12px', fontSize:12.5, fontWeight:700 }}>
+                        {li.name}
+                        <button type="button"
+                          onClick={() => setForm({...form, linkedItemIds: form.linkedItemIds.filter(x => x !== id)})}
+                          aria-label={t('inventory.removeLinkedItemAria', { name: li.name })}
+                          style={{ width:20, height:20, borderRadius:'50%', background:'var(--border)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, flexShrink:0 }}
+                        >✕</button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              <input
+                value={linkedSearch}
+                onChange={e => setLinkedSearch(e.target.value)}
+                placeholder={t('inventory.linkedItemsSearchPlaceholder')}
+              />
+              {linkedSearch.trim() && (() => {
+                const results = items.filter(i =>
+                  i.id !== selected?.id &&
+                  !form.linkedItemIds.includes(i.id) &&
+                  i.name.toLowerCase().includes(linkedSearch.trim().toLowerCase())
+                ).slice(0, 8)
+                return (
+                  <div style={{ marginTop:6, maxHeight:170, overflowY:'auto', border:'1px solid var(--border)', borderRadius:10 }}>
+                    {results.length === 0 ? (
+                      <p style={{ padding:'9px 12px', fontSize:12.5, color:'var(--text3)', fontStyle:'italic' }}>{t('inventory.linkedItemsNoResults')}</p>
+                    ) : results.map((i, idx) => (
+                      <button key={i.id} type="button"
+                        onClick={() => { setForm({...form, linkedItemIds:[...form.linkedItemIds, i.id]}); setLinkedSearch('') }}
+                        style={{ display:'flex', width:'100%', alignItems:'center', justifyContent:'space-between', gap:8, padding:'9px 12px', background:'transparent', borderBottom: idx < results.length-1 ? '1px solid var(--border)' : 'none', fontSize:13, fontWeight:600, textAlign:'left', color:'var(--text)' }}
+                      >
+                        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i.name}</span>
+                        <span style={{ color:'var(--accent)', flexShrink:0, display:'flex' }}><Plus size={14} /></span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
+              <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.linkedItemsHint')}</p>
+            </div>
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
               <SaveButton onSave={saveItem} onDone={myDrag.close} onError={myDrag.triggerJiggle} className="btn btn-primary" style={{ flex:2 }}><Save size={16} /> {t('inventory.save')}</SaveButton>

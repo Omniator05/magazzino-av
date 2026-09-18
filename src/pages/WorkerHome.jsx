@@ -7,11 +7,14 @@ import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestor
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import TutorialModal from '../components/TutorialModal'
-import { Unload, Recurring, Pin, Box, Gear } from '../components/Icon'
+import { Unload, Recurring, Pin, Box, Gear, Search, ChevronRight, Plus } from '../components/Icon'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import DailyQuip from '../components/DailyQuip'
 import Profile from './Profile'
+import TodayReminderModal from '../components/TodayReminderModal'
+
+const EVENT_CAP = 5
 
 const greetingKey = () => {
   const h = new Date().getHours()
@@ -27,6 +30,19 @@ export default function WorkerHome() {
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const [showProfile, setShowProfile] = useState(false)
   const [events, setEvents] = useState([])
+  const [search, setSearch] = useState('')
+  const [visibleCount, setVisibleCount] = useState(EVENT_CAP)
+  const [openSections, setOpenSections] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('workerhome_sections')
+      return saved ? JSON.parse(saved) : { recurring: true, upcoming: true, installations: false }
+    } catch { return { recurring: true, upcoming: true, installations: false } }
+  })
+  const toggle = section => setOpenSections(s => {
+    const next = { ...s, [section]: !s[section] }
+    try { sessionStorage.setItem('workerhome_sections', JSON.stringify(next)) } catch {}
+    return next
+  })
   const [weather, setWeather] = useState(() => {
     try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
   })
@@ -102,8 +118,35 @@ export default function WorkerHome() {
     return result
   })
 
-  const singleEvents = events.filter(e => !e.seriesId)
-  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today)
+  // Un evento di OGGI il cui carico è già rientrato per intero (prova che
+  // sia stato davvero eseguito, non solo "niente ancora caricato") sparisce
+  // subito da qui, senza aspettare la mezzanotte — vedi anche Archive.jsx.
+  const isWrappedToday = e => {
+    if (effectiveEndDate(e) !== today) return false
+    const items = e.items || []
+    return items.some(i => i.returned) && !items.some(i => i.loaded && !i.returned)
+  }
+
+  // Rent/Install (ex "installazioni") vanno in una sezione propria — restano
+  // aperte anche a lungo, non hanno senso mescolate agli eventi "normali"
+  // nei Prossimi, stessa separazione già usata in Events.jsx (lato admin).
+  // Promosso in cima se comincia oggi — stessa idea di Events.jsx lato
+  // admin: un rent può avere data di inizio molto lontana e restare comunque
+  // attivo, quindi il semplice ordine per data non basta a farlo notare.
+  const installations = events
+    .filter(e => e.type === 'installation' && !e.archived)
+    .sort((a, b) => (a.date === today) === (b.date === today) ? 0 : a.date === today ? -1 : 1)
+  const singleEvents = events.filter(e => !e.seriesId && e.type !== 'installation')
+  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e))
+  const visibleSingle = upcomingSingle.slice(0, visibleCount)
+  const hiddenCount = upcomingSingle.length - visibleSingle.length
+
+  const searchResults = search.trim()
+    ? events.filter(e =>
+        e.name?.toLowerCase().includes(search.toLowerCase()) ||
+        e.location?.toLowerCase().includes(search.toLowerCase())
+      )
+    : []
 
   const displayName = name || profile?.username || t('workerHome.defaultName')
   const initial = displayName.charAt(0).toUpperCase()
@@ -305,8 +348,29 @@ export default function WorkerHome() {
         }
       `}</style>
 
-      <div style={{ padding:'16px 0' }}>
+      {/* Barra di ricerca — sempre visibile, stessa posizione/stile della
+          pagina Eventi lato admin (Events.jsx), così le due viste si
+          leggono come la stessa app invece di due layout diversi. */}
+      <div style={{ padding:'0 16px 12px' }}>
+        <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
+          <span style={{ position:'absolute', left:14, color:'var(--text3)', display:'flex' }}><Search size={16} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('events.searchPlaceholder')}
+            aria-label={t('events.searchPlaceholder')}
+            style={{ width:'100%', padding:'12px 14px 12px 40px', borderRadius:14, border:'1.5px solid var(--border)', background:'var(--card)', color:'var(--text)', fontSize:14 }} />
+        </div>
+      </div>
 
+      <div style={{ padding:'4px 0 16px' }}>
+        {search.trim() ? (
+          <>
+            <p style={{ padding:'0 16px 12px', color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.resultsCount', { count: searchResults.length })}</p>
+            {searchResults.length === 0
+              ? <p style={{ padding:'20px 16px', color:'var(--text2)', textAlign:'center' }}>{t('events.noResultsFor', { search })}</p>
+              : searchResults.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)
+            }
+          </>
+        ) : (
+        <>
         {/* DA SCARICARE — in evidenza, solo se il modulo liste di carico è attivo */}
         {loadListsOn && daScaricare.length > 0 && (
           <div id="sec-dascaricare" style={{ margin:'0 0 8px', scrollMarginTop:16 }}>
@@ -319,12 +383,12 @@ export default function WorkerHome() {
         )}
 
         {/* "Niente da mostrare" va giudicato sulle sezioni che contano
-            davvero (da scaricare/ricorrenti/prossimi), non su events.length:
-            una squadra con solo eventi passati o archiviati in events.length
-            avrebbe superato questo controllo restando comunque a schermo
-            vuoto, senza nessun placeholder — pagina "morta" senza motivo
-            (stesso bug già corretto in Events.jsx). */}
-        {(!loadListsOn || daScaricare.length === 0) && pinnedRecurring.length === 0 && upcomingSingle.length === 0 ? (
+            davvero (da scaricare/ricorrenti/prossimi/rent-install), non su
+            events.length: una squadra con solo eventi passati o archiviati
+            in events.length avrebbe superato questo controllo restando
+            comunque a schermo vuoto, senza nessun placeholder — pagina
+            "morta" senza motivo (stesso bug già corretto in Events.jsx). */}
+        {(!loadListsOn || daScaricare.length === 0) && pinnedRecurring.length === 0 && upcomingSingle.length === 0 && installations.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={46} /></p>
             <h3>{t('workerHome.emptyTitle')}</h3>
@@ -333,34 +397,69 @@ export default function WorkerHome() {
           </div>
         ) : (
           <>
-            {/* Ricorrenti */}
+            {/* Ricorrenti — collassabile, come in Events.jsx */}
             {pinnedRecurring.length > 0 && (
-              <>
-                <div id="sec-ricorrenti" style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px', marginTop:4, scrollMarginTop:16 }}>
-                  <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={15} /> {t('workerHome.recurring')}</p>
-                  <div style={{ flex:1, height:1, background:'rgba(79,195,247,0.2)' }} />
-                </div>
-                {pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
-                {upcomingSingle.length > 0 && <div style={{ height:1, background:'var(--border)', margin:'4px 16px 12px' }} />}
-              </>
+              <div id="sec-ricorrenti" style={{ marginBottom:4, scrollMarginTop:16 }}>
+                <button onClick={() => toggle('recurring')} className="btn-section"
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
+                  <span style={{ color:'var(--blue)', display:'flex', transition:'transform 0.2s', transform: openSections.recurring ? 'rotate(90deg)' : 'rotate(0deg)' }}><ChevronRight size={16} /></span>
+                  <span className="section-label" style={{ color:'var(--blue)', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={13} /> {t('workerHome.recurring')}</span>
+                  <span style={{ background:'rgba(79,195,247,0.15)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>{pinnedRecurring.length}</span>
+                </button>
+                {openSections.recurring && pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
+              </div>
             )}
 
-            {/* Prossimi singoli */}
+            {/* Prossimi singoli — collassabile */}
             {upcomingSingle.length > 0 && (
-              <div id="sec-prossimi" style={{ scrollMarginTop:16 }}>
-                {pinnedRecurring.length > 0 && (
-                  <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'0 16px 8px' }}>{t('workerHome.upcoming')}</p>
+              <div id="sec-prossimi" style={{ marginBottom:4, scrollMarginTop:16 }}>
+                <button onClick={() => toggle('upcoming')} className="btn-section"
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
+                  <span style={{ color:'var(--text2)', display:'flex', transition:'transform 0.2s', transform: openSections.upcoming ? 'rotate(90deg)' : 'rotate(0deg)' }}><ChevronRight size={16} /></span>
+                  <span className="section-label" style={{ color:'var(--text2)', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.upcoming')}</span>
+                  <span style={{ background:'var(--card2)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--text2)' }}>{upcomingSingle.length}</span>
+                </button>
+                {openSections.upcoming && (
+                  <>
+                    {visibleSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
+                    {hiddenCount > 0 && (
+                      <div style={{ padding:'4px 16px 8px' }}>
+                        <button onClick={() => setVisibleCount(c => c + EVENT_CAP)}
+                          style={{ width:'100%', padding:'12px', borderRadius:14, background:'var(--card2)', border:'1.5px solid var(--border)', color:'var(--text2)', fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                          <Plus size={15} /> {t('events.moreEvents', { count: hiddenCount })}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
-                {upcomingSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
+              </div>
+            )}
+
+            {/* RENT/INSTALL — sezione a parte, stessa separazione già usata
+                in Events.jsx lato admin: restano caricate/non rientrate a
+                lungo apposta, non hanno senso mescolate ai Prossimi. */}
+            {installations.length > 0 && (
+              <div id="sec-installations" style={{ marginBottom:4, scrollMarginTop:16 }}>
+                <button onClick={() => toggle('installations')} className="btn-section"
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
+                  <span style={{ color:'#5b4fcf', display:'flex', transition:'transform 0.2s', transform: openSections.installations ? 'rotate(90deg)' : 'rotate(0deg)' }}><ChevronRight size={16} /></span>
+                  <span className="section-label" style={{ color:'#5b4fcf', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.installations')}</span>
+                  <span style={{ background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installations.length}</span>
+                </button>
+                {openSections.installations && installations.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
               </div>
             )}
           </>
+        )}
+        </>
         )}
       </div>
 
       {showProfile && <Profile onClose={() => setShowProfile(false)} />}
 
       {!showOverlay && <TutorialModal role="worker" />}
+
+      {!showOverlay && <TodayReminderModal events={events} today={today} navigate={navigate} />}
     </div>
   )
 }
@@ -388,11 +487,17 @@ function EventCard({ ev, today, navigate, forceState, loadListsOn }) {
     done:    { color:'var(--green)',   label: t('workerHome.phaseDone') },
   }[phase]
 
+  // Un rent/install che comincia oggi va preparato/caricato oggi come
+  // qualunque evento — deve poter spiccare col rosso "urgente" anche lì
+  // dentro, non restare per sempre violetto uguale a tutti gli altri nella
+  // sezione Rent/Install (dove altrimenti si perde facilmente di vista).
   const iconGradient = daScaricare
     ? '#fb8500'
+    : isToday
+    ? '#e63946'
     : ev.type === 'installation'
-    ? '#a7c957'
-    : (isToday || phase === 'partial' || phase === 'out')
+    ? '#7c6fea'
+    : (phase === 'partial' || phase === 'out')
     ? '#e63946'
     : '#a8dadc'
 

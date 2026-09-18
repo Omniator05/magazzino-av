@@ -4,7 +4,6 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatDate } from '../utils/formatDate'
 import DeleteButton from '../components/DeleteButton'
-import DateBadge from '../components/DateBadge'
 import EditButton from '../components/EditButton'
 import { Pin, Dot } from '../components/Icon'
 import { EventListSkeleton } from '../components/Skeleton'
@@ -23,11 +22,15 @@ import CreateEventFlow from '../components/CreateEventFlow'
 const EVENT_CAP = 5
 
 /* ── Inline SVG icons (coerenti con Dashboard.jsx, no emoji) ──────────────── */
-const IconAlertDot = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+// Stessa coppia di icone del selettore tipo in CreateEventFlow.jsx — qui
+// serve di nuovo per lo stesso selettore, riproposto anche in modifica.
+const IconCalendarSm = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
 )
-const IconWrench = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+const IconWrenchSm = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
   </svg>
 )
@@ -174,62 +177,88 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   )
 }
 
-function InstallationCard({ event: inst, today, t, navigate, onEdit, onDelete, onClose, loadListsOn }) {
+// Stessa "forma" delle card evento normali (icona-data 52px, bordo che
+// segnala solo uno stato che conta, azioni a bottone nell'angolo) — prima
+// questa card era strutturalmente un'altra cosa (icona piccola fissa,
+// bordo viola permanente, bottone "chiudi" a piena larghezza incorporato),
+// il che la faceva sembrare un pezzo di un'altra app. Violetto e tag "Rent/
+// Install" restano — sono loro a dire "questo è diverso da un evento",
+// non tutto il resto della card.
+function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDelete, onClose, loadListsOn }) {
   const items     = inst.items || []
   const loaded    = items.filter(i => i.loaded).length
   const total     = items.length
-  const isExpired = inst.endDate && inst.endDate < today
+  // NB: il campo scritto su Firestore è sempre "dateEnd" (stesso nome usato
+  // dagli eventi normali per la data di fine multi-giorno) — "endDate" non
+  // viene mai salvato su un documento evento, solo usato localmente nel
+  // form per calcolare le occorrenze ricorrenti future (vedi CreateEventFlow.jsx).
+  const isExpired = inst.dateEnd && inst.dateEnd < today
+  // "Oggi" per un rent/install = comincia oggi, cioè va preparato/caricato
+  // oggi — stessa idea di isToday per gli eventi normali, così una riga che
+  // altrimenti si perde in mezzo a tutte le altre nella sezione Rent/Install
+  // si fa notare quando conta davvero (stessa richiesta di quel colore
+  // "speciale": qui è lo stesso rosso urgente degli eventi di oggi, non un
+  // terzo colore da imparare a riconoscere in più).
+  const isToday = inst.date === today
+
+  const cardBorder = (isToday || isExpired) ? 'rgba(220,38,38,0.4)' : 'var(--dash-card-border)'
+  const iconColor = isToday ? 'var(--accent)' : '#7c6fea'
+  const statusColor = isToday ? '#dc2626' : isExpired ? '#dc2626' : loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)'
+  const baseStatusText = isExpired
+    ? t('events.expiredBadge')
+    : total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })
+  const statusText = isToday ? t('events.todayStatus', { status: baseStatusText.toLowerCase() }) : baseStatusText
 
   return (
-    <div
-      onClick={() => navigate(`/events/${inst.id}`)}
+    <div onClick={() => navigate(`/events/${inst.id}`)}
       className="event-card"
-      style={{ margin:'0 16px 10px', borderRadius:18, overflow:'hidden', cursor:'pointer', boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
-        background: isExpired ? 'rgba(220,38,38,0.06)' : 'var(--dash-card)',
-        border: `1.5px solid ${isExpired ? 'rgba(220,38,38,0.35)' : '#ddd6fe'}`,
-      }}
+      style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)' }}
     >
-      {isExpired && (
-        <div style={{ background:'rgba(220,38,38,0.12)', padding:'5px 16px', borderBottom:'1px solid rgba(220,38,38,0.2)', display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ color:'#dc2626' }}><IconAlertDot /></span>
-          <p style={{ color:'#dc2626', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.06em' }}>{t('events.expiredBadge')}</p>
-        </div>
-      )}
-      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
-        <span style={{ color:'#5b4fcf', flexShrink:0 }}><IconWrench /></span>
-        <button type="button"
-          onClick={e => { e.stopPropagation(); navigate(`/events/${inst.id}`) }}
-          aria-label={t('events.openEventAria', { name: inst.name })}
-          style={{ flex:1, minWidth:0, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', cursor:'pointer', font:'inherit', color:'inherit' }}
-        >
-          <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:3 }}>
-            <h3 style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontSize:15, fontWeight:700, color:'var(--dash-title)' }}>{inst.name}</h3>
-            <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
-          </div>
-          <DateBadge dateStr={inst.date} dateEndStr={inst.endDate} location={inst.location} today={today} />
-          {loadListsOn && (
-            <p style={{ color: loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)', fontSize:12, fontWeight:600, marginTop:4 }}>
-              {total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })}
-            </p>
-          )}
-        </button>
-        <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
-          <EditButton onClick={e => onEdit(e, inst)} size={44} ariaLabel={t('events.editInstallationAria')} />
-          <DeleteButton onClick={e => onDelete(e, inst)} size={44} ariaLabel={t('events.deleteInstallationAria')} />
-        </div>
+      {/* Icona — stesso blocco data 52px delle card normali: violetto di
+          norma (identità "rent/install"), rosso se comincia oggi — sempre
+          l'identità del tag a dire "rent/install", il colore a dire "urgenza". */}
+      <div style={{ width:52, height:52, borderRadius:13, background:iconColor, flexShrink:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
+        <span style={{ fontSize:20, fontWeight:800 }}>{inst.date ? new Date(inst.date+'T12:00:00').getDate() : '?'}</span>
+        <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>{inst.date ? formatDate(inst.date+'T12:00:00', {month:'short'}, i18n.language) : ''}</span>
       </div>
-      <div style={{ padding:'0 16px 14px' }} onClick={e => e.stopPropagation()}>
-        <button
-          onClick={() => onClose(inst)}
-          style={{ width:'100%', padding:'11px', borderRadius:12,
-            background: isExpired ? 'rgba(220,38,38,0.10)' : '#ede9fe',
-            border: 'none',
-            color: isExpired ? '#dc2626' : '#5b4fcf',
-            fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:8
-          }}
-        >
-          <IconCheckSm /> {t('events.closeInstallationBtn')}
+
+      <button type="button"
+        onClick={e => { e.stopPropagation(); navigate(`/events/${inst.id}`) }}
+        aria-label={t('events.openEventAria', { name: inst.name })}
+        style={{ flex:1, minWidth:0, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', cursor:'pointer', font:'inherit', color:'inherit' }}
+      >
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
+          {/* Niente flex:1 qui: il titolo si allarga solo quanto serve al
+              proprio testo (min-content grazie a minWidth:0), così il tag
+              gli sta subito accanto invece di finire spinto in fondo alla
+              riga per titoli corti. Continua comunque a troncare con
+              ellissi quando lo spazio scarseggia. */}
+          <h3 style={{ fontSize:15, fontWeight:700, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>{inst.name}</h3>
+          {/* Nascosto sotto i 480px: su telefono, fra icona-data, titolo e i
+              tre bottoni-azione, il tag finiva per mangiarsi quasi tutto lo
+              spazio del titolo. Il colore della card (icona viola/rossa)
+              basta comunque a distinguerla da un evento normale. */}
+          <span className="install-tag" style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+        </div>
+        {loadListsOn && (
+          <p style={{ fontSize:12, fontWeight:600, color:statusColor, display:'flex', alignItems:'center', gap:5 }}>
+            {(isToday || isExpired) && <Dot size={7} color="#dc2626" />}
+            {statusText}
+          </p>
+        )}
+        {inst.location && <span style={{ fontSize:11, color:'var(--dash-muted)', marginTop:4, display:'inline-flex', alignItems:'center', gap:4 }}><Pin size={12} /> {inst.location}</span>}
+      </button>
+
+      {/* Azioni — stessa fila a bottoni-icona 44px delle card normali, con
+          in più la chiusura rapida (era prima un bottone a piena
+          larghezza sotto, ora un'icona in fila con le altre due). */}
+      <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+        <button onClick={() => onClose(inst)} aria-label={t('events.closeInstallationBtn')} title={t('events.closeInstallationBtn')}
+          style={{ width:44, height:44, borderRadius:12, background: isExpired ? 'rgba(220,38,38,0.10)' : '#ede9fe', color: isExpired ? '#dc2626' : '#5b4fcf', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <IconCheckSm />
         </button>
+        <EditButton onClick={e => onEdit(e, inst)} size={44} ariaLabel={t('events.editInstallationAria')} />
+        <DeleteButton onClick={e => onDelete(e, inst)} size={44} ariaLabel={t('events.deleteInstallationAria')} />
       </div>
     </div>
   )
@@ -378,7 +407,15 @@ export default function Events() {
   })
 
   const singleEvents   = events.filter(e => !e.seriesId && e.type !== 'installation')
-  const installations  = events.filter(e => e.type === 'installation' && !e.archived)
+  // Un rent/install può avere una data di inizio anche molto lontana (resta
+  // "attivo" finché non lo si chiude), quindi il normale ordine per data non
+  // basta a farlo notare quando conta — a differenza degli eventi, dove
+  // "oggi" è già in pratica il primo della lista essendo la data più vicina
+  // fra quelle mostrate. Qui va promosso esplicitamente in cima, così si
+  // vede a colpo d'occhio anche in mezzo a rent più vecchi.
+  const installations  = events
+    .filter(e => e.type === 'installation' && !e.archived)
+    .sort((a, b) => (a.date === today) === (b.date === today) ? 0 : a.date === today ? -1 : 1)
 
   // Un evento rimane "attivo" se:
   // 1. la data di FINE (o inizio, se monogiorno) è oggi o futura, OPPURE
@@ -392,7 +429,17 @@ export default function Events() {
     return items.some(i => i.loaded && !i.returned) // qualcosa ancora fuori
   }
 
-  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today)
+  // Un evento di OGGI il cui carico è già rientrato per intero (prova che
+  // sia stato davvero eseguito — non basta "niente ancora caricato", che
+  // varrebbe anche prima che la giornata inizi) sparisce subito dagli "in
+  // programma", senza aspettare la mezzanotte — vedi anche Archive.jsx.
+  const isWrappedToday = e => {
+    if (effectiveEndDate(e) !== today) return false
+    const items = e.items || []
+    return items.some(i => i.returned) && !items.some(i => i.loaded && !i.returned)
+  }
+
+  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e))
   const daScaricareSingle = singleEvents.filter(e => {
     if (effectiveEndDate(e) >= today) return false
     const its = e.items || []
@@ -483,7 +530,7 @@ export default function Events() {
     await updateDoc(doc(db, 'events', installation.id), { archived: true })
   }
 
-  const instCardProps = { today, t, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: closeInstallation, loadListsOn }
+  const instCardProps = { today, t, i18n, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: closeInstallation, loadListsOn }
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
@@ -645,13 +692,43 @@ export default function Events() {
         onCreated={(eventId, { fromTemplate }) => { if (fromTemplate) navigate(`/events/${eventId}`) }}
       />
 
-      {/* Modifica evento esistente — niente scelta template/tipo qui, quella
-          si decide solo in creazione. */}
+      {/* Modifica evento esistente — niente scelta template qui, quella si
+          decide solo in creazione; il tipo (evento/rent-install) invece si
+          può ancora cambiare qui: è solo un'etichetta che sposta la lista
+          di carico in un'altra sezione, non tocca gli articoli né lo stato
+          del carico, quindi non c'è motivo di bloccarla dopo la creazione —
+          capita di creare un evento normale e accorgersi poi che in realtà
+          è un noleggio lungo. Non offerta per un'occorrenza ricorrente
+          (seriesId): ricorrenza e rent/install sono mutuamente esclusive
+          anche in creazione, vedi CreateEventFlow.jsx. */}
       {showModal && (
         <div className={`modal-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={eventDrag.onOverlayClick}>
           <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
             <button className="close-btn" onClick={eventDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.editEventTitle')}</h2>
+            {!editing?.seriesId && (
+              <div style={{ display:'flex', gap:8, marginBottom:16, background:'var(--card2)', borderRadius:12, padding:4 }}>
+                <button
+                  onClick={() => setForm(f => ({...f, type:'event'}))}
+                  aria-pressed={form.type !== 'installation'}
+                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                    background: form.type !== 'installation' ? 'var(--card)' : 'transparent',
+                    color: form.type !== 'installation' ? 'var(--text)' : 'var(--text2)',
+                    boxShadow: form.type !== 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                    border: 'none', transition:'all 0.15s',
+                  }}><IconCalendarSm /> {t('events.typeEvent')}</button>
+                <button
+                  onClick={() => setForm(f => ({...f, type:'installation'}))}
+                  aria-pressed={form.type === 'installation'}
+                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                    background: form.type === 'installation' ? '#ede9fe' : 'transparent',
+                    color: form.type === 'installation' ? '#5b4fcf' : 'var(--text2)',
+                    boxShadow: form.type === 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                    border: form.type === 'installation' ? '1px solid #ddd6fe' : '1px solid transparent',
+                    transition:'all 0.15s',
+                  }}><IconWrenchSm /> {t('events.typeInstallation')}</button>
+              </div>
+            )}
             <div className="form-group">
               <label htmlFor="ev-name">{t('calendar.eventNameLabel')}</label>
               <input id="ev-name" value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('calendar.eventNamePlaceholder')} />
@@ -704,6 +781,11 @@ export default function Events() {
            sopra a una card che ha già una sua ombra propria risultava sporco.
            Tolta solo l'ombra, non l'intero hover (colore/scala restano). */
         .event-card button:not(:disabled):hover { box-shadow: none; }
+        /* Tag "Rent/Install" — via su telefono, dove icona+titolo+3 bottoni
+           azione non lasciano spazio per leggere il titolo (vedi sopra). */
+        @media (max-width: 480px) {
+          .install-tag { display: none; }
+        }
       `}</style>
     </div>
   )

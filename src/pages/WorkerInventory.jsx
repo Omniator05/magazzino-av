@@ -82,9 +82,18 @@ export default function WorkerInventory() {
     return () => clearTimeout(timeout)
   }, [showFilterMenu])
 
+  // Su telefono, aprire la tastiera per scrivere nel campo posizione fa
+  // scorrere la pagina per portare il campo in vista — non è l'utente che
+  // sta scorrendo la pagina, quindi mentre si scrive lì dentro (l'input ha
+  // il focus) lo scroll non deve chiudere il pannello (stesso fix di
+  // Inventory.jsx).
   useEffect(() => {
     if (!showFilterMenu) return
-    const closeOnScroll = () => setShowFilterMenu(false)
+    const closeOnScroll = () => {
+      const active = document.activeElement
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return
+      setShowFilterMenu(false)
+    }
     window.addEventListener('scroll', closeOnScroll)
     return () => window.removeEventListener('scroll', closeOnScroll)
   }, [showFilterMenu])

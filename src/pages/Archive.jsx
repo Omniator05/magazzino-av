@@ -48,14 +48,23 @@ export default function Archive() {
       const snap = await getDocs(q)
       const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
-      // Un evento va in archivio solo se:
-      // 1. La data è passata, E
-      // 2. Lista vuota (nessun articolo) OPPURE tutti gli articoli caricati sono rientrati
+      // Un evento va in archivio se:
+      // 1. La data è passata, E lista vuota (nessun articolo) OPPURE tutti gli
+      //    articoli caricati sono rientrati; OPPURE
+      // 2. È di OGGI ma il carico è già rientrato per intero — serve la prova
+      //    che sia stato davvero eseguito (almeno un rientro), non solo "non
+      //    ancora iniziato": un evento mattutino il cui materiale torna in
+      //    giornata non deve aspettare la mezzanotte per liberare spazio.
       const archived = allDocs.filter(e => {
-        if (e.date >= today) return false
         const items = e.items || []
-        if (items.length === 0) return true
-        return !items.some(i => i.loaded && !i.returned)
+        if (e.date < today) {
+          if (items.length === 0) return true
+          return !items.some(i => i.loaded && !i.returned)
+        }
+        if (e.date === today) {
+          return items.some(i => i.returned) && !items.some(i => i.loaded && !i.returned)
+        }
+        return false
       })
 
       const docs = archived.slice(0, PAGE_SIZE)

@@ -5,7 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction, increment } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
 import { toggleWorkerAssignment, isWorkerUnavailable, vehicleConflictEvent } from '../utils/workerAssignment'
 import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
@@ -14,6 +14,7 @@ import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateBadge from '../components/DateBadge'
 import { Warn, Plus, Check, Kit } from '../components/Icon'
+import { useSwipeDismiss } from '../hooks/useSwipeDismiss'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
@@ -180,6 +181,10 @@ export default function EventDetail() {
   const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  // Suggerimenti scartati con lo swipe in QUESTA apertura del modal — escluderli
+  // subito dal ranking (non solo dal render) è ciò che libera davvero lo slot
+  // per il prossimo suggerimento migliore, non solo nasconde la riga.
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState(() => new Set())
   useModalScrollLock(showAddItem || showExtraModal || showTemplatePicker || !!editItem || showAssignModal)
 
   const eventRef = doc(db, 'events', id)
@@ -303,6 +308,7 @@ export default function EventDetail() {
   // Calcola frequenza e co-occorrenza dagli eventi passati ogni volta che si apre il modal
   useEffect(() => {
     if (!showAddItem) { setSuggestionMaps(null); return }
+    setDismissedSuggestionIds(new Set())
     setLoadingSuggestions(true)
     getDocs(query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date', 'desc')))
       .then(snap => {
@@ -527,13 +533,30 @@ export default function EventDetail() {
   }
 
   // Aggiunge al carrello temporaneo (non chiude il modal)
+  const toCartRow = (i, qty) => ({ id: i.id, name: i.name, category: i.category, brand: i.brand, model: i.model, location: i.location || '', isKit: i.isKit || false, kitSize: i.kitSize || null, isBundle: i.isBundle||false, components: i.components||null, instances: i.instances||null, totalQty: i.totalQty||null, qty })
+
   const addToCart = (item, qty) => {
     setCart(prev => {
-      if (prev.some(c => c.id === item.id)) {
-        // Aggiorna qty se già nel carrello
+      const alreadyIn = prev.some(c => c.id === item.id)
+      if (alreadyIn) {
+        // Aggiorna qty se già nel carrello — non è un nuovo inserimento,
+        // quindi non deve far ripartire l'aggiunta automatica dei collegati
+        // sotto (altrimenti riaggiungerebbe un collegato appena rimosso a
+        // mano ogni volta che si ritocca lo stepper del genitore).
         return prev.map(c => c.id === item.id ? { ...c, qty } : c)
       }
-      return [...prev, { id: item.id, name: item.name, category: item.category, brand: item.brand, model: item.model, location: item.location || '', isKit: item.isKit || false, kitSize: item.kitSize || null, isBundle: item.isBundle||false, components: item.components||null, instances: item.instances||null, totalQty: item.totalQty||null, qty }]
+      const next = [...prev, toCartRow(item, qty)]
+      // Oggetti collegati (es. "tavolo dj" → gonna + gambe, vedi Inventory.jsx
+      // → linkedItemIds): si aggiungono da soli solo al primo inserimento del
+      // genitore, con la sua stessa quantità, e solo se non sono già nel
+      // carrello o già in lista (stessa condizione di notInCart più sotto).
+      const alreadyPresent = new Set(next.map(c => c.id))
+      const linkedAdditions = (item.linkedItemIds || [])
+        .filter(id => id !== item.id && !alreadyPresent.has(id) && (addAsMancante || !eventItems.some(e => (e.itemRef || e.id) === id)))
+        .map(id => allItems.find(ci => ci.id === id))
+        .filter(Boolean)
+        .map(ci => toCartRow(ci, qty))
+      return linkedAdditions.length ? [...next, ...linkedAdditions] : next
     })
   }
 
@@ -753,8 +776,14 @@ export default function EventDetail() {
   const suggestions = suggestionMaps
     ? (() => {
         const scored = notInCart
+          .filter(item => !dismissedSuggestionIds.has(item.id))
           .map(item => {
-            const base = suggestionMaps.freq[item.id] || 0
+            // Uno scarto ripetuto (swipe) smorza il peso della sola frequenza
+            // storica — non azzera mai il punteggio: se l'oggetto resta
+            // comunque il più coerente con quello che c'è già in lista (alta
+            // co-occorrenza), può ripresentarsi lo stesso.
+            const dismissDamp = 1 / (1 + (item.suggestionDismissCount || 0) * 0.5)
+            const base = (suggestionMaps.freq[item.id] || 0) * dismissDamp
             let coocBonus = 0
             currentEventIds.forEach(cid => { coocBonus += (suggestionMaps.cooc[cid]?.[item.id] || 0) })
             const categoryAlreadyCovered = item.category && currentCategories.has(item.category)
@@ -785,6 +814,16 @@ export default function EventDetail() {
       })()
     : []
   const suggestedIds = new Set(suggestions.map(s => s.id))
+
+  // Swipe su un suggerimento: sparisce subito (libera lo slot per il
+  // prossimo migliore) e il contatore sul catalogo persiste per smorzarlo
+  // nei prossimi eventi — vedi il dampening sopra in `scored`. Non blocca
+  // mai la ricerca manuale, solo il ranking automatico dei suggerimenti.
+  const dismissSuggestion = item => {
+    setDismissedSuggestionIds(prev => new Set(prev).add(item.id))
+    updateDoc(doc(db, 'items', item.id), { suggestionDismissCount: increment(1) }).catch(() => {})
+  }
+
   // Nella lista principale (senza ricerca) nascondi gli articoli già mostrati nei suggerimenti
   const filteredForList = search ? filtered : filtered.filter(i => !suggestedIds.has(i.id))
 
@@ -1418,15 +1457,16 @@ export default function EventDetail() {
                   {loadingSuggestions
                     ? <p style={{ fontSize:13, color:'var(--text2)', padding:'8px 16px 14px' }}>{t('eventDetail.analyzingPastEvents')}</p>
                     : suggestions.map(item => (
-                      <AddItemRow
-                        key={`sug_${item.id}`}
-                        item={item}
-                        onAdd={addToCart}
-                        icon={ICONS[item.category] || '📦'}
-                        inCart={cart.some(c => c.id === item.id)}
-                        cartQty={cart.find(c => c.id === item.id)?.qty}
-                        alreadyInList={eventItems.some(e => e.id === item.id)}
-                      />
+                      <DismissibleSuggestion key={`sug_${item.id}`} item={item} onDismiss={() => dismissSuggestion(item)}>
+                        <AddItemRow
+                          item={item}
+                          onAdd={addToCart}
+                          icon={ICONS[item.category] || '📦'}
+                          inCart={cart.some(c => c.id === item.id)}
+                          cartQty={cart.find(c => c.id === item.id)?.qty}
+                          alreadyInList={eventItems.some(e => e.id === item.id)}
+                        />
+                      </DismissibleSuggestion>
                     ))
                   }
                 </div>
@@ -1601,14 +1641,19 @@ export default function EventDetail() {
             <h2 style={{ fontSize:18, fontWeight:800, marginBottom:20 }}>{editItem.name}</h2>
 
             {(() => {
-              // Non si può assegnare a questa riga più di quanto esiste
-              // davvero in magazzino: totale posseduto, più quanto questa
-              // riga stessa ha già "riservato" caricandolo (altrimenti,
-              // modificando una riga già caricata, il tetto risulterebbe più
-              // basso di quanto dovrebbe — quella quota è già sua).
+              // Tetto = quantità TOTALE posseduta, non quella disponibile ora
+              // (stesso principio, e stesso bug da correggere qui, dello
+              // stepper in AddItemRow più sotto): usare availableQty capiva
+              // un oggetto ancora fuori per un rent/altro evento OGGI, anche
+              // se rientra ben prima della data di QUESTO evento — impediva
+              // di pianificare la quantità giusta su una lista futura, senza
+              // nemmeno passare dall'avviso di disponibilità (che quello sì
+              // guarda le date). totalQty non si riduce mai per il carico
+              // corrente, quindi qui non serve più "restituire" la quota
+              // della riga già caricata come prima.
               const catalogItem = allItems.find(i => i.id === (editItem.itemRef || editItem.id))
               const maxQty = catalogItem
-                ? Math.max(1, (catalogItem.availableQty ?? catalogItem.totalQty ?? 1) + (editItem.loaded ? editItem.qty : 0))
+                ? Math.max(1, catalogItem.totalQty ?? catalogItem.availableQty ?? 1)
                 : 999
               return (
                 <div className="form-group">
@@ -1814,6 +1859,44 @@ export default function EventDetail() {
   )
 }
 
+// Riga suggerimento con swipe-to-dismiss in stile Mail — vedi useSwipeDismiss.
+// Uno scarto libera subito lo slot per il prossimo suggerimento migliore
+// (il chiamante lo toglie dal ranking, non solo dal render) e alimenta il
+// contatore sul catalogo che smorza i suggerimenti ripetutamente ignorati.
+function DismissibleSuggestion({ item, children, onDismiss }) {
+  const { t } = useTranslation()
+  const swipe = useSwipeDismiss(onDismiss)
+  return (
+    <div style={{ position:'relative', overflow:'hidden' }}>
+      {/* Il rosso riempie TUTTO lo spazio che si apre durante il trascinamento,
+          non solo la larghezza del bottone finale — altrimenti a metà swipe
+          si vedrebbe uno spicchio "vuoto" prima del rosso, non un vero buco
+          rosso come lo swipe-to-delete di Mail. */}
+      <div style={{ position:'absolute', inset:0, background:'var(--red)' }}>
+        <button
+          type="button"
+          onClick={swipe.commit}
+          aria-label={t('eventDetail.suggestionDismissAria', { name: item.name })}
+          style={{ width:'100%', height:'100%', background:'transparent', color:'#fff', border:'none', display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:22 }}
+        >
+          <span style={{ fontSize:12.5, fontWeight:800 }}>{t('eventDetail.suggestionDismiss')}</span>
+        </button>
+      </div>
+      <div ref={swipe.rowRef} {...swipe.rowProps} style={{ position:'relative', background:'var(--card)', touchAction:'pan-y' }}>
+        {children}
+        {swipe.revealed && (
+          <div
+            onClick={swipe.close}
+            role="button"
+            aria-label={t('common.close')}
+            style={{ position:'absolute', inset:0 }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
   const { t } = useTranslation()
   const [qty, setQty] = useState(cartQty || 1)
@@ -1855,6 +1938,7 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
             : item.isKit && item.kitSize
             ? t('eventDetail.kitsAvailable', { count: item.availableQty ?? item.totalQty, pieces: (item.availableQty ?? item.totalQty) * item.kitSize })
             : t('eventDetail.availableShort', { count: item.availableQty ?? item.totalQty })}
+          {item.category === 'Consumabili' && item.consumableUnit && item.consumableUnit !== 'pezzi' && ` (${t(`inventory.unitShort_${item.consumableUnit}`)})`}
         </p>
         {item.location && (
           <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.22)', borderRadius:6, padding:'2px 8px' }}>
@@ -1920,6 +2004,11 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
     ? (catalogItem.instances || []).filter(inst => (item.instanceNumbers || []).includes(inst.number))
     : []
   const damagedInstances = assignedInstances.filter(inst => (inst.brokenComponents || []).length > 0)
+  // Stessa unità reale del catalogo (pezzi/metri/rotoli) — un consumabile
+  // in metri non deve leggersi come se fosse a pezzi, vedi WorkerScanner.jsx.
+  const qtyUnitLabel = item.category === 'Consumabili'
+    ? t(`inventory.unitShort_${catalogItem?.consumableUnit || 'pezzi'}`)
+    : t('inventory.unitShort_pezzi')
 
   return (
     <div style={{ borderBottom:'1px solid var(--border)', background: bulkSelected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: bulkSelected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
@@ -1971,7 +2060,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
               </span>
             )}
           </div>
-          <p style={{ color:'var(--text2)', fontSize:13 }}>{t('eventDetail.qty', { count: item.qty || 1 })}</p>
+          <p style={{ color:'var(--text2)', fontSize:13 }}>{item.qty || 1} {qtyUnitLabel}</p>
           {item.eventNote ? (
             <p style={{ color:'var(--accent2)', fontSize:12, marginTop:3, fontStyle:'italic' }}>📝 {item.eventNote}</p>
           ) : warehouseNotes ? (

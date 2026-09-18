@@ -13,11 +13,6 @@ import DateField from '../components/DateField'
 import CreateEventFlow from '../components/CreateEventFlow'
 import { Plus, Check, Warn } from '../components/Icon'
 
-const ICONS = {
-  'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️','Corrente':'⚡','Effetti':'🎉',
-  'Consumabili':'🪣','Microfoni':'🎤','Traduzione':'🌐','Connettività':'📶',
-  'Comunicazione':'📡','Strumenti':'🎸','Altro':'📦',
-}
 const ACTIVITY_COLORS = {
   added:'var(--blue)', removed:'var(--red)',
   pronto:'#059669', unpronto:'var(--text3)',
@@ -44,6 +39,7 @@ export default function InventoryItemHistory() {
   const [events, setEvents] = useState([])
   const [itemActivityLog, setItemActivityLog] = useState([])
   const [historyInstanceFilter, setHistoryInstanceFilter] = useState(null)
+  const [historyTab, setHistoryTab] = useState('events') // 'events' | 'activity'
   const [showEventActivity, setShowEventActivity] = useState(null) // { id, name } | null
   const [checkStart, setCheckStart] = useState(() => todayStr())
   const [checkEnd, setCheckEnd] = useState(() => todayStr())
@@ -83,11 +79,22 @@ export default function InventoryItemHistory() {
   }
 
   // A differenza del vecchio popup, qui la cronologia non è tagliata a 5 —
-  // è l'intero motivo per cui questa è diventata una pagina a sé.
+  // è l'intero motivo per cui questa è diventata una pagina a sé. Ordine:
+  // prima l'evento per cui l'oggetto è ATTUALMENTE fuori (se c'è — è
+  // l'informazione più urgente, a prescindere da quanto lontana sia la sua
+  // data, es. non deve finire sotto un evento futuro solo perché prenotato
+  // più avanti), poi gli altri per data decrescente.
+  const isOutForEvent = ev => {
+    const itm = (ev.items || []).find(matchesItem)
+    return !!(itm?.loaded && !itm?.returned)
+  }
   const detailEventHistory = events
     .filter(ev => (ev.items || []).some(matchesItem))
-    .sort((a, b) => b.date.localeCompare(a.date))
-  const detailEvents = events.filter(ev => (ev.items || []).some(i => matchesItem(i) && i.loaded && !i.returned))
+    .sort((a, b) => {
+      const aOut = isOutForEvent(a), bOut = isOutForEvent(b)
+      if (aOut !== bOut) return aOut ? -1 : 1
+      return b.date.localeCompare(a.date)
+    })
 
   // Controllo disponibilità: NON legato a un evento reale (id:null non
   // corrisponde mai a un evento vero), stesso conteggio quantità-consapevole
@@ -127,30 +134,39 @@ export default function InventoryItemHistory() {
       <div className="page-header">
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <BackHomeButton to="/inventory" />
-          <h1 style={{ textAlign:'right', display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}>
-            <span style={{ fontSize:22 }}>{item ? (ICONS[item.category] || '📦') : ''}</span>
-            {item?.name || ''}
-          </h1>
+          {/* Titolo fisso, non il nome dell'oggetto — così sta sempre su una
+              riga sola su mobile, senza bisogno di troncare/andare a capo
+              qualunque sia la lunghezza del nome. Il nome vero e proprio si
+              legge subito sotto, nella prima card. */}
+          <h1 style={{ textAlign:'right' }}>{t('inventory.historyPageTitle')}</h1>
         </div>
       </div>
 
+
       {/* Scheda base — stessa lettura "un rigo per campo" del modal di
-          dettaglio in Inventory.jsx, qui di sola consultazione. */}
+          dettaglio in Inventory.jsx, qui di sola consultazione. Il nome è
+          il primo rigo: l'header sopra ora è un titolo fisso ("Dettagli"),
+          quindi questa è la prima cosa che dice di quale oggetto si sta
+          parlando — attaccato al resto, non in una card a parte. */}
       {item && (
         <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+          <div style={{ padding:'12px 16px', display:'flex', justifyContent:'space-between', gap:14 }}>
+            <span style={{ color:'var(--text2)', fontSize:13, flexShrink:0 }}>{t('inventory.nameFieldLabel')}</span>
+            <span style={{ fontWeight:700, fontSize:14, textAlign:'right', minWidth:0, overflowWrap:'break-word' }}>{item.name}</span>
+          </div>
           {(item.brand || item.model) && (
-            <div style={{ padding:'12px 16px', display:'flex', justifyContent:'space-between', gap:14 }}>
-              <span style={{ color:'var(--text2)', fontSize:13 }}>{t('inventory.brandModelLabel')}</span>
-              <span style={{ fontWeight:600, fontSize:13, textAlign:'right' }}>{[item.brand, item.model].filter(Boolean).join(' ')}</span>
+            <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)', display:'flex', justifyContent:'space-between', gap:14 }}>
+              <span style={{ color:'var(--text2)', fontSize:13, flexShrink:0 }}>{t('inventory.brandModelLabel')}</span>
+              <span style={{ fontWeight:600, fontSize:13, textAlign:'right', minWidth:0, overflowWrap:'break-word' }}>{[item.brand, item.model].filter(Boolean).join(' ')}</span>
             </div>
           )}
           {item.location && (
             <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)', display:'flex', justifyContent:'space-between', gap:14 }}>
-              <span style={{ color:'var(--text2)', fontSize:13 }}>{t('inventory.warehousePosition')}</span>
-              <span style={{ fontWeight:600, fontSize:13, textAlign:'right' }}>{item.location}</span>
+              <span style={{ color:'var(--text2)', fontSize:13, flexShrink:0 }}>{t('inventory.warehousePosition')}</span>
+              <span style={{ fontWeight:600, fontSize:13, textAlign:'right', minWidth:0, overflowWrap:'break-word' }}>{item.location}</span>
             </div>
           )}
-          <div style={{ padding:'12px 16px', borderTop: (item.brand || item.model || item.location) ? '1px solid var(--border)' : 'none' }}>
+          <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
               <span style={{ color:'var(--text2)', fontSize:13 }}>{t('inventory.detailAvailable')}</span>
               <span style={{ fontWeight:800, fontSize:15 }}>{item.availableQty}/{item.totalQty}</span>
@@ -226,117 +242,152 @@ export default function InventoryItemHistory() {
         />
       )}
 
-      {/* Filtro per baule — solo per i kit: lo storico aggregato del kit
-          intero non dice quale ESEMPLARE fisico è stato dove. */}
-      {item?.isBundle && (
-        <div style={{ margin:'0 16px 16px', display:'flex', gap:6, flexWrap:'wrap' }}>
+      {/* Cronologia dell'oggetto: due viste sullo stesso oggetto — dove è
+          stato/andrà (eventi) e chi ha toccato cosa (attività) — raccolte
+          in un unico blocco con un selettore invece di due card identiche
+          impilate una sopra l'altra, che davano lo stesso peso visivo a
+          due sezioni di importanza diversa. */}
+      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+        <div style={{ display:'flex', borderBottom:'1px solid var(--border)' }}>
           <button
-            onClick={() => setHistoryInstanceFilter(null)}
-            className="btn-no-anim"
-            aria-pressed={historyInstanceFilter === null}
+            onClick={() => setHistoryTab('events')}
+            className="chip-no-press"
+            aria-pressed={historyTab === 'events'}
             style={{
-              padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
-              background: historyInstanceFilter === null ? 'var(--accent)' : 'var(--card2)',
-              color: historyInstanceFilter === null ? '#fff' : 'var(--text2)',
-              border: `1px solid ${historyInstanceFilter === null ? 'var(--accent)' : 'var(--border)'}`,
+              flex:1, padding:'13px 8px', fontSize:12.5, fontWeight:800, textAlign:'center', background:'transparent',
+              color: historyTab === 'events' ? 'var(--accent)' : 'var(--text2)',
+              borderBottom: historyTab === 'events' ? '2px solid var(--accent)' : '2px solid transparent', marginBottom:-1,
             }}
           >
-            {t('inventory.allInstancesFilter')}
+            {t('inventory.tabEvents', { count: detailEventHistory.length })}
           </button>
-          {ensureInstanceList(item.instances, item.totalQty).map(inst => (
-            <button
-              key={inst.number}
-              onClick={() => setHistoryInstanceFilter(n => n === inst.number ? null : inst.number)}
-              className="btn-no-anim"
-              aria-pressed={historyInstanceFilter === inst.number}
-              style={{
-                padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
-                background: historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--card2)',
-                color: historyInstanceFilter === inst.number ? '#fff' : ((inst.brokenComponents||[]).length > 0 ? 'var(--red)' : 'var(--text2)'),
-                border: `1px solid ${historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--border)'}`,
-              }}
-            >
-              {t('inventory.kitInstanceLabel', { number: inst.number })}
-            </button>
-          ))}
+          <button
+            onClick={() => setHistoryTab('activity')}
+            className="chip-no-press"
+            aria-pressed={historyTab === 'activity'}
+            style={{
+              flex:1, padding:'13px 8px', fontSize:12.5, fontWeight:800, textAlign:'center', background:'transparent',
+              color: historyTab === 'activity' ? 'var(--accent)' : 'var(--text2)',
+              borderBottom: historyTab === 'activity' ? '2px solid var(--accent)' : '2px solid transparent', marginBottom:-1,
+            }}
+          >
+            {t('inventory.tabActivity', { count: itemActivityLog.length })}
+          </button>
         </div>
-      )}
 
-      {/* Storico completo — passato e futuro, senza limite. */}
-      <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-        <p style={{ fontSize:12.5, fontWeight:700, color:'var(--text)', marginBottom:10 }}>{t('inventory.history', { count: detailEventHistory.length })}</p>
-        {detailEventHistory.length === 0 ? (
-          <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic' }}>{t('inventory.noHistoryAvailable')}</p>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {detailEventHistory.map(ev => {
-              const itm = (ev.items || []).find(matchesItem)
-              const stillOut = itm?.loaded && !itm?.returned
-              return (
-                <button
-                  key={ev.id}
-                  onClick={() => navigate(`/events/${ev.id}`)}
-                  style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
-                >
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                      <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                      {item?.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
-                        <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
-                      )}
-                    </div>
-                    <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
-                      {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language)}
-                      {ev.location ? ` · ${ev.location}` : ''}
-                    </p>
-                  </div>
-                  {stillOut && (
-                    <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>{t('inventory.out')}</span>
-                  )}
-                  <span style={{ color:'var(--text2)' }}>→</span>
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Cronologia "chi ha fatto cosa" — attraverso TUTTI gli eventi, anche
-          quelli che nel frattempo hanno rimosso l'oggetto dalla propria
-          lista o sono stati archiviati/eliminati. */}
-      {itemActivityLog.length > 0 && (
-        <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-          <p style={{ fontSize:12.5, fontWeight:700, color:'var(--text)', marginBottom:10 }}>{t('inventory.activityTitle')}</p>
-          <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:320, overflowY:'auto' }}>
-            {itemActivityLog.map(entry => (
-              <button
-                key={entry.id}
-                type="button"
-                className="btn-no-anim"
-                disabled={!entry.eventId}
-                onClick={() => entry.eventId && setShowEventActivity({ id: entry.eventId, name: entry.eventName })}
-                style={{ display:'flex', alignItems:'flex-start', gap:9, width:'100%', textAlign:'left', background:'transparent', padding:'6px 4px', borderRadius:8, cursor: entry.eventId ? 'pointer' : 'default' }}
-              >
-                <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontSize:13, fontWeight:600 }}>
-                    {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
-                  </p>
-                  <p style={{ fontSize:11, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                    {entry.eventName && (
-                      <span style={{ color: entry.eventId ? 'var(--blue)' : 'var(--text2)', fontWeight:600 }}>{entry.eventName}</span>
-                    )}
-                    <span style={{ color:'var(--text2)' }}>
-                      {entry.eventName ? ' · ' : ''}
-                      {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
-                    </span>
-                  </p>
+        <div style={{ padding:'14px 16px' }}>
+          {historyTab === 'events' ? (
+            <>
+              {/* Filtro per baule — solo per i kit: lo storico aggregato del
+                  kit intero non dice quale ESEMPLARE fisico è stato dove. */}
+              {item?.isBundle && (
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+                  <button
+                    onClick={() => setHistoryInstanceFilter(null)}
+                    className="btn-no-anim"
+                    aria-pressed={historyInstanceFilter === null}
+                    style={{
+                      padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                      background: historyInstanceFilter === null ? 'var(--accent)' : 'var(--card2)',
+                      color: historyInstanceFilter === null ? '#fff' : 'var(--text2)',
+                      border: `1px solid ${historyInstanceFilter === null ? 'var(--accent)' : 'var(--border)'}`,
+                    }}
+                  >
+                    {t('inventory.allInstancesFilter')}
+                  </button>
+                  {ensureInstanceList(item.instances, item.totalQty).map(inst => (
+                    <button
+                      key={inst.number}
+                      onClick={() => setHistoryInstanceFilter(n => n === inst.number ? null : inst.number)}
+                      className="btn-no-anim"
+                      aria-pressed={historyInstanceFilter === inst.number}
+                      style={{
+                        padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                        background: historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--card2)',
+                        color: historyInstanceFilter === inst.number ? '#fff' : ((inst.brokenComponents||[]).length > 0 ? 'var(--red)' : 'var(--text2)'),
+                        border: `1px solid ${historyInstanceFilter === inst.number ? 'var(--accent)' : 'var(--border)'}`,
+                      }}
+                    >
+                      {t('inventory.kitInstanceLabel', { number: inst.number })}
+                    </button>
+                  ))}
                 </div>
-              </button>
-            ))}
-          </div>
+              )}
+
+              {detailEventHistory.length === 0 ? (
+                <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic' }}>{t('inventory.noHistoryAvailable')}</p>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {detailEventHistory.map(ev => {
+                    const itm = (ev.items || []).find(matchesItem)
+                    const stillOut = itm?.loaded && !itm?.returned
+                    return (
+                      <button
+                        key={ev.id}
+                        onClick={() => navigate(`/events/${ev.id}`)}
+                        style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                      >
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                            <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                            {item?.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
+                              <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
+                            )}
+                          </div>
+                          <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>
+                            {formatDate(ev.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language)}
+                            {ev.location ? ` · ${ev.location}` : ''}
+                          </p>
+                        </div>
+                        {stillOut && (
+                          <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:11, flexShrink:0 }}>{t('inventory.out')}</span>
+                        )}
+                        <span style={{ color:'var(--text2)' }}>→</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            /* Cronologia "chi ha fatto cosa" — attraverso TUTTI gli eventi,
+               anche quelli che nel frattempo hanno rimosso l'oggetto dalla
+               propria lista o sono stati archiviati/eliminati. */
+            itemActivityLog.length === 0 ? (
+              <p style={{ color:'var(--text3)', fontSize:13, fontStyle:'italic' }}>{t('inventory.noActivityAvailable')}</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:320, overflowY:'auto' }}>
+                {itemActivityLog.map(entry => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="btn-no-anim"
+                    disabled={!entry.eventId}
+                    onClick={() => entry.eventId && setShowEventActivity({ id: entry.eventId, name: entry.eventName })}
+                    style={{ display:'flex', alignItems:'flex-start', gap:9, width:'100%', textAlign:'left', background:'transparent', padding:'6px 4px', borderRadius:8, cursor: entry.eventId ? 'pointer' : 'default' }}
+                  >
+                    <span style={{ width:8, height:8, borderRadius:'50%', background: ACTIVITY_COLORS[entry.action] || 'var(--text3)', flexShrink:0, marginTop:6 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:13, fontWeight:600 }}>
+                        {t(`eventDetail.activity_${entry.action}`, { name: entry.userName || t('eventDetail.unknownUser') })}
+                      </p>
+                      <p style={{ fontSize:11, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {entry.eventName && (
+                          <span style={{ color: entry.eventId ? 'var(--blue)' : 'var(--text2)', fontWeight:600 }}>{entry.eventName}</span>
+                        )}
+                        <span style={{ color:'var(--text2)' }}>
+                          {entry.eventName ? ' · ' : ''}
+                          {entry.createdAt?.toDate ? formatDate(entry.createdAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : t('eventDetail.historyJustNow')}
+                        </span>
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
+          )}
         </div>
-      )}
+      </div>
 
       {/* Cronologia di un singolo evento, dalla sezione sopra — filtra
           itemActivityLog già in memoria, nessuna nuova query. */}

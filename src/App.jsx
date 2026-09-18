@@ -53,7 +53,6 @@ import AbsenceNotifications from './components/AbsenceNotifications'
 import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
-import UpdateAvailableBanner from './components/UpdateAvailableBanner'
 
 // Riusato sia mentre si aspettano i dati di login sia come fallback di
 // Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
@@ -293,7 +292,6 @@ export default function App() {
         <BrowserRouter>
           <LoadingBar />
           <OfflineIndicator />
-          <UpdateAvailableBanner />
           <PageTransition />
           <OnboardingReveal />
           {/* Un solo confine Suspense in cima basta: cattura il caricamento

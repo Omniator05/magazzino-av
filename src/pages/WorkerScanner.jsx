@@ -723,6 +723,7 @@ export default function WorkerScanner() {
             notes: data?.notes || null,
             components: data?.isBundle && data?.components?.length ? data.components : null,
             instances: data?.isBundle ? (data.instances || []) : null,
+            consumableUnit: data?.consumableUnit || null,
           }
         })
         return next
@@ -1690,6 +1691,13 @@ function ChecklistRow({ item }) {
   }
   const location = item._details?.location || null
   const warehouseNotes = item._details?.notes || null
+  // Un consumabile può essere tracciato in metri/rotoli invece che a pezzi
+  // (vedi Inventory.jsx → consumableUnit): il magazziniere deve vedere
+  // l'unità reale, non "pz" fisso, altrimenti "20" letto come pezzi invece
+  // che metri porta a caricare/segnare la quantità sbagliata.
+  const qtyUnitLabel = item.category === 'Consumabili'
+    ? t(`inventory.unitShort_${item._details?.consumableUnit || 'pezzi'}`)
+    : t('workerScanner.piecesUnit')
   // Auto-repair: se l'evento è stato salvato prima che i componenti fossero
   // registrati sul kit, quelli live dal catalogo (risolti in blocco dal
   // genitore) hanno priorità così la lista è sempre aggiornata.
@@ -1767,7 +1775,7 @@ function ChecklistRow({ item }) {
           </div>
           <div style={{ display:'inline-flex', alignItems:'baseline', gap:4, marginTop:4 }}>
             <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
-            <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{t('workerScanner.piecesUnit')}</span>
+            <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{qtyUnitLabel}</span>
           </div>
           {damagedInstances.length > 0 && (
             <p style={{ color:'var(--red)', fontSize:11, marginTop:3, lineHeight:1.4 }}>
