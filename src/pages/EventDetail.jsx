@@ -18,7 +18,8 @@ import { useSwipeDismiss } from '../hooks/useSwipeDismiss'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
-import { syncKitAwareInventory, itemCommittedElsewhere } from '../utils/kitInventory'
+import { syncKitAwareInventory, itemCommittedElsewhere, closeInstallationEvent } from '../utils/kitInventory'
+import CloseInstallationModal from '../components/CloseInstallationModal'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import JSZip from 'jszip'
 
@@ -90,6 +91,7 @@ export default function EventDetail() {
   const [showExtraModal, setShowExtraModal] = useState(false)
   const [cart, setCart] = useState([])
   const [showDiscardCart, setShowDiscardCart] = useState(false)
+  const [showCloseInstallModal, setShowCloseInstallModal] = useState(false)
   const addItemDrag   = useModalDrag(
     () => setShowAddItem(false),
     () => { if (cart.length > 0) { setShowDiscardCart(true); return false } return true }
@@ -976,7 +978,7 @@ export default function EventDetail() {
   }
 
   const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
-  const CAT_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
+  const CAT_ORDER = ['Kit','Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
   const filteredEventItems = itemListSearch.trim()
     ? eventItems.filter(i => i.name?.toLowerCase().includes(itemListSearch.trim().toLowerCase()))
     : eventItems
@@ -1154,27 +1156,12 @@ export default function EventDetail() {
           </div>
         )}
 
-        {/* Bottone chiudi installazione */}
+        {/* Bottone chiudi installazione (lato admin — EventDetail.jsx è la
+            pagina evento SOLO admin; i magazzinieri su /events/:id vedono
+            invece WorkerScanner.jsx, che ha la sua stessa versione più sotto). */}
         {event.type === 'installation' && (
           <button
-            onClick={async () => {
-              if (!(await confirm({ title: t('eventDetail.confirmCloseInstallationTitle'), message: t('eventDetail.confirmCloseInstallationMessage'), confirmLabel: t('eventDetail.confirmCloseInstallationLabel') }))) return
-              for (const item of eventItems) {
-                if (item.loaded && !item.returned && !item.isExtra) {
-                  try {
-                    const itemRef = doc(db, 'items', item.id)
-                    const snap = await getDoc(itemRef)
-                    if (snap.exists()) {
-                      const current = snap.data()
-                      const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-                      await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty||0) + (item.qty||1)) })
-                    }
-                  } catch(e) { console.error(e) }
-                }
-              }
-              await updateDoc(doc(db, 'events', id), { archived: true })
-              navigate('/events')
-            }}
+            onClick={() => setShowCloseInstallModal(true)}
             style={{ width:'100%', marginTop:12, padding:'13px', borderRadius:12,
               background:'rgba(90,82,201,0.12)', border:'1px solid rgba(90,82,201,0.3)',
               color:'#7c6fcd', fontWeight:700, fontSize:14,
@@ -1185,6 +1172,13 @@ export default function EventDetail() {
           </button>
         )}
       </div>
+
+      <CloseInstallationModal
+        open={showCloseInstallModal}
+        onClose={() => { setShowCloseInstallModal(false); navigate('/events') }}
+        message={t('eventDetail.confirmCloseInstallationMessage')}
+        onConfirm={async () => { await closeInstallationEvent(id, eventItems); return true }}
+      />
 
       {/* Contenuti Brasserie — solo se un organizzatore ha configurato una settimana per questa data */}
       {brasserieWeek && (

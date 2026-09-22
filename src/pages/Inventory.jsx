@@ -34,16 +34,17 @@ const ACTIVITY_COLORS = {
   returned:'var(--green)', unreturned:'var(--text3)',
   missing:'#ea580c', unmissing:'var(--text3)',
 }
-const CATEGORIES =['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
+const CATEGORIES =['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const KIT_CATEGORIES = CATEGORIES
-// Ordine di visualizzazione nella lista raggruppata
-const CATEGORY_ORDER = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
+// Ordine di visualizzazione nella lista raggruppata — audio e microfoni
+// vicini, poi video, poi luci e strutture (rigging) di seguito.
+const CATEGORY_ORDER = ['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 // Unità di misura per i Consumabili — non tutti si contano allo stesso modo:
 // moquette/gonna palco a metri, nastro a rotoli, taniche/fascette/pile a pezzi.
 // "pezzi" resta il default per tutto il resto (retrocompatibile: gli oggetti
 // esistenti senza questo campo si comportano come prima, in pezzi).
 const CONSUMABLE_UNITS = ['pezzi', 'metri', 'rotoli']
-const MAIN_CATS = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti']
+const MAIN_CATS = ['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti']
 const ICONS = {
   'Audio':       '🔊',
   'Video':       '📺',

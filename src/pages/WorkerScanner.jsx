@@ -13,7 +13,8 @@ import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
-import { syncKitAwareInventory } from '../utils/kitInventory'
+import { syncKitAwareInventory, closeInstallationEvent } from '../utils/kitInventory'
+import CloseInstallationModal from '../components/CloseInstallationModal'
 import { todayStr } from '../utils/workHours'
 
 const ICONS = {
@@ -173,6 +174,7 @@ export default function WorkerScanner() {
   const [showAllPreparedPopup, setShowAllPreparedPopup] = useState(false)
   const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
   const [showAllReturnedPopup, setShowAllReturnedPopup] = useState(false)
+  const [showCloseInstallModal, setShowCloseInstallModal] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [showEventNotes, setShowEventNotes] = useState(false)
   const prevPreparedRef = useRef(0)
@@ -1165,12 +1167,28 @@ export default function WorkerScanner() {
             )
           })()}
 
+          {/* Chiudi rent/install — solo qui, in fase Rientro, quando tutto è
+              tornato: un rent/install non si archivia mai da solo come un
+              evento normale (resta caricato apposta anche a lungo), quindi
+              serve un'azione esplicita, e va raggiungibile anche da chi lo
+              sta effettivamente scaricando, non solo dall'admin. */}
+          {mode === 'return' && event?.type === 'installation' && total > 0 && returned === total && (
+            <button onClick={() => setShowCloseInstallModal(true)}
+              style={{ width:'100%', marginBottom:8, padding:'13px', borderRadius:12,
+                background:'rgba(90,82,201,0.12)', border:'1px solid rgba(90,82,201,0.3)',
+                color:'#7c6fcd', fontWeight:700, fontSize:14,
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              }}>
+              {t('eventDetail.closeInstallation')}
+            </button>
+          )}
+
           <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
             {items.length === 0
               ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>{t('workerScanner.listNotPrepared')}</p>
               : (() => {
                   const WS_CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
-                  const WS_ORDER = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
+                  const WS_ORDER = ['Kit','Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
 
                   const buildItemProps = (item, vehicleColor) => ({
                     ...item,
@@ -1343,6 +1361,59 @@ export default function WorkerScanner() {
                         action: newReturned ? 'returned' : 'unreturned', profile, userId: user?.uid,
                       })
                     },
+                    // Rientro PARZIALE: solo per oggetti non-kit con qty > 1
+                    // (i kit multi-baule hanno già il proprio tracciamento
+                    // per singolo esemplare, vedi scannedInstances più sotto —
+                    // qui serve per una riga "semplice" tipo "4 piastre" dove
+                    // solo una parte torna prima delle altre. Divide la riga
+                    // in due: quella originale resta "fuori" con la quantità
+                    // residua, una nuova riga nasce già "rientrata" con la
+                    // quantità restituita — stesso schema delle righe
+                    // duplicate già usato per gli oggetti "mancante" in
+                    // EventDetail.jsx (stesso itemRef, id proprio).
+                    _onPartialReturn: async (itemId, splitQty) => {
+                      const totalQty = item.qty || 1
+                      if (item.isBundle || !splitQty || splitQty <= 0 || splitQty >= totalQty) return
+                      const remainingQty = totalQty - splitQty
+                      const returnedRowId = `${itemId}_ret_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+                      setOptimistic(itemId, { qty: remainingQty })
+                      let itm
+                      try {
+                        await runTransaction(db, async (tx) => {
+                          const snap = await tx.get(eventRef)
+                          if (!snap.exists()) return
+                          const evItems = snap.data().items || []
+                          const current = evItems.find(i => i.id === itemId)
+                          if (!current?.loaded || current.returned || (current.qty || 1) <= splitQty) return
+                          itm = current
+                          const returnedRow = {
+                            id: returnedRowId, itemRef: current.itemRef || current.id,
+                            name: current.name, category: current.category, location: current.location || '',
+                            isKit: current.isKit || false, kitSize: current.kitSize || null,
+                            isBundle: false, components: null,
+                            qty: splitQty, pronto: true, loaded: true, returned: true, returnedConsumed: false,
+                            mancante: false,
+                          }
+                          tx.update(eventRef, {
+                            items: evItems.flatMap(i => i.id !== itemId ? [i] : [{ ...i, qty: (i.qty || 1) - splitQty }, returnedRow]),
+                          })
+                        })
+                      } catch (e) {
+                        setSaveError(t('workerScanner.saveErrorMessage'))
+                        clearOptimistic(itemId, ['qty'])
+                        return
+                      }
+                      if (!itm) { clearOptimistic(itemId, ['qty']); return }
+                      await syncKitAwareInventory({
+                        catalogItemId: itm.itemRef || itemId, isBundle: false, category: itm.category,
+                        qty: splitQty, sign: 1,
+                      })
+                      logItemActivity({
+                        teamId, eventId: id, eventName: event?.name, itemId: returnedRowId, itemName: item.name,
+                        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+                        action: 'returned', profile, userId: user?.uid,
+                      })
+                    },
                     _onTogglePronto: async (itemId) => {
                       const newPronto = !item.pronto
                       // Stesso controllo di _onToggleLoaded: segnare "pronto" senza
@@ -1457,7 +1528,7 @@ export default function WorkerScanner() {
                         )}
                         {grouped[cat].map(item => (
                           <div key={item.id} ref={!item[doneField] && item.id === firstUnloadedId ? firstUnloadedRef : null}>
-                            <ChecklistRow item={buildItemProps(item, vehicleColor)} />
+                            <ChecklistRow item={buildItemProps(item, vehicleColor)} mode={mode} />
                           </div>
                         ))}
                       </div>
@@ -1589,6 +1660,13 @@ export default function WorkerScanner() {
         </div>
       )}
 
+      <CloseInstallationModal
+        open={showCloseInstallModal}
+        onClose={() => { setShowCloseInstallModal(false); navigate('/') }}
+        message={t('eventDetail.confirmCloseInstallationMessage')}
+        onConfirm={async () => { await closeInstallationEvent(id, event?.items || []); return true }}
+      />
+
       {/* Modal extra worker */}
       {showExtraWorker && (
         <div className={`modal-overlay${extraDrag.closing ? ' closing' : ''}`} onClick={extraDrag.onOverlayClick}>
@@ -1626,9 +1704,19 @@ export default function WorkerScanner() {
 }
 
 // Riga checklist con bottoni touch-friendly e note accessibili
-function ChecklistRow({ item }) {
+function ChecklistRow({ item, mode }) {
   const { t } = useTranslation()
   const [showInfo, setShowInfo]   = useState(false)
+  // Rientro parziale: solo per righe "semplici" (non kit) con più di 1
+  // pezzo, ancora fuori — vedi _onPartialReturn nel genitore. Il popup
+  // parte sempre da 1 e non può arrivare alla quantità intera della riga
+  // (quello è il bottone "Rientro" normale sopra). Compare solo nella fase
+  // "Rientro": nelle altre fasi (Pronto/Carico) è fuori contesto — chi sta
+  // preparando o caricando non deve vedersi proporre un'azione di rientro.
+  const [showPartialReturn, setShowPartialReturn] = useState(false)
+  const [partialQty, setPartialQty] = useState(1)
+  const [partialSaving, setPartialSaving] = useState(false)
+  const canPartialReturn = mode === 'return' && !item.isBundle && (item.qty || 1) > 1 && item.loaded && !item.returned
   // Tenere premuto il bottone "Carico" segna l'oggetto mancante/rotto invece
   // di caricarlo — evita un quarto bottone dedicato solo a un caso raro. La
   // striscia arancione parte con un piccolo ritardo (non su un tap normale,
@@ -1740,7 +1828,7 @@ function ChecklistRow({ item }) {
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
             {isForgottenReturn && (
-              <span style={{ background:'rgba(107,114,128,0.15)', color:'var(--text2)', border:'1px solid rgba(107,114,128,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('workerScanner.leftOutBadge')}</span>
+              <span style={{ background:'rgba(255,82,82,0.15)', color:'var(--red)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('workerScanner.leftOutBadge')}</span>
             )}
             {item.pronto && !item.loaded && <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>}
             {(item.instanceNumbers || []).length > 0 && (
@@ -1777,6 +1865,12 @@ function ChecklistRow({ item }) {
             <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
             <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{qtyUnitLabel}</span>
           </div>
+          {canPartialReturn && (
+            <button type="button" className="btn-no-anim" onClick={() => { setPartialQty(1); setShowPartialReturn(true) }}
+              style={{ display:'block', marginTop:4, background:'transparent', color:'var(--blue)', fontSize:11.5, fontWeight:700, textDecoration:'underline', padding:0 }}>
+              {t('workerScanner.partialReturnTrigger')}
+            </button>
+          )}
           {damagedInstances.length > 0 && (
             <p style={{ color:'var(--red)', fontSize:11, marginTop:3, lineHeight:1.4 }}>
               {damagedInstances.map(inst => t('eventDetail.kitInstanceIssue', {
@@ -1866,8 +1960,8 @@ function ChecklistRow({ item }) {
             disabled={!item.loaded}
             style={{ position:'relative', overflow:'hidden', minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
               display:'flex', alignItems:'center', justifyContent:'center',
-              background: item.returned ? (isForgottenReturn ? 'rgba(107,114,128,0.15)' : 'rgba(52,211,153,0.15)') : item.loaded ? 'var(--card2)' : 'var(--bg3)',
-              color: item.returned ? (isForgottenReturn ? 'var(--text2)' : 'var(--green)') : item.loaded ? 'var(--text2)' : 'var(--text3)',
+              background: item.returned ? (isForgottenReturn ? 'rgba(255,82,82,0.15)' : 'rgba(52,211,153,0.15)') : item.loaded ? 'var(--card2)' : 'var(--bg3)',
+              color: item.returned ? (isForgottenReturn ? 'var(--red)' : 'var(--green)') : item.loaded ? 'var(--text2)' : 'var(--text3)',
               opacity: item.loaded ? 1 : 0.4,
               WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
             }}
@@ -1916,6 +2010,40 @@ function ChecklistRow({ item }) {
               }
             </div>
           )}
+        </div>
+      )}
+
+      {showPartialReturn && (
+        <div
+          onClick={() => !partialSaving && setShowPartialReturn(false)}
+          style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ width:'100%', maxWidth:340, background:'var(--card)', borderRadius:18, padding:22 }}>
+            <h3 style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:4 }}>{t('workerScanner.partialReturnTitle')}</h3>
+            <p style={{ fontSize:13, color:'var(--text2)', marginBottom:16 }}>{t('workerScanner.partialReturnDesc', { name: item.name, total: item.qty || 1 })}</p>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:14, marginBottom:20 }}>
+              <button onClick={() => setPartialQty(q => Math.max(1, q - 1))} disabled={partialSaving}
+                style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:20, fontWeight:700 }}>−</button>
+              <span style={{ fontSize:26, fontWeight:900, color:'var(--text)', minWidth:40, textAlign:'center' }}>{partialQty}</span>
+              <button onClick={() => setPartialQty(q => Math.min((item.qty || 1) - 1, q + 1))} disabled={partialSaving}
+                style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:20, fontWeight:700 }}>+</button>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setShowPartialReturn(false)} disabled={partialSaving} className="btn-no-anim"
+                style={{ flex:1, padding:12, borderRadius:12, background:'var(--card2)', color:'var(--text2)', fontWeight:700, fontSize:13.5 }}>
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={async () => {
+                  setPartialSaving(true)
+                  try { await item._onPartialReturn(item.id, partialQty) } finally { setPartialSaving(false); setShowPartialReturn(false) }
+                }}
+                disabled={partialSaving} className="btn btn-primary"
+                style={{ flex:1, padding:12, borderRadius:12, fontWeight:700, fontSize:13.5 }}>
+                {partialSaving ? t('common.saving') : t('workerScanner.partialReturnConfirm')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

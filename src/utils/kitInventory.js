@@ -136,3 +136,25 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
   }
   await deleteDoc(doc(db, 'events', event.id))
 }
+
+// Chiude un rent/install: restituisce la giacenza di tutto ciò che risulta
+// ancora caricato e non rientrato, poi archivia l'evento — stessa identica
+// logica che prima viveva duplicata fra Events.jsx (lista admin) e
+// EventDetail.jsx (pagina del singolo evento, ora raggiungibile anche dai
+// magazzinieri). Un solo posto da cui tenerla corretta.
+export const closeInstallationEvent = async (eventId, items) => {
+  for (const item of items || []) {
+    if (item.loaded && !item.returned && !item.isExtra) {
+      try {
+        const itemRef = doc(db, 'items', item.id)
+        const snap = await getDoc(itemRef)
+        if (snap.exists()) {
+          const current = snap.data()
+          const maxAvail = (current.totalQty || 0) - (current.brokenQty || 0)
+          await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty || 0) + (item.qty || 1)) })
+        }
+      } catch (e) { console.error(e) }
+    }
+  }
+  await updateDoc(doc(db, 'events', eventId), { archived: true })
+}

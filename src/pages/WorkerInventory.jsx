@@ -11,7 +11,7 @@ import DailyQuip from '../components/DailyQuip'
 
 // Stessa lista di Inventory.jsx (vista admin) — usata qui solo per il
 // filtro categoria del menu filtri avanzati, vedi sotto.
-const CATEGORIES = ['Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Microfoni','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
+const CATEGORIES = ['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const ICONS = {
   'Audio':    '🔊',
   'Video':    '📺',

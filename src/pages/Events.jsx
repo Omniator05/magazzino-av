@@ -16,7 +16,8 @@ import { syncEventToGoogle, deleteGoogleEvent, listUpcomingGoogleEvents, fromGoo
 import { db } from '../firebase'
 import { collection, addDoc, deleteDoc, updateDoc, doc, getDoc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
+import { deleteEventWithInventoryCheck, closeInstallationEvent } from '../utils/kitInventory'
+import CloseInstallationModal from '../components/CloseInstallationModal'
 import CreateEventFlow from '../components/CreateEventFlow'
 
 const EVENT_CAP = 5
@@ -86,7 +87,11 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   const evEnd    = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
   const isMultiDay = evEnd !== event.date
   const isPast   = evEnd < today
-  const daScaricare = loadListsOn && isPast && items.some(i => i.loaded && !i.returned)
+  // Un rent/install scaduto conta come "da scaricare" anche se tutto è già
+  // rientrato — a differenza di un evento normale, qui l'urgenza non è "c'è
+  // ancora roba fuori" ma "va chiuso": vedi il bottone "Termina Rent/Chiudi
+  // Install" più sotto, raggiunto proprio passando da questa sezione.
+  const daScaricare = loadListsOn && isPast && (event.type === 'installation' || items.some(i => i.loaded && !i.returned))
 
   // Segue lo stadio più avanzato raggiunto da almeno un oggetto — appena i
   // magazzinieri iniziano a lavorarci la dicitura passa da "N oggetti in
@@ -288,6 +293,7 @@ export default function Events() {
     } catch { return { recurring: true, unload: true, upcoming: true } }
   })
   const [search, setSearch]       = useState('')
+  const [closingInstallation, setClosingInstallation] = useState(null)
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
   const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{} })
@@ -440,11 +446,20 @@ export default function Events() {
   }
 
   const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e))
-  const daScaricareSingle = singleEvents.filter(e => {
+  const daScaricareSingle = events.filter(e => {
+    if (e.seriesId) return false  // i ricorrenti passati non rientrati sono già in pastUnfinished sopra
+    if (e.type === 'installation') {
+      // Un rent/install resta caricato/non rientrato DI PROPOSITO finché è
+      // ancora attivo — ma una volta SCADUTO (fine contratto prevista
+      // passata) è la stessa urgenza di un evento dimenticato: va scaricato/
+      // richiuso, quindi qui ci entra a pieno titolo invece di restare
+      // invisibile nella sua sezione collassata.
+      return !e.archived && e.dateEnd && e.dateEnd < today
+    }
     if (effectiveEndDate(e) >= today) return false
     const its = e.items || []
     return its.length > 0 && its.some(i => i.loaded && !i.returned)
-  })
+  }).sort((a, b) => (a.type === 'installation') === (b.type === 'installation') ? 0 : a.type === 'installation' ? -1 : 1)
 
   // Cap con "carica altri"
   const [visibleCount, setVisibleCount] = useState(EVENT_CAP)
@@ -511,26 +526,7 @@ export default function Events() {
 
   const cardProps = { today, t, i18n, navigate, phaseConfig: PHASE_CONFIG, onEdit: openEdit, onDelete: deleteEvent, loadListsOn }
 
-  const closeInstallation = async (installation) => {
-    if (!(await confirm({ title: t('eventDetail.confirmCloseInstallationTitle'), message: t('events.confirmCloseInstallMessage', { name: installation.name }), confirmLabel: t('eventDetail.confirmCloseInstallationLabel') }))) return
-    const items = installation.items || []
-    for (const item of items) {
-      if (item.loaded && !item.returned && !item.isExtra) {
-        try {
-          const itemRef = doc(db, 'items', item.id)
-          const snap = await getDoc(itemRef)
-          if (snap.exists()) {
-            const current = snap.data()
-            const maxAvail = (current.totalQty||0) - (current.brokenQty||0)
-            await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty||0) + (item.qty||1)) })
-          }
-        } catch(e) { console.error(e) }
-      }
-    }
-    await updateDoc(doc(db, 'events', installation.id), { archived: true })
-  }
-
-  const instCardProps = { today, t, i18n, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: closeInstallation, loadListsOn }
+  const instCardProps = { today, t, i18n, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: setClosingInstallation, loadListsOn }
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
@@ -690,6 +686,13 @@ export default function Events() {
         onClose={() => { setCreateFlowOpen(false); setCreateFlowSkip(null) }}
         skipChoice={createFlowSkip}
         onCreated={(eventId, { fromTemplate }) => { if (fromTemplate) navigate(`/events/${eventId}`) }}
+      />
+
+      <CloseInstallationModal
+        open={!!closingInstallation}
+        onClose={() => setClosingInstallation(null)}
+        message={closingInstallation ? t('events.confirmCloseInstallMessage', { name: closingInstallation.name }) : ''}
+        onConfirm={async () => { await closeInstallationEvent(closingInstallation.id, closingInstallation.items || []); return true }}
       />
 
       {/* Modifica evento esistente — niente scelta template qui, quella si

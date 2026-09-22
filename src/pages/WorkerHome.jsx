@@ -78,15 +78,18 @@ export default function WorkerHome() {
 
   const daScaricare = events.filter(e => {
     if (e.seriesId) return false  // gli eventi ricorrenti sono gestiti nella sezione "Ricorrenti"
-    // Le installazioni restano caricate/non rientrate DI PROPOSITO, anche a
-    // lungo — non è materiale "da scaricare urgentemente" solo perché la
-    // data è passata, altrimenti ci resterebbero per settimane/mesi finché
-    // non vengono smontate e chiuse a mano dall'admin (chiudi installazione).
-    if (e.type === 'installation') return false
+    if (e.type === 'installation') {
+      // Un rent/install resta caricato/non rientrato DI PROPOSITO finché è
+      // ancora attivo, anche a lungo — ma una volta SCADUTO (fine contratto
+      // prevista passata) è la stessa identica urgenza di un evento
+      // dimenticato: va scaricato/richiuso, quindi qui ci entra a pieno
+      // titolo invece di restare invisibile nella sua sezione collassata.
+      return !e.archived && e.dateEnd && e.dateEnd < today
+    }
     if (effectiveEndDate(e) >= today) return false
     const items = e.items || []
     return items.length > 0 && items.some(i => i.loaded && !i.returned)
-  })
+  }).sort((a, b) => (a.type === 'installation') === (b.type === 'installation') ? 0 : a.type === 'installation' ? -1 : 1)
 
   const isActive = e => {
     if (effectiveEndDate(e) >= today) return true
@@ -134,7 +137,8 @@ export default function WorkerHome() {
   // admin: un rent può avere data di inizio molto lontana e restare comunque
   // attivo, quindi il semplice ordine per data non basta a farlo notare.
   const installations = events
-    .filter(e => e.type === 'installation' && !e.archived)
+    // Uno scaduto è già in "Da scaricare" sopra — non va ripetuto anche qui.
+    .filter(e => e.type === 'installation' && !e.archived && !(e.dateEnd && e.dateEnd < today))
     .sort((a, b) => (a.date === today) === (b.date === today) ? 0 : a.date === today ? -1 : 1)
   const singleEvents = events.filter(e => !e.seriesId && e.type !== 'installation')
   const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e))
