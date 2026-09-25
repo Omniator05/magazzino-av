@@ -23,6 +23,8 @@ import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { getCodeDisplay } from '../utils/codeDisplay'
+import LinkedItemsEditor from '../components/LinkedItemsEditor'
+import { getLinkedItems, linkedItemsToFields } from '../utils/linkedItems'
 import { QrCode, Barcode } from '../components/Icon'
 
 // Colori pallino per la sezione Cronologia (dettaglio oggetto) — stessa
@@ -34,6 +36,23 @@ const ACTIVITY_COLORS = {
   returned:'var(--green)', unreturned:'var(--text3)',
   missing:'#ea580c', unmissing:'var(--text3)',
 }
+// Form oggetto. I dati tecnici (peso, consumo, portata, dimensioni in metri,
+// seriale) stanno nella sotto-pagina "Dettagli oggetto" del modal; restano
+// stringhe finché non si salva (vuoto = non compilato, null su Firestore).
+const DETAIL_FIELDS = ['weightKg', 'peakPowerW', 'loadCapacityKg', 'widthM', 'lengthM', 'heightM', 'serialNumber']
+const emptyItemForm = () => ({
+  name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi',
+  weightKg:'', peakPowerW:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[],
+})
+const itemToForm = item => ({
+  name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'',
+  brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
+  weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', loadCapacityKg:item.loadCapacityKg ?? '',
+  widthM:item.widthM ?? '', lengthM:item.lengthM ?? '', heightM:item.heightM ?? '', serialNumber:item.serialNumber || '',
+  linkedItems:getLinkedItems(item),
+})
+// "1,5" o "1.5" → 1.5; vuoto/zero/non numerico → null (distingue "non compilato" da "davvero zero")
+const parseDecimal = v => v !== '' && v != null ? (parseFloat(String(v).replace(',', '.')) || null) : null
 const CATEGORIES =['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 const KIT_CATEGORIES = CATEGORIES
 // Ordine di visualizzazione nella lista raggruppata — audio e microfoni
@@ -120,9 +139,10 @@ export default function Inventory() {
   const [kitEditComponents, setKitEditComponents] = useState([])
   const [kitEditInstances, setKitEditInstances] = useState([])
   const [kitEditSearch, setKitEditSearch]       = useState('')
-  const [kitForm, setKitForm]           = useState({ name:'', location:'', qty:1, category:'Altro' })
+  const [kitForm, setKitForm]           = useState({ name:'', location:'', qty:1, category:'Altro', linkedItems:[] })
   const [kitComponents, setKitComponents] = useState([])
   const [kitSearch, setKitSearch]       = useState('')
+  const [kitLinkedSearch, setKitLinkedSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(null)
   const [itemActivityLog, setItemActivityLog] = useState([])
@@ -137,8 +157,10 @@ export default function Inventory() {
   const [importParsed, setImportParsed] = useState(null) // { items, warnings }
   const [importError, setImportError] = useState('')
   const [importProgress, setImportProgress] = useState(0)
-  const [form, setForm] = useState({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'', linkedItemIds:[] })
+  const [form, setForm] = useState(emptyItemForm)
   const [linkedSearch, setLinkedSearch] = useState('')
+  // Pagina visibile nel modal oggetto: prima pagina o una delle sotto-pagine
+  const [modalPage, setModalPage] = useState('main') // 'main' | 'details' | 'linked'
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
@@ -250,18 +272,19 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm({ name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi', weightKg:'', peakPowerW:'', linkedItemIds:[] }); setLinkedSearch(''); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm(emptyItemForm()); setLinkedSearch(''); setModalPage('main'); setShowModal(true) }
   const openEdit = item => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
       setEditingKit(item)
-      setKitForm({ name:item.name, location:item.location||'', qty:item.totalQty||1, category:item.category||'Altro' })
+      setKitForm({ name:item.name, location:item.location||'', qty:item.totalQty||1, category:item.category||'Altro', linkedItems:getLinkedItems(item) })
       setKitEditComponents((item.components||[]).map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty, maxQty:99 })))
       setKitEditInstances(item.instances || [])
       setKitEditSearch('')
+      setKitLinkedSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm({ name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'', brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi', weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', linkedItemIds:item.linkedItemIds||[] }); setLinkedSearch(''); setShowModal(true)
+      setSelected(item); setForm(itemToForm(item)); setLinkedSearch(''); setModalPage('main'); setShowModal(true)
     }
   }
 
@@ -292,8 +315,15 @@ export default function Inventory() {
     // Entrambi opzionali (solo per gli oggetti "importanti" che vale la pena
     // tracciare) — stringa vuota resta null, non 0, per distinguere "non
     // compilato" da "davvero zero" e non sporcare la scheda di ogni oggetto.
-    const weightKg = form.weightKg !== '' ? (parseFloat(String(form.weightKg).replace(',', '.')) || null) : null
-    const peakPowerW = form.peakPowerW !== '' ? (parseInt(form.peakPowerW) || null) : null
+    const details = {
+      weightKg: parseDecimal(form.weightKg),
+      peakPowerW: form.peakPowerW !== '' ? (parseInt(form.peakPowerW) || null) : null,
+      loadCapacityKg: parseDecimal(form.loadCapacityKg),
+      widthM: parseDecimal(form.widthM),
+      lengthM: parseDecimal(form.lengthM),
+      heightM: parseDecimal(form.heightM),
+      serialNumber: form.serialNumber.trim() || null,
+    }
     if (!selected) {
       if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsInWarehouse) {
         await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: FREE_LIMITS.itemsInWarehouse }) })
@@ -308,13 +338,13 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, weightKg, peakPowerW, linkedItemIds:form.linkedItemIds })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems) })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
-        brand:form.brand, model:form.model, location:form.location, notes:form.notes, weightKg, peakPowerW, linkedItemIds:form.linkedItemIds,
+        brand:form.brand, model:form.model, location:form.location, notes:form.notes, ...details, ...linkedItemsToFields(form.linkedItems),
         teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
@@ -834,6 +864,43 @@ export default function Inventory() {
         <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
           <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
             <button className="close-btn" onClick={myDrag.close} aria-label={t("common.close")}>✕</button>
+            {modalPage !== 'main' && (
+              <>
+                <button type="button" onClick={() => setModalPage('main')} aria-label={t('common.back')}
+                  style={{ display:'inline-flex', alignItems:'center', gap:4, background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:700, padding:'4px 0', marginBottom:6 }}>
+                  ← {t('common.back')}
+                </button>
+                <h2>{modalPage === 'details' ? t('inventory.detailsPageTitle') : t('inventory.linkedPageTitle')}</h2>
+                <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{form.name || t('inventory.newItemTitle')}</p>
+              </>
+            )}
+            {modalPage === 'details' && (
+              <>
+                <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginBottom:14 }}>{t('inventory.detailsPageHint')}</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                  <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.peakPowerLabel')}</label><input type="text" inputMode="numeric" value={form.peakPowerW} onChange={e => setForm({...form,peakPowerW:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.peakPowerPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.loadCapacityLabel')}</label><input type="text" inputMode="decimal" value={form.loadCapacityKg} onChange={e => setForm({...form,loadCapacityKg:e.target.value})} placeholder={t('inventory.loadCapacityPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.serialNumberLabel')}</label><input value={form.serialNumber} onChange={e => setForm({...form,serialNumber:e.target.value})} placeholder={t('inventory.serialNumberPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.widthLabel')}</label><input type="text" inputMode="decimal" value={form.widthM} onChange={e => setForm({...form,widthM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.lengthLabel')}</label><input type="text" inputMode="decimal" value={form.lengthM} onChange={e => setForm({...form,lengthM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.heightLabel')}</label><input type="text" inputMode="decimal" value={form.heightM} onChange={e => setForm({...form,heightM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
+                </div>
+                <button type="button" onClick={() => setModalPage('main')} className="btn btn-primary btn-full" style={{ marginTop:8 }}>{t('inventory.pageDone')}</button>
+              </>
+            )}
+            {modalPage === 'linked' && (
+              <>
+                <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginBottom:14 }}>{t('inventory.linkedPageHint')}</p>
+                <LinkedItemsEditor
+                  items={items} selfId={selected?.id}
+                  value={form.linkedItems} onChange={links => setForm({...form, linkedItems:links})}
+                  search={linkedSearch} onSearchChange={setLinkedSearch}
+                />
+                <button type="button" onClick={() => setModalPage('main')} className="btn btn-primary btn-full" style={{ marginTop:16 }}>{t('inventory.pageDone')}</button>
+              </>
+            )}
+            {modalPage === 'main' && (<>
             <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
             <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
             <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
@@ -870,13 +937,6 @@ export default function Inventory() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
               <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
-            </div>
-            {/* Peso e consumo di picco — entrambi opzionali, pensati solo per
-                gli oggetti "importanti" che vale la pena tracciare (fari,
-                casse, amplificatori...), non richiesti per tutto il catalogo. */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
-              <div className="form-group"><label>{t('inventory.peakPowerLabel')}</label><input type="text" inputMode="numeric" value={form.peakPowerW} onChange={e => setForm({...form,peakPowerW:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.peakPowerPlaceholder')} /></div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
@@ -937,64 +997,30 @@ export default function Inventory() {
               </div>
             )}
 
-            {/* Oggetti collegati — si aggiungono da soli quando questo finisce
-                in una lista di carico (es. "tavolo dj" → gonna + gambe), per
-                non dimenticarseli. Solo al primo inserimento, mai al posto di
-                una quantità che chi carica ha già scelto di persona — vedi
-                addToCart in EventDetail.jsx. Facoltativo. */}
-            <div className="form-group">
-              <label>{t('inventory.linkedItemsLabel')}</label>
-              {form.linkedItemIds.length > 0 && (
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
-                  {form.linkedItemIds.map(id => {
-                    const li = items.find(i => i.id === id)
-                    if (!li) return null
-                    return (
-                      <span key={id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'var(--card2)', border:'1px solid var(--border)', borderRadius:20, padding:'5px 6px 5px 12px', fontSize:12.5, fontWeight:700 }}>
-                        {li.name}
-                        <button type="button"
-                          onClick={() => setForm({...form, linkedItemIds: form.linkedItemIds.filter(x => x !== id)})}
-                          aria-label={t('inventory.removeLinkedItemAria', { name: li.name })}
-                          style={{ width:20, height:20, borderRadius:'50%', background:'var(--border)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, flexShrink:0 }}
-                        >✕</button>
-                      </span>
-                    )
-                  })}
+            {/* Sotto-pagine: tengono corta la prima pagina, restano in `form`
+                finché non si salva qui sotto. */}
+            {(() => {
+              const detailsFilled = DETAIL_FIELDS.filter(k => String(form[k] ?? '').trim() !== '').length
+              const linkedCount = form.linkedItems.length
+              const pageBtn = { flex:1, minWidth:0, textAlign:'left', padding:'11px 12px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', display:'flex', flexDirection:'column', gap:2 }
+              return (
+                <div style={{ display:'flex', gap:10, marginBottom:8 }}>
+                  <button type="button" className="btn-no-anim" onClick={() => setModalPage('details')} style={pageBtn}>
+                    <span style={{ fontSize:13.5, fontWeight:800 }}>{t('inventory.detailsButton')} ›</span>
+                    <span style={{ fontSize:11.5, color:'var(--text2)' }}>{detailsFilled > 0 ? t('inventory.detailsFilled', { count: detailsFilled }) : t('inventory.detailsEmpty')}</span>
+                  </button>
+                  <button type="button" className="btn-no-anim" onClick={() => setModalPage('linked')} style={pageBtn}>
+                    <span style={{ fontSize:13.5, fontWeight:800 }}>{t('inventory.linkedButton')} ›</span>
+                    <span style={{ fontSize:11.5, color:'var(--text2)' }}>{linkedCount > 0 ? t('inventory.linkedCount', { count: linkedCount }) : t('inventory.linkedEmpty')}</span>
+                  </button>
                 </div>
-              )}
-              <input
-                value={linkedSearch}
-                onChange={e => setLinkedSearch(e.target.value)}
-                placeholder={t('inventory.linkedItemsSearchPlaceholder')}
-              />
-              {linkedSearch.trim() && (() => {
-                const results = items.filter(i =>
-                  i.id !== selected?.id &&
-                  !form.linkedItemIds.includes(i.id) &&
-                  i.name.toLowerCase().includes(linkedSearch.trim().toLowerCase())
-                ).slice(0, 8)
-                return (
-                  <div style={{ marginTop:6, maxHeight:170, overflowY:'auto', border:'1px solid var(--border)', borderRadius:10 }}>
-                    {results.length === 0 ? (
-                      <p style={{ padding:'9px 12px', fontSize:12.5, color:'var(--text3)', fontStyle:'italic' }}>{t('inventory.linkedItemsNoResults')}</p>
-                    ) : results.map((i, idx) => (
-                      <button key={i.id} type="button"
-                        onClick={() => { setForm({...form, linkedItemIds:[...form.linkedItemIds, i.id]}); setLinkedSearch('') }}
-                        style={{ display:'flex', width:'100%', alignItems:'center', justifyContent:'space-between', gap:8, padding:'9px 12px', background:'transparent', borderBottom: idx < results.length-1 ? '1px solid var(--border)' : 'none', fontSize:13, fontWeight:600, textAlign:'left', color:'var(--text)' }}
-                      >
-                        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i.name}</span>
-                        <span style={{ color:'var(--accent)', flexShrink:0, display:'flex' }}><Plus size={14} /></span>
-                      </button>
-                    ))}
-                  </div>
-                )
-              })()}
-              <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.linkedItemsHint')}</p>
-            </div>
+              )
+            })()}
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
               <SaveButton onSave={saveItem} onDone={myDrag.close} onError={myDrag.triggerJiggle} className="btn btn-primary" style={{ flex:2 }}><Save size={16} /> {t('inventory.save')}</SaveButton>
             </div>
+            </>)}
           </div>
         </div>
       )}
@@ -1008,7 +1034,7 @@ export default function Inventory() {
         // L'ultimo evento (per data) in cui l'oggetto risulta stato caricato,
         // a prescindere dal fatto che sia già rientrato — usato per "Dove si
         // trova" quando non è attualmente fuori da nessuna parte.
-        const lastOutEvent = detailEventHistory.find(ev => (ev.items || []).find(matchesDetailItem)?.loaded)
+        const lastOutEvent = detailEventHistory.find(ev => (ev.items || []).some(i => matchesDetailItem(i) && i.loaded))
         const hasFullHistory = detailEventHistory.length > 0 || itemActivityLog.length > 0
         const row = (i) => ({ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14, padding:'12px 16px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' })
         const rowLabel = { color:'var(--text2)', fontSize:13, flexShrink:0 }
@@ -1049,6 +1075,44 @@ export default function Inventory() {
                 <div style={row(r++)}>
                   <span style={rowLabel}>{t('inventory.peakPowerLabel')}</span>
                   <span style={rowValue}>{t('inventory.peakPowerValue', { value: showDetail.peakPowerW })}</span>
+                </div>
+              )}
+              {showDetail.loadCapacityKg != null && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.loadCapacityLabel')}</span>
+                  <span style={rowValue}>{t('inventory.weightValue', { value: showDetail.loadCapacityKg })}</span>
+                </div>
+              )}
+              {(showDetail.lengthM != null || showDetail.widthM != null || showDetail.heightM != null) && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.dimensionsLabel')}</span>
+                  <span style={rowValue}>
+                    {[['length', showDetail.lengthM], ['width', showDetail.widthM], ['height', showDetail.heightM]]
+                      .filter(([, v]) => v != null)
+                      .map(([k, v]) => `${t(`inventory.dimShort_${k}`)} ${v}`).join(' · ')} m
+                  </span>
+                </div>
+              )}
+              {showDetail.serialNumber && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.serialNumberLabel')}</span>
+                  <span style={{ ...rowValue, fontFamily:'monospace' }}>{showDetail.serialNumber}</span>
+                </div>
+              )}
+              {getLinkedItems(showDetail).length > 0 && (
+                <div style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:6 }}>
+                  <span style={rowLabel}>{t('inventory.linkedAutoAddLabel')}</span>
+                  <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                    {getLinkedItems(showDetail).map(l => {
+                      const li = items.find(i => i.id === l.itemId)
+                      if (!li) return null
+                      return (
+                        <span key={l.itemId} style={{ ...rowValue, textAlign:'left' }}>
+                          {l.qty}× {li.name} <span style={{ color:'var(--text2)', fontWeight:500 }}>· {t(l.mode === 'perUnit' ? 'inventory.linkModePerUnit' : 'inventory.linkModeOnce')}</span>
+                        </span>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
               <div style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:8 }}>
@@ -1335,7 +1399,7 @@ export default function Inventory() {
                 <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>{t('inventory.newItemOption')}</span>
                 <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newItemOptionDesc')}</span>
               </button>
-              <button onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',qty:1,category:'Altro'}); setKitComponents([]); setKitSearch(''); setShowKitModal(true) }}
+              <button onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',qty:1,category:'Altro',linkedItems:[]}); setKitComponents([]); setKitSearch(''); setKitLinkedSearch(''); setShowKitModal(true) }}
                 style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
                 <span style={{ color:'var(--accent2)' }}><Kit size={34} /></span>
                 <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>{t('inventory.newKitOption')}</span>
@@ -1433,6 +1497,16 @@ export default function Inventory() {
                 </div>
               )}
               <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
+                <div style={{ maxHeight:280, overflowY:'auto' }}>
+                  <label>{t('inventory.linkedItemsLabel')}</label>
+                  <LinkedItemsEditor
+                    items={items} selfId={editingKit?.id}
+                    value={kitForm.linkedItems} onChange={links => setKitForm({...kitForm, linkedItems:links})}
+                    search={kitLinkedSearch} onSearchChange={setKitLinkedSearch}
+                  />
+                </div>
+              </div>
+              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
                 <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder={t('inventory.addComponentPlaceholder')} style={{ fontSize:13 }} />
               </div>
               {items
@@ -1476,6 +1550,7 @@ export default function Inventory() {
                     availableQty: newAvailable,
                     components: kitEditComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
                     instances: ensureInstanceList(kitEditInstances, newTotal),
+                    ...linkedItemsToFields(kitForm.linkedItems),
                   })
                   setShowKitEditModal(false)
                   setShowDetail(null)
@@ -1532,6 +1607,16 @@ export default function Inventory() {
               </div>
             )}
             <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <div style={{ maxHeight:280, overflowY:'auto' }}>
+                  <label>{t('inventory.linkedItemsLabel')}</label>
+                  <LinkedItemsEditor
+                    items={items} selfId={null}
+                    value={kitForm.linkedItems} onChange={links => setKitForm({...kitForm, linkedItems:links})}
+                    search={kitLinkedSearch} onSearchChange={setKitLinkedSearch}
+                  />
+                </div>
+            </div>
+            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <input value={kitSearch} onChange={e => setKitSearch(e.target.value)} placeholder={t('inventory.searchItemToAdd')} style={{ fontSize:13 }} />
             </div>
             <div style={{ overflowY:'auto', flex:1 }}>
@@ -1561,6 +1646,7 @@ export default function Inventory() {
                     components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
                     totalQty: kitQty, availableQty: kitQty,
                     instances: ensureInstanceList([], kitQty),
+                    ...linkedItemsToFields(kitForm.linkedItems),
                     teamId, createdAt: serverTimestamp(), createdBy: user.uid,
                   })
                   await updateDoc(ref, { code: generateItemCode(ref.id) })

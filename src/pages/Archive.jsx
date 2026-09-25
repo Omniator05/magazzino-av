@@ -10,6 +10,7 @@ import DateBadge from '../components/DateBadge'
 import DeleteButton from '../components/DeleteButton'
 import BackHomeButton from '../components/BackHomeButton'
 import { isModuleEnabled } from '../utils/modules'
+import { freshRowsFromEvent } from '../utils/eventLists'
 import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
 
 const PAGE_SIZE = 30
@@ -89,13 +90,14 @@ export default function Archive() {
   const useAsTemplate = async (event) => {
     setCopying(event.id)
     try {
-      const templateItems = (event.items || []).map(i => ({
-        ...i, loaded: false, returned: false,
-      }))
+      // Stato di avanzamento azzerato: il nuovo evento parte da capo
+      const templateItems = freshRowsFromEvent(event.items)
       // Naviga alla pagina eventi con gli articoli pre-caricati
       navigate('/events', { state: {
         templateItems,
         templateName: event.name,
+        templateLists: event.lists || [],
+        templateMainListName: event.mainListName || '',
       }})
     } catch(e) {
       console.error('Template error:', e)

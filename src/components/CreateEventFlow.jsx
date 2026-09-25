@@ -73,6 +73,7 @@ const blankForm = (initialDate) => ({
  * - skipChoice: 'blank' salta dritto al form vuoto (usato da Dashboard → "Crea evento"),
  *   oppure un oggetto { name, items } per saltare dritto al form con quel contenuto
  *   già pronto (usato da Archive → "Usa come template")
+ *   (con `allowTypeChoice: true` il form offre anche il toggle Evento/Rent-Install)
  * - onCreated(eventId, { fromTemplate }): l'evento è stato creato
  */
 export default function CreateEventFlow({ open, onClose, initialDate, skipChoice, onCreated }) {
@@ -97,16 +98,23 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
   const [form, setForm] = useState(() => blankForm(initialDate))
   const [saving, setSaving] = useState(false)
+  // Liste di carico aggiuntive portate da un evento d'archivio usato come template
+  const [pendingLists, setPendingLists] = useState({ lists: [], mainListName: '' })
+  // Di norma un flusso con lista già pronta (template) non offre il toggle
+  // Evento/Rent-Install; qui sì se il chiamante lo chiede esplicitamente.
+  const allowTypeChoice = !!(skipChoice && typeof skipChoice === 'object' && skipChoice.allowTypeChoice)
 
   useEffect(() => {
     if (!open) return
     if (skipChoice === 'blank') {
       setPendingTemplateItems(null)
+      setPendingLists({ lists: [], mainListName: '' })
       setForm(blankForm(initialDate))
       setStep('form')
     } else if (skipChoice && typeof skipChoice === 'object') {
       setForm({ ...blankForm(initialDate), name: skipChoice.name || '' })
       setPendingTemplateItems(skipChoice.items || [])
+      setPendingLists({ lists: skipChoice.lists || [], mainListName: skipChoice.mainListName || '' })
       setStep('form')
     } else {
       setPendingTemplateItems(null)
@@ -135,6 +143,8 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
         name: form.name.trim(), location: form.location.trim(),
         notes: form.notes.trim(), dateEnd: form.dateEnd || null,
         items: pendingTemplateItems || [],
+        lists: pendingTemplateItems ? pendingLists.lists : [],
+        mainListName: pendingTemplateItems ? pendingLists.mainListName : '',
         teamId,
         createdAt: serverTimestamp(), createdBy: user.uid,
         recurrence: form.recurrence, seriesId,
@@ -154,9 +164,10 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
     } finally { setSaving(false) }
   }
 
-  const chooseBlank = () => { setPendingTemplateItems(null); setStep('form') }
+  const chooseBlank = () => { setPendingTemplateItems(null); setPendingLists({ lists: [], mainListName: '' }); setStep('form') }
   const chooseTemplate = (tpl) => {
     setForm(f => ({ ...f, name: tpl.name }))
+    setPendingLists({ lists: [], mainListName: '' })
     setPendingTemplateItems((tpl.components || []).map(c => ({ id:c.id, name:c.name, category:c.category, qty:c.qty, loaded:false, returned:false })))
     setStep('form')
   }
@@ -234,9 +245,9 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
         <div className={`modal-overlay${formDrag.closing ? ' closing' : ''}`} onClick={formDrag.onOverlayClick}>
           <div className={`modal${formDrag.jiggling ? ' modal-jiggle' : ''}${formDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...formDrag.props}>
             <button className="close-btn" onClick={formDrag.close} aria-label={t('common.close')}>✕</button>
-            <h2>{pendingTemplateItems ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
+            <h2>{pendingTemplateItems && !allowTypeChoice ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
 
-            {!pendingTemplateItems && (
+            {(!pendingTemplateItems || allowTypeChoice) && (
               <div style={{ display:'flex', gap:8, marginBottom:16, background:'var(--card2)', borderRadius:12, padding:4 }}>
                 <button
                   onClick={() => setForm(f => ({...f, type:'event'}))}

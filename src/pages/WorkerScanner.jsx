@@ -11,6 +11,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
+import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
 import { syncKitAwareInventory, closeInstallationEvent } from '../utils/kitInventory'
@@ -93,6 +94,8 @@ export default function WorkerScanner() {
   // capo e a rivedere i popup "tutto pronto/caricato" anche a lavoro già
   // fatto). Ora si deriva da dati condivisi (Firestore), uguale per tutti.
   const [mode, setMode] = useState('pronto') // 'pronto' | 'load' | 'return'
+  // Lista di carico su cui si sta lavorando (liste multiple, vedi utils/eventLists.js).
+  const [activeListId, setActiveListId] = useState(MAIN_LIST_ID)
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   const [error, setError] = useState(null)
@@ -305,7 +308,7 @@ export default function WorkerScanner() {
     // comporta come sempre: un'approssimazione accettabile per un caso limite.
     let intact = true
     if (mode === 'return' && foundItem.category === 'Consumabili') {
-      const localItem = event?.items?.find(i => i.id === foundItem.id)
+      const localItem = resolveScanRow(event?.items || [], foundItem.id, { mode, unitNumber, activeListId: activeList })
       const singleScanCompletes = localItem && localItem.loaded && !localItem.returned && (localItem.instanceNumbers || []).length <= 1
       if (singleScanCompletes) {
         intact = await askConsumableIntact(foundItem.name)
@@ -323,7 +326,7 @@ export default function WorkerScanner() {
     // incoerente (pronto ma poi mancante al carico) — chiediamo PRIMA della transazione,
     // stesso motivo del blocco sopra.
     if (mode === 'load' || mode === 'pronto') {
-      const localItem = event?.items?.find(i => i.id === foundItem.id)
+      const localItem = resolveScanRow(event?.items || [], foundItem.id, { mode, unitNumber, activeListId: activeList })
       const alreadyDone = mode === 'load' ? localItem?.loaded : localItem?.pronto
       if (!alreadyDone && (foundItem.availableQty ?? foundItem.totalQty ?? 0) <= 0) {
         const reason = (foundItem.brokenQty || 0) >= (foundItem.totalQty || 0) ? 'broken' : 'loaded'
@@ -335,7 +338,7 @@ export default function WorkerScanner() {
               const snap = await tx.get(eventRef)
               if (!snap.exists()) return
               const evItems = snap.data().items || []
-              tx.update(eventRef, { items: evItems.map(i => i.id === foundItem.id ? { ...i, mancante: true } : i) })
+              tx.update(eventRef, { items: evItems.map(i => (localItem && i.id === localItem.id) ? { ...i, mancante: true } : i) })
             })
             vibrate([100, 50, 100])
             const result = { action: 'marked_missing', item: localItem || foundItem }
@@ -369,7 +372,7 @@ export default function WorkerScanner() {
       const snap = await tx.get(eventRef)
       if (!snap.exists()) { outcome = { action: 'event_missing' }; return }
       const eventItems = snap.data().items || []
-      const eventItem = eventItems.find(i => i.id === foundItem.id)
+      const eventItem = resolveScanRow(eventItems, foundItem.id, { mode, unitNumber, activeListId: activeList })
 
       if (!eventItem) { outcome = { action: 'not_in_list', item: foundItem }; return }
 
@@ -423,7 +426,7 @@ export default function WorkerScanner() {
           const nowScanned = [...already, scannedInstance]
           const isComplete = assignedInstances.every(n => nowScanned.includes(n))
           const updatedScanned = { ...(eventItem.scannedInstances || {}), [mode]: nowScanned }
-          tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
+          tx.update(eventRef, { items: eventItems.map(i => i.id === eventItem.id ? {
             ...i, scannedInstances: updatedScanned, [doneFieldName]: isComplete,
             ...(isComplete ? cascadeFor(doneFieldName) : {}),
             ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
@@ -434,7 +437,7 @@ export default function WorkerScanner() {
             : { action: 'instance_progress', item: eventItem, scannedInstance, doneCount: nowScanned.length, totalCount: assignedInstances.length, ...extra }
           return
         }
-        tx.update(eventRef, { items: eventItems.map(i => i.id === foundItem.id ? {
+        tx.update(eventRef, { items: eventItems.map(i => i.id === eventItem.id ? {
           ...i, [doneFieldName]: true, ...cascadeFor(doneFieldName),
           ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
           ...(doneFieldName === 'returned' ? { returnedConsumed: !intact } : {}),
@@ -486,7 +489,7 @@ export default function WorkerScanner() {
       logItemActivity({
         teamId, eventId: id, eventName: event?.name, itemId: outcome.item.id, itemName: outcome.item.name,
         catalogItemId: outcome.item.isExtra ? null : (outcome.item.itemRef || outcome.item.id),
-        action: outcome.action, profile, userId: user?.uid,
+        listId: rowListId(outcome.item), action: outcome.action, profile, userId: user?.uid,
       })
     }
     } catch (e) {
@@ -565,7 +568,14 @@ export default function WorkerScanner() {
   }
 
   // Derivazioni items — calcolate sempre (prima del return anticipato)
-  const items = event ? (event.items || []).map(i => pendingOverrides[i.id] ? { ...i, ...pendingOverrides[i.id] } : i) : []
+  const allEventItems = event ? (event.items || []).map(i => pendingOverrides[i.id] ? { ...i, ...pendingOverrides[i.id] } : i) : []
+  // Liste di carico multiple: `items` è SOLO la lista attiva, così contatori,
+  // checklist, fasi e popup di completamento valgono per lista senza
+  // toccare il resto del file. Con una sola lista coincide con tutto l'evento.
+  const eventLists = getEventLists(event)
+  const multiList = hasMultipleLists(event)
+  const activeList = eventLists.some(l => l.id === activeListId) ? activeListId : MAIN_LIST_ID
+  const items = multiList ? allEventItems.filter(i => rowListId(i) === activeList) : allEventItems
   const prepared = items.filter(i => i.pronto).length
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
@@ -586,18 +596,30 @@ export default function WorkerScanner() {
   // un lavoro già finito da qualcun altro riaprirebbe i popup "tutto
   // pronto/caricato" a chiunque apra lo scanner dopo.
   useEffect(() => {
-    if (!event || items.length === 0 || phaseInitRef.current === id) return
+    if (!event || allEventItems.length === 0 || phaseInitRef.current === id) return
     phaseInitRef.current = id
     prevPreparedRef.current = prepared
     prevLoadedRef.current = loaded
     prevReturnedRef.current = items.filter(i => i.loaded && i.returned).length
     const evEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
     const isPast = evEnd < todayStr()
-    const anyToReturn = items.some(i => i.loaded && !i.returned)
+    const anyToReturn = allEventItems.some(i => i.loaded && !i.returned)
     if (isPast && anyToReturn) setMode('return')
     else if (total > 0 && loaded === total) setMode('return')
     else if (total > 0 && prepared === total) setMode('load')
   }, [event, items, id, total, loaded, prepared])
+
+  // Cambiando lista attiva i contatori saltano a quelli dell'altra lista: si
+  // riallineano i riferimenti dei popup "tutto pronto/caricato/rientrato",
+  // altrimenti passare a una lista già completa farebbe scattare il popup
+  // come se il completamento fosse appena avvenuto. Dichiarato PRIMA degli
+  // effetti dei popup, così gira prima di loro nello stesso commit.
+  useEffect(() => {
+    prevPreparedRef.current = prepared
+    prevLoadedRef.current = loaded
+    prevReturnedRef.current = items.filter(i => i.loaded && i.returned).length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeList])
 
   // Campo "fatto" della fase corrente — usato per ordinamento liste, scroll
   // al primo da fare, e contatore di completamento: unica fonte invece di
@@ -613,7 +635,7 @@ export default function WorkerScanner() {
   const [confirmingExtra, setConfirmingExtra] = useState(false)
   const addExtraWorkerItem = async () => {
     if (!extraWorkerForm.name.trim() || confirmingExtra) return
-    if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsPerList) {
+    if (!isProPlan(team) && allEventItems.length >= FREE_LIMITS.itemsPerList) {
       await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
       return
     }
@@ -625,7 +647,7 @@ export default function WorkerScanner() {
         const snap = await tx.get(eventRef)
         if (!snap.exists()) return
         const currentItems = snap.data().items || []
-        const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false }
+        const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false, ...(activeList !== MAIN_LIST_ID ? { listId: activeList } : {}) }
         tx.update(eventRef, { items: [...currentItems, extra] })
       })
       // Solo dopo conferma di salvataggio si chiude il modale — altrimenti,
@@ -734,6 +756,8 @@ export default function WorkerScanner() {
   }, [event])
 
   if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p></div>
+
+  const listLabel = l => l?.name || (l?.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
 
   const scanResult = {
     pronto:           { bg:'rgba(79,195,247,0.15)',  border:'rgba(79,195,247,0.4)',  color:'var(--blue)',    icon:'📋', title:t('workerScanner.prontoTitle'), msg: i => t('workerScanner.prontoMsg', { name: i?.name }) },
@@ -860,6 +884,9 @@ export default function WorkerScanner() {
               <div style={{ fontSize:56, marginBottom:12 }}>{r.icon}</div>
               <p style={{ fontWeight:800, fontSize:22, color:r.color, marginBottom:8 }}>{r.title}</p>
               <p style={{ color:'var(--text)', fontSize:16, lineHeight:1.4 }}>{scanToast.item?.name || t('scanner.code', { code: scanToast.code })}</p>
+              {multiList && scanToast.item && rowListId(scanToast.item) !== activeList && (
+                <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, marginTop:6 }}>{t('workerScanner.inOtherList', { name: listLabel(eventLists.find(l => l.id === rowListId(scanToast.item))) })}</p>
+              )}
               {scanToast.location && (
                 <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:12, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'6px 16px' }}>
                   <span>📍</span>
@@ -1016,6 +1043,34 @@ export default function WorkerScanner() {
           )}
         </div>
         {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
+        {/* Selettore lista di carico — solo se l'evento ne ha più di una. Contatori,
+            checklist e scansioni valgono per la lista scelta (una scansione di un
+            oggetto che sta in un'altra lista lo dice esplicitamente). */}
+        {multiList && (
+          <div role="tablist" aria-label={t('workerScanner.listSelectorAria')} style={{ display:'flex', gap:6, overflowX:'auto', marginTop:10, paddingBottom:2, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+            {eventLists.map(l => {
+              const rows = allEventItems.filter(i => rowListId(i) === l.id && !i.mancante)
+              const doneCount = rows.filter(i => i[doneField]).length
+              const isActive = l.id === activeList
+              return (
+                <button
+                  key={l.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => { setActiveListId(l.id); setItemListSearch('') }}
+                  style={{
+                    flexShrink:0, padding:'7px 12px', borderRadius:20, fontSize:12.5, fontWeight:700, whiteSpace:'nowrap',
+                    background: isActive ? phaseColor : 'var(--card2)',
+                    color: isActive ? '#fff' : 'var(--text2)',
+                    border: `1px solid ${isActive ? phaseColor : 'var(--border)'}`,
+                  }}
+                >
+                  {listLabel(l)} · {doneCount}/{rows.length}
+                </button>
+              )
+            })}
+          </div>
+        )}
         {showEventNotes && event.notes && (
           <div style={{
             marginTop:10, padding:'12px 14px',
@@ -1172,7 +1227,7 @@ export default function WorkerScanner() {
               evento normale (resta caricato apposta anche a lungo), quindi
               serve un'azione esplicita, e va raggiungibile anche da chi lo
               sta effettivamente scaricando, non solo dall'admin. */}
-          {mode === 'return' && event?.type === 'installation' && total > 0 && returned === total && (
+          {mode === 'return' && event?.type === 'installation' && allEventItems.some(i => !i.mancante) && allEventItems.filter(i => !i.mancante).every(i => i.returned) && (
             <button onClick={() => setShowCloseInstallModal(true)}
               style={{ width:'100%', marginBottom:8, padding:'13px', borderRadius:12,
                 background:'rgba(90,82,201,0.12)', border:'1px solid rgba(90,82,201,0.3)',
@@ -1286,7 +1341,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        action: newLoaded ? 'loaded' : 'unloaded', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newLoaded ? 'loaded' : 'unloaded', profile, userId: user?.uid,
                       })
                     },
                     // forceOut: dalla pressione lunga sul bottone Scarico —
@@ -1358,7 +1413,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        action: newReturned ? 'returned' : 'unreturned', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newReturned ? 'returned' : 'unreturned', profile, userId: user?.uid,
                       })
                     },
                     // Rientro PARZIALE: solo per oggetti non-kit con qty > 1
@@ -1393,6 +1448,7 @@ export default function WorkerScanner() {
                             isBundle: false, components: null,
                             qty: splitQty, pronto: true, loaded: true, returned: true, returnedConsumed: false,
                             mancante: false,
+                            ...(current.listId ? { listId: current.listId } : {}),
                           }
                           tx.update(eventRef, {
                             items: evItems.flatMap(i => i.id !== itemId ? [i] : [{ ...i, qty: (i.qty || 1) - splitQty }, returnedRow]),
@@ -1411,7 +1467,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId: returnedRowId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        action: 'returned', profile, userId: user?.uid,
+                        listId: rowListId(item), action: 'returned', profile, userId: user?.uid,
                       })
                     },
                     _onTogglePronto: async (itemId) => {
@@ -1468,7 +1524,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        action: newPronto ? 'pronto' : 'unpronto', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newPronto ? 'pronto' : 'unpronto', profile, userId: user?.uid,
                       })
                     },
                     _onToggleMancante: async (itemId) => {
@@ -1489,7 +1545,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        action: newMancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newMancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
                       })
                     },
                   })

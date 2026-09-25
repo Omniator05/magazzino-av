@@ -13,7 +13,7 @@ import { db } from '../firebase'
 // il suo percorso attraverso TUTTI gli eventi in cui è comparso, non solo
 // quello corrente — la lista di carico di un singolo evento è per forza
 // temporanea (l'oggetto può esserne rimosso), la scheda magazzino no.
-export const logItemActivity = async ({ teamId, eventId, eventName, itemId, itemName, catalogItemId, action, profile, userId }) => {
+export const logItemActivity = async ({ teamId, eventId, eventName, itemId, itemName, catalogItemId, listId, action, profile, userId }) => {
   try {
     await addDoc(collection(db, 'itemActivity'), {
       teamId,
@@ -22,6 +22,7 @@ export const logItemActivity = async ({ teamId, eventId, eventName, itemId, item
       itemId,
       itemName: itemName || '',
       catalogItemId: catalogItemId || null,
+      listId: listId || null,
       action,
       userId: userId || null,
       userName: profile?.name || profile?.username || null,

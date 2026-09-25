@@ -310,7 +310,7 @@ export default function Events() {
   // apro subito il flusso di creazione saltando la schermata di scelta.
   useEffect(() => {
     if (navState?.templateItems) {
-      setCreateFlowSkip({ name: navState.templateName || '', items: navState.templateItems })
+      setCreateFlowSkip({ name: navState.templateName || '', items: navState.templateItems, lists: navState.templateLists || [], mainListName: navState.templateMainListName || '' })
       setCreateFlowOpen(true)
       window.history.replaceState({}, '')
     } else if (navState?.openNewEvent) {

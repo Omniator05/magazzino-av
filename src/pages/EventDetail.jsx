@@ -20,6 +20,9 @@ import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
 import { syncKitAwareInventory, itemCommittedElsewhere, closeInstallationEvent } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
+import ListNameModal from '../components/ListNameModal'
+import { linkedAdditionsFor } from '../utils/linkedItems'
+import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, listRowId, moveRowToList, pickInstanceNumbers } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import JSZip from 'jszip'
 
@@ -127,9 +130,13 @@ export default function EventDetail() {
   const [bulkVehicleMode, setBulkVehicleMode] = useState(false)
   const [bulkSelectedIds, setBulkSelectedIds] = useState(new Set())
   const [bulkVehicleId, setBulkVehicleId] = useState('')
-  const [addAsMancante, setAddAsMancante] = useState(false)
+  // Liste di carico multiple (vedi utils/eventLists.js): lista in cui finiscono
+  // gli oggetti aggiunti dal modal, e popup nome lista (nuova/rinomina/sposta).
+  const [addTargetList, setAddTargetList] = useState(MAIN_LIST_ID)
+  const [listModal, setListModal] = useState(null) // { mode:'new'|'rename'|'moveUnloaded', listId?, name? }
+  const [listMenuId, setListMenuId] = useState(null) // menu ⋯ aperto su una lista
   const [editItem, setEditItem] = useState(null)
-  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances }) => {
+  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances, listId }) => {
     // L'assegnazione a unità specifiche (kit o oggetto singolo) resta solo se
     // l'admin ne ha scelta almeno una — altrimenti basta modificare la
     // quantità di un oggetto qualsiasi (es. un'americana, dove non importa
@@ -153,9 +160,48 @@ export default function EventDetail() {
       finalInstanceNumbers = []
       includeInstanceNumbers = true
     }
-    await updateEventItems(current => current.map(i =>
-      i.id !== id ? i : { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(includeInstanceNumbers ? { instanceNumbers: finalInstanceNumbers } : {}) }
-    ))
+    // Cambiare la quantità di una riga GIÀ caricata (e non ancora rientrata)
+    // annulla il carico: la giacenza scalata con la vecchia quantità sarebbe
+    // altrimenti sbagliata per sempre (il rientro restituirebbe la nuova). Il
+    // carico va rifatto, e scalerà la quantità giusta.
+    const localRow = eventItems.find(i => i.id === id)
+    const qtyChangeUnloads = !!localRow && !localRow.isExtra && localRow.loaded && !localRow.returned && (localRow.qty || 1) !== qty
+    if (qtyChangeUnloads) {
+      const ok = await confirm({
+        title: t('eventDetail.qtyChangeUnloadTitle'),
+        message: t('eventDetail.qtyChangeUnloadMessage', { name: localRow.name, from: localRow.qty || 1, to: qty }),
+        confirmLabel: t('eventDetail.qtyChangeUnloadLabel'),
+      })
+      if (!ok) return
+    }
+    let unloadedRow = null
+    await updateEventItems(current => {
+      unloadedRow = null // la transazione può rieseguire il transform
+      const taken = new Set(current.map(i => i.id))
+      return current.map(i => {
+        if (i.id !== id) return i
+        let updated = { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(includeInstanceNumbers ? { instanceNumbers: finalInstanceNumbers } : {}) }
+        if (i.loaded && !i.returned && !i.isExtra && (i.qty || 1) !== qty) {
+          unloadedRow = i
+          updated = { ...updated, loaded: false, scannedInstances: { ...(i.scannedInstances || {}), load: [] } }
+        }
+        // Cambio lista dal modal di modifica riga
+        return (listId && listId !== rowListId(i)) ? moveRowToList(updated, listId, taken) : updated
+      })
+    })
+    if (unloadedRow) {
+      // La giacenza torna com'era prima del carico (vecchia quantità, anche
+      // dei componenti se è un kit); il prossimo carico scalerà quella nuova.
+      await syncKitAwareInventory({
+        catalogItemId: unloadedRow.itemRef || unloadedRow.id,
+        isBundle: unloadedRow.isBundle, category: unloadedRow.category, qty: unloadedRow.qty, sign: 1,
+      })
+      logItemActivity({
+        teamId, eventId, eventName: event?.name, itemId: id, itemName: unloadedRow.name,
+        catalogItemId: unloadedRow.itemRef || unloadedRow.id,
+        listId: rowListId(unloadedRow), action: 'unloaded', profile, userId: user?.uid,
+      })
+    }
     // Solo se lo stato "mancante" è davvero cambiato — non ogni salvataggio
     // della modifica riga tocca per forza questo campo. "wasMancante" è
     // congelato al valore di apertura del modale (vedi onEdit in
@@ -166,7 +212,7 @@ export default function EventDetail() {
       logItemActivity({
         teamId, eventId, eventName: event?.name, itemId: id, itemName: editItem?.name,
         catalogItemId: isExtra ? null : (itemRef || id),
-        action: mancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
+        listId: editItem?.listId, action: mancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
       })
     }
     setEditItem(null)
@@ -368,6 +414,15 @@ export default function EventDetail() {
   const total = eventItems.length
   const mancanti = eventItems.filter(i => i.mancante).length
 
+  // Liste di carico multiple (utils/eventLists.js). I conteggi qui sopra
+  // restano totali dell'evento; il dettaglio per lista sta nell'intestazione
+  // di ciascun blocco.
+  const eventLists = getEventLists(event)
+  const multiList = hasMultipleLists(event)
+  const targetListId = eventLists.some(l => l.id === addTargetList) ? addTargetList : MAIN_LIST_ID
+  const targetListItems = eventItems.filter(e => rowListId(e) === targetListId)
+  const listLabel = l => l.name || (l.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
+
   // Contenuti Brasserie per questa data (se un organizzatore ne ha configurata una)
   const brasserieArtistiSlots = brasserieWeek?.layers?.artisti || []
   const brasserieArtistiFilled = brasserieArtistiSlots.filter(s => s.logoUrl).length
@@ -425,15 +480,22 @@ export default function EventDetail() {
   // quando con più persone sullo stesso evento (admin + magazzinieri) una
   // scrittura basata su dati non più freschi cancellerebbe in silenzio le
   // modifiche fatte da un altro nel frattempo.
-  const updateEventItems = async (transformOrItems) => {
+  // patchOrFn (opzionale): campi dell'evento da scrivere nella STESSA
+  // transazione (es. { lists } per le liste multiple), o una funzione
+  // (datiEventoCorrenti) => patch — così righe e definizione delle liste non
+  // possono mai finire fuori sincronia.
+  const updateEventItems = async (transformOrItems, patchOrFn) => {
     const transform = typeof transformOrItems === 'function' ? transformOrItems : () => transformOrItems
     let finalItems
+    let finalPatch = {}
     try {
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(eventRef)
-        const current = snap.data()?.items || []
+        const data = snap.data() || {}
+        const current = data.items || []
         finalItems = transform(current)
-        tx.update(eventRef, { items: finalItems })
+        finalPatch = typeof patchOrFn === 'function' ? patchOrFn(data) : (patchOrFn || {})
+        tx.update(eventRef, { items: finalItems, ...finalPatch })
       })
     } catch (e) {
       // Con una connessione instabile la scrittura può fallire in silenzio:
@@ -471,7 +533,13 @@ export default function EventDetail() {
             if (!siblingSnap.exists()) return
             const siblingItems = siblingSnap.data().items || []
             const extras = siblingItems.filter(i => !templateIds.has(i.id))
-            tx.update(siblingRef, { items: [...itemsTemplate, ...extras] })
+            // Le righe portano il loro listId: senza la definizione delle
+            // liste anche sugli altri eventi della serie resterebbero orfane.
+            tx.update(siblingRef, {
+              items: [...itemsTemplate, ...extras],
+              lists: finalPatch.lists ?? event.lists ?? [],
+              mainListName: finalPatch.mainListName ?? event.mainListName ?? '',
+            })
           })
         }))
       } catch (e) {
@@ -481,6 +549,42 @@ export default function EventDetail() {
         setSaveError(t('eventDetail.seriesSyncErrorMessage'))
       }
     }
+  }
+
+  // Crea una lista; con moveFromListId sposta lì tutte le righe di quella
+  // lista NON ancora caricate (il caso "lista dei mancanti": quello che è già
+  // uscito resta dov'è, il resto si separa senza doverlo segnare a mano).
+  const createList = async (name, moveFromListId) => {
+    const listId = newListId()
+    await updateEventItems(
+      current => {
+        if (!moveFromListId) return current
+        const taken = new Set(current.map(i => i.id))
+        return current.map(i => (rowListId(i) === moveFromListId && !i.loaded) ? moveRowToList(i, listId, taken) : i)
+      },
+      data => ({ lists: [...(data.lists || []), { id: listId, name }] })
+    )
+    setListModal(null)
+    if (!moveFromListId) setAddTargetList(listId)
+  }
+
+  const renameList = async (listId, name) => {
+    await updateEventItems(
+      current => current,
+      data => listId === MAIN_LIST_ID
+        ? { mainListName: name }
+        : { lists: (data.lists || []).map(l => l.id === listId ? { ...l, name } : l) }
+    )
+    setListModal(null)
+  }
+
+  const deleteList = async (listId) => {
+    const ok = await confirm({ title: t('eventDetail.deleteListTitle'), message: t('eventDetail.deleteListMessage'), confirmLabel: t('eventDetail.deleteListLabel'), danger: true })
+    if (!ok) return
+    await updateEventItems(
+      current => current,
+      data => ({ lists: (data.lists || []).filter(l => l.id !== listId) })
+    )
   }
 
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
@@ -544,21 +648,28 @@ export default function EventDetail() {
         // Aggiorna qty se già nel carrello — non è un nuovo inserimento,
         // quindi non deve far ripartire l'aggiunta automatica dei collegati
         // sotto (altrimenti riaggiungerebbe un collegato appena rimosso a
-        // mano ogni volta che si ritocca lo stepper del genitore).
-        return prev.map(c => c.id === item.id ? { ...c, qty } : c)
+        // mano ogni volta che si ritocca lo stepper del genitore). I collegati
+        // "a ogni oggetto" già aggiunti in automatico seguono invece la nuova
+        // quantità del genitore, finché non sono stati modificati a mano.
+        return prev.map(c => {
+          if (c.id === item.id) return { ...c, qty, ...(c.linkedFrom ? { manualQty: true } : {}) }
+          if (c.linkedFrom === item.id && c.linkedPerUnit && !c.manualQty) return { ...c, qty: c.linkedPerUnit * qty }
+          return c
+        })
       }
       const next = [...prev, toCartRow(item, qty)]
-      // Oggetti collegati (es. "tavolo dj" → gonna + gambe, vedi Inventory.jsx
-      // → linkedItemIds): si aggiungono da soli solo al primo inserimento del
-      // genitore, con la sua stessa quantità, e solo se non sono già nel
-      // carrello o già in lista (stessa condizione di notInCart più sotto).
-      const alreadyPresent = new Set(next.map(c => c.id))
-      const linkedAdditions = (item.linkedItemIds || [])
-        .filter(id => id !== item.id && !alreadyPresent.has(id) && (addAsMancante || !eventItems.some(e => (e.itemRef || e.id) === id)))
-        .map(id => allItems.find(ci => ci.id === id))
-        .filter(Boolean)
-        .map(ci => toCartRow(ci, qty))
-      return linkedAdditions.length ? [...next, ...linkedAdditions] : next
+      // Oggetti collegati (vedi utils/linkedItems.js): si aggiungono da soli
+      // solo al primo inserimento del genitore — "a ogni oggetto" con qty ×
+      // quantità del genitore, "una sola volta" con qty fissa — e solo se non
+      // ci sono già (nel carrello, nella lista di destinazione o, per "una
+      // sola volta", in qualunque lista dell'evento).
+      const additions = linkedAdditionsFor({
+        item, parentQty: qty, cartIds: next.map(c => c.id),
+        targetListId, eventRows: eventItems, allItems,
+      })
+      return additions.length
+        ? [...next, ...additions.map(a => ({ ...toCartRow(a.catalogItem, a.qty), linkedFrom: item.id, ...(a.perUnit ? { linkedPerUnit: a.perUnit } : {}) }))]
+        : next
     })
   }
 
@@ -585,7 +696,17 @@ export default function EventDetail() {
       const catalogItem = allItems.find(x => x.id === c.id)
       if (!catalogItem) continue
       const maxAvail = (catalogItem.totalQty || 0) - (catalogItem.brokenQty || 0)
-      const { events: committedEvents } = itemCommittedElsewhere(c.id, event, otherEvents)
+      // Oltre ad altri eventi, conta anche lo stesso oggetto già in ALTRE
+      // liste di questo evento (itemCommittedElsewhere salta l'evento
+      // corrente): due liste con lo stesso oggetto non devono poter
+      // superare la giacenza senza avviso.
+      const inOtherLists = eventItems
+        .filter(e => !e.isExtra && !e.mancante && rowListId(e) !== targetListId && (e.itemRef || e.id) === c.id)
+        .reduce((s, e) => s + (e.qty || 1), 0)
+      const committedEvents = [
+        ...(inOtherLists > 0 ? [{ id: event.id, name: event.name, qty: inOtherLists }] : []),
+        ...itemCommittedElsewhere(c.id, event, otherEvents).events,
+      ]
       const committedQty = committedEvents.reduce((s, e) => s + e.qty, 0)
       if (committedQty + c.qty > maxAvail) {
         conflicts.push({
@@ -646,20 +767,23 @@ export default function EventDetail() {
       }
     }
 
-    const addAsMancanteSnapshot = addAsMancante
     // Righe da scrivere calcolate UNA volta qui fuori (non dentro il transform,
     // che una transazione può rieseguire più volte in caso di conflitto) — così
     // l'id usato per la cronologia è garantito lo stesso scritto su Firestore.
+    const listStamp = targetListId === MAIN_LIST_ID ? {} : { listId: targetListId }
     const rowsToAdd = cartSnapshot.map(c => {
       if (c.isExtra) {
-        return { id: c.id, name: c.name, qty: c.qty || 1, notes: c.notes || '', category: 'Extra', isExtra: true, loaded: false, returned: false }
+        return { id: c.id, name: c.name, qty: c.qty || 1, notes: c.notes || '', category: 'Extra', isExtra: true, loaded: false, returned: false, ...listStamp }
       }
-      const alreadyExists = eventItems.some(e => e.id === c.id || e.itemRef === c.id)
+      // Solo nella lista di destinazione: lo stesso oggetto in un'altra lista
+      // è una riga normale, non un duplicato "mancante".
+      const alreadyExists = targetListItems.some(e => !e.isExtra && (e.id === c.id || e.itemRef === c.id))
       // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
       // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
       // poi cambiarli a mano dalla modifica riga.
       const instanceNumbers = c.isBundle
-        ? reconcileInstanceNumbers(ensureInstanceList(c.instances, c.totalQty ?? c.qty), [], c.qty)
+        ? pickInstanceNumbers(c.instances, c.totalQty, c.qty,
+            eventItems.filter(e => rowListId(e) !== targetListId && (e.itemRef || e.id) === c.id).flatMap(e => e.instanceNumbers || []))
         : null
       if (alreadyExists) {
         // Riga separata con id unico, itemRef punta all'articolo Firebase originale
@@ -672,15 +796,18 @@ export default function EventDetail() {
           ...(c.isBundle ? { instanceNumbers } : {}),
           qty: c.qty, loaded: false, returned: false,
           mancante: true,
+          ...listStamp,
         }
       }
       return {
-        id: c.id, name: c.name, category: c.category, location: c.location||'',
+        id: listRowId(c.id, targetListId), name: c.name, category: c.category, location: c.location||'',
+        ...(targetListId === MAIN_LIST_ID ? {} : { itemRef: c.id }),
         isKit: c.isKit||false, kitSize: c.kitSize||null,
         isBundle: c.isBundle||false, components: c.components||null,
         ...(c.isBundle ? { instanceNumbers } : {}),
         qty: c.qty, loaded: false, returned: false,
-        mancante: addAsMancanteSnapshot || false,
+        mancante: false,
+        ...listStamp,
       }
     })
     // Piano gratuito: si aggiunge solo fino a riempire lo spazio rimasto
@@ -701,21 +828,22 @@ export default function EventDetail() {
     await Promise.all(rowsCapped.map(row => logItemActivity({
       teamId, eventId, eventName: event?.name, itemId: row.id, itemName: row.name,
       catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
-      action: 'added', profile, userId: user?.uid,
+      listId: rowListId(row), action: 'added', profile, userId: user?.uid,
     })))
     setCart([])
     setSearch('')
-    setAddAsMancante(false)
     if (rowsSkipped > 0) {
       await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
     }
     return true
   }
 
-  const openAddModal = () => {
+  const openAddModal = (listId) => {
+    // Chiamato anche direttamente come onClick (riceve l'evento): solo una
+    // stringa vale come id di lista.
+    if (typeof listId === 'string') setAddTargetList(listId)
     setCart([])
     setSearch('')
-    setAddAsMancante(false)
     setShowAddItem(true)
   }
 
@@ -743,16 +871,15 @@ export default function EventDetail() {
     logItemActivity({
       teamId, eventId, eventName: event?.name, itemId, itemName: item.name,
       catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-      action: 'removed', profile, userId: user?.uid,
+      listId: rowListId(item), action: 'removed', profile, userId: user?.uid,
     })
   }
 
-  // Con "segna come mancanti" attivo, un articolo già in lista deve restare
-  // selezionabile — è esattamente il caso d'uso: te ne serve ancora, quindi
-  // vuoi aggiungerne una seconda riga segnata mancante (gestito da confirmCart).
+  // Un articolo già nella lista di destinazione non si può riaggiungere (in
+  // un'altra lista sì: è una riga a sé).
   const notInCart = allItems.filter(i =>
     !cart.some(c => c.id === i.id) &&
-    (addAsMancante || !eventItems.some(e => (e.itemRef || e.id) === i.id))
+    !targetListItems.some(e => (e.itemRef || e.id) === i.id)
   )
   const filtered = notInCart.filter(i =>
     i.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -853,7 +980,8 @@ export default function EventDetail() {
     // d'occhio (email, telefonata), non ha valore legale di per sé.
     const docRef = `${(event.date || '').replace(/-/g, '')}-${event.id.slice(0, 5).toUpperCase()}`
 
-    const rows = list.map((i, n) => {
+    // Righe di una lista, numerate da 1 dentro la lista stessa.
+    const renderRows = (listRows) => listRows.map((i, n) => {
       // Contenuto del kit (se presente) risolto dal vivo dal catalogo — con
       // fallback ai componenti congelati sulla riga se il catalogo non è
       // ancora stato caricato — così su carta si vede subito cosa c'è dentro
@@ -890,6 +1018,17 @@ export default function EventDetail() {
       return mainRow + componentRows
     }).join('')
 
+    const tableHead = '<thead><tr><th class="num">#</th><th>Articolo</th><th class="qty">Q.tà</th><th class="chk">✓</th></tr></thead>'
+    // Con più liste: una tabella con titolo per ciascuna (quelle vuote si
+    // saltano); con una sola resta la tabella unica di sempre.
+    const tablesHtml = multiList
+      ? eventLists
+          .map(l => ({ l, rows: list.filter(i => rowListId(i) === l.id) }))
+          .filter(sec => sec.rows.length > 0)
+          .map(sec => `<div class="listtitle">${esc(listLabel(sec.l))}<span>${sec.rows.length} voci · ${sec.rows.reduce((n, i) => n + (i.qty || 1), 0)} pezzi</span></div><table>${tableHead}<tbody>${renderRows(sec.rows)}</tbody></table>`)
+          .join('')
+      : `<table>${tableHead}<tbody>${renderRows(list) || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px;">Nessun articolo nella lista</td></tr>'}</tbody></table>`
+
     const metaRow = (label, val) => val ? `<div class="mrow"><span class="mlabel">${label}</span><span class="mval">${esc(val)}</span></div>` : ''
 
     const html = `<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>Documento di Trasporto – ${esc(event.name)}</title>
@@ -910,6 +1049,8 @@ export default function EventDetail() {
       .mrow { display:flex; gap:10px; font-size:13px; padding:3px 0; }
       .mlabel { color:#6b7280; min-width:96px; font-weight:600; }
       .mval { color:#111827; font-weight:600; text-transform: capitalize; }
+      .listtitle { display:flex; justify-content:space-between; align-items:baseline; font-size:15px; font-weight:800; margin:22px 0 8px; }
+      .listtitle span { color:#6b7280; font-size:11px; font-weight:600; }
       table { width: 100%; border-collapse: collapse; }
       thead th { background: #222c42; color: #fff; padding: 9px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
       thead th.num { width: 36px; text-align:center; }
@@ -953,10 +1094,7 @@ export default function EventDetail() {
         ${metaRow('Colli/articoli', `${list.length} voci · ${totPezzi} pezzi totali`)}
       </div>
 
-      <table>
-        <thead><tr><th class="num">#</th><th>Articolo</th><th class="qty">Q.tà</th><th class="chk">✓</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px;">Nessun articolo nella lista</td></tr>'}</tbody>
-      </table>
+      ${tablesHtml}
       <p class="tot">Totale: <strong>${list.length} voci · ${totPezzi} pezzi</strong></p>
 
       <div class="sign">
@@ -982,34 +1120,88 @@ export default function EventDetail() {
   const filteredEventItems = itemListSearch.trim()
     ? eventItems.filter(i => i.name?.toLowerCase().includes(itemListSearch.trim().toLowerCase()))
     : eventItems
-  const catGrouped = {}
-  filteredEventItems.forEach(item => {
-    // Categorie "orfane" finiscono in Altro invece di sparire: un articolo può
-    // avere qui la categoria congelata al momento dell'aggiunta all'evento,
-    // che non esiste più tra quelle attuali se nel frattempo è stata rinominata
-    // nel magazzino (es. vecchia migrazione categorie) — il dato non va perso.
-    const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
-    const cat = CAT_ORDER.includes(rawCat) ? rawCat : 'Altro'
-    if (!catGrouped[cat]) catGrouped[cat] = []
-    catGrouped[cat].push(item)
-  })
-  const catKeys = CAT_ORDER.filter(c => catGrouped[c])
-  const multiCat = catKeys.length > 1
-  const groupedEventItems = catKeys.map(cat => (
-    <div key={cat}>
-      {multiCat && (
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px 4px' }}>
-          <span style={{ fontSize:12 }}>{CAT_ICONS[cat]||'📦'}</span>
-          <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
-          <div style={{ flex:1, height:1, background:'var(--border)' }} />
-          <span style={{ fontSize:10, color:'var(--text3)' }}>{catGrouped[cat].length}</span>
+  // Righe di UNA lista raggruppate per categoria (stessa resa di sempre).
+  const renderGroupedItems = (rows) => {
+    const catGrouped = {}
+    rows.forEach(item => {
+      // Categorie "orfane" finiscono in Altro invece di sparire: un articolo può
+      // avere qui la categoria congelata al momento dell'aggiunta all'evento,
+      // che non esiste più tra quelle attuali se nel frattempo è stata rinominata
+      // nel magazzino (es. vecchia migrazione categorie) — il dato non va perso.
+      const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
+      const cat = CAT_ORDER.includes(rawCat) ? rawCat : 'Altro'
+      if (!catGrouped[cat]) catGrouped[cat] = []
+      catGrouped[cat].push(item)
+    })
+    const catKeys = CAT_ORDER.filter(c => catGrouped[c])
+    const multiCat = catKeys.length > 1
+    return catKeys.map(cat => (
+      <div key={cat}>
+        {multiCat && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px 4px' }}>
+            <span style={{ fontSize:12 }}>{CAT_ICONS[cat]||'📦'}</span>
+            <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
+            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+            <span style={{ fontSize:10, color:'var(--text3)' }}>{catGrouped[cat].length}</span>
+          </div>
+        )}
+        {catGrouped[cat].map(item => (
+          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
+        ))}
+      </div>
+    ))
+  }
+  const groupedEventItems = renderGroupedItems(filteredEventItems)
+
+  // Un blocco per lista quando l'evento ne ha più di una: intestazione FUORI
+  // dalla card (il menu ⋯ non viene tagliato dall'overflow arrotondato).
+  const renderListBlock = (l) => {
+    const all = eventItems.filter(i => rowListId(i) === l.id)
+    const rows = filteredEventItems.filter(i => rowListId(i) === l.id)
+    const loadedCount = all.filter(i => i.loaded).length
+    const hasUnloaded = all.some(i => !i.loaded)
+    const menuOpen = listMenuId === l.id
+    const menuBtn = { display:'block', width:'100%', textAlign:'left', padding:'11px 14px', fontSize:13, fontWeight:600, background:'transparent', color:'var(--text)', borderRadius:0 }
+    return (
+      <div key={l.id} style={{ margin:'16px 16px 0' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+          <p style={{ flex:1, minWidth:0, fontWeight:800, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{listLabel(l)}</p>
+          <span style={{ fontSize:12, color:'var(--text2)', flexShrink:0 }}>{t('eventDetail.listCounts', { loaded: loadedCount, total: all.length })}</span>
+          <button onClick={() => openAddModal(l.id)} aria-label={t('eventDetail.addToThisListAria', { name: listLabel(l) })}
+            style={{ width:30, height:30, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Plus size={15} />
+          </button>
+          <div style={{ position:'relative', flexShrink:0 }}>
+            <button onClick={() => setListMenuId(menuOpen ? null : l.id)} aria-label={t('eventDetail.listMenuAria', { name: listLabel(l) })} aria-expanded={menuOpen}
+              style={{ width:30, height:30, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:800, lineHeight:1 }}>⋯</button>
+            {menuOpen && (
+              <>
+                <div onClick={() => setListMenuId(null)} style={{ position:'fixed', inset:0, zIndex:19 }} />
+                <div style={{ position:'absolute', right:0, top:'calc(100% + 4px)', minWidth:230, zIndex:20, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 8px 28px rgba(0,0,0,0.14)', overflow:'hidden' }}>
+                  <button style={menuBtn} onClick={() => { setListMenuId(null); setListModal({ mode:'rename', listId:l.id, name:l.name }) }}>{t('eventDetail.renameList')}</button>
+                  {hasUnloaded && (
+                    <button style={{ ...menuBtn, borderTop:'1px solid var(--border)' }} onClick={() => { setListMenuId(null); setListModal({ mode:'moveUnloaded', listId:l.id, name:'' }) }}>{t('eventDetail.moveUnloadedToNewList')}</button>
+                  )}
+                  {l.id !== MAIN_LIST_ID && all.length === 0 && (
+                    <button style={{ ...menuBtn, borderTop:'1px solid var(--border)', color:'var(--red)' }} onClick={() => { setListMenuId(null); deleteList(l.id) }}>{t('eventDetail.deleteListLabel')}</button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      )}
-      {catGrouped[cat].map(item => (
-        <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
-      ))}
-    </div>
-  ))
+        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+          {all.length === 0
+            ? <p style={{ padding:'22px 20px', textAlign:'center', color:'var(--text2)', fontSize:13 }}>{t('eventDetail.emptyListShort')}</p>
+            : rows.length === 0
+              ? <p style={{ padding:'18px 20px', textAlign:'center', color:'var(--text3)', fontSize:13 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
+              : renderGroupedItems(rows)}
+        </div>
+      </div>
+    )
+  }
+  const loadedTotal = eventItems.filter(i => i.loaded).length
+  const listLinkBtn = { background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:700, padding:'6px 4px', display:'inline-flex', alignItems:'center', gap:5 }
 
   return (
     <div className="page">
@@ -1082,6 +1274,15 @@ export default function EventDetail() {
                   </span>
                 )
               })}
+              {/* "+ Nuova lista" (verde) prima, poi "+ Assegna" — stessa pillola */}
+              {loadListsOn && (
+                <button
+                  onClick={() => setListModal({ mode:'new', name:'' })}
+                  style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(26,158,92,0.10)', border:'1px dashed rgba(26,158,92,0.5)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--green)' }}
+                >
+                  + {t('eventDetail.newList')}
+                </button>
+              )}
               <button
                 onClick={() => setShowAssignModal(true)}
                 style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--card2)', border:'1px dashed var(--border)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--text2)' }}
@@ -1308,7 +1509,14 @@ export default function EventDetail() {
         </div>
       )}
 
-      {/* Lista articoli */}
+      {/* Lista articoli — una sola card finché l'evento ha una lista sola
+          (resa identica a prima), un blocco per lista da quando ce ne sono di più. */}
+      {multiList ? (
+        <>
+          {eventLists.map(renderListBlock)}
+        </>
+      ) : (
+        <>
       <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
         {eventItems.length === 0
           ? <div className="empty-state" style={{ padding:'40px 20px' }}>
@@ -1330,6 +1538,14 @@ export default function EventDetail() {
         }
       </div>
 
+          {loadedTotal > 0 && loadedTotal < eventItems.length && (
+            <div style={{ margin:'8px 16px 0' }}>
+              <button onClick={() => setListModal({ mode:'moveUnloaded', listId:MAIN_LIST_ID, name:'' })} style={listLinkBtn}>{t('eventDetail.moveUnloadedToNewList')}</button>
+            </div>
+          )}
+        </>
+      )}
+
       {/* FAB aggiungi articoli */}
       <button
         onClick={openAddModal}
@@ -1349,6 +1565,21 @@ export default function EventDetail() {
       </>}
 
       {/* Conferma: chiusura con articoli selezionati non aggiunti */}
+      <ListNameModal
+        open={!!listModal}
+        title={listModal?.mode === 'rename' ? t('eventDetail.renameListTitle') : listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedTitle') : t('eventDetail.newListTitle')}
+        message={listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedMessage') : undefined}
+        initialName={listModal?.name || ''}
+        placeholder={t('eventDetail.listNamePlaceholder')}
+        confirmLabel={listModal?.mode === 'rename' ? t('common.save') : t('eventDetail.createListLabel')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setListModal(null)}
+        onConfirm={name => {
+          if (listModal.mode === 'rename') renameList(listModal.listId, name)
+          else createList(name, listModal.mode === 'moveUnloaded' ? listModal.listId : null)
+        }}
+      />
+
       {showDiscardCart && (
         <div onClick={() => setShowDiscardCart(false)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
           <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:320, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
@@ -1393,24 +1624,28 @@ export default function EventDetail() {
                   <button onClick={() => setSearch('')} aria-label={t('eventDetail.clearSearchAria')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'var(--card2)', borderRadius:'50%', width:20, height:20, fontSize:12, color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                 )}
               </div>
-              {/* Toggle mancanti */}
-              <button
-                className="btn-no-anim"
-                aria-pressed={addAsMancante}
-                onClick={() => setAddAsMancante(v => !v)}
-                style={{ marginTop:10, width:'100%', padding:'10px 14px', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'space-between',
-                  background: addAsMancante ? 'rgba(234,88,12,0.08)' : 'var(--card2)',
-                  border: addAsMancante ? '1.5px solid rgba(234,88,12,0.35)' : '1.5px solid var(--border)',
-                  transition:'all 0.15s',
-                }}
-              >
-                <span style={{ fontSize:13, fontWeight:700, color: addAsMancante ? '#ea580c' : 'var(--text2)' }}>
-                  {t('eventDetail.markAsMissing')}
-                </span>
-                <span style={{ width:36, height:20, borderRadius:10, background: addAsMancante ? '#ea580c' : 'var(--border)', display:'flex', alignItems:'center', padding:'0 3px', transition:'background 0.2s', justifyContent: addAsMancante ? 'flex-end' : 'flex-start' }}>
-                  <span style={{ width:14, height:14, borderRadius:'50%', background:'white', display:'block' }} />
-                </span>
-              </button>
+              {/* Lista di destinazione — solo se l'evento ha più liste */}
+              {multiList && (
+                <div style={{ marginTop:10 }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>{t('eventDetail.addToListLabel')}</p>
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    {eventLists.map(l => (
+                      <button
+                        key={l.id}
+                        className="btn-no-anim"
+                        aria-pressed={targetListId === l.id}
+                        onClick={() => setAddTargetList(l.id)}
+                        style={{
+                          padding:'6px 12px', borderRadius:20, fontSize:12, fontWeight:700, maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                          background: targetListId === l.id ? 'var(--accent)' : 'var(--card2)',
+                          color: targetListId === l.id ? '#fff' : 'var(--text2)',
+                          border: `1px solid ${targetListId === l.id ? 'var(--accent)' : 'var(--border)'}`,
+                        }}
+                      >{listLabel(l)}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Articolo extra */}
               <button
                 className="btn-no-anim"
@@ -1458,7 +1693,6 @@ export default function EventDetail() {
                           icon={ICONS[item.category] || '📦'}
                           inCart={cart.some(c => c.id === item.id)}
                           cartQty={cart.find(c => c.id === item.id)?.qty}
-                          alreadyInList={eventItems.some(e => e.id === item.id)}
                         />
                       </DismissibleSuggestion>
                     ))
@@ -1484,7 +1718,6 @@ export default function EventDetail() {
                     icon={ICONS[item.category] || '📦'}
                     inCart={cart.some(c => c.id === item.id)}
                     cartQty={cart.find(c => c.id === item.id)?.qty}
-                    alreadyInList={eventItems.some(e => e.id === item.id)}
                   />
                 ))
               }
@@ -1681,6 +1914,15 @@ export default function EventDetail() {
                 placeholder={t('eventDetail.eventNotePlaceholder')}
               />
             </div>
+
+            {multiList && (
+              <div className="form-group">
+                <label htmlFor="ed-item-list">{t('eventDetail.itemListLabel')}</label>
+                <select id="ed-item-list" value={editItem.listId || MAIN_LIST_ID} onChange={e => setEditItem(ei => ({ ...ei, listId: e.target.value }))}>
+                  {eventLists.map(l => <option key={l.id} value={l.id}>{listLabel(l)}</option>)}
+                </select>
+              </div>
+            )}
 
             {(() => {
               const catalogItem = allItems.find(i => i.id === (editItem.itemRef || editItem.id))
@@ -1891,7 +2133,7 @@ function DismissibleSuggestion({ item, children, onDismiss }) {
   )
 }
 
-function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
+function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
   const { t } = useTranslation()
   const [qty, setQty] = useState(cartQty || 1)
   // Tetto = quantità TOTALE in magazzino, non quella disponibile ora: la
@@ -1921,8 +2163,6 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty, alreadyInList }) {
               posto dove conta ancora) — avere anche il vecchio badge "🧰
               BUNDLE" qui duplicava l'etichetta sugli stessi kit. */}
           {item.isBundle && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, display:'inline-flex', alignItems:'center', gap:3 }}><Kit size={11} /> KIT</span>}
-          {alreadyInList && !inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>{t('eventDetail.alreadyInListWillBeMissing')}</span>}
-          {alreadyInList && inCart && <span style={{ background:'rgba(234,88,12,0.10)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.25)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800 }}>{t('eventDetail.alreadyInListSeparateRow')}</span>}
         </div>
         <p style={{ color:'var(--text2)', fontSize:12 }}>
           {[item.brand, item.model].filter(Boolean).join(' ')}
@@ -2011,7 +2251,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
             (le azioni a destra restano bottoni separati, non annidati qui). */}
         <button type="button"
           className="btn-no-anim"
-          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0 })}
+          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0, listId: rowListId(item) })}
           aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
           aria-pressed={bulkMode ? bulkSelected : undefined}
           style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}

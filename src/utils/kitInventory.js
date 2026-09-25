@@ -81,12 +81,22 @@ export const itemCommittedElsewhere = (catalogItemId, event, otherEvents) => {
   const evEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
   otherEvents.forEach(other => {
     if (other.id === event.id || !other.date) return
+    const rows = (other.items || []).filter(i => !i.isExtra && (i.itemRef || i.id) === catalogItemId)
+    if (rows.length === 0) return
+    // Una riga ancora caricata e non rientrata è fisicamente fuori ORA, a
+    // prescindere dalla dateEnd nominale dell'evento — che può mancare del
+    // tutto (un'installazione a tempo indeterminato, "finché non la
+    // rimuovo") o essere già passata senza che il rientro sia stato ancora
+    // segnato (rientro dimenticato). In entrambi i casi collassare
+    // l'occupazione a un solo giorno (il vecchio comportamento) la faceva
+    // sparire dal controllo non appena quel giorno non era più "oggi" — qui
+    // resta aperta finché non risulta rientrata.
+    const stillOut = rows.some(i => i.loaded && !i.returned)
     const oStart = other.date
     const oEnd = other.dateEnd && other.dateEnd >= other.date ? other.dateEnd : other.date
-    if (!(evStart <= oEnd && evEnd >= oStart)) return
-    const rowQty = (other.items || [])
-      .filter(i => !i.isExtra && (i.itemRef || i.id) === catalogItemId)
-      .reduce((s, i) => s + (i.qty || 1), 0)
+    const overlaps = stillOut ? evEnd >= oStart : (evStart <= oEnd && evEnd >= oStart)
+    if (!overlaps) return
+    const rowQty = rows.reduce((s, i) => s + (i.qty || 1), 0)
     if (rowQty > 0) {
       result.qty += rowQty
       result.events.push({ id: other.id, name: other.name, qty: rowQty })
@@ -143,18 +153,14 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
 // EventDetail.jsx (pagina del singolo evento, ora raggiungibile anche dai
 // magazzinieri). Un solo posto da cui tenerla corretta.
 export const closeInstallationEvent = async (eventId, items) => {
-  for (const item of items || []) {
-    if (item.loaded && !item.returned && !item.isExtra) {
-      try {
-        const itemRef = doc(db, 'items', item.id)
-        const snap = await getDoc(itemRef)
-        if (snap.exists()) {
-          const current = snap.data()
-          const maxAvail = (current.totalQty || 0) - (current.brokenQty || 0)
-          await updateDoc(itemRef, { availableQty: Math.min(maxAvail, (current.availableQty || 0) + (item.qty || 1)) })
-        }
-      } catch (e) { console.error(e) }
-    }
-  }
+  // Stessa restituzione del rientro normale: usa l'oggetto di catalogo vero
+  // (itemRef || id — le righe di liste diverse/duplicate hanno un id proprio)
+  // e riallinea anche i componenti se la riga è un kit.
+  await Promise.all((items || [])
+    .filter(item => item.loaded && !item.returned && !item.isExtra)
+    .map(item => syncKitAwareInventory({
+      catalogItemId: item.itemRef || item.id, isBundle: item.isBundle, category: item.category,
+      qty: item.qty, sign: 1,
+    })))
   await updateDoc(doc(db, 'events', eventId), { archived: true })
 }

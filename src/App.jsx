@@ -36,6 +36,7 @@ const WorkerCalendar = lazy(() => import('./pages/WorkerCalendar'))
 const Brasserie = lazy(() => import('./pages/Brasserie'))
 const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
 const NotFound = lazy(() => import('./pages/NotFound'))
+const Novita = lazy(() => import('./pages/Novita'))
 const WorkHours = lazy(() => import('./pages/WorkHours'))
 const SettingsWorkHours = lazy(() => import('./pages/SettingsWorkHours'))
 const SettingsWorkHoursWorker = lazy(() => import('./pages/SettingsWorkHoursWorker'))
@@ -186,6 +187,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendar />} />
             <Route path="/work-hours" element={<WorkHours />} />
+            <Route path="/novita" element={<Novita />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -255,6 +257,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/archive" element={<Archive />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/events/:id/scan" element={<WorkerScanner />} />
+          <Route path="/novita" element={<Novita />} />
           <Route path="/admin/settings" element={<Settings />} />
           <Route path="/admin/settings/profile" element={<SettingsProfile />} />
           <Route path="/admin/settings/modules" element={<SettingsModules />} />

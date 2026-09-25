@@ -9,7 +9,7 @@ import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstan
 import { formatDate } from '../utils/formatDate'
 import { todayStr } from '../utils/workHours'
 import BackHomeButton from '../components/BackHomeButton'
-import DateField from '../components/DateField'
+import DateRangeField from '../components/DateRangeField'
 import CreateEventFlow from '../components/CreateEventFlow'
 import { Plus, Check, Warn } from '../components/Icon'
 
@@ -84,10 +84,9 @@ export default function InventoryItemHistory() {
   // l'informazione più urgente, a prescindere da quanto lontana sia la sua
   // data, es. non deve finire sotto un evento futuro solo perché prenotato
   // più avanti), poi gli altri per data decrescente.
-  const isOutForEvent = ev => {
-    const itm = (ev.items || []).find(matchesItem)
-    return !!(itm?.loaded && !itm?.returned)
-  }
+  // .some, non .find: con più liste di carico lo stesso oggetto può avere
+  // più righe nello stesso evento, e conta se ANCHE SOLO UNA è ancora fuori.
+  const isOutForEvent = ev => (ev.items || []).some(i => matchesItem(i) && i.loaded && !i.returned)
   const detailEventHistory = events
     .filter(ev => (ev.items || []).some(matchesItem))
     .sort((a, b) => {
@@ -181,18 +180,20 @@ export default function InventoryItemHistory() {
 
       {/* Controllo disponibilità libero — la ragione d'essere di questa
           pagina: sapere se l'oggetto è impegnato in un certo periodo senza
-          dover creare un evento (nemmeno provvisorio) solo per scoprirlo. */}
+          dover creare un evento (nemmeno provvisorio) solo per scoprirlo.
+          Card volutamente più "pesante" delle altre (bordo doppio, leggero
+          rialzo) — è l'azione principale della pagina, deve saltare
+          all'occhio subito, a differenza dello storico sotto che è solo
+          consultazione. */}
       {item && (
-        <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
-          <p style={{ fontSize:12.5, fontWeight:700, color:'var(--text)', marginBottom:10 }}>{t('inventory.availabilityCheckTitle')}</p>
-          <div style={{ display:'flex', gap:8 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <DateField value={checkStart} onChange={v => { setCheckStart(v); if (checkEnd < v) setCheckEnd(v) }} placeholder={t('inventory.availabilityCheckFrom')} />
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <DateField value={checkEnd} onChange={setCheckEnd} min={checkStart} placeholder={t('inventory.availabilityCheckTo')} />
-            </div>
-          </div>
+        <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1.5px solid var(--border2)', borderRadius:'var(--radius)', padding:'16px', boxShadow:'var(--shadow-sm)' }}>
+          <p style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:12 }}>{t('inventory.availabilityCheckTitle')}</p>
+          <DateRangeField
+            start={checkStart}
+            end={checkEnd}
+            onChange={(s, e) => { setCheckStart(s); setCheckEnd(e) }}
+            placeholder={t('inventory.availabilityCheckPeriodPlaceholder')}
+          />
           {checkRangeValid && maxAvail > 0 && (() => {
             const state = committedQty === 0 ? 'free' : freeQty > 0 ? 'partial' : 'none'
             const color = state === 'free' ? 'var(--green)' : state === 'partial' ? 'var(--accent2)' : 'var(--red)'
@@ -221,9 +222,9 @@ export default function InventoryItemHistory() {
             <button
               onClick={() => setShowCreateFlow(true)}
               className="btn btn-primary btn-full"
-              style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}
+              style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'9px 16px', fontSize:13 }}
             >
-              <Plus size={15} /> {t('inventory.createListWithItem')}
+              <Plus size={13} /> {t('inventory.createEventWithItem')}
             </button>
           </div>
         </div>
@@ -237,7 +238,7 @@ export default function InventoryItemHistory() {
         <CreateEventFlow
           open={showCreateFlow}
           onClose={() => setShowCreateFlow(false)}
-          skipChoice={{ name: '', items: [newListItem] }}
+          skipChoice={{ name: '', items: [newListItem], allowTypeChoice: true }}
           onCreated={eventId => navigate(`/events/${eventId}`)}
         />
       )}
@@ -246,7 +247,10 @@ export default function InventoryItemHistory() {
           stato/andrà (eventi) e chi ha toccato cosa (attività) — raccolte
           in un unico blocco con un selettore invece di due card identiche
           impilate una sopra l'altra, che davano lo stesso peso visivo a
-          due sezioni di importanza diversa. */}
+          due sezioni di importanza diversa. Qui volutamente più dimesso del
+          controllo disponibilità sopra: bordo singolo sottile, niente
+          rialzo, tab più leggere — è consultazione, non l'azione della
+          pagina. */}
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)' }}>
           <button
@@ -254,9 +258,9 @@ export default function InventoryItemHistory() {
             className="chip-no-press"
             aria-pressed={historyTab === 'events'}
             style={{
-              flex:1, padding:'13px 8px', fontSize:12.5, fontWeight:800, textAlign:'center', background:'transparent',
-              color: historyTab === 'events' ? 'var(--accent)' : 'var(--text2)',
-              borderBottom: historyTab === 'events' ? '2px solid var(--accent)' : '2px solid transparent', marginBottom:-1,
+              flex:1, padding:'11px 8px', fontSize:12, fontWeight:700, textAlign:'center', background:'transparent',
+              color: historyTab === 'events' ? 'var(--text)' : 'var(--text3)',
+              borderBottom: historyTab === 'events' ? '2px solid var(--text2)' : '2px solid transparent', marginBottom:-1,
             }}
           >
             {t('inventory.tabEvents', { count: detailEventHistory.length })}
@@ -266,9 +270,9 @@ export default function InventoryItemHistory() {
             className="chip-no-press"
             aria-pressed={historyTab === 'activity'}
             style={{
-              flex:1, padding:'13px 8px', fontSize:12.5, fontWeight:800, textAlign:'center', background:'transparent',
-              color: historyTab === 'activity' ? 'var(--accent)' : 'var(--text2)',
-              borderBottom: historyTab === 'activity' ? '2px solid var(--accent)' : '2px solid transparent', marginBottom:-1,
+              flex:1, padding:'11px 8px', fontSize:12, fontWeight:700, textAlign:'center', background:'transparent',
+              color: historyTab === 'activity' ? 'var(--text)' : 'var(--text3)',
+              borderBottom: historyTab === 'activity' ? '2px solid var(--text2)' : '2px solid transparent', marginBottom:-1,
             }}
           >
             {t('inventory.tabActivity', { count: itemActivityLog.length })}
@@ -319,19 +323,20 @@ export default function InventoryItemHistory() {
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   {detailEventHistory.map(ev => {
-                    const itm = (ev.items || []).find(matchesItem)
-                    const stillOut = itm?.loaded && !itm?.returned
+                    const matchingRows = (ev.items || []).filter(matchesItem)
+                    const stillOut = matchingRows.some(i => i.loaded && !i.returned)
+                    const instanceNumbers = [...new Set(matchingRows.flatMap(i => i.instanceNumbers || []))].sort((a, b) => a - b)
                     return (
                       <button
                         key={ev.id}
                         onClick={() => navigate(`/events/${ev.id}`)}
-                        style={{ display:'flex', alignItems:'center', gap:12, background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
+                        style={{ display:'flex', alignItems:'center', gap:12, background:'var(--card2)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 14px', textAlign:'left' }}
                       >
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                             <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
-                            {item?.isBundle && (itm?.instanceNumbers||[]).length > 0 && (
-                              <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: itm.instanceNumbers.join(', ') })}</span>
+                            {item?.isBundle && instanceNumbers.length > 0 && (
+                              <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('eventDetail.kitInstancesBadge', { numbers: instanceNumbers.join(', ') })}</span>
                             )}
                           </div>
                           <p style={{ fontSize:12, color:'var(--text2)', marginTop:2 }}>

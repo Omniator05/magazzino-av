@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { auth } from '../firebase'
@@ -6,6 +7,7 @@ import { reauthenticateWithCredential, EmailAuthProvider, updatePassword as fbUp
 import { useCenteredModal } from '../hooks/useCenteredModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import SegmentedControl from '../components/SegmentedControl'
+import { hasUnseenWhatsNew } from '../utils/whatsNew'
 
 const AVATARS = [
   // Espressioni — le più usate come avatar
@@ -52,6 +54,7 @@ const IconLock = () => (
 export default function Profile({ onClose }) {
   const { t, i18n } = useTranslation()
   const { profile, user, updateProfileData } = useAuth()
+  const navigate = useNavigate()
   const [savingLang, setSavingLang] = useState(false)
   const modal = useCenteredModal(onClose)
   useModalScrollLock(true)
@@ -235,6 +238,21 @@ export default function Profile({ onClose }) {
               disabled={savingLang}
             />
           </div>
+        </GroupCard>
+
+        {/* Gruppo: Novità — gli aggiornamenti più importanti dell'app */}
+        <GroupCard label={t('profile.sectionWhatsNew')}>
+          <button
+            onClick={() => { onClose(); navigate('/novita') }}
+            className="btn-no-anim"
+            style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'transparent', textAlign: 'left' }}
+          >
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{t('profile.whatsNewRow')}</span>
+            {hasUnseenWhatsNew() && (
+              <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 7, padding: '2px 8px', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.4px', textTransform: 'uppercase' }}>{t('whatsNew.badgeNew')}</span>
+            )}
+            <span style={{ color: 'var(--text3)', fontSize: 18 }}>›</span>
+          </button>
         </GroupCard>
 
         {/* Gruppo: Sicurezza — cambio password a comparsa, chiuso di default */}
