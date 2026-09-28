@@ -1,6 +1,6 @@
 import LegalPageLayout, { LegalH2, LegalP, LegalList, LegalCallout } from '../components/LegalPageLayout'
 
-const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
+const SUPPORT_EMAIL = 'info@roadcase.it'
 
 // Bozza: le condizioni economiche (prova 30gg, 35€/mese, nessuna carta
 // richiesta per iniziare, disdetta libera dal portale Stripe) sono prese

@@ -1,6 +1,6 @@
 import LegalPageLayout, { LegalH2, LegalP, LegalList, LegalCallout } from '../components/LegalPageLayout'
 
-const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
+const SUPPORT_EMAIL = 'info@roadcase.it'
 
 // Questa pagina descrive lo stato REALE del codice, non un obiettivo: nessun
 // analytics/tracking (verificato: nessuna dipendenza del genere in

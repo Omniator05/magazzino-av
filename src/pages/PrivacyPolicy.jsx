@@ -1,6 +1,6 @@
 import LegalPageLayout, { LegalH2, LegalP, LegalList, LegalCallout } from '../components/LegalPageLayout'
 
-const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
+const SUPPORT_EMAIL = 'info@roadcase.it'
 
 // Bozza redatta per essere tecnicamente e fattualmente corretta rispetto a
 // come funziona davvero l'app (sub-responsabili, dati raccolti, base

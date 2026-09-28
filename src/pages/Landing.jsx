@@ -341,7 +341,7 @@ export default function Landing() {
             <img src="/pwa-192x192.png" alt="" width={24} height={24} style={{ borderRadius: 6, display: 'block' }} />
             <Wordmark size={16} />
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text2)' }}>Contatti: <a href="mailto:appmagazzinoav@gmail.com" style={{ color: 'inherit' }}>appmagazzinoav@gmail.com</a></p>
+          <p style={{ fontSize: 13, color: 'var(--text2)' }}>Contatti: <a href="mailto:info@roadcase.it" style={{ color: 'inherit' }}>info@roadcase.it</a></p>
           <p style={{ fontSize: 13, color: 'var(--text2)' }}>
             <Link to="/privacy" style={{ color: 'inherit' }}>Privacy</Link>
             {' · '}

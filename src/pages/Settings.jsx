@@ -9,7 +9,7 @@ import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck }
 import { trialDaysLeft } from '../utils/billing'
 import Toast from '../components/Toast'
 
-const SUPPORT_EMAIL = 'appmagazzinoav@gmail.com'
+const SUPPORT_EMAIL = 'info@roadcase.it'
 
 const sectionLabelStyle = { padding:'0 16px 8px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }
 

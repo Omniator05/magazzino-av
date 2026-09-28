@@ -21,34 +21,18 @@ import BackHomeButton from '../components/BackHomeButton'
 //    conferma dello stato Pro, cosa si è sbloccato e la gestione del
 //    pagamento in secondo piano. Nessun invito a disdire.
 //
-// L'unico vantaggio rimasto comune a ENTRAMBI i piani a pagamento — invariato
-// rispetto al piano gratuito (vedi src/utils/planLimits.js → FREE_LIMITS).
-// Admin, magazzinieri e oggetti in magazzino sono invece tier-aware, vedi
-// PLANS sotto: sono le tre leve che distinguono Team da Business
-// (2026-09-28).
-const SHARED_BENEFITS = [
-  { titleKey: 'billingBenefitListTitle', haveDescKey: 'billingHaveListDesc', limit: FREE_LIMITS.itemsPerList },
-]
-
 // I due piani a pagamento (introdotti 2026-09-28) — differiscono su tre
 // leve: numero di admin, magazzinieri e oggetti in magazzino. priceCents è
 // il prezzo per i NUOVI abbonati; chi si è abbonato prima di questi 2 piani
 // vede il proprio prezzo vero da team.planPriceCents (vedi la vista PREMIUM
-// sotto), non questo valore. adminCap/workerCap/warehouseCap = i tetti DI
-// QUESTO piano (null = illimitato) — usati nel titolo e nella riga "cosa hai
-// sbloccato" della vista PREMIUM. `features`: solo per la card di vendita
-// (vista ACQUISIZIONE) — { key, vars? } così ogni card può avere numeri
-// diversi riga per riga (il piano Free sotto ne ha bisogno, i due a
-// pagamento no).
+// sotto), non questo valore. `features`: elenco mostrato dentro la card
+// (renderPlanCard, riusata identica sia nella vista ACQUISIZIONE che
+// nell'upgrade a Business dentro PREMIUM) — { key, vars? } così ogni card
+// può avere numeri diversi riga per riga (il piano Free sotto ne ha bisogno,
+// i due a pagamento no).
 const PLANS = [
   {
     tier: 'team', nameKey: 'billingPlanNameTeam', priceCents: 4500, betaBadge: true, recommended: true,
-    adminTitleKey: 'billingBenefitAdminsTitleTeam',
-    haveAdminDescKey: 'billingHaveAdminsDescTeam', adminCap: TEAM_LIMITS.admins,
-    workerTitleKey: 'billingBenefitWorkersTitleTeam',
-    haveWorkerDescKey: 'billingHaveWorkersDescTeam', workerCap: TEAM_LIMITS.workers,
-    warehouseTitleKey: 'billingBenefitWarehouseTitleTeam',
-    haveWarehouseDescKey: 'billingHaveWarehouseDescTeam', warehouseCap: TEAM_LIMITS.itemsInWarehouse,
     taglineKey: 'billingTeamTagline',
     features: [
       { key: 'billingBenefitAdminsTitleTeam', vars: { cap: TEAM_LIMITS.admins } },
@@ -60,12 +44,6 @@ const PLANS = [
   },
   {
     tier: 'business', nameKey: 'billingPlanNameBusiness', priceCents: 12900, betaBadge: false, recommended: false,
-    adminTitleKey: 'billingBenefitAdminsTitle',
-    haveAdminDescKey: 'billingHaveAdminsDesc', adminCap: null,
-    workerTitleKey: 'billingBenefitWorkersTitle',
-    haveWorkerDescKey: 'billingHaveWorkersDesc', workerCap: null,
-    warehouseTitleKey: 'billingBenefitWarehouseTitle',
-    haveWarehouseDescKey: 'billingHaveWarehouseDesc', warehouseCap: null,
     taglineKey: 'billingBusinessTagline',
     features: [
       { key: 'billingBenefitAdminsTitle' },
@@ -79,8 +57,7 @@ const PLANS = [
 
 // Il piano gratuito, come terza card della vista ACQUISIZIONE — stessi numeri
 // di src/utils/planLimits.js → FREE_LIMITS, mai riscritti a mano. Non entra
-// mai nella vista PREMIUM (una squadra gratuita non è mai "abbonata"), quindi
-// non ha adminCap/haveAdminDescKey come gli altri due.
+// mai nella vista PREMIUM (una squadra gratuita non è mai "abbonata").
 const FREE_PLAN = {
   tier: 'free', nameKey: 'billingPlanNameFree', priceCents: 0, betaBadge: false, recommended: false,
   taglineKey: 'billingFreeTagline',
@@ -104,15 +81,16 @@ export default function SettingsBilling() {
   const location = useLocation()
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
-  const [toast, setToast] = useState('')
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
+  // Ritorno da Stripe Checkout: il webhook aggiorna già billingStatus da solo,
+  // questo stato serve solo a mostrare l'hero PREMIUM in versione "grazie"
+  // invece di quella normale (vedi sotto) — resta true per il resto di questa
+  // sessione della pagina, sparisce da solo a un refresh/nuova visita perché
+  // il parametro ?billing=success viene tolto subito dall'URL.
+  const [justSubscribed, setJustSubscribed] = useState(false)
 
-  // Ritorno da Stripe Checkout. Il webhook aggiorna già billingStatus da solo:
-  // qui è solo il messaggio di conferma — puliamo subito l'URL per non
-  // ri-mostrarlo a un refresh/back.
   useEffect(() => {
     if (new URLSearchParams(location.search).get('billing') === 'success') {
-      showToast(t('adminUsers.billingSuccessToast'))
+      setJustSubscribed(true)
       navigate('/admin/settings/billing', { replace: true })
     }
   }, [])
@@ -142,6 +120,9 @@ export default function SettingsBilling() {
   const isSubscribed = !!team?.stripeSubscriptionId
   const isPremium = status === 'active' || status === 'exempt'
   const isExempt = status === 'exempt'
+  // Una squadra esente non passa mai da un checkout Stripe (l'accesso è
+  // offerto), quindi non ha senso mostrarle l'hero "grazie per l'acquisto".
+  const showWelcome = justSubscribed && !isExempt
   const cancelScheduled = !!team?.cancelAtPeriodEnd
   // Abbonato prima dei 2 piani (team.planTier ancora assente) → Team di
   // default, stessa regola di adminLimit() in utils/planLimits.js. Il prezzo
@@ -160,9 +141,53 @@ export default function SettingsBilling() {
     </div>
   )
 
-  const toastEl = toast && (
-    <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
-      {toast}
+  // Scheda piano — riusata identica sia per le 3 card della vista
+  // ACQUISIZIONE sia per l'unica card "fai l'upgrade a Business" dentro
+  // PREMIUM: stessa presentazione (nome, prezzo, elenco funzioni), cambia
+  // solo cosa succede al click del bottone, passato da chi la chiama.
+  const renderPlanCard = (p, cta) => (
+    <div key={p.tier} style={{
+      position:'relative', background:'var(--card)',
+      border: p.recommended ? '2px solid var(--accent)' : '1px solid var(--border)',
+      borderRadius:20, padding: p.recommended ? '21px 20px 20px' : '22px 20px 20px',
+      boxShadow: p.recommended ? '0 10px 28px rgba(230,57,70,0.14)' : 'none',
+      display:'flex', flexDirection:'column', gap:16,
+    }}>
+      {p.recommended && (
+        <span style={{ position:'absolute', top:-12, left:20, background:'var(--accent)', color:'#fff', borderRadius:20, padding:'3px 12px', fontSize:10.5, fontWeight:800, letterSpacing:'0.4px', textTransform:'uppercase' }}>
+          {t('adminUsers.billingRecommendedBadge')}
+        </span>
+      )}
+
+      <div>
+        <p style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>{t(`adminUsers.${p.nameKey}`)}</p>
+        <p style={{ fontSize:13, color:'var(--text2)', marginTop:3, lineHeight:1.4 }}>{t(`adminUsers.${p.taglineKey}`)}</p>
+        <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:10 }}>
+          <p style={{ fontSize:30, fontWeight:800, color: p.recommended ? 'var(--accent)' : 'var(--text)', lineHeight:1 }}>
+            {p.tier === 'free' ? formatEuros(p.priceCents) : <>{formatEuros(p.priceCents)}<span style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>/{t('adminUsers.billingPerMonth')}</span></>}
+          </p>
+          {p.betaBadge && <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', letterSpacing:'0.3px', background:'var(--card2)', border:'1px solid var(--border)', borderRadius:6, padding:'2px 6px' }}>PREZZO BETA</span>}
+        </div>
+      </div>
+
+      {/* flex:1 assorbe lo spazio in eccesso quando più card sono affiancate
+          e stirate alla stessa altezza (vedi vista ACQUISIZIONE, dove Free
+          ha una riga in meno delle altre due): senza, il bottone della card
+          più corta resterebbe più in alto, fuori riga dalle altre. */}
+      <div style={{ display:'flex', flexDirection:'column', gap:9, flex:1 }}>
+        {p.features.map(f => (
+          <div key={f.key} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
+            <div style={{ width:20, height:20, flexShrink:0, borderRadius:6, marginTop:1, background:'rgba(105,240,174,0.15)', color:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Check size={11} />
+            </div>
+            <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', lineHeight:1.4 }}>
+              {t(`adminUsers.${f.key}`, f.vars)}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {cta}
     </div>
   )
 
@@ -170,13 +195,18 @@ export default function SettingsBilling() {
   if (isPremium) {
     return (
       <div className="page">
-        {toastEl}
         {header}
 
         {/* Hero Pro — la ricompensa emotiva dell'upgrade. Gradiente accento,
             crest a stella, ringraziamento. Nessun prezzo in evidenza, nessun
-            invito ad agire: qui l'azione è già stata compiuta. */}
-        <div style={{
+            invito ad agire: qui l'azione è già stata compiuta.
+            Appena tornati da un checkout riuscito (justSubscribed), lo stesso
+            hero mostra per questa visita eyebrow/titolo dedicati al "grazie"
+            invece della versione standard — il corpo del testo resta lo
+            stesso (cosa la squadra ha sbloccato), non serve duplicarlo. Un
+            solo ingresso animato (.animate-in, già usata altrove nell'app),
+            non ripetuto ai render successivi. */}
+        <div className={showWelcome ? 'animate-in' : undefined} style={{
           margin:'0 16px 18px', borderRadius:20, overflow:'hidden', position:'relative',
           background:'linear-gradient(145deg, #e63946 0%, #b31f3c 100%)',
           padding:'22px 20px 24px', color:'#fff',
@@ -187,13 +217,17 @@ export default function SettingsBilling() {
           </div>
           <div style={{ position:'relative' }}>
             <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:12 }}>
-              <Star size={15} />
+              {showWelcome ? <Check size={15} /> : <Star size={15} />}
               <span style={{ fontSize:11, fontWeight:800, letterSpacing:'1.4px' }}>
-                {isExempt ? t('adminUsers.billingExemptEyebrow') : t(`adminUsers.billingProEyebrow_${plan.tier}`)}
+                {showWelcome ? t('adminUsers.billingWelcomeEyebrow')
+                  : isExempt ? t('adminUsers.billingExemptEyebrow')
+                  : t(`adminUsers.billingProEyebrow_${plan.tier}`)}
               </span>
             </div>
             <p style={{ fontSize:25, fontWeight:800, letterSpacing:'-0.4px', lineHeight:1.1, marginBottom:8 }}>
-              {isExempt ? t('adminUsers.billingExemptHeading') : t(`adminUsers.billingProHeading_${plan.tier}`)}
+              {showWelcome ? t('adminUsers.billingWelcomeHeading', { plan: t(`adminUsers.${plan.nameKey}`) })
+                : isExempt ? t('adminUsers.billingExemptHeading')
+                : t(`adminUsers.billingProHeading_${plan.tier}`)}
             </p>
             <p style={{ fontSize:13, lineHeight:1.55, color:'rgba(255,255,255,0.88)', maxWidth:340 }}>
               {isExempt ? t('adminUsers.billingExemptThanks') : t(`adminUsers.billingProThanks_${plan.tier}`)}
@@ -201,35 +235,9 @@ export default function SettingsBilling() {
           </div>
         </div>
 
-        {/* Cosa hai sbloccato — gli stessi 4 punti della card di vendita, ma
-            al presente e "tuoi", non come mancanze del piano gratuito. */}
-        <p style={{ padding:'0 16px 8px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>
-          {t('adminUsers.billingUnlockedLabel')}
-        </p>
-        <div style={{
-          margin:'0 16px 18px', background:'var(--card)', border:'1px solid var(--border)',
-          borderRadius:'var(--radius)', padding:'16px 18px', display:'flex', flexDirection:'column', gap:13,
-        }}>
-          {[
-            { titleKey: plan.workerTitleKey, haveDescKey: plan.haveWorkerDescKey, limit: FREE_LIMITS.workers, cap: plan.workerCap },
-            { titleKey: plan.warehouseTitleKey, haveDescKey: plan.haveWarehouseDescKey, limit: FREE_LIMITS.itemsInWarehouse, cap: plan.warehouseCap },
-            ...SHARED_BENEFITS,
-            { titleKey: plan.adminTitleKey, haveDescKey: plan.haveAdminDescKey, limit: FREE_LIMITS.admins, cap: plan.adminCap },
-          ].map(b => (
-            <div key={b.titleKey} style={{ display:'flex', alignItems:'flex-start', gap:11 }}>
-              <div style={{ width:24, height:24, flexShrink:0, borderRadius:7, marginTop:1, background:'rgba(105,240,174,0.15)', color:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Check size={13} />
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontSize:13.5, fontWeight:700, color:'var(--text)' }}>{t(`adminUsers.${b.titleKey}`, { limit: b.limit, cap: b.cap })}</p>
-                <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, lineHeight:1.4 }}>{t(`adminUsers.${b.haveDescKey}`, { limit: b.limit, cap: b.cap })}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
         {/* Gestione pagamento — solo per gli abbonati veri (l'esente non ha
-            nulla da gestire). Volutamente sobria e in fondo. */}
+            nulla da gestire). Cosa la squadra ha sbloccato vive solo nel
+            testo dell'hero sopra: niente checklist duplicata qui sotto. */}
         {!isExempt && (
           <>
             {cancelScheduled && (
@@ -249,43 +257,46 @@ export default function SettingsBilling() {
               </div>
             )}
 
-            <div style={{
-              margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)',
-              borderRadius:'var(--radius)', padding:'16px 18px',
-            }}>
-              <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:10, marginBottom: renewalDate ? 4 : 0 }}>
-                <span style={{ fontSize:13.5, fontWeight:700, color:'var(--text)' }}>{t('adminUsers.billingPlanRow', { plan: t(`adminUsers.${plan.nameKey}`) })}</span>
-                <span style={{ fontSize:14, fontWeight:800, color:'var(--text)', fontVariantNumeric:'tabular-nums' }}>
-                  {formatEuros(planPriceCents)}<span style={{ fontSize:11.5, fontWeight:600, color:'var(--text2)' }}>/{t('adminUsers.billingPerMonth')}</span>
-                </span>
-              </div>
-              {renewalDate && !cancelScheduled && (
-                <p style={{ fontSize:12, color:'var(--text2)', lineHeight:1.5 }}>
-                  {t('adminUsers.billingNextRenewal', { date: renewalDate })}
+            {/* Fai l'upgrade a Business — prima era una riga di testo sotto
+                il bottone "Gestisci pagamento", facile da non notare. Ora è
+                la stessa identica card di vendita della vista ACQUISIZIONE
+                (renderPlanCard sopra), con la propria descrizione e il
+                proprio elenco funzioni — non serve inventarne una versione
+                ridotta. Il bottone apre comunque lo stesso Billing Portal:
+                cambiare piano (Team→Business) passa da lì, se configurato in
+                Stripe con entrambi i Price come opzioni di cambio
+                abbonamento — nessun altro bottone/endpoint dedicato. */}
+            {plan.tier === 'team' && !cancelScheduled && (
+              <>
+                <p style={{ padding:'0 16px 8px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                  {t('adminUsers.billingUpgradeSectionTitle')}
                 </p>
-              )}
+                <div style={{ margin:'0 16px 18px' }}>
+                  {renderPlanCard(
+                    PLANS.find(p => p.tier === 'business'),
+                    <button onClick={() => manageBilling(true)} className="btn btn-primary btn-full" disabled={billingLoading}>
+                      {billingLoading ? t('common.redirecting') : t('adminUsers.billingUpgradeCardButton')}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
-              {billingError && <p style={{ color:'var(--red)', fontSize:12, margin:'12px 0 0', fontWeight:600 }}>{billingError}</p>}
+            {billingError && <p style={{ color:'var(--red)', fontSize:12, margin:'0 16px 16px', fontWeight:600, textAlign:'center' }}>{billingError}</p>}
 
-              <button
-                onClick={() => manageBilling(true)}
-                className="btn btn-secondary btn-full"
-                disabled={billingLoading}
-                style={{ marginTop:14 }}
-              >
+            {/* Chiusura pagina: piano/prezzo/rinnovo reali in una riga
+                (l'hero sopra non li mostra), poi un solo bottone per tutto
+                il resto della gestione — niente più card a sé. */}
+            <div style={{ margin:'0 16px 16px', textAlign:'center' }}>
+              <p style={{ fontSize:12, color:'var(--text2)', lineHeight:1.5, marginBottom:10 }}>
+                {t('adminUsers.billingPlanRow', { plan: t(`adminUsers.${plan.nameKey}`) })} — {formatEuros(planPriceCents)}/{t('adminUsers.billingPerMonth')}
+                {renewalDate && !cancelScheduled && <>. {t('adminUsers.billingNextRenewal', { date: renewalDate })}</>}
+              </p>
+              <button onClick={() => manageBilling(true)} className="btn btn-secondary btn-full" disabled={billingLoading}>
                 {billingLoading ? t('common.redirecting')
                   : cancelScheduled ? t('adminUsers.billingReactivateButton')
-                  : t('adminUsers.billingManagePaymentButton')}
+                  : t('adminUsers.billingManagePlanButton')}
               </button>
-              {/* Cambiare piano (Team→Business o viceversa) passa dallo stesso
-                  Billing Portal — se configurato in Stripe con entrambi i
-                  Price come opzioni di cambio abbonamento, non serve nessun
-                  altro bottone/endpoint dedicato. */}
-              {plan.tier === 'team' && !cancelScheduled && (
-                <p style={{ fontSize:12, color:'var(--text2)', textAlign:'center', marginTop:10 }}>
-                  {t('adminUsers.billingUpgradeToBusinessHint')}
-                </p>
-              )}
             </div>
           </>
         )}
@@ -308,7 +319,6 @@ export default function SettingsBilling() {
 
   return (
     <div className="page">
-      {toastEl}
       {header}
 
       {/* Header con urgenza concreta — il contatore/stato resta com'era; sotto,
@@ -340,68 +350,24 @@ export default function SettingsBilling() {
           consigliata (Team) per prima. Colonna su mobile, tre affiancate da
           desktop in su (vedi .billing-plans qui sotto). */}
       <div className="billing-plans" style={{ margin:'0 16px 8px', display:'flex', gap:14 }}>
-        {[...PLANS, FREE_PLAN].map(p => (
-          <div key={p.tier} style={{
-            position:'relative', background:'var(--card)',
-            border: p.recommended ? '2px solid var(--accent)' : '1px solid var(--border)',
-            borderRadius:20, padding: p.recommended ? '21px 20px 20px' : '22px 20px 20px',
-            boxShadow: p.recommended ? '0 10px 28px rgba(230,57,70,0.14)' : 'none',
-            display:'flex', flexDirection:'column', gap:16,
-          }}>
-            {p.recommended && (
-              <span style={{ position:'absolute', top:-12, left:20, background:'var(--accent)', color:'#fff', borderRadius:20, padding:'3px 12px', fontSize:10.5, fontWeight:800, letterSpacing:'0.4px', textTransform:'uppercase' }}>
-                {t('adminUsers.billingRecommendedBadge')}
-              </span>
-            )}
-
-            <div>
-              <p style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>{t(`adminUsers.${p.nameKey}`)}</p>
-              <p style={{ fontSize:13, color:'var(--text2)', marginTop:3, lineHeight:1.4 }}>{t(`adminUsers.${p.taglineKey}`)}</p>
-              <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:10 }}>
-                <p style={{ fontSize:30, fontWeight:800, color: p.recommended ? 'var(--accent)' : 'var(--text)', lineHeight:1 }}>
-                  {p.tier === 'free' ? formatEuros(p.priceCents) : <>{formatEuros(p.priceCents)}<span style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>/{t('adminUsers.billingPerMonth')}</span></>}
-                </p>
-                {p.betaBadge && <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', letterSpacing:'0.3px', background:'var(--card2)', border:'1px solid var(--border)', borderRadius:6, padding:'2px 6px' }}>PREZZO BETA</span>}
-              </div>
-            </div>
-
-            {/* Elenco completo del piano — la card sta in piedi da sola, non
-                rimanda a nessun blocco condiviso sopra o fra loro. flex:1
-                assorbe lo spazio in eccesso quando le card sono affiancate e
-                stirate alla stessa altezza (Free ha una riga in meno delle
-                altre due): senza, il suo bottone resterebbe più in alto,
-                fuori riga rispetto a Team/Business. */}
-            <div style={{ display:'flex', flexDirection:'column', gap:9, flex:1 }}>
-              {p.features.map(f => (
-                <div key={f.key} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
-                  <div style={{ width:20, height:20, flexShrink:0, borderRadius:6, marginTop:1, background:'rgba(105,240,174,0.15)', color:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <Check size={11} />
-                  </div>
-                  <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', lineHeight:1.4 }}>
-                    {t(`adminUsers.${f.key}`, f.vars)}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Free non è un'azione — è dove ci si trova già finché non si
-                sceglie uno degli altri due piani. Bottone non cliccabile. */}
-            {p.tier === 'free' ? (
-              <button className="btn btn-secondary btn-full" disabled style={{ opacity:0.6, cursor:'default' }}>
-                {t('adminUsers.billingCurrentPlanButton')}
-              </button>
-            ) : (
-              <button
-                onClick={() => manageBilling(isSubscribed, p.tier)}
-                className={isSubscribed ? 'btn btn-secondary btn-full' : (p.recommended ? 'btn btn-primary btn-full' : 'btn btn-secondary btn-full')}
-                disabled={billingLoading}
-              >
-                {billingLoading ? t('common.redirecting')
-                  : isSubscribed ? t('adminUsers.manageBillingButton')
-                  : t('adminUsers.subscribeButtonWithPrice', { price: formatEuros(p.priceCents) })}
-              </button>
-            )}
-          </div>
+        {[...PLANS, FREE_PLAN].map(p => renderPlanCard(p,
+          /* Free non è un'azione — è dove ci si trova già finché non si
+             sceglie uno degli altri due piani. Bottone non cliccabile. */
+          p.tier === 'free' ? (
+            <button className="btn btn-secondary btn-full" disabled style={{ opacity:0.6, cursor:'default' }}>
+              {t('adminUsers.billingCurrentPlanButton')}
+            </button>
+          ) : (
+            <button
+              onClick={() => manageBilling(isSubscribed, p.tier)}
+              className={isSubscribed ? 'btn btn-secondary btn-full' : (p.recommended ? 'btn btn-primary btn-full' : 'btn btn-secondary btn-full')}
+              disabled={billingLoading}
+            >
+              {billingLoading ? t('common.redirecting')
+                : isSubscribed ? t('adminUsers.manageBillingButton')
+                : t('adminUsers.subscribeButtonWithPrice', { price: formatEuros(p.priceCents) })}
+            </button>
+          )
         ))}
       </div>
 
