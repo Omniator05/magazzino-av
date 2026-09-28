@@ -21,7 +21,7 @@ import Picker from '../components/Picker'
 import DailyQuip from '../components/DailyQuip'
 import { parseCSV, mapRowsToItems } from '../utils/csvImport'
 import { ensureInstanceList, kitHasIncompleteInstance } from '../utils/kitInstances'
-import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
+import { warehouseLimit, promptLimitReached } from '../utils/planLimits'
 import { getCodeDisplay } from '../utils/codeDisplay'
 import LinkedItemsEditor from '../components/LinkedItemsEditor'
 import { getLinkedItems, linkedItemsToFields } from '../utils/linkedItems'
@@ -325,8 +325,9 @@ export default function Inventory() {
       serialNumber: form.serialNumber.trim() || null,
     }
     if (!selected) {
-      if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsInWarehouse) {
-        await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: FREE_LIMITS.itemsInWarehouse }) })
+      const warehouseCap = warehouseLimit(team)
+      if (items.length >= warehouseCap) {
+        await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
         return false
       }
       const dup = items.find(i => i.name.trim().toLowerCase() === form.name.trim().toLowerCase())
@@ -474,7 +475,8 @@ export default function Inventory() {
     // Piano gratuito: un import CSV può portare ben oltre il limite in un
     // colpo solo — si importa solo fino a riempire lo spazio rimasto, il
     // resto va scartato con un avviso invece di sforare in silenzio.
-    const headroom = isProPlan(team) ? Infinity : Math.max(0, FREE_LIMITS.itemsInWarehouse - items.length)
+    const warehouseCap = warehouseLimit(team)
+    const headroom = Math.max(0, warehouseCap - items.length)
     const toImport = importParsed.items.slice(0, headroom)
     const skipped = importParsed.items.length - toImport.length
     for (let i = 0; i < toImport.length; i++) {
@@ -489,7 +491,7 @@ export default function Inventory() {
     }
     setImportStep('done')
     if (skipped > 0) {
-      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.importCappedMsg', { imported: toImport.length, limit: FREE_LIMITS.itemsInWarehouse, skipped }) })
+      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.importCappedMsg', { imported: toImport.length, limit: warehouseCap, skipped }) })
     }
   }
 
@@ -1635,8 +1637,9 @@ export default function Inventory() {
               <SaveButton
                 onSave={async () => {
                   if (!kitForm.name.trim() || kitComponents.length === 0) return false
-                  if (!isProPlan(team) && items.length >= FREE_LIMITS.itemsInWarehouse) {
-                    await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: FREE_LIMITS.itemsInWarehouse }) })
+                  const warehouseCap = warehouseLimit(team)
+                  if (items.length >= warehouseCap) {
+                    await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
                     return false
                   }
                   const kitQty = kitForm.qty || 1

@@ -8,18 +8,13 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
 // Promemoria "passa a Pro" per l'admin, mostrato solo nella Home admin.
 // Due livelli, entrambi mai bloccanti e mai visti dai magazzinieri:
-//  - BANNER inline: chiudibile, ricompare dopo un periodo di pausa (non a
-//    ogni apertura). Presente per qualunque squadra non ancora abbonata.
+//  - BANNER inline: fisso, non si chiude — finché la squadra non è abbonata
+//    l'admin deve continuare a vederlo. Presente per qualunque squadra non
+//    ancora abbonata.
 //  - PROMEMORIA al login: modale una-tantum per sessione, SOLO quando la
 //    situazione è concreta (prova che scade tra ≤3 giorni o già scaduta).
 // Chi è già abbonato / esente / bloccato per pagamento fallito non vede nulla.
-const BANNER_KEY = 'proUpsellBannerDismissedAt'
 const SESSION_KEY = 'proUpsellLoginSeen'
-const COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
-
-function readTs(key) {
-  try { return Number(localStorage.getItem(key)) || 0 } catch { return 0 }
-}
 
 export default function ProUpsell() {
   const { t } = useTranslation()
@@ -38,9 +33,6 @@ export default function ProUpsell() {
   // Solo admin, squadra non già a pagamento e non bloccata (past_due → BillingGate).
   const eligible = isAdmin && !!status && !isPaid && status !== 'past_due'
 
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => Date.now() - readTs(BANNER_KEY) < COOLDOWN_MS,
-  )
   const [modalOpen, setModalOpen] = useState(false)
 
   // Il team arriva in modo asincrono: decidiamo l'apertura della modale in un
@@ -62,10 +54,6 @@ export default function ProUpsell() {
     try { sessionStorage.setItem(SESSION_KEY, '1') } catch {}
   }
   const goToBilling = () => { closeModal(); navigate('/admin/settings/billing') }
-  const dismissBanner = () => {
-    setBannerDismissed(true)
-    try { localStorage.setItem(BANNER_KEY, String(Date.now())) } catch {}
-  }
 
   const bannerTitle = trialExpired ? t('proUpsell.bannerExpiredTitle')
     : trialEndingSoon ? t('proUpsell.bannerEndingTitle', { count: days })
@@ -74,31 +62,32 @@ export default function ProUpsell() {
 
   return (
     <>
-      {!bannerDismissed && (
-        <div style={{
-          background: urgent ? '#fff5f5' : 'var(--dash-card)',
+      <style>{`
+        .pro-upsell-banner { transition: border-color 0.2s ease, background 0.2s ease; }
+        .pro-upsell-banner .pu-chevron { transition: transform 0.2s ease, opacity 0.2s ease; opacity: 0.55; }
+        @media (hover: hover) and (pointer: fine) {
+          .pro-upsell-banner:hover { border-color: var(--accent); background: rgba(230,57,70,0.06); }
+          .pro-upsell-banner:hover .pu-chevron { transform: translateX(3px); opacity: 1; }
+        }
+      `}</style>
+      <button
+        type="button"
+        className="btn-no-anim pro-upsell-banner"
+        onClick={() => navigate('/admin/settings/billing')}
+        style={{
+          width: '100%', background: urgent ? '#fff5f5' : 'var(--dash-card)',
           border: `1px solid ${urgent ? '#fecdd3' : 'var(--dash-card-border)'}`,
-          borderRadius: 16, padding: '12px 12px 12px 15px', marginBottom: 10,
-          display: 'flex', alignItems: 'center', gap: 11,
-        }}>
-          <span style={{ color: 'var(--accent)', flexShrink: 0 }}><Star size={19} /></span>
-          <button
-            onClick={() => navigate('/admin/settings/billing')}
-            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}
-          >
-            <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--dash-title)' }}>{bannerTitle}</p>
-            <p style={{ fontSize: 12, color: 'var(--dash-muted)', marginTop: 1, lineHeight: 1.4 }}>{bannerDesc}</p>
-          </button>
-          <button
-            onClick={dismissBanner}
-            aria-label={t('common.close')}
-            className="btn-no-anim"
-            style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 8, background: 'transparent', border: 'none', color: 'var(--dash-muted)', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            &times;
-          </button>
-        </div>
-      )}
+          borderRadius: 16, padding: '12px 15px', marginBottom: 10,
+          display: 'flex', alignItems: 'center', gap: 11, textAlign: 'left',
+        }}
+      >
+        <span style={{ color: 'var(--accent)', flexShrink: 0 }}><Star size={19} /></span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--dash-title)' }}>{bannerTitle}</p>
+          <p style={{ fontSize: 12, color: 'var(--dash-muted)', marginTop: 1, lineHeight: 1.4 }}>{bannerDesc}</p>
+        </span>
+        <span className="pu-chevron" style={{ color: 'var(--accent)', fontSize: 18, flexShrink: 0 }}>›</span>
+      </button>
 
       {modalOpen && (
         <div

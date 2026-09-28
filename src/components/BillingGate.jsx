@@ -21,11 +21,17 @@ export default function BillingGate() {
     : status === 'canceled' ? 'billing.canceledTitle'
     : 'billing.trialExpiredTitle'
 
-  const startCheckout = async () => {
+  // Pagamento fallito → l'abbonamento (Team o Business) esiste già: va
+  // sistemato il metodo di pagamento su QUELLO, via il Billing Portal di
+  // Stripe — non ricreato da zero con una nuova sessione di checkout, che da
+  // quando esistono 2 piani a pagamento (2026-09-28) rischierebbe di
+  // "ripartire" un cliente Business come Team (il checkout senza `tier`
+  // sceglie sempre Team di default, vedi api/create-checkout-session.js).
+  const fixPayment = async () => {
     setLoading(true); setError('')
     try {
       const idToken = await user.getIdToken()
-      const res = await fetch('/api/create-checkout-session', {
+      const res = await fetch('/api/create-portal-session', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}` },
       })
@@ -47,8 +53,8 @@ export default function BillingGate() {
         </p>
         {error && <p style={{ color:'#dc2626', fontSize:13, marginBottom:14, fontWeight:600 }}>{error}</p>}
         {isAdmin && (
-          <button onClick={startCheckout} disabled={loading} className="btn btn-primary btn-full">
-            {loading ? t('common.redirecting') : t('billing.subscribeButton')}
+          <button onClick={fixPayment} disabled={loading} className="btn btn-primary btn-full">
+            {loading ? t('common.redirecting') : t('billing.fixPaymentButton')}
           </button>
         )}
         <button onClick={logout} style={{ marginTop:16, background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:600, padding:8 }}>

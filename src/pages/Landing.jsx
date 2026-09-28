@@ -27,6 +27,29 @@ const FEATURES = [
   { icon: Clock,     title: 'Personale e ore',   desc: 'Assegni i magazzinieri agli eventi e tieni traccia delle ore di lavoro.' },
 ]
 
+// I 3 piani — stessa fonte di verità del resto dell'app: Free/Team hanno un
+// tetto di admin, magazzinieri E oggetti in magazzino (src/utils/planLimits.js
+// → FREE_LIMITS/TEAM_LIMITS), Business no. Solo le liste di carico restano
+// sempre illimitate su Team e Business — il vantaggio rispetto a chi fa
+// pagare per persona.
+const PRICING_PLANS = [
+  {
+    name: 'Free', price: '0€', period: null, tagline: 'Per iniziare da soli.',
+    features: ['1 amministratore', 'Fino a 3 magazzinieri', 'Fino a 50 oggetti in magazzino', 'Liste di carico fino a 20 oggetti'],
+    ctaLabel: 'Inizia gratis', highlight: false,
+  },
+  {
+    name: 'Team', price: '45€', period: '/mese', tagline: 'Per una squadra vera.', badge: 'Consigliato',
+    features: ['Fino a 5 amministratori', 'Fino a 10 magazzinieri', 'Fino a 300 oggetti in magazzino', 'Scanner, kit e liste multiple'],
+    ctaLabel: '30 giorni di prova gratuita', highlight: true,
+  },
+  {
+    name: 'Business', price: '129€', period: '/mese', tagline: 'Per aziende più strutturate.',
+    features: ['Amministratori illimitati', 'Magazzinieri illimitati', 'Magazzino e liste senza limiti', 'Tutto quello che c\'è in Team'],
+    ctaLabel: '30 giorni di prova gratuita', highlight: false,
+  },
+]
+
 const STRENGTHS = [
   { title: 'Pensata per il magazzino', text: 'Wi‑Fi debole e mani occupate sono la norma. Ogni salvataggio viene confermato e, se non va a buon fine, l\'app te lo dice invece di far finta di niente.' },
   { title: 'Si installa come un\'app', text: 'Aggiungila alla schermata Home di iPhone o Android: si apre a schermo intero, senza passare dallo store.' },
@@ -131,6 +154,7 @@ export default function Landing() {
         .lp-features { display: grid; grid-template-columns: 1fr; gap: 12px; }
         .lp-steps { display: grid; grid-template-columns: 1fr; gap: 12px; }
         .lp-strengths { display: grid; grid-template-columns: 1fr; gap: 24px; }
+        .lp-pricing { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: stretch; }
         .lp-btn { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; padding: 14px 24px; border-radius: 12px; font-size: 15px; font-weight: 700; text-decoration: none; transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease; }
         .lp-btn-primary { background: var(--accent); color: #fff; box-shadow: 0 6px 20px rgba(230,57,70,0.28); }
         .lp-btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border2); }
@@ -154,6 +178,7 @@ export default function Landing() {
           .lp-hero { grid-template-columns: 1.1fr 0.9fr; gap: 56px; padding: 72px 0 96px; }
           .lp-features { grid-template-columns: repeat(4, 1fr); }
           .lp-strengths { grid-template-columns: repeat(3, 1fr); gap: 32px; }
+          .lp-pricing { grid-template-columns: repeat(3, 1fr); gap: 20px; }
         }
         @media (prefers-reduced-motion: reduce) {
           .lp-reveal { animation: none; opacity: 1; }
@@ -194,7 +219,7 @@ export default function Landing() {
                 <Link to="/login" className="lp-btn lp-btn-secondary">Accedi</Link>
               </div>
               <p className="lp-reveal" style={{ fontSize: 13, color: 'var(--text2)', marginTop: 14, animationDelay: '220ms' }}>
-                Nessuna carta richiesta. Poi 35 € al mese per azienda.
+                Nessuna carta richiesta. Da 45 € al mese per azienda.
               </p>
             </div>
             <div className="lp-reveal" style={{ animationDelay: '200ms' }}>
@@ -263,18 +288,49 @@ export default function Landing() {
 
         {/* Prezzo e invito finale */}
         <section id="prezzo" style={{ ...wrap, padding: '72px 20px 80px' }}>
-          <div className="lp-card" style={{ padding: 'clamp(24px, 5vw, 44px)', display: 'flex', flexDirection: 'column', gap: 20, alignItems: 'flex-start', borderColor: 'var(--border2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 'clamp(26px, 5vw, 36px)', fontWeight: 800, letterSpacing: '-0.03em' }}>30 giorni di prova gratuita</h2>
-              <span style={{ background: 'rgba(230,57,70,0.10)', color: 'var(--accent)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Prezzo beta</span>
-            </div>
-            <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text2)', maxWidth: 620 }}>
-              Nessuna carta richiesta all'attivazione. Poi <strong style={{ color: 'var(--text)' }}>35 € al mese per azienda</strong>, un prezzo speciale finché l'app è in sviluppo. Disdici quando vuoi.
-            </p>
-            <div className="lp-cta">
-              <Link to="/signup" className="lp-btn lp-btn-primary">Inizia l'esperienza</Link>
-              <Link to="/login" className="lp-btn lp-btn-secondary">Ho già un account</Link>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+            <h2 style={{ fontSize: 'clamp(26px, 5vw, 36px)', fontWeight: 800, letterSpacing: '-0.03em' }}>30 giorni di prova gratuita</h2>
+            <span style={{ background: 'rgba(230,57,70,0.10)', color: 'var(--accent)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Prezzo beta</span>
+          </div>
+          <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text2)', maxWidth: 620, marginBottom: 32 }}>
+            Nessuna carta richiesta all'attivazione. Un unico limite tra i piani a pagamento: quanti amministratori — magazzinieri, oggetti e liste di carico restano sempre senza tetto. Disdici quando vuoi.
+          </p>
+
+          <div className="lp-pricing">
+            {PRICING_PLANS.map(plan => (
+              <div key={plan.name} className="lp-card" style={{
+                padding: '26px 24px', display: 'flex', flexDirection: 'column', gap: 18,
+                borderColor: plan.highlight ? 'var(--accent)' : 'var(--border)',
+                boxShadow: plan.highlight ? '0 12px 32px rgba(230,57,70,0.14)' : 'none',
+                position: 'relative',
+              }}>
+                {plan.badge && (
+                  <span style={{ position: 'absolute', top: -12, left: 24, background: 'var(--accent)', color: '#fff', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.4px', textTransform: 'uppercase' }}>{plan.badge}</span>
+                )}
+                <div>
+                  <p style={{ fontSize: 18, fontWeight: 800 }}>{plan.name}</p>
+                  <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 2 }}>{plan.tagline}</p>
+                </div>
+                <p style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.02em' }}>
+                  {plan.price}{plan.period && <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)' }}>{plan.period}</span>}
+                </p>
+                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                  {plan.features.map(f => (
+                    <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.4 }}>
+                      <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link to="/signup" className={`lp-btn ${plan.highlight ? 'lp-btn-primary' : 'lp-btn-secondary'}`} style={{ width: '100%' }}>{plan.ctaLabel}</Link>
+              </div>
+            ))}
+          </div>
+
+          <div className="lp-cta" style={{ marginTop: 28 }}>
+            <Link to="/login" className="lp-btn lp-btn-secondary">Ho già un account</Link>
           </div>
         </section>
       </main>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
-import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
+import { adminLimit, workerLimit, promptLimitReached } from '../utils/planLimits'
 import { isModuleEnabled } from '../utils/modules'
 import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -175,17 +175,23 @@ export default function SettingsUsers() {
     if (users.some(u => u.username === username)) {
       setError(t('adminUsers.errorUsernameTaken')); return false
     }
-    // Piano gratuito: 1 admin, 3 magazzinieri — chi crea account qui è
-    // sempre l'admin stesso (pagina admin-only), niente da controllare oltre
-    // al ruolo scelto.
-    if (!isProPlan(team)) {
-      const role = form.role || 'worker'
-      if (role === 'admin' && users.filter(u => u.role === 'admin').length >= FREE_LIMITS.admins) {
-        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.adminsMsg', { limit: FREE_LIMITS.admins }) })
+    // Tetto admin e magazzinieri: sempre controllati, non solo sul piano
+    // gratuito — sono due delle leve che distinguono Team da Business, vedi
+    // adminLimit/workerLimit in utils/planLimits.js. Chi crea account qui è
+    // sempre l'admin stesso (pagina admin-only), niente altro da controllare
+    // oltre al ruolo scelto.
+    const role = form.role || 'worker'
+    if (role === 'admin') {
+      const cap = adminLimit(team)
+      if (Number.isFinite(cap) && users.filter(u => u.role === 'admin').length >= cap) {
+        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.adminsMsg', { limit: cap }) })
         return false
       }
-      if (role === 'worker' && users.filter(u => u.role === 'worker').length >= FREE_LIMITS.workers) {
-        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.workersMsg', { limit: FREE_LIMITS.workers }) })
+    }
+    if (role === 'worker') {
+      const cap = workerLimit(team)
+      if (Number.isFinite(cap) && users.filter(u => u.role === 'worker').length >= cap) {
+        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.workersMsg', { limit: cap }) })
         return false
       }
     }

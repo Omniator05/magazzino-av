@@ -418,6 +418,11 @@ export default function Dashboard({ toggleTheme, theme }) {
 
       <div style={{ padding:'0 16px' }}>
 
+        {/* ── Promemoria piano Pro (solo admin non abbonati) — subito sotto
+            l'header, prima di tutto il resto: non deve poter passare
+            inosservato scorrendo verso gli strumenti. */}
+        <ProUpsell />
+
         {/* ── Strumenti ───────────────────────── */}
         {/* Renderizzata subito, PRIMA dei banner qui sotto: i banner dipendono
             da `items` (caricato in modo asincrono da Firestore) e comparendo
@@ -519,9 +524,6 @@ export default function Dashboard({ toggleTheme, theme }) {
             </button>
           </div>
         )}
-
-        {/* ── Promemoria piano Pro (solo admin non abbonati) ── */}
-        <ProUpsell />
 
         {/* ── Prossimi eventi ──────────────────── */}
         <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:14 }}>

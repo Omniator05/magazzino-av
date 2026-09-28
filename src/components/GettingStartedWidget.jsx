@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
@@ -46,6 +46,13 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
   const navigate = useNavigate()
   const [workerCount, setWorkerCount] = useState(null) // null = ancora in caricamento
   const [collapsed, setCollapsed] = useState(false)
+  // Su mobile il widget è stretto (270px): impilare 3 righe intere lo rende
+  // sproporzionato rispetto al resto della dashboard. Lì si scorre uno step
+  // alla volta con uno swipe orizzontale nativo (scroll-snap) e si salta a
+  // uno step preciso toccando il suo pallino; da 700px in su resta l'elenco
+  // intero (vedi .gsw-steps-list/.gsw-steps-carousel più sotto).
+  const [mobileStepIndex, setMobileStepIndex] = useState(0)
+  const stepsScrollRef = useRef(null)
   const [dismissed, setDismissed] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [entered, setEntered] = useState(false)
@@ -73,6 +80,20 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
     { key:'team',  label: t('dashboard.gettingStartedTeam'),  icon: <IconUsersPlus />,    path:'/admin/settings',  done: (workerCount ?? 1) > 1 },
   ]
   const doneCount = steps.filter(s => s.done).length
+
+  // Il pallino attivo segue lo scroll reale (swipe con un dito), non uno
+  // stato scelto a priori — arrotonda la posizione al pannello più vicino.
+  const handleStepsScroll = () => {
+    const el = stepsScrollRef.current
+    if (!el || !el.clientWidth) return
+    setMobileStepIndex(Math.round(el.scrollLeft / el.clientWidth))
+  }
+  const scrollToStep = (i) => {
+    const el = stepsScrollRef.current
+    if (!el) return
+    setMobileStepIndex(i) // feedback immediato sul pallino, non aspetta lo scroll fluido
+    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
+  }
 
   // Finché items/eventi/squadra non sono ancora arrivati da Firestore i
   // rispettivi step risultano "non fatti" per definizione (array vuoti,
@@ -125,29 +146,78 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
       </div>
 
       {!collapsed && (
-        <div style={{ padding:'4px 10px 8px' }}>
-          {steps.map(step => (
-            <button key={step.key} onClick={() => navigate(step.path)} className="btn-no-anim" style={{
-              width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 6px',
-              background:'transparent', textAlign:'left', borderRadius:10,
-            }}>
-              <span style={{
-                width:20, height:20, borderRadius:'50%', flexShrink:0,
-                display:'flex', alignItems:'center', justifyContent:'center',
-                background: step.done ? '#22c55e' : 'var(--dash-pill-bg)',
-                border: step.done ? 'none' : '1.5px solid var(--dash-pill-border)',
-                color: step.done ? 'white' : 'var(--dash-muted)',
+        <>
+          {/* Desktop (≥700px, vedi .gsw-steps-list sotto): tutti gli step impilati */}
+          <div className="gsw-steps-list" style={{ padding:'4px 10px 8px' }}>
+            {steps.map(step => (
+              <button key={step.key} onClick={() => navigate(step.path)} className="btn-no-anim" style={{
+                width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 6px',
+                background:'transparent', textAlign:'left', borderRadius:10,
               }}>
-                {step.done ? <IconCheckDone /> : step.icon}
-              </span>
-              <span style={{
-                flex:1, fontSize:13, fontWeight:600,
-                color: step.done ? 'var(--dash-muted)' : 'var(--dash-title)',
-                textDecoration: step.done ? 'line-through' : 'none',
-              }}>{step.label}</span>
-            </button>
-          ))}
-        </div>
+                <span style={{
+                  width:20, height:20, borderRadius:'50%', flexShrink:0,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  background: step.done ? '#22c55e' : 'var(--dash-pill-bg)',
+                  border: step.done ? 'none' : '1.5px solid var(--dash-pill-border)',
+                  color: step.done ? 'white' : 'var(--dash-muted)',
+                }}>
+                  {step.done ? <IconCheckDone /> : step.icon}
+                </span>
+                <span style={{
+                  flex:1, fontSize:13, fontWeight:600,
+                  color: step.done ? 'var(--dash-muted)' : 'var(--dash-title)',
+                  textDecoration: step.done ? 'line-through' : 'none',
+                }}>{step.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile (<700px): una riga alla volta, si scorre con lo swipe
+              (scroll-snap nativo) e i pallini sotto sono anche loro toccabili
+              per saltare a uno step preciso — niente frecce. */}
+          <div className="gsw-steps-carousel" style={{ padding:'2px 0 10px' }}>
+            <div ref={stepsScrollRef} onScroll={handleStepsScroll} className="gsw-steps-scroll" style={{ display:'flex' }}>
+              {steps.map(step => (
+                <button key={step.key} onClick={() => navigate(step.path)} className="btn-no-anim gsw-step-slide" style={{
+                  flex:'0 0 100%', minWidth:0, display:'flex', alignItems:'center', gap:10, padding:'9px 10px',
+                  background:'transparent', textAlign:'left', borderRadius:10,
+                }}>
+                  <span style={{
+                    width:20, height:20, borderRadius:'50%', flexShrink:0,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    background: step.done ? '#22c55e' : 'var(--dash-pill-bg)',
+                    border: step.done ? 'none' : '1.5px solid var(--dash-pill-border)',
+                    color: step.done ? 'white' : 'var(--dash-muted)',
+                  }}>
+                    {step.done ? <IconCheckDone /> : step.icon}
+                  </span>
+                  <span style={{
+                    flex:1, minWidth:0, fontSize:13, fontWeight:600,
+                    color: step.done ? 'var(--dash-muted)' : 'var(--dash-title)',
+                    textDecoration: step.done ? 'line-through' : 'none',
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                  }}>{step.label}</span>
+                </button>
+              ))}
+            </div>
+            {steps.length > 1 && (
+              <div style={{ display:'flex', justifyContent:'center', gap:6, marginTop:2 }}>
+                {steps.map((step, i) => (
+                  <button key={step.key} onClick={() => scrollToStep(i)}
+                    aria-label={t('dashboard.gettingStartedGoToStep', { label: step.label })}
+                    aria-current={i === mobileStepIndex}
+                    className="btn-no-anim"
+                    style={{
+                      width:6, height:6, borderRadius:3, padding:0, transformOrigin:'left center',
+                      background: i === mobileStepIndex ? 'var(--accent)' : 'var(--dash-pill-border)',
+                      transform: i === mobileStepIndex ? 'scaleX(2.6)' : 'scaleX(1)',
+                      transition:'transform 0.2s ease, background 0.2s ease',
+                    }} />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       <style>{`
@@ -161,6 +231,17 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
           bottom: calc(env(safe-area-inset-bottom) + 130px);
           width: 270px;
         }
+        .gsw-steps-list { display: none; }
+        .gsw-steps-carousel { display: block; }
+        /* Swipe nativo, una card a schermo per volta, nessuna scrollbar visibile. */
+        .gsw-steps-scroll {
+          overflow-x: auto;
+          scroll-snap-type: x mandatory;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .gsw-steps-scroll::-webkit-scrollbar { display: none; }
+        .gsw-step-slide { scroll-snap-align: start; scroll-snap-stop: always; }
         @media (min-width: 700px) {
           .gsw-widget {
             left: 20px;
@@ -168,6 +249,11 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
             bottom: calc(env(safe-area-inset-bottom) + 24px);
             width: 320px;
           }
+          .gsw-steps-list { display: block; }
+          .gsw-steps-carousel { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .gsw-steps-scroll { scroll-behavior: auto; }
         }
       `}</style>
     </div>

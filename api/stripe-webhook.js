@@ -26,15 +26,34 @@ async function findTeamRefByCustomerId(db, customerId) {
   return snap.empty ? null : snap.docs[0].ref
 }
 
+// Da quale Price Stripe è fatto l'abbonamento → quale dei 2 piani a
+// pagamento (introdotti 2026-09-28). Un Price sconosciuto (es. il vecchio
+// STRIPE_PRICE_ID a 35€, ancora agganciato agli abbonati di prima) non
+// scrive planTier — resta quello che adminLimit() già tratta come 'team' di
+// default in utils/planLimits.js, niente da fare qui.
+function tierFromPriceId(priceId) {
+  if (!priceId) return null
+  if (priceId === process.env.STRIPE_PRICE_ID_BUSINESS) return 'business'
+  if (priceId === process.env.STRIPE_PRICE_ID_TEAM) return 'team'
+  return null
+}
+
 // Campi "premium" mostrati nella pagina Abbonamento quando il piano è attivo:
-// data del prossimo rinnovo e se l'abbonamento è già stato messo in disdetta
-// (resta attivo fino a fine periodo). `sub` è un oggetto Subscription di Stripe.
+// data del prossimo rinnovo, se l'abbonamento è già stato messo in disdetta
+// (resta attivo fino a fine periodo), quale piano è e il prezzo VERO pagato
+// (non un numero fisso in pagina: gli abbonati da prima dei 3 piani restano a
+// 35€, i nuovi Team pagano 45€ — vedi tierFromPriceId sopra). `sub` è un
+// oggetto Subscription di Stripe.
 function subscriptionFields(sub) {
   const out = {}
   if (sub?.current_period_end) {
     out.currentPeriodEnd = new Date(sub.current_period_end * 1000).toISOString()
   }
   out.cancelAtPeriodEnd = sub?.cancel_at_period_end === true
+  const price = sub?.items?.data?.[0]?.price
+  const tier = tierFromPriceId(price?.id)
+  if (tier) out.planTier = tier
+  if (typeof price?.unit_amount === 'number') out.planPriceCents = price.unit_amount
   return out
 }
 
