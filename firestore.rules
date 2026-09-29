@@ -6,9 +6,6 @@ service cloud.firestore {
     function myProfile() {
       return get(/databases/$(database)/documents/profiles/$(request.auth.uid));
     }
-    function myTeamId() {
-      return myProfile().data.teamId;
-    }
     // Membro approvato e attivo della squadra indicata — condizione di
     // accesso base per leggere/scrivere qualunque dato di quella squadra.
     function isApprovedMember(teamId) {
