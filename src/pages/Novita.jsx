@@ -67,7 +67,7 @@ export default function Novita() {
       <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none', marginBottom:22 }}>
         <div style={{ display:'flex', gap:8, padding:'0 16px', width:'max-content', minWidth:'100%' }}>
           {[
-            { key:'all', label:t('whatsNew.filterAll'), count:counts.all, color:'var(--text)', bg:'var(--text)' },
+            { key:'all', label:t('whatsNew.filterAll'), count:counts.all, color:'#fff', bg:'var(--text)' },
             { key:'new', label:t('whatsNew.kindNew'),    count:counts.new, color:'#fff', bg:'var(--accent)' },
             { key:'fix', label:t('whatsNew.kindFixPlural'), count:counts.fix, color:'#fff', bg:'var(--accent2)' },
           ].map(f => (
@@ -112,10 +112,18 @@ export default function Novita() {
                   boxShadow: isLatest ? '0 0 0 4px rgba(230,57,70,0.14)' : 'none',
                 }} />
 
-                <button onClick={() => toggleRelease(release.id)} aria-expanded={isOpen} style={{
-                  display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, width:'100%',
-                  background:'none', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer',
-                }}>
+                {/* Un div, non un <button> — evita gli stili hover/focus di
+                    default del browser sul button nativo (segnalati come
+                    "non vanno bene"), e con un solo onClick su tutta la riga
+                    (titolo, conteggio, freccia) non c'è nessuna zona che
+                    sfugga al tap, freccia inclusa. */}
+                <div
+                  onClick={() => toggleRelease(release.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRelease(release.id) } }}
+                  role="button" tabIndex={0} aria-expanded={isOpen}
+                  className="novita-release-toggle"
+                  style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, width:'100%', cursor:'pointer' }}
+                >
                   <div style={{ minWidth:0 }}>
                     <p style={{ fontSize:12, fontWeight:800, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>
                       {formatDate(release.date + 'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)}
@@ -131,7 +139,7 @@ export default function Novita() {
                       <ChevronRight size={16} />
                     </span>
                   </div>
-                </button>
+                </div>
 
                 {isOpen && (
                   <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:14 }}>
@@ -171,6 +179,8 @@ export default function Novita() {
         @media (hover: hover) and (pointer: fine) {
           .novita-item-card:hover { border-color: var(--border2); box-shadow: var(--shadow-sm); }
         }
+        .novita-release-toggle { -webkit-tap-highlight-color: transparent; }
+        .novita-release-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
       `}</style>
     </div>
   )
