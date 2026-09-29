@@ -115,6 +115,31 @@ export default function SettingsBilling() {
     }
   }
 
+  // Cambia il piano direttamente sull'abbonamento già attivo (vedi
+  // api/upgrade-subscription.js) invece di passare dal Billing Portal, che
+  // richiede di elencare lì i Price selezionabili — una configurazione
+  // separata per test/live che si è rivelata inaffidabile. Nessun redirect:
+  // l'aggiornamento è immediato, poi ricarica la pagina per rileggere il
+  // team fresco da Firestore (AuthContext lo carica solo al login, non ha un
+  // listener realtime — vedi il commento su updateTeamData lì).
+  const upgradeToBusiness = async () => {
+    setBillingLoading(true); setBillingError('')
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/upgrade-subscription', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: 'business' }),
+      })
+      const data = await res.json()
+      if (res.ok) window.location.reload()
+      else { setBillingError(data.error || t('adminUsers.errorBillingGeneric')); setBillingLoading(false) }
+    } catch {
+      setBillingError(t('adminUsers.errorBillingGeneric'))
+      setBillingLoading(false)
+    }
+  }
+
   const status = team?.billingStatus
   const daysLeft = Math.max(trialDaysLeft(team) ?? 0, 0)
   const isSubscribed = !!team?.stripeSubscriptionId
@@ -274,8 +299,8 @@ export default function SettingsBilling() {
                 <div style={{ margin:'0 16px 18px' }}>
                   {renderPlanCard(
                     PLANS.find(p => p.tier === 'business'),
-                    <button onClick={() => manageBilling(true)} className="btn btn-primary btn-full" disabled={billingLoading}>
-                      {billingLoading ? t('common.redirecting') : t('adminUsers.billingUpgradeCardButton')}
+                    <button onClick={upgradeToBusiness} className="btn btn-primary btn-full" disabled={billingLoading}>
+                      {billingLoading ? t('common.saving') : t('adminUsers.billingUpgradeCardButton')}
                     </button>
                   )}
                 </div>

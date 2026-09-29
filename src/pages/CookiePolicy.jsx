@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import LegalPageLayout, { LegalH2, LegalP, LegalList, LegalCallout } from '../components/LegalPageLayout'
 
 const SUPPORT_EMAIL = 'info@roadcase.it'
@@ -9,10 +10,12 @@ const SUPPORT_EMAIL = 'info@roadcase.it'
 // utils/googleCalendar.js quando un admin collega davvero Google Calendar
 // (vedi loadGoogleIdentityScript) — non più in ogni pagina come prima. Se in
 // futuro si aggiunge un vero tracciamento/analytics, questa pagina E la
-// mancanza di un banner cookie vanno riviste insieme.
-export default function CookiePolicy() {
+// mancanza di un banner cookie vanno riviste insieme. Versione inglese:
+// stessa traduzione fedele degli stessi fatti — se cambia un fatto in una
+// lingua, va cambiato in entrambe.
+function ContentIt() {
   return (
-    <LegalPageLayout title="Cookie Policy" updatedAt="8 settembre 2026">
+    <>
       <LegalP>
         Questa pagina spiega quali cookie e tecnologie simili (es. localStorage, IndexedDB) utilizza
         Roadcase (il "Servizio") e perché.
@@ -65,6 +68,81 @@ export default function CookiePolicy() {
           Per le informazioni complete su come trattiamo i dati personali vedi l'<a href="/privacy" style={{ color:'var(--accent)', fontWeight:600 }}>Informativa Privacy</a>.
         </p>
       </LegalCallout>
+    </>
+  )
+}
+
+function ContentEn() {
+  return (
+    <>
+      <LegalP>
+        This page explains which cookies and similar technologies (e.g. localStorage, IndexedDB)
+        Roadcase (the "Service") uses, and why.
+      </LegalP>
+
+      <LegalH2>1. What we use directly</LegalH2>
+      <LegalP>
+        Roadcase does not install profiling, advertising or third-party analytics cookies. To make login
+        work we use Firebase Authentication, which stores the login session in the browser via{' '}
+        <strong>IndexedDB/localStorage</strong> (not cookies in the strict sense) — data that is
+        technically necessary for the Service itself to work (staying logged in from one page to the
+        next), and therefore does not require consent under Article 122 of the Italian Privacy Code (the
+        "strictly necessary" category of cookies/technologies).
+      </LegalP>
+
+      <LegalH2>2. Third-party services that may set their own</LegalH2>
+      <LegalList items={[
+        <><strong>Google (Google Calendar sign-in and sync)</strong> — the Google sign-in script is only loaded if and when an admin voluntarily starts the Google Calendar connection from Settings &gt; Integrations; from that point on Google may set its own cookies under its own{' '}
+          <a href="https://policies.google.com/technologies/cookies" target="_blank" rel="noreferrer" style={{ color:'var(--accent)', fontWeight:600 }}>cookie policy</a>. Anyone who doesn't use this feature never loads that script or its cookies.</>,
+        <><strong>Stripe (subscription payment)</strong> — when you activate or manage your subscription you are redirected to a page hosted on the stripe.com domain, which may set its own cookies under{' '}
+          <a href="https://stripe.com/en/privacy" target="_blank" rel="noreferrer" style={{ color:'var(--accent)', fontWeight:600 }}>Stripe's cookie policy</a>. This only happens for someone who actually starts a payment.</>,
+      ]} />
+
+      <LegalH2>3. Why there's no cookie banner</LegalH2>
+      <LegalP>
+        We don't directly set any cookie that isn't necessary for the Service to work, so no consent
+        banner is shown: the only exceptions (Google, Stripe) are loaded only following a deliberate,
+        conscious action by the user (connecting Google Calendar, starting a payment), not simply by
+        loading the site.
+      </LegalP>
+
+      <LegalH2>4. How to manage cookies from your browser</LegalH2>
+      <LegalP>
+        You can still control, block or delete cookies at any time from your browser's settings. Keep in
+        mind that blocking Google's cookies may prevent the Google Calendar integration from working, and
+        blocking Stripe's may prevent you from completing a payment.
+      </LegalP>
+
+      <LegalH2>5. Changes to this page</LegalH2>
+      <LegalP>
+        If the Service introduces statistical analysis tools or other non-strictly-necessary technologies
+        in the future, we will update this page and, if required by law, introduce a dedicated consent
+        banner.
+      </LegalP>
+
+      <LegalCallout>
+        <p style={{ fontSize:14, fontWeight:700, marginBottom:6, color:'var(--text)' }}>Contact</p>
+        <p style={{ fontSize:13.5, color:'var(--text2)', lineHeight:1.6 }}>
+          For questions about this page, write to{' '}
+          <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color:'var(--accent)', fontWeight:600 }}>{SUPPORT_EMAIL}</a>.
+          For full details on how we handle personal data see the{' '}
+          <a href="/privacy" style={{ color:'var(--accent)', fontWeight:600 }}>Privacy Policy</a>.
+        </p>
+      </LegalCallout>
+    </>
+  )
+}
+
+export default function CookiePolicy() {
+  const [lang, setLang] = useState('it')
+  return (
+    <LegalPageLayout
+      title={lang === 'en' ? 'Cookie Policy' : 'Cookie Policy'}
+      updatedAt={lang === 'en' ? 'September 8, 2026' : '8 settembre 2026'}
+      lang={lang}
+      onLangChange={setLang}
+    >
+      {lang === 'en' ? <ContentEn /> : <ContentIt />}
     </LegalPageLayout>
   )
 }

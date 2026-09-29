@@ -95,7 +95,7 @@ service cloud.firestore {
 
     // Pattern comune per tutte le collection dati applicative: items, events,
     // tasks, templates, unavailability, brasserieWeeks, brasserieArtists,
-    // googleCalendarEvents, eventOrganizerContent.
+    // eventOrganizerContent.
     match /{collection}/{docId} {
       // get() su un documento che non esiste ancora (es. eventOrganizerContent
       // prima che un organizzatore carichi contenuti, brasserieWeeks per una
@@ -103,11 +103,19 @@ service cloud.firestore {
       // quel caso genera un errore di valutazione, non un false — va gestito
       // esplicitamente, altrimenti anche i listener su documenti legittimamente
       // assenti falliscono con permission-denied invece di restituire "non esiste".
-      allow get: if collection != 'profiles' && collection != 'teams'
+      //
+      // 'teamSecrets' è ESCLUSA qui allo stesso modo di profiles/teams: contiene
+      // il refresh token Google (cifrato, ma comunque un segreto server-only) —
+      // senza questa esclusione il match a jolly la renderebbe leggibile da
+      // QUALUNQUE membro approvato della squadra (non solo admin), perché il
+      // documento ha comunque un campo teamId. Nessuna regola sotto la nomina:
+      // resta raggiungibile solo dall'Admin SDK lato server, che ignora le
+      // regole di sicurezza.
+      allow get: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets'
         && (resource == null || canAccessTeam(resource.data.teamId));
-      allow list, update, delete: if collection != 'profiles' && collection != 'teams'
+      allow list, update, delete: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets'
         && canAccessTeam(resource.data.teamId);
-      allow create: if collection != 'profiles' && collection != 'teams'
+      allow create: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets'
         && canAccessTeam(request.resource.data.teamId);
     }
   }

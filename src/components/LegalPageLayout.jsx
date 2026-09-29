@@ -6,22 +6,48 @@ import BackHomeButton from './BackHomeButton'
 // "in-app" (leggibilità di un testo lungo) invece dello sfondo scuro da
 // marketing di Landing/Auth, larghezza colonna limitata per non avere righe
 // troppo lunghe da seguire.
-export default function LegalPageLayout({ title, updatedAt, children }) {
+//
+// `lang`/`onLangChange` pilotano il contenuto IT/EN scritto a mano in ogni
+// pagina (PrivacyPolicy.jsx ecc., due blocchi JSX paralleli) — stato locale
+// della singola pagina, volutamente SEPARATO dalla lingua globale dell'app
+// (i18next, profile.language): queste pagine sono lette anche da chi non ha
+// mai fatto login (quindi nessun profilo/preferenza salvata), e la lingua
+// dei Termini non deve cambiare da sola solo perché un domani un admin loggato
+// cambia lingua all'app.
+export default function LegalPageLayout({ title, updatedAt, lang, onLangChange, children }) {
   return (
     <div style={{ minHeight:'100dvh', background:'var(--bg)' }}>
       <div style={{
         position:'sticky', top:0, zIndex:10, background:'var(--bg)',
         borderBottom:'1px solid var(--border)', padding:'calc(env(safe-area-inset-top) + 10px) 16px 10px',
       }}>
-        <div style={{ maxWidth:640, margin:'0 auto', display:'flex', alignItems:'center', gap:8 }}>
-          <BackHomeButton to="/" />
-          <p style={{ fontSize:15, fontWeight:700, color:'var(--text)' }}>{title}</p>
+        <div style={{ maxWidth:640, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+            <BackHomeButton to="/" />
+            <p style={{ fontSize:15, fontWeight:700, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title}</p>
+          </div>
+          {lang && onLangChange && (
+            <div style={{ display:'flex', gap:4, flexShrink:0, background:'var(--card2)', border:'1px solid var(--border)', borderRadius:20, padding:2 }}>
+              {['it', 'en'].map(code => (
+                <button key={code} onClick={() => onLangChange(code)} style={{
+                  fontSize:11.5, fontWeight:800, letterSpacing:'0.3px', padding:'4px 10px', borderRadius:16,
+                  background: lang === code ? 'var(--card)' : 'transparent',
+                  color: lang === code ? 'var(--text)' : 'var(--text3)',
+                  boxShadow: lang === code ? 'var(--shadow-sm)' : 'none',
+                }}>
+                  {code.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <div style={{ maxWidth:640, margin:'0 auto', padding:'28px 20px 80px' }}>
         <h1 style={{ fontSize:26, fontWeight:800, letterSpacing:'-0.4px', color:'var(--text)', marginBottom:6 }}>{title}</h1>
-        <p style={{ fontSize:12.5, color:'var(--text3)', marginBottom:30 }}>Ultimo aggiornamento: {updatedAt}</p>
+        <p style={{ fontSize:12.5, color:'var(--text3)', marginBottom:30 }}>
+          {lang === 'en' ? 'Last updated' : 'Ultimo aggiornamento'}: {updatedAt}
+        </p>
         {children}
       </div>
     </div>

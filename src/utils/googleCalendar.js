@@ -1,197 +1,65 @@
-// Integrazione Google Calendar — sincronizzazione "best effort" lato client,
-// senza backend: quando chi ha collegato l'account ha l'app aperta con un
-// token valido in questa sessione browser, crea/modifica/elimina gli eventi
-// corrispondenti su Google Calendar. Se il token manca o è scaduto la sync
-// viene semplicemente saltata (nessun errore mostrato) — l'utente riconnette
-// da Impostazioni quando serve.
-import { GOOGLE_CLIENT_ID, GOOGLE_CALENDAR_SCOPE } from '../config/googleCalendar'
+// Client sottile per la sync Google Calendar server-side — vedi
+// api/google-oauth-start.js, api/google-oauth-callback.js,
+// api/push-event-to-google.js, api/sync-google-pull.js (cron). Nessuna
+// chiamata diretta a googleapis.com da qui, nessun token Google nel browser:
+// solo chiamate autenticate (Firebase ID token) alle nostre funzioni
+// serverless, che parlano con Google usando un refresh token per-squadra
+// salvato lato server. Sostituisce la vecchia integrazione client-only
+// (Google Identity Services, token effimero, moriva ogni ora).
+import { auth } from '../firebase'
 
-let tokenClient = null
-let cachedToken = null // { accessToken, expiresAt }
-let gsiLoadPromise = null
-
-// Lo script Google Identity Services non è più incluso in index.html (era
-// scaricato su OGNI pagina, anche da chi non usa questa integrazione — un
-// costo di privacy/performance non necessario). Lo iniettiamo qui, una sola
-// volta, solo quando un admin prova davvero a collegare Google Calendar.
-function loadGoogleIdentityScript() {
-  if (window.google?.accounts?.oauth2) return Promise.resolve()
-  if (gsiLoadPromise) return gsiLoadPromise
-  gsiLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = () => resolve()
-    script.onerror = () => { gsiLoadPromise = null; reject(new Error('google-identity-load-failed')) }
-    document.head.appendChild(script)
-  })
-  return gsiLoadPromise
-}
-
-async function ensureTokenClient() {
-  await loadGoogleIdentityScript()
-  if (!window.google?.accounts?.oauth2) {
-    throw new Error('google-identity-not-loaded')
-  }
-  if (!tokenClient) {
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GOOGLE_CALENDAR_SCOPE,
-      callback: () => {}, // sovrascritto ad ogni richiesta, vedi sotto
-    })
-  }
-  return tokenClient
-}
-
-// Apre il flusso OAuth di Google (richiede un click utente per il gesture
-// requirement del browser — vale anche al primo utilizzo, quando questa
-// funzione deve prima scaricare lo script Google Identity: essendo
-// chiamata da un handler di click, il "gesture" resta valido abbastanza a
-// lungo da coprire anche quell'attesa). Risolve con l'access token, oppure
-// rigetta se l'utente annulla o c'è un errore.
-export async function connectGoogleCalendar() {
-  const client = await ensureTokenClient()
-  return new Promise((resolve, reject) => {
-    try {
-      client.callback = resp => {
-        if (resp.error) { reject(resp); return }
-        // -60s di margine di sicurezza sulla scadenza dichiarata da Google
-        cachedToken = { accessToken: resp.access_token, expiresAt: Date.now() + (resp.expires_in - 60) * 1000 }
-        resolve(resp.access_token)
-      }
-      client.requestAccessToken()
-    } catch (e) { reject(e) }
-  })
-}
-
-export function disconnectGoogleCalendar() {
-  cachedToken = null
-}
-
-// Token valido per QUESTA sessione browser, senza mostrare popup. Torna null
-// se non è mai stato ottenuto o è scaduto — la sync viene saltata in quel caso.
-function getCachedAccessToken() {
-  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.accessToken
-  return null
-}
-
-const API_BASE = 'https://www.googleapis.com/calendar/v3/calendars'
-
-function toGoogleEvent(event) {
-  const endDate = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
-  // Eventi "all day": su Google Calendar la data di fine è ESCLUSIVA (+1 giorno)
-  const endExclusive = new Date(endDate + 'T00:00:00')
-  endExclusive.setDate(endExclusive.getDate() + 1)
-  return {
-    summary: event.name,
-    location: event.location || undefined,
-    description: event.notes || undefined,
-    start: { date: event.date },
-    end: { date: endExclusive.toISOString().split('T')[0] },
-  }
-}
-
-// Crea o aggiorna l'evento su Google Calendar. Ritorna il googleEventId da
-// salvare sul documento Firestore, oppure null se la sync non è avvenuta
-// (nessun calendario collegato o nessun token valido in questa sessione).
-export async function syncEventToGoogle(event, calendarId) {
-  if (!calendarId) return null
-  const accessToken = getCachedAccessToken()
-  if (!accessToken) return null
-
-  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-  const body = JSON.stringify(toGoogleEvent(event))
-
+async function authedPost(path, body) {
+  const user = auth.currentUser
+  if (!user) return null
   try {
-    if (event.googleEventId) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events/${event.googleEventId}`, {
-        method: 'PATCH', headers, body,
-      })
-      if (res.ok) return event.googleEventId
-      if (res.status !== 404 && res.status !== 410) return event.googleEventId
-      // 404/410: l'evento era stato cancellato manualmente su Google → lo ricreiamo sotto
-    }
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events`, {
-      method: 'POST', headers, body,
+    const idToken = await user.getIdToken()
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(body || {}),
     })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data.id || null
+    return res.ok ? res.json() : null
   } catch {
     return null
   }
 }
 
-export async function deleteGoogleEvent(googleEventId, calendarId) {
-  if (!calendarId || !googleEventId) return
-  const accessToken = getCachedAccessToken()
-  if (!accessToken) return
-  try {
-    await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events/${googleEventId}`, {
-      method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
-    })
-  } catch {}
+// Avvia il collegamento: l'intera pagina viene reindirizzata a Google (non
+// più un popup) — il flusso a codice di autorizzazione, indispensabile per
+// ottenere un refresh token, richiede un vero redirect col nostro backend
+// come destinatario finale del "code", non è compatibile con un popup.
+export async function startGoogleCalendarConnect() {
+  const data = await authedPost('/api/google-oauth-start')
+  if (!data?.url) throw new Error('google-oauth-start-failed')
+  window.location.href = data.url
 }
 
-// Elenca gli eventi dal calendario collegato in una finestra di tempo, con le
-// occorrenze ricorrenti già "espanse" in eventi singoli (singleEvents=true —
-// combacia con il nostro modello: un documento per occorrenza). Scorre tutte
-// le pagine dei risultati (l'API ne ritorna al massimo 250 per richiesta).
-// Ritorna null se la sync non è disponibile in questa sessione (calendario
-// non collegato o token scaduto) — diverso da [] che vuol dire "collegato ma
-// nessun evento nella finestra di tempo".
-export async function listUpcomingGoogleEvents(calendarId, { pastDays = 400, futureDays = 400 } = {}) {
-  if (!calendarId) return null
-  const accessToken = getCachedAccessToken()
-  if (!accessToken) return null
-
-  const timeMin = new Date(Date.now() - pastDays * 86400000).toISOString()
-  const timeMax = new Date(Date.now() + futureDays * 86400000).toISOString()
-  const headers = { Authorization: `Bearer ${accessToken}` }
-
-  const items = []
-  let pageToken = ''
-  let firstPage = true
-  try {
-    do {
-      const params = new URLSearchParams({ singleEvents: 'true', orderBy: 'startTime', timeMin, timeMax, maxResults: '250' })
-      if (pageToken) params.set('pageToken', pageToken)
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(calendarId)}/events?${params}`, { headers })
-      if (!res.ok) { if (firstPage) return null; break }
-      const data = await res.json()
-      items.push(...(data.items || []))
-      pageToken = data.nextPageToken || ''
-      firstPage = false
-    } while (pageToken)
-  } catch {
-    if (items.length === 0) return null
-  }
-  return items.filter(ev => ev.status !== 'cancelled')
+// Innescato subito dopo aver creato/modificato un evento su Firestore —
+// fire-and-forget: la vera chiamata a Google avviene server-side, con un
+// refresh token duraturo, non con lo stato del browser in quel momento.
+// Se il calendario non è collegato per questa squadra, l'endpoint la salta
+// in silenzio (stesso comportamento "best effort" di sempre).
+export function pushEventToGoogle(eventId) {
+  authedPost('/api/push-event-to-google', { eventId, action: 'upsert' }).catch(() => {})
 }
 
-// Converte un evento Google Calendar nei campi usati dai nostri documenti
-// evento. Torna null se l'evento non ha una data valida (non dovrebbe capitare).
-export function fromGoogleEvent(gEvent) {
-  let date, dateEnd = null
-  if (gEvent.start?.date) {
-    // Evento "all day": la data di fine su Google è ESCLUSIVA (-1 giorno per noi)
-    date = gEvent.start.date
-    const endInclusive = new Date(gEvent.end.date + 'T00:00:00')
-    endInclusive.setDate(endInclusive.getDate() - 1)
-    const end = endInclusive.toISOString().split('T')[0]
-    if (end !== date) dateEnd = end
-  } else if (gEvent.start?.dateTime) {
-    date = gEvent.start.dateTime.slice(0, 10)
-    const end = (gEvent.end?.dateTime || gEvent.start.dateTime).slice(0, 10)
-    if (end !== date) dateEnd = end
-  } else {
-    return null
-  }
-  return {
-    name: gEvent.summary?.trim() || '(senza titolo)',
-    date, dateEnd,
-    location: gEvent.location || '',
-    notes: gEvent.description || '',
-  }
+export function deleteEventFromGoogle(googleEventId) {
+  if (!googleEventId) return
+  authedPost('/api/push-event-to-google', { action: 'delete', googleEventId }).catch(() => {})
+}
+
+// Scollega: revoca il refresh token presso Google e ripulisce lo stato
+// server-side (teamSecrets + i campi sul team) — vedi api/google-oauth-disconnect.js.
+export async function disconnectGoogleCalendar() {
+  const data = await authedPost('/api/google-oauth-disconnect')
+  if (!data?.ok) throw new Error('google-oauth-disconnect-failed')
+}
+
+// Pull immediato su richiesta (bottone "Sincronizza ora") — il cron
+// automatico gira al massimo una volta al giorno su Vercel Hobby, questo
+// colma l'attesa quando serve vedere subito una modifica fatta su Google.
+export async function syncGoogleCalendarNow() {
+  const data = await authedPost('/api/google-sync-now')
+  if (!data || data.error) throw new Error('google-sync-now-failed')
+  return data // { created, updated, deleted } oppure { skipped: '...' }
 }

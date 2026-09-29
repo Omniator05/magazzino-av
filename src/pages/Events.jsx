@@ -12,9 +12,9 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
-import { syncEventToGoogle, deleteGoogleEvent, listUpcomingGoogleEvents, fromGoogleEvent, connectGoogleCalendar } from '../utils/googleCalendar'
+import { pushEventToGoogle, deleteEventFromGoogle } from '../utils/googleCalendar'
 import { db } from '../firebase'
-import { collection, addDoc, deleteDoc, updateDoc, doc, getDoc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
+import { collection, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
 import { deleteEventWithInventoryCheck, closeInstallationEvent } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
@@ -55,13 +55,6 @@ const IconCheckSm = () => (
 const IconArchive = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
-  </svg>
-)
-const IconSync = ({ spinning }) => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-    style={spinning ? { animation:'spin 0.9s linear infinite' } : undefined}>
-    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
   </svg>
 )
 const IconPlus = () => (
@@ -271,7 +264,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
 
 export default function Events() {
   const { t, i18n } = useTranslation()
-  const { user, team, teamId } = useAuth()
+  const { team, teamId } = useAuth()
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const PHASE_CONFIG = [
@@ -280,9 +273,6 @@ export default function Events() {
   ]
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
-  const [gSyncing, setGSyncing]   = useState(false)
-  const [toast, setToast]         = useState('')
-  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const [showModal, setShowModal] = useState(false)
   const eventDrag = useModalDrag(() => setShowModal(false))
   const [showSearch, setShowSearch]     = useState(false)
@@ -327,65 +317,6 @@ export default function Events() {
   }, [teamId])
 
   // ── Import da Google Calendar (i collaboratori scrivono lì, non in app) ──
-  // Confronta gli eventi Google con quelli già collegati (googleEventId) fra
-  // quelli già caricati: crea i nuovi, aggiorna quelli cambiati. Non cancella
-  // mai nulla in automatico — un evento sparito da Google resta in app finché
-  // qualcuno non lo elimina a mano (troppo rischioso farlo alla cieca su
-  // eventi che magari hanno già oggetti caricati).
-  const importFromGoogle = async (googleEvents) => {
-    const byGoogleId = new Map(events.filter(ev => ev.googleEventId).map(ev => [ev.googleEventId, ev]))
-    let created = 0, updated = 0
-    for (const gEv of googleEvents) {
-      const mapped = fromGoogleEvent(gEv)
-      if (!mapped) continue
-      const existing = byGoogleId.get(gEv.id)
-      if (existing) {
-        const changed = existing.name !== mapped.name || existing.date !== mapped.date
-          || (existing.dateEnd || null) !== mapped.dateEnd
-          || (existing.location || '') !== mapped.location || (existing.notes || '') !== mapped.notes
-        if (changed) { await updateDoc(doc(db, 'events', existing.id), mapped); updated++ }
-      } else {
-        await addDoc(collection(db, 'events'), {
-          ...mapped, googleEventId: gEv.id, items: [], teamId,
-          createdAt: serverTimestamp(), createdBy: user.uid,
-          recurrence: 'never', seriesId: null, type: 'event', phases: {},
-        })
-        created++
-      }
-    }
-    return { created, updated }
-  }
-
-  const syncFromGoogle = async (interactive) => {
-    if (!team?.googleCalendarId || gSyncing) return
-    setGSyncing(true)
-    try {
-      if (interactive) await connectGoogleCalendar()
-      const googleEvents = await listUpcomingGoogleEvents(team.googleCalendarId)
-      if (googleEvents === null) {
-        if (interactive) showToast(t('events.googleSyncUnavailable'))
-        return
-      }
-      const { created, updated } = await importFromGoogle(googleEvents)
-      if (interactive) showToast(t('events.googleSyncDone', { created, updated }))
-    } catch {
-      if (interactive) showToast(t('events.googleSyncUnavailable'))
-    } finally { setGSyncing(false) }
-  }
-
-  // Tentativo automatico e silenzioso: all'apertura pagina (appena gli eventi
-  // già esistenti sono stati caricati, altrimenti rischierebbe di ricreare
-  // come "nuovi" eventi già collegati ma non ancora arrivati da Firestore) e
-  // ogni volta che si torna su questa scheda/app — es. dopo essere passati su
-  // Google Calendar ad aggiungere una data e poi tornati indietro.
-  useEffect(() => {
-    if (!team?.googleCalendarId) return
-    if (!loading) syncFromGoogle(false)
-    const onVisible = () => { if (document.visibilityState === 'visible') syncFromGoogle(false) }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [loading, team?.googleCalendarId])
-
   const today = new Date().toISOString().split('T')[0]
 
   // Separa ricorrenti (solo il prossimo per serie) da singoli
@@ -499,10 +430,10 @@ export default function Events() {
         location: form.location.trim(), notes: form.notes.trim(),
         type: form.type || 'event',
         phases: form.phases || {},
+        updatedAt: serverTimestamp(),
       }
       await updateDoc(doc(db, 'events', editing.id), updated)
-      const gId = await syncEventToGoogle({ ...updated, googleEventId: editing.googleEventId }, team?.googleCalendarId)
-      if (gId && gId !== editing.googleEventId) await updateDoc(doc(db, 'events', editing.id), { googleEventId: gId })
+      pushEventToGoogle(editing.id)
       setShowModal(false)
       setEditing(null)
       setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{} })
@@ -514,12 +445,12 @@ export default function Events() {
     if (event.seriesId) {
       if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteSeriesMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
         await deleteEventWithInventoryCheck({ event, confirm, t })
-        await deleteGoogleEvent(event.googleEventId, team?.googleCalendarId)
+        deleteEventFromGoogle(event.googleEventId)
       }
     } else {
       if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
         await deleteEventWithInventoryCheck({ event, confirm, t })
-        await deleteGoogleEvent(event.googleEventId, team?.googleCalendarId)
+        deleteEventFromGoogle(event.googleEventId)
       }
     }
   }
@@ -530,32 +461,12 @@ export default function Events() {
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
-      {/* Il toast è visivo e a scomparsa automatica: senza questa regione chi
-          usa uno screen reader non saprebbe mai se la sincronizzazione è
-          andata a buon fine. Regione sempre montata, non condizionata. */}
-      <div aria-live="polite" role="status" style={{ position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }}>
-        {toast}
-      </div>
-      {toast && (
-        <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 20px', zIndex:999, fontSize:14, fontWeight:600, color:'var(--text)', boxShadow:'var(--shadow)', whiteSpace:'nowrap' }}>
-          {toast}
-        </div>
-      )}
       <div style={{ padding:'56px 22px 18px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
         <div>
           <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1 }}>{t('events.title')}</h1>
           <p style={{ fontSize:13, color:'var(--dash-muted)', fontWeight:500, marginTop:3 }}>{t('events.upcomingCount', { count: upcomingSingle.length + pinnedRecurring.length })}</p>
         </div>
         <div style={{ display:'flex', gap:8, paddingTop:4 }}>
-          {team?.googleCalendarId && (
-            <button onClick={() => syncFromGoogle(true)} disabled={gSyncing} style={{
-              background:'var(--dash-pill-bg)', border:'1px solid var(--dash-pill-border)', color:'var(--dash-muted)',
-              borderRadius:50, padding:'8px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6,
-              opacity: gSyncing ? 0.6 : 1,
-            }}>
-              <IconSync spinning={gSyncing} /> {t('events.googleSyncButton')}
-            </button>
-          )}
           <button onClick={() => navigate('/archive')} style={{
             background:'var(--dash-pill-bg)', border:'1px solid var(--dash-pill-border)', color:'var(--dash-muted)',
             borderRadius:50, padding:'8px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6,

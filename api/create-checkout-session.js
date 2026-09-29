@@ -3,16 +3,7 @@
 // squadra dell'admin che chiama. Il client fa POST qui e reindirizza il
 // browser all'URL restituito.
 import { requireTeamAdmin } from './_authAdmin.js'
-import { getStripe, resolveTeamStripeCustomer } from './_stripe.js'
-
-// Due Price Stripe, uno per piano — il vecchio STRIPE_PRICE_ID (35€) non è
-// più referenziato da nessuna parte del codice: resta agganciato SOLO agli
-// abbonamenti già attivi prima dei 3 piani (2026-09-28), che continuano a
-// rinnovarsi da soli a quel prezzo senza bisogno di nessuna migrazione.
-const PRICE_IDS = {
-  team: process.env.STRIPE_PRICE_ID_TEAM,
-  business: process.env.STRIPE_PRICE_ID_BUSINESS,
-}
+import { getStripe, resolveTeamStripeCustomer, PRICE_IDS } from './_stripe.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { collection, addDoc, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate } from '../utils/formatDate'
 import { generateDates } from '../utils/recurrence'
-import { syncEventToGoogle } from '../utils/googleCalendar'
+import { pushEventToGoogle } from '../utils/googleCalendar'
 import DateField from './DateField'
 
 const IconDoc = () => (
@@ -78,7 +78,7 @@ const blankForm = (initialDate) => ({
  */
 export default function CreateEventFlow({ open, onClose, initialDate, skipChoice, onCreated }) {
   const { t, i18n } = useTranslation()
-  const { user, team, teamId } = useAuth()
+  const { user, teamId } = useAuth()
   const today = new Date().toISOString().split('T')[0]
 
   const RECURRENCE_OPTIONS = [
@@ -146,18 +146,16 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
         lists: pendingTemplateItems ? pendingLists.lists : [],
         mainListName: pendingTemplateItems ? pendingLists.mainListName : '',
         teamId,
-        createdAt: serverTimestamp(), createdBy: user.uid,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: user.uid,
         recurrence: form.recurrence, seriesId,
         type: form.type || 'event',
         phases: form.phases || {},
       }
       const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
-      const gId = await syncEventToGoogle({ ...base, date: form.date }, team?.googleCalendarId)
-      if (gId) await updateDoc(doc(db, 'events', ref.id), { googleEventId: gId })
+      pushEventToGoogle(ref.id)
       for (const date of futureDates) {
-        const r = await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp() })
-        const gId2 = await syncEventToGoogle({ ...base, date }, team?.googleCalendarId)
-        if (gId2) await updateDoc(doc(db, 'events', r.id), { googleEventId: gId2 })
+        const r = await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+        pushEventToGoogle(r.id)
       }
       onCreated?.(ref.id, { fromTemplate: !!pendingTemplateItems })
       onClose?.()
