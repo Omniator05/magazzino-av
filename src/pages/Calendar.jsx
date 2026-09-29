@@ -170,10 +170,11 @@ export default function Calendar() {
           if (isOnline) {
             try {
               const idToken = await user.getIdToken()
-              await fetch('/api/send-absence-notification', {
+              await fetch('/api/send-email', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                  type: 'absence',
                   workerName: profile?.name || profile?.username || t('common.noName'),
                   startDate: data.startDate, endDate: data.endDate, reason: data.reason,
                 }),

@@ -1,7 +1,7 @@
 // Riceve il redirect di Google dopo che l'admin ha dato il consenso — un
 // semplice GET del browser, nessun header di autenticazione: l'unica prova
 // che questa richiesta corrisponde davvero a un collegamento avviato da un
-// admin è la firma dello "state" (vedi google-oauth-start.js/_crypto.js).
+// admin è la firma dello "state" (vedi google-oauth.js/_crypto.js).
 import { getAdmin } from './_authAdmin.js'
 import { verifyState, encrypt } from './_crypto.js'
 import { exchangeCodeForTokens, getGoogleUserEmail } from './_googleAuth.js'

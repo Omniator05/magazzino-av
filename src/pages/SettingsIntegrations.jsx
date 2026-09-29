@@ -7,7 +7,7 @@ import { Check } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
 
 // Sotto-pagina "Integrazioni" di Impostazioni — oggi solo Google Calendar.
-// Sync vera lato server (vedi api/google-oauth-start.js, .../callback.js,
+// Sync vera lato server (vedi api/google-oauth.js, .../callback.js,
 // push-event-to-google.js, sync-google-pull.js — un cron): l'admin dà il
 // consenso una volta, un refresh token per la squadra resta salvato (cifrato)
 // lato server, nessun bisogno di ricollegarsi ogni volta che scade una

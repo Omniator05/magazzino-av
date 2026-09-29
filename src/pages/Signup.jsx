@@ -175,10 +175,10 @@ function CreateTeamStep({ onBack, onDone }) {
       // signup già riuscito.
       try {
         const idToken = await cred.user.getIdToken()
-        await fetch('/api/send-welcome-email', {
+        await fetch('/api/send-email', {
           method: 'POST',
           headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ toEmail: f.email.trim().toLowerCase(), adminName: f.name.trim() }),
+          body: JSON.stringify({ type: 'welcome', toEmail: f.email.trim().toLowerCase(), adminName: f.name.trim() }),
         })
       } catch {}
 

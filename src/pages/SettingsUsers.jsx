@@ -234,10 +234,10 @@ export default function SettingsUsers() {
       if (inviteEmail) {
         try {
           const idToken = await user.getIdToken()
-          await fetch('/api/send-invite-email', {
+          await fetch('/api/send-email', {
             method: 'POST',
             headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password }),
+            body: JSON.stringify({ type: 'invite', toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password }),
           })
         } catch {}
       }
@@ -385,10 +385,10 @@ export default function SettingsUsers() {
     setSendingResetEmail(true); clearDetailMsg()
     try {
       const idToken = await user.getIdToken()
-      const res = await fetch('/api/send-password-reset-email', {
+      const res = await fetch('/api/send-email', {
         method: 'POST',
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUid: showDetail.id }),
+        body: JSON.stringify({ type: 'passwordReset', targetUid: showDetail.id }),
       })
       if (!res.ok) throw new Error()
       showToast(t('adminUsers.resetEmailSentToast', { email: showDetail.email }))

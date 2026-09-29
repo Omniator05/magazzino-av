@@ -41,9 +41,9 @@ export function decrypt(payload) {
   return plainText.toString('utf8')
 }
 
-// "state" firmato per il giro di redirect OAuth: google-oauth-start.js lo
-// genera (autenticato, sa già chi è l'admin/la squadra), il browser lo porta
-// a Google e poi a google-oauth-callback.js — che NON riceve nessun header
+// "state" firmato per il giro di redirect OAuth: google-oauth.js (azione
+// "start") lo genera (autenticato, sa già chi è l'admin/la squadra), il
+// browser lo porta a Google e poi a google-oauth-callback.js — che NON riceve nessun header
 // di autenticazione (è un semplice redirect GET), quindi deve poter
 // verificare "questo state è davvero il nostro, non manomesso" solo dalla
 // firma. Riusa la stessa chiave della cifratura: un solo segreto da

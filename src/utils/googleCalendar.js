@@ -1,5 +1,5 @@
 // Client sottile per la sync Google Calendar server-side — vedi
-// api/google-oauth-start.js, api/google-oauth-callback.js,
+// api/google-oauth.js (start/disconnect), api/google-oauth-callback.js,
 // api/push-event-to-google.js, api/sync-google-pull.js (cron). Nessuna
 // chiamata diretta a googleapis.com da qui, nessun token Google nel browser:
 // solo chiamate autenticate (Firebase ID token) alle nostre funzioni
@@ -29,7 +29,7 @@ async function authedPost(path, body) {
 // ottenere un refresh token, richiede un vero redirect col nostro backend
 // come destinatario finale del "code", non è compatibile con un popup.
 export async function startGoogleCalendarConnect() {
-  const data = await authedPost('/api/google-oauth-start')
+  const data = await authedPost('/api/google-oauth', { action: 'start' })
   if (!data?.url) throw new Error('google-oauth-start-failed')
   window.location.href = data.url
 }
@@ -49,9 +49,9 @@ export function deleteEventFromGoogle(googleEventId) {
 }
 
 // Scollega: revoca il refresh token presso Google e ripulisce lo stato
-// server-side (teamSecrets + i campi sul team) — vedi api/google-oauth-disconnect.js.
+// server-side (teamSecrets + i campi sul team) — vedi api/google-oauth.js.
 export async function disconnectGoogleCalendar() {
-  const data = await authedPost('/api/google-oauth-disconnect')
+  const data = await authedPost('/api/google-oauth', { action: 'disconnect' })
   if (!data?.ok) throw new Error('google-oauth-disconnect-failed')
 }
 
