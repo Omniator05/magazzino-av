@@ -72,9 +72,19 @@ export const isScanCandidate = (row, catalogId) =>
 
 // Sceglie LA riga su cui agire per una scansione, quando lo stesso oggetto
 // compare in più liste dello stesso evento. Priorità: riga con l'unità
-// scansionata (kit/pezzi numerati) > non ancora fatta nella fase corrente >
-// nella lista attiva > non "mancante" > ordine originale. Se la riga è una
+// scansionata (kit/pezzi numerati) > nella lista attiva > non ancora fatta
+// nella fase corrente > non "mancante" > ordine originale. Se la riga è una
 // sola, è quella (comportamento invariato di sempre).
+//
+// La lista attiva batte lo stato "fatto/da fare": Pronto e Carico tengono le
+// liste volutamente separate (vedi WorkerScanner.jsx), quindi una volta che
+// la riga della lista attiva è già completata, uno scan dello stesso
+// catalogId NON deve "sconfinare" a completare in silenzio la riga di
+// un'altra lista — deve restare sulla lista attiva (che poi risulterà
+// "già fatto", esito corretto). In Scarico la vista unita (ALL_LISTS_ID) non
+// corrisponde a nessuna lista reale: questo livello diventa un pareggio per
+// tutte le righe e lo stato "da rientrare" torna a decidere, esattamente
+// come serve quando si scarica tutto insieme senza attenzione alla lista.
 export const resolveScanRow = (rows, catalogId, { mode, unitNumber, activeListId }) => {
   const cands = rows.map((row, idx) => ({ row, idx })).filter(({ row }) => isScanCandidate(row, catalogId))
   if (cands.length <= 1) return cands[0]?.row || null
@@ -83,8 +93,8 @@ export const resolveScanRow = (rows, catalogId, { mode, unitNumber, activeListId
   const score = ({ row }) => {
     let sc = 0
     if (unit && (row.instanceNumbers || []).length > 0 && !row.instanceNumbers.includes(unit)) sc += 8
-    if (row[doneField] || (mode === 'return' && !row.loaded)) sc += 4
-    if (rowListId(row) !== activeListId) sc += 2
+    if (rowListId(row) !== activeListId) sc += 4
+    if (row[doneField] || (mode === 'return' && !row.loaded)) sc += 2
     if (row.mancante) sc += 1
     return sc
   }

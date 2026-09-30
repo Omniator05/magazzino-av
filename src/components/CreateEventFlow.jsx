@@ -2,35 +2,15 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { collection, addDoc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate } from '../utils/formatDate'
 import { generateDates } from '../utils/recurrence'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import DateField from './DateField'
+import DateRangeField from './DateRangeField'
 
-const IconDoc = () => (
-  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-  </svg>
-)
-const IconList = () => (
-  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-  </svg>
-)
-const IconChevronSm = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 18 15 12 9 6"/>
-  </svg>
-)
-const IconChevronLeft = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="15 18 9 12 15 6"/>
-  </svg>
-)
 const IconCalendarSm = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
@@ -56,6 +36,7 @@ const IconRepeat = () => (
 const blankForm = (initialDate) => ({
   name:'', date: initialDate || new Date().toISOString().split('T')[0], dateEnd:'',
   location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{},
+  quoteRef:'', managerName:'', managerPhone:'', managerEmail:'',
 })
 
 /**
@@ -66,14 +47,19 @@ const blankForm = (initialDate) => ({
  * a ciascuna pagina, che ha un proprio modal più semplice per l'editing (il
  * toggle tipo/i template non servono lì, vedi il rispettivo `!editing`).
  *
+ * Niente più schermata di scelta "evento vuoto o da template": si va
+ * sempre dritti al form (più veloce), e se serve un template lo si applica
+ * dopo alla lista (già vuota) dalla pagina evento — stesso identico elenco
+ * template, vedi il picker in EventDetail.jsx.
+ *
  * Props:
  * - open: mostra il flusso
- * - onClose: chiusura completa (qualunque step)
+ * - onClose: chiusura completa
  * - initialDate: precompila la data di inizio (es. il giorno selezionato in Calendar)
- * - skipChoice: 'blank' salta dritto al form vuoto (usato da Dashboard → "Crea evento"),
- *   oppure un oggetto { name, items } per saltare dritto al form con quel contenuto
- *   già pronto (usato da Archive → "Usa come template")
- *   (con `allowTypeChoice: true` il form offre anche il toggle Evento/Rent-Install)
+ * - skipChoice: 'blank' per un form vuoto, oppure un oggetto { name, items }
+ *   per un form con quel contenuto già pronto (usato da Archive/InventoryItemHistory
+ *   → "Usa come template"; con `allowTypeChoice: true` il form offre anche il
+ *   toggle Evento/Rent-Install)
  * - onCreated(eventId, { fromTemplate }): l'evento è stato creato
  */
 export default function CreateEventFlow({ open, onClose, initialDate, skipChoice, onCreated }) {
@@ -93,8 +79,6 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
     { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
   ]
 
-  const [step, setStep] = useState('choice') // 'choice' | 'templates' | 'form'
-  const [templates, setTemplates] = useState([])
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
   const [form, setForm] = useState(() => blankForm(initialDate))
   const [saving, setSaving] = useState(false)
@@ -106,29 +90,19 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
 
   useEffect(() => {
     if (!open) return
-    if (skipChoice === 'blank') {
-      setPendingTemplateItems(null)
-      setPendingLists({ lists: [], mainListName: '' })
-      setForm(blankForm(initialDate))
-      setStep('form')
-    } else if (skipChoice && typeof skipChoice === 'object') {
+    if (skipChoice && typeof skipChoice === 'object') {
       setForm({ ...blankForm(initialDate), name: skipChoice.name || '' })
       setPendingTemplateItems(skipChoice.items || [])
       setPendingLists({ lists: skipChoice.lists || [], mainListName: skipChoice.mainListName || '' })
-      setStep('form')
     } else {
+      // skipChoice === 'blank' (ogni chiamante lo passa — vedi Calendar.jsx/
+      // Events.jsx) o comunque non un oggetto template: form vuoto.
       setPendingTemplateItems(null)
+      setPendingLists({ lists: [], mainListName: '' })
       setForm(blankForm(initialDate))
-      setStep('choice')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
-
-  useEffect(() => {
-    if (!open || !teamId) return
-    const q = query(collection(db, 'templates'), where('teamId', '==', teamId), orderBy('name'))
-    return onSnapshot(q, snap => setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [open, teamId])
 
   const futureDates = form.recurrence !== 'never' && form.date && form.endDate
     ? generateDates(form.date, form.recurrence, form.endDate) : []
@@ -150,6 +124,10 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
         recurrence: form.recurrence, seriesId,
         type: form.type || 'event',
         phases: form.phases || {},
+        quoteRef: form.quoteRef.trim(),
+        eventManager: {
+          name: form.managerName.trim(), phone: form.managerPhone.trim(), email: form.managerEmail.trim(),
+        },
       }
       const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
       pushEventToGoogle(ref.id)
@@ -162,84 +140,13 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
     } finally { setSaving(false) }
   }
 
-  const chooseBlank = () => { setPendingTemplateItems(null); setPendingLists({ lists: [], mainListName: '' }); setStep('form') }
-  const chooseTemplate = (tpl) => {
-    setForm(f => ({ ...f, name: tpl.name }))
-    setPendingLists({ lists: [], mainListName: '' })
-    setPendingTemplateItems((tpl.components || []).map(c => ({ id:c.id, name:c.name, category:c.category, qty:c.qty, loaded:false, returned:false })))
-    setStep('form')
-  }
-
-  const choiceDrag    = useModalDrag(() => onClose?.(), undefined, undefined, open && step === 'choice')
-  const templatesDrag = useModalDrag(() => onClose?.(), undefined, undefined, open && step === 'templates')
-  const formDrag      = useModalDrag(() => onClose?.(), undefined, saveEvent, open && step === 'form')
+  const formDrag = useModalDrag(() => onClose?.(), undefined, saveEvent, open)
 
   useModalScrollLock(open)
 
   if (!open) return null
 
   return (
-    <>
-      {step === 'choice' && (
-        <div className={`modal-overlay${choiceDrag.closing ? ' closing' : ''}`} onClick={choiceDrag.onOverlayClick}>
-          <div className={`modal${choiceDrag.jiggling ? ' modal-jiggle' : ''}${choiceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...choiceDrag.props}>
-            <button className="close-btn" onClick={choiceDrag.close} aria-label={t('common.close')}>✕</button>
-            <h2>{t('calendar.newEventTitle')}</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{t('events.newEventModalDesc')}</p>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
-              <button onClick={chooseBlank}
-                style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <span style={{ color:'var(--text)' }}><IconDoc /></span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>{t('events.blankEvent')}</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('events.blankEventDesc')}</span>
-              </button>
-              <button onClick={() => setStep('templates')}
-                style={{ background:'rgba(79,195,247,0.08)', border:'2px solid rgba(79,195,247,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <span style={{ color:'var(--blue)' }}><IconList /></span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--blue)' }}>{t('archive.useTemplate')}</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('events.templateOptionDesc')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {step === 'templates' && (
-        <div className={`modal-overlay${templatesDrag.closing ? ' closing' : ''}`} onClick={templatesDrag.onOverlayClick}>
-          <div className={`modal${templatesDrag.jiggling ? ' modal-jiggle' : ''}${templatesDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...templatesDrag.props}>
-            <button className="close-btn" onClick={templatesDrag.close} aria-label={t('common.close')}>✕</button>
-            <button onClick={() => setStep('choice')} aria-label={t('common.back')}
-              style={{ display:'inline-flex', alignItems:'center', gap:4, color:'var(--text2)', fontSize:13, fontWeight:700, marginBottom:10, background:'transparent', padding:'6px 10px', margin:'0 0 10px -10px', borderRadius:10 }}>
-              <IconChevronLeft /> {t('common.back')}
-            </button>
-            <h2>{t('archive.useTemplate')}</h2>
-            {templates.length === 0 ? (
-              <div style={{ padding:'16px', background:'var(--card2)', borderRadius:10, textAlign:'center', marginTop:8 }}>
-                <p style={{ color:'var(--text2)', fontSize:13 }}>{t('events.noTemplates')}</p>
-              </div>
-            ) : (
-              <div style={{ marginTop:8 }}>
-                {templates.map(tpl => (
-                  <button key={tpl.id} onClick={() => chooseTemplate(tpl)}
-                    style={{ width:'100%', padding:'12px 16px', borderRadius:12, background:'rgba(79,195,247,0.07)', border:'1px solid rgba(79,195,247,0.25)', color:'var(--text)', fontWeight:600, fontSize:14, textAlign:'left', marginBottom:8, display:'flex', alignItems:'center', gap:12 }}>
-                    <span style={{ color:'var(--blue)', flexShrink:0 }}><IconList /></span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:700 }}>{tpl.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12, marginTop:2 }}>
-                        {t('events.itemsCount', { count: (tpl.components || []).length })}
-                        {tpl.notes ? ` · ${tpl.notes}` : ''}
-                      </p>
-                    </div>
-                    <span style={{ color:'var(--blue)' }}><IconChevronSm /></span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {step === 'form' && (
         <div className={`modal-overlay${formDrag.closing ? ' closing' : ''}`} onClick={formDrag.onOverlayClick}>
           <div className={`modal${formDrag.jiggling ? ' modal-jiggle' : ''}${formDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...formDrag.props}>
             <button className="close-btn" onClick={formDrag.close} aria-label={t('common.close')}>✕</button>
@@ -281,12 +188,16 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
               <input id="cef-name" value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>{t('calendar.startDateLabel')}</label>
-              <DateField value={form.date} onChange={v => setForm({...form, date:v})} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.endDateLabel')} {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintInstallation')}</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintEvent')}</span>}</label>
-              <DateField value={form.dateEnd} min={form.date} clearable onChange={v => setForm({...form, dateEnd:v})} placeholder={t('common.noneOption')} />
+              <label>{t('calendar.eventDateLabel')} {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintInstallation')}</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintEvent')}</span>}</label>
+              {/* Un solo campo stile "booking" al posto di inizio/fine
+                  separati: un tap = giorno singolo, un secondo tap su un
+                  giorno diverso estende fino a lì. dateEnd resta '' per un
+                  giorno singolo (stessa convenzione letta altrove in app). */}
+              <DateRangeField
+                start={form.date}
+                end={form.dateEnd || form.date}
+                onChange={(s, e) => setForm(f => ({ ...f, date: s, dateEnd: e === s ? '' : e }))}
+              />
             </div>
             {form.type !== 'installation' && (
               <div className="form-group">
@@ -309,6 +220,18 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
             <div className="form-group">
               <label htmlFor="cef-notes">{t('calendar.notesLabel')}</label>
               <textarea id="cef-notes" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cef-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="cef-quote" value={form.quoteRef} onChange={e => setForm({...form, quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cef-manager-name">{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="cef-manager-name" value={form.managerName} onChange={e => setForm({...form, managerName:e.target.value})} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
+              <div style={{ display:'flex', gap:8 }}>
+                <input value={form.managerPhone} onChange={e => setForm({...form, managerPhone:e.target.value})} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
+                <input value={form.managerEmail} onChange={e => setForm({...form, managerEmail:e.target.value})} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+              </div>
             </div>
             {form.type !== 'installation' && (
               <>
@@ -347,7 +270,5 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
             </button>
           </div>
         </div>
-      )}
-    </>
   )
 }

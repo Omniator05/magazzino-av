@@ -11,12 +11,19 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
-import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow } from '../utils/eventLists'
+import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow, isScanCandidate } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
 import { syncKitAwareInventory, closeInstallationEvent } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import { todayStr } from '../utils/workHours'
+
+// Sentinella solo-UI (non un vero id di lista, mai scritta su Firestore):
+// in fase Scarico la sera si butta tutto nei furgoni senza attenzione a
+// quale lista appartenga, quindi lì le liste si riuniscono in un'unica vista
+// di scansione per default, coi bottoni lista che restano solo come filtro
+// facoltativo. Pronto/Carico restano invece separati per lista come prima.
+const ALL_LISTS_ID = '__all__'
 
 const ICONS = {
   'Audio':    '🔊',
@@ -98,6 +105,9 @@ export default function WorkerScanner() {
   const [activeListId, setActiveListId] = useState(MAIN_LIST_ID)
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
+  // Avviso "lista X completata, passo a Y" (vedi effetto più sotto) — solo
+  // testo, non blocca nulla come phaseBlockedMsg sopra.
+  const [listSwitchMsg, setListSwitchMsg] = useState('')
   const [error, setError] = useState(null)
   const [saveError, setSaveError] = useState('')
   // Sovrascritture ottimistiche per pronto/carico/rientro/mancante: senza,
@@ -180,8 +190,13 @@ export default function WorkerScanner() {
   const [showCloseInstallModal, setShowCloseInstallModal] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [showEventNotes, setShowEventNotes] = useState(false)
-  const prevPreparedRef = useRef(0)
-  const prevLoadedRef = useRef(0)
+  // "tutto pronto"/"tutto caricato" guardano l'INTERO evento (tutte le
+  // liste), non solo quella in vista — vedi allPrepared/allLoaded più sotto:
+  // con liste separate, finire solo quella attiva non deve bastare a far
+  // scattare il popup e il cambio fase per un evento non ancora pronto/
+  // caricato davvero del tutto.
+  const prevAllPreparedRef = useRef(0)
+  const prevAllLoadedRef = useRef(0)
   const prevReturnedRef = useRef(0)
   // Evita che l'effetto "fase iniziale" sotto (e la prima lettura dei
   // prevXRef sopra) scattino ad ogni aggiornamento degli item — solo una
@@ -372,6 +387,31 @@ export default function WorkerScanner() {
       const snap = await tx.get(eventRef)
       if (!snap.exists()) { outcome = { action: 'event_missing' }; return }
       const eventItems = snap.data().items || []
+
+      // Rientro di un oggetto generico (etichetta non specifica di un
+      // baule): un solo scan rientra TUTTE le righe di questo catalogId
+      // ancora da rientrare, in qualunque lista dell'evento si trovino — la
+      // sera si butta tutto insieme nei furgoni senza distinguere da quale
+      // lista veniva un pezzo, quindi non ha senso dover riscansionare lo
+      // stesso codice una volta per lista. Un'etichetta di baule specifica
+      // (unitNumber presente) resta invece puntuale: quella conferma UN
+      // pezzo preciso, non va sommata alle altre righe.
+      if (mode === 'return' && !unitNumber) {
+        const returnable = eventItems.filter(row =>
+          isScanCandidate(row, foundItem.id) && row.loaded && !row.returned && (row.instanceNumbers || []).length <= 1
+        )
+        if (returnable.length > 0) {
+          tx.update(eventRef, { items: eventItems.map(i =>
+            returnable.some(r => r.id === i.id) ? { ...i, returned: true, returnedConsumed: !intact } : i
+          ) })
+          outcome = { action: 'returned', item: returnable[0], items: returnable, count: returnable.length, location: foundItem.location || '' }
+          return
+        }
+        // Nessuna riga ancora da rientrare per questo codice: prosegue sotto
+        // col percorso normale, che dà l'esito giusto (già rientrato/non
+        // caricato/non in lista) sulla riga più pertinente.
+      }
+
       const eventItem = resolveScanRow(eventItems, foundItem.id, { mode, unitNumber, activeListId: activeList })
 
       if (!eventItem) { outcome = { action: 'not_in_list', item: foundItem }; return }
@@ -477,20 +517,28 @@ export default function WorkerScanner() {
     if (outcome.action === 'loaded' || (outcome.action === 'returned' && intact)) {
       // foundItem.id è già l'oggetto vero di magazzino (trovato per codice
       // scansionato, non per id di riga evento) — nessun itemRef da risolvere qui.
+      // Un rientro multiplo (outcome.items, vedi sopra) somma la qty di TUTTE
+      // le righe rientrate insieme — altrimenti la giacenza tornerebbe
+      // disponibile solo per una riga anche se ne sono rientrate di più.
+      const returnedRows = outcome.items || [outcome.item]
+      const totalQty = returnedRows.reduce((s, r) => s + (r.qty || 1), 0)
       await syncKitAwareInventory({
         catalogItemId: foundItem.id, isBundle: outcome.item.isBundle, category: outcome.item.category,
-        qty: outcome.item.qty, sign: outcome.action === 'loaded' ? -1 : 1,
+        qty: outcome.action === 'loaded' ? outcome.item.qty : totalQty, sign: outcome.action === 'loaded' ? -1 : 1,
       })
     }
 
     // Cronologia — solo sui completamenti veri (pronto/loaded/returned), non
-    // su "già fatto" o su un avanzamento parziale di un kit multi-unità.
+    // su "già fatto" o su un avanzamento parziale di un kit multi-unità. Un
+    // rientro multiplo registra una voce per OGNI riga rientrata (liste
+    // diverse comprese), non solo per la prima.
     if (outcome.action === 'pronto' || outcome.action === 'loaded' || outcome.action === 'returned') {
-      logItemActivity({
-        teamId, eventId: id, eventName: event?.name, itemId: outcome.item.id, itemName: outcome.item.name,
-        catalogItemId: outcome.item.isExtra ? null : (outcome.item.itemRef || outcome.item.id),
-        listId: rowListId(outcome.item), action: outcome.action, profile, userId: user?.uid,
-      })
+      const loggedRows = outcome.action === 'returned' ? (outcome.items || [outcome.item]) : [outcome.item]
+      loggedRows.forEach(row => logItemActivity({
+        teamId, eventId: id, eventName: event?.name, itemId: row.id, itemName: row.name,
+        catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
+        listId: rowListId(row), action: outcome.action, profile, userId: user?.uid,
+      }))
     }
     } catch (e) {
       // La scansione non è stata registrata: niente vibrazione/suono di
@@ -502,6 +550,16 @@ export default function WorkerScanner() {
       setProcessing(false)
     }
   }
+
+  // Il callback passato a html5-qrcode.start() più sotto viene registrato UNA
+  // SOLA volta (finché non si preme Stop e si riavvia la fotocamera) — senza
+  // questo ref resterebbe legato per sempre a mode/lista/event di quando la
+  // fotocamera è partita: cambiando fase (es. da Pronto a Scarico) senza
+  // riavviarla, ogni scan continuerebbe a eseguire la logica della fase
+  // vecchia (visto in pratica: in Scarico diceva ancora "già pronto"). Il
+  // ref garantisce che il callback chiami sempre la versione più recente.
+  const processCodeRef = useRef(processCode)
+  processCodeRef.current = processCode
 
   // Lettore wireless (Netum C750 e simili in modalità Bluetooth HID): si
   // comporta come una tastiera, "digita" il codice e Invio da solo — stessa
@@ -547,7 +605,7 @@ export default function WorkerScanner() {
           experimentalFeatures: { useBarCodeDetectorIfSupported: true },
         },
         async decodedText => {
-          await processCode(decodedText)
+          await processCodeRef.current(decodedText)
           setTimeout(() => setLastScan(prev => prev), 3000)
         },
         () => {}
@@ -572,10 +630,20 @@ export default function WorkerScanner() {
   // Liste di carico multiple: `items` è SOLO la lista attiva, così contatori,
   // checklist, fasi e popup di completamento valgono per lista senza
   // toccare il resto del file. Con una sola lista coincide con tutto l'evento.
+  // In fase Scarico è anche ammessa ALL_LISTS_ID ("Tutte"): items torna a
+  // essere l'intero evento come nel caso non-multiList, ma i bottoni lista
+  // restano visibili sotto come filtro facoltativo verso una singola lista.
   const eventLists = getEventLists(event)
+  // Spostata qui (serve anche all'effetto di cambio-lista automatico più
+  // sotto, dichiarato prima del return anticipato — non solo nel JSX finale).
+  const listLabel = l => l?.name || (l?.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
   const multiList = hasMultipleLists(event)
-  const activeList = eventLists.some(l => l.id === activeListId) ? activeListId : MAIN_LIST_ID
-  const items = multiList ? allEventItems.filter(i => rowListId(i) === activeList) : allEventItems
+  const activeList = mode === 'return' && activeListId === ALL_LISTS_ID
+    ? ALL_LISTS_ID
+    : (eventLists.some(l => l.id === activeListId) ? activeListId : MAIN_LIST_ID)
+  const items = multiList
+    ? (activeList === ALL_LISTS_ID ? allEventItems : allEventItems.filter(i => rowListId(i) === activeList))
+    : allEventItems
   const prepared = items.filter(i => i.pronto).length
   const loaded   = items.filter(i => i.loaded).length
   const returned = items.filter(i => i.returned).length
@@ -583,6 +651,13 @@ export default function WorkerScanner() {
   // "pronto"/"caricato": escluderli dal totale evita che la lista resti
   // bloccata al 90% per sempre quando un pezzo non si trova o è danneggiato.
   const total    = items.filter(i => !i.mancante).length
+  // Stessi totali ma sull'INTERO evento (tutte le liste): solo per decidere
+  // quando far scattare in automatico "tutto pronto"/"tutto caricato" — vedi
+  // prevAllPreparedRef/prevAllLoadedRef sopra. I contatori mostrati in UI
+  // restano invece quelli per lista (`total`/`prepared`/`loaded` sopra).
+  const allTotal    = allEventItems.filter(i => !i.mancante).length
+  const allPrepared = allEventItems.filter(i => i.pronto).length
+  const allLoaded   = allEventItems.filter(i => i.loaded).length
 
   // Fase iniziale, derivata dai dati condivisi dell'evento invece che
   // ricordata per dispositivo: se l'evento è già passato e c'è ancora
@@ -598,25 +673,62 @@ export default function WorkerScanner() {
   useEffect(() => {
     if (!event || allEventItems.length === 0 || phaseInitRef.current === id) return
     phaseInitRef.current = id
-    prevPreparedRef.current = prepared
-    prevLoadedRef.current = loaded
+    prevAllPreparedRef.current = allPrepared
+    prevAllLoadedRef.current = allLoaded
     prevReturnedRef.current = items.filter(i => i.loaded && i.returned).length
     const evEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
     const isPast = evEnd < todayStr()
     const anyToReturn = allEventItems.some(i => i.loaded && !i.returned)
     if (isPast && anyToReturn) setMode('return')
-    else if (total > 0 && loaded === total) setMode('return')
-    else if (total > 0 && prepared === total) setMode('load')
-  }, [event, items, id, total, loaded, prepared])
+    else if (allTotal > 0 && allLoaded === allTotal) setMode('return')
+    else if (allTotal > 0 && allPrepared === allTotal) setMode('load')
+  }, [event, items, id, allTotal, allLoaded, allPrepared])
 
-  // Cambiando lista attiva i contatori saltano a quelli dell'altra lista: si
-  // riallineano i riferimenti dei popup "tutto pronto/caricato/rientrato",
+  // Entrando in Scarico si parte sempre dalla vista unita di tutte le liste
+  // (vedi ALL_LISTS_ID sopra) — è lì che serve, per scansionare senza dover
+  // sapere da quale lista arriva ogni oggetto. Uscendo da Scarico quella
+  // scelta non ha più senso per Pronto/Carico, si torna alla principale.
+  useEffect(() => {
+    if (mode === 'return') { if (multiList) setActiveListId(ALL_LISTS_ID) }
+    else if (activeListId === ALL_LISTS_ID) setActiveListId(MAIN_LIST_ID)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
+  // Lista attiva completata (pronto o carico) ma l'evento non lo è ancora
+  // (altre liste rimangono da fare): passa da sola alla prossima lista non
+  // ancora completa, con un avviso — altrimenti il magazziniere resta fermo
+  // su una lista finita senza accorgersi che ce n'è un'altra da fare. Scarico
+  // non rientra qui: lì le liste sono già riunite di default (vedi sopra).
+  const activeListDoneRef = useRef(false)
+  useEffect(() => {
+    if (!multiList || (mode !== 'pronto' && mode !== 'load')) { activeListDoneRef.current = false; return }
+    const field = mode === 'pronto' ? 'pronto' : 'loaded'
+    const doneNow = total > 0 && (mode === 'pronto' ? prepared : loaded) === total
+    if (doneNow && !activeListDoneRef.current) {
+      const fromList = eventLists.find(l => l.id === activeList)
+      const next = eventLists.find(l => {
+        if (l.id === activeList) return false
+        const rows = allEventItems.filter(r => rowListId(r) === l.id && !r.mancante)
+        return rows.length > 0 && rows.some(r => !r[field])
+      })
+      if (next) {
+        setActiveListId(next.id)
+        setItemListSearch('')
+        setListSwitchMsg(t('workerScanner.listSwitchedTo', { from: listLabel(fromList), to: listLabel(next) }))
+        setTimeout(() => setListSwitchMsg(''), 3200)
+      }
+    }
+    activeListDoneRef.current = doneNow
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prepared, loaded, total, mode, multiList, activeList])
+
+  // Cambiando lista attiva il contatore rientrati salta a quello dell'altra
+  // lista: si riallinea il riferimento del popup "tutto rientrato" (l'unico
+  // ancora per-lista — pronto/caricato guardano l'intero evento, vedi sopra),
   // altrimenti passare a una lista già completa farebbe scattare il popup
   // come se il completamento fosse appena avvenuto. Dichiarato PRIMA degli
   // effetti dei popup, così gira prima di loro nello stesso commit.
   useEffect(() => {
-    prevPreparedRef.current = prepared
-    prevLoadedRef.current = loaded
     prevReturnedRef.current = items.filter(i => i.loaded && i.returned).length
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeList])
@@ -647,7 +759,10 @@ export default function WorkerScanner() {
         const snap = await tx.get(eventRef)
         if (!snap.exists()) return
         const currentItems = snap.data().items || []
-        const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false, ...(activeList !== MAIN_LIST_ID ? { listId: activeList } : {}) }
+        // ALL_LISTS_ID non è una lista vera (solo la vista unita di Scarico):
+        // un extra aggiunto da lì non ha una lista di provenienza nota, resta
+        // sulla principale come nel caso senza liste multiple.
+        const extra = { id:`extra-${Date.now()}`, name, qty, category:'Extra', isExtra:true, loaded:false, returned:false, ...(activeList !== MAIN_LIST_ID && activeList !== ALL_LISTS_ID ? { listId: activeList } : {}) }
         tx.update(eventRef, { items: [...currentItems, extra] })
       })
       // Solo dopo conferma di salvataggio si chiude il modale — altrimenti,
@@ -676,38 +791,41 @@ export default function WorkerScanner() {
 
   // Popup quando tutto è pronto — passa in automatico al carico, così
   // riscansionando gli stessi codici finiscono dritti su "caricato" invece di
-  // dover cambiare fase a mano ogni volta. Il popup scatta solo se il
-  // completamento avviene DURANTE questa sessione (prevPreparedRef parte già
-  // dal valore reale, seminato dall'effetto "fase iniziale" sopra) — non più
-  // "mostrato una volta per dispositivo" via localStorage: chi apre lo
-  // scanner con una lista già completata da un collega non lo vede più.
+  // dover cambiare fase a mano ogni volta. Guarda l'INTERO evento
+  // (allPrepared/allTotal), non solo la lista in vista: con liste separate,
+  // finire solo quella attiva non deve bastare a considerare pronto l'evento.
+  // Il popup scatta solo se il completamento avviene DURANTE questa sessione
+  // (prevAllPreparedRef parte già dal valore reale, seminato dall'effetto
+  // "fase iniziale" sopra) — non più "mostrato una volta per dispositivo" via
+  // localStorage: chi apre lo scanner con un evento già completato da un
+  // collega non lo vede più.
   useEffect(() => {
     if (
       mode === 'pronto' &&
-      total > 0 &&
-      prepared === total &&
-      prevPreparedRef.current < total
+      allTotal > 0 &&
+      allPrepared === allTotal &&
+      prevAllPreparedRef.current < allTotal
     ) {
       setShowAllPreparedPopup(true)
       setMode('load')
     }
-    prevPreparedRef.current = prepared
-  }, [prepared, total, mode])
+    prevAllPreparedRef.current = allPrepared
+  }, [allPrepared, allTotal, mode])
 
   // Popup quando tutto è caricato — stesso principio del popup sopra.
   useEffect(() => {
     if (
       mode === 'load' &&
-      total > 0 &&
-      loaded === total &&
-      prevLoadedRef.current < total
+      allTotal > 0 &&
+      allLoaded === allTotal &&
+      prevAllLoadedRef.current < allTotal
     ) {
       setShowAllLoadedPopup(true)
       fireConfetti()
       setMode('return')
     }
-    prevLoadedRef.current = loaded
-  }, [loaded, total, mode])
+    prevAllLoadedRef.current = allLoaded
+  }, [allLoaded, allTotal, mode])
 
   // Popup quando tutto è rientrato — stesso principio.
   useEffect(() => {
@@ -756,8 +874,6 @@ export default function WorkerScanner() {
   }, [event])
 
   if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p></div>
-
-  const listLabel = l => l?.name || (l?.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
 
   const scanResult = {
     pronto:           { bg:'rgba(79,195,247,0.15)',  border:'rgba(79,195,247,0.4)',  color:'var(--blue)',    icon:'📋', title:t('workerScanner.prontoTitle'), msg: i => t('workerScanner.prontoMsg', { name: i?.name }) },
@@ -867,6 +983,9 @@ export default function WorkerScanner() {
       <div aria-live="assertive" role="alert" style={srOnlyStyle}>
         {phaseBlockedMsg}
       </div>
+      <div aria-live="polite" role="status" style={srOnlyStyle}>
+        {listSwitchMsg}
+      </div>
 
       {/* - Popup centrale post-scansione - */}
       {scanToast && (() => {
@@ -884,7 +1003,20 @@ export default function WorkerScanner() {
               <div style={{ fontSize:56, marginBottom:12 }}>{r.icon}</div>
               <p style={{ fontWeight:800, fontSize:22, color:r.color, marginBottom:8 }}>{r.title}</p>
               <p style={{ color:'var(--text)', fontSize:16, lineHeight:1.4 }}>{scanToast.item?.name || t('scanner.code', { code: scanToast.code })}</p>
-              {multiList && scanToast.item && rowListId(scanToast.item) !== activeList && (
+              {/* Rientro multiplo (vedi processCode: un solo scan rientra
+                  tutte le righe non ancora rientrate di questo oggetto, in
+                  qualunque lista) — senza questo avviso sembrerebbe rientrata
+                  solo una riga anche quando in realtà lo sono di più. */}
+              {scanToast.count > 1 && (
+                <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, marginTop:6 }}>{t('workerScanner.returnedMultiCount', { count: scanToast.count })}</p>
+              )}
+              {/* Nella vista unita di Scarico (activeList === ALL_LISTS_ID) non
+                  esiste un "mismatch" — mostra comunque la lista di provenienza,
+                  ma solo per gli oggetti fuori dalla principale, altrimenti
+                  comparirebbe su quasi ogni scansione senza dire nulla di utile. */}
+              {multiList && scanToast.item && (
+                activeList === ALL_LISTS_ID ? rowListId(scanToast.item) !== MAIN_LIST_ID : rowListId(scanToast.item) !== activeList
+              ) && (
                 <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, marginTop:6 }}>{t('workerScanner.inOtherList', { name: listLabel(eventLists.find(l => l.id === rowListId(scanToast.item))) })}</p>
               )}
               {scanToast.location && (
@@ -1043,11 +1175,35 @@ export default function WorkerScanner() {
           )}
         </div>
         {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
-        {/* Selettore lista di carico — solo se l'evento ne ha più di una. Contatori,
-            checklist e scansioni valgono per la lista scelta (una scansione di un
-            oggetto che sta in un'altra lista lo dice esplicitamente). */}
+        {/* Selettore lista di carico — solo se l'evento ne ha più di una.
+            Pronto/Carico: contatori, checklist e scansioni valgono per la
+            lista scelta (una scansione di un oggetto che sta in un'altra
+            lista lo dice esplicitamente). Scarico: parte già su "Tutte" (vista
+            unita di tutte le liste, ALL_LISTS_ID) — la sera si scarica tutto
+            insieme senza attenzione a quale lista appartenga; i bottoni lista
+            restano comunque cliccabili per filtrare su una sola, se serve. */}
         {multiList && (
           <div role="tablist" aria-label={t('workerScanner.listSelectorAria')} style={{ display:'flex', gap:6, overflowX:'auto', marginTop:10, paddingBottom:2, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+            {mode === 'return' && (() => {
+              const rows = allEventItems.filter(i => !i.mancante)
+              const doneCount = rows.filter(i => i[doneField]).length
+              const isActive = activeList === ALL_LISTS_ID
+              return (
+                <button
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => { setActiveListId(ALL_LISTS_ID); setItemListSearch('') }}
+                  style={{
+                    flexShrink:0, padding:'7px 12px', borderRadius:20, fontSize:12.5, fontWeight:700, whiteSpace:'nowrap',
+                    background: isActive ? phaseColor : 'var(--card2)',
+                    color: isActive ? '#fff' : 'var(--text2)',
+                    border: `1px solid ${isActive ? phaseColor : 'var(--border)'}`,
+                  }}
+                >
+                  {t('workerScanner.allLists')} · {doneCount}/{rows.length}
+                </button>
+              )
+            })()}
             {eventLists.map(l => {
               const rows = allEventItems.filter(i => rowListId(i) === l.id && !i.mancante)
               const doneCount = rows.filter(i => i[doneField]).length
@@ -1070,6 +1226,9 @@ export default function WorkerScanner() {
               )
             })}
           </div>
+        )}
+        {listSwitchMsg && (
+          <p style={{ color:phaseColor, fontSize:12, fontWeight:700, marginTop:6, textAlign:'center' }}>{listSwitchMsg}</p>
         )}
         {showEventNotes && event.notes && (
           <div style={{
@@ -1104,6 +1263,9 @@ export default function WorkerScanner() {
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:800, fontSize:16, color:r.color }}>{r.title}</p>
                       <p style={{ color:'var(--text)', fontSize:13, marginTop:1 }}>{r.msg(lastScan.item)}</p>
+                      {lastScan.count > 1 && (
+                        <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, marginTop:1 }}>{t('workerScanner.returnedMultiCount', { count: lastScan.count })}</p>
+                      )}
                       {lastScan.location && (
                         <div style={{ display:'inline-flex', alignItems:'center', gap:4, marginTop:5, background:'rgba(79,195,247,0.18)', border:'1px solid rgba(79,195,247,0.4)', borderRadius:6, padding:'3px 10px' }}>
                           <span style={{ fontSize:12 }}>📍</span>

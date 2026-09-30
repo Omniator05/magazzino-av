@@ -286,7 +286,7 @@ export default function Events() {
   const [closingInstallation, setClosingInstallation] = useState(null)
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
-  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{} })
+  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
   // Flusso unico di creazione evento (Calendar.jsx monta lo stesso componente):
   // vedi src/components/CreateEventFlow.jsx.
   const [createFlowOpen, setCreateFlowOpen] = useState(false)
@@ -414,7 +414,10 @@ export default function Events() {
   const openEdit = (e, event) => {
     e.stopPropagation()
     setEditing(event)
-    setForm({ name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{} })
+    setForm({
+      name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{},
+      quoteRef: event.quoteRef||'', managerName: event.eventManager?.name||'', managerPhone: event.eventManager?.phone||'', managerEmail: event.eventManager?.email||'',
+    })
     setShowModal(true)
   }
 
@@ -430,13 +433,15 @@ export default function Events() {
         location: form.location.trim(), notes: form.notes.trim(),
         type: form.type || 'event',
         phases: form.phases || {},
+        quoteRef: form.quoteRef.trim(),
+        eventManager: { name: form.managerName.trim(), phone: form.managerPhone.trim(), email: form.managerEmail.trim() },
         updatedAt: serverTimestamp(),
       }
       await updateDoc(doc(db, 'events', editing.id), updated)
       pushEventToGoogle(editing.id)
       setShowModal(false)
       setEditing(null)
-      setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{} })
+      setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
     } finally { setSaving(false) }
   }
 
@@ -476,7 +481,7 @@ export default function Events() {
         </div>
       </div>
 
-      <FabButton onClick={() => { setCreateFlowSkip(null); setCreateFlowOpen(true) }} ariaLabel={t('events.newEventButton')} />
+      <FabButton onClick={() => { setCreateFlowSkip('blank'); setCreateFlowOpen(true) }} ariaLabel={t('events.newEventButton')} />
 
       {/* Search bar SEMPRE visibile */}
       <div style={{ padding:'0 16px 12px' }}>
@@ -570,7 +575,7 @@ export default function Events() {
             {daScaricareSingle.length === 0 && pinnedRecurring.length === 0 && upcomingSingle.length === 0 && installations.length === 0 && (
               <button
                 type="button"
-                onClick={() => { setCreateFlowSkip(null); setCreateFlowOpen(true) }}
+                onClick={() => { setCreateFlowSkip('blank'); setCreateFlowOpen(true) }}
                 className="btn-no-anim"
                 style={{ width:'calc(100% - 32px)', margin:'20px 16px', background:'var(--dash-card)', border:'1.5px dashed var(--dash-pill-border)', borderRadius:20, padding:'32px 20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:10, cursor:'pointer', font:'inherit', color:'inherit' }}
               >
@@ -676,6 +681,18 @@ export default function Events() {
             <div className="form-group">
               <label htmlFor="ev-notes">{t('calendar.notesLabel')}</label>
               <textarea id="ev-notes" value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="ev-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="ev-quote" value={form.quoteRef} onChange={e => setForm({...form,quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="ev-manager-name">{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="ev-manager-name" value={form.managerName} onChange={e => setForm({...form,managerName:e.target.value})} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
+              <div style={{ display:'flex', gap:8 }}>
+                <input value={form.managerPhone} onChange={e => setForm({...form,managerPhone:e.target.value})} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
+                <input value={form.managerEmail} onChange={e => setForm({...form,managerEmail:e.target.value})} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+              </div>
             </div>
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>

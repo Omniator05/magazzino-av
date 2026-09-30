@@ -210,6 +210,10 @@ export default function Calendar() {
         dateEnd: editForm.dateEnd || null,
         location: editForm.location.trim(), notes: editForm.notes.trim(),
         phases: editForm.phases || {},
+        quoteRef: (editForm.quoteRef || '').trim(),
+        eventManager: {
+          name: (editForm.managerName || '').trim(), phone: (editForm.managerPhone || '').trim(), email: (editForm.managerEmail || '').trim(),
+        },
       }), isOnline)
       if (!isOnline) showToast(t('common.savedOfflineToast'))
       setEditingEvent(null)
@@ -259,7 +263,10 @@ export default function Calendar() {
   const openEdit = (e, ev) => {
     e.stopPropagation()
     setEditingEvent(ev)
-    setEditForm({ name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'', location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{} })
+    setEditForm({
+      name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'', location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
+      quoteRef: ev.quoteRef||'', managerName: ev.eventManager?.name||'', managerPhone: ev.eventManager?.phone||'', managerEmail: ev.eventManager?.email||'',
+    })
   }
 
   useEffect(() => {
@@ -326,6 +333,13 @@ export default function Calendar() {
       cur.setDate(cur.getDate() + 1)
     }
   })
+  // Un evento normale è quasi sempre ciò che si sta cercando aprendo un
+  // giorno (un rent/install spesso occupa il giorno per settimane, ma è
+  // "rumore di fondo" rispetto a un evento puntuale) — gli eventi vengono
+  // prima, i rent/install dopo, sia nei puntini del mese che nell'elenco del
+  // giorno selezionato (entrambi leggono da eventsByDate). Sort stabile:
+  // l'ordine tra eventi dello stesso tipo resta quello originale.
+  Object.values(eventsByDate).forEach(list => list.sort((a, b) => (a.type === 'installation') - (b.type === 'installation')))
 
   // Indice fasi: data → array di { event, key, color, label }
   const PHASE_META = {
@@ -438,7 +452,17 @@ export default function Calendar() {
         <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
           {cells.map((cell, i) => {
             const dStr = toDateStr(cell.dateObj)
-            const dayEvents = eventsByDate[dStr] || []
+            // Un rent/install può durare mesi: ripeterlo su ogni giorno della
+            // griglia mensile lo fa sembrare "occupato" anche nei giorni in
+            // cui non c'è nulla da fare. Qui, SOLO nella griglia, un
+            // rent/install compare solo il giorno di inizio e quello di
+            // fine — aprendo un giorno intermedio (vedi selectedEvents più
+            // sotto, che legge eventsByDate senza questo filtro) resta comunque visibile.
+            const dayEvents = (eventsByDate[dStr] || []).filter(ev => {
+              if (ev.type !== 'installation') return true
+              const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
+              return dStr === ev.date || dStr === end
+            })
             const dayGoogleEvents = googleEventsByDate[dStr] || []
             const dayAbsences = absencesOnDate(dStr)
             const hasMyAbsence = dayAbsences.some(a => a.workerId === user?.uid)
@@ -884,6 +908,7 @@ export default function Calendar() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         initialDate={selectedDate || todayStr}
+        skipChoice="blank"
         onCreated={(eventId, { fromTemplate }) => { if (fromTemplate) navigate(`/events/${eventId}`) }}
       />
 
@@ -924,6 +949,18 @@ export default function Calendar() {
             <div className="form-group">
               <label htmlFor="cal-edit-notes">{t('calendar.notesLabel')}</label>
               <textarea id="cal-edit-notes" value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cal-edit-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="cal-edit-quote" value={editForm.quoteRef||''} onChange={e => setEditForm(f => ({...f, quoteRef:e.target.value}))} placeholder={t('events.quoteRefPlaceholder')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cal-edit-manager-name">{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <input id="cal-edit-manager-name" value={editForm.managerName||''} onChange={e => setEditForm(f => ({...f, managerName:e.target.value}))} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
+              <div style={{ display:'flex', gap:8 }}>
+                <input value={editForm.managerPhone||''} onChange={e => setEditForm(f => ({...f, managerPhone:e.target.value}))} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
+                <input value={editForm.managerEmail||''} onChange={e => setEditForm(f => ({...f, managerEmail:e.target.value}))} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+              </div>
             </div>
             <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !editForm.name?.trim() || !editForm.date}>

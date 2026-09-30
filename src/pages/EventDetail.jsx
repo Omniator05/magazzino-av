@@ -12,7 +12,6 @@ import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstan
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { useConfirm } from '../context/ConfirmProvider'
-import DateBadge from '../components/DateBadge'
 import { Warn, Plus, Check, Kit } from '../components/Icon'
 import { useSwipeDismiss } from '../hooks/useSwipeDismiss'
 import { formatDate } from '../utils/formatDate'
@@ -1203,6 +1202,22 @@ export default function EventDetail() {
   const loadedTotal = eventItems.filter(i => i.loaded).length
   const listLinkBtn = { background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:700, padding:'6px 4px', display:'inline-flex', alignItems:'center', gap:5 }
 
+  // Riga "etichetta + valore" per il blocco info sotto il nome evento
+  // (data/location/preventivo/contatto) — stessa forma per tutte le righe
+  // invece di un badge diverso per ognuna, per essere leggibili in un colpo
+  // d'occhio. Solo etichetta scritta, senza icona affiancata (ridondante
+  // avere entrambe). `href` rende il valore un link (tel:/mailto:).
+  const infoRow = (label, value, href) => (
+    <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:13.5 }}>
+      <span style={{ color:'var(--text2)', fontWeight:700, flexShrink:0 }}>{label}</span>
+      {href ? (
+        <a href={href} style={{ flex:1, minWidth:0, color:'var(--blue)', fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</a>
+      ) : (
+        <span style={{ flex:1, minWidth:0, color:'var(--text)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</span>
+      )}
+    </div>
+  )
+
   return (
     <div className="page">
       {saveError && (
@@ -1239,11 +1254,28 @@ export default function EventDetail() {
             <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
               <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
               {event.type === 'installation' && (
-                <span style={{ background:'rgba(90,82,201,0.15)', color:'#7c6fcd', border:'1px solid rgba(90,82,201,0.3)', borderRadius:8, padding:'2px 10px', fontSize:11, fontWeight:800, flexShrink:0 }}>🔧 INSTALLAZIONE</span>
+                <span style={{ background:'rgba(90,82,201,0.15)', color:'#7c6fcd', border:'1px solid rgba(90,82,201,0.3)', borderRadius:8, padding:'2px 10px', fontSize:11, fontWeight:800, flexShrink:0 }}>INSTALLAZIONE</span>
               )}
             </div>
-            <div style={{ marginTop:2 }}>
-              <DateBadge dateStr={event.date} dateEndStr={event.dateEnd} location={event.location} today={today} />
+            {/* Blocco info: stessa forma etichetta+valore per data, location,
+                preventivo e contatto — una lista leggibile invece di badge
+                diversi per ogni informazione. Telefono ed email sono link
+                diretti (tel:/mailto:) per chiamare o scrivere senza dover
+                copiare il numero. */}
+            <div style={{ display:'flex', flexDirection:'column', gap:5, marginTop:4 }}>
+              {infoRow(t('eventDetail.dateFieldLabel'),
+                event.dateEnd && event.dateEnd !== event.date
+                  ? t('workerCalendar.dateRange', {
+                      start: formatDate(event.date+'T12:00:00', { day:'numeric', month:'long' }, i18n.language),
+                      end: formatDate(event.dateEnd+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language),
+                    })
+                  : `${formatDate(event.date+'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language)}${event.date === today ? ` · ${t('calendar.today').toUpperCase()}` : ''}`
+              )}
+              {event.location && infoRow(t('calendar.locationLabel'), event.location)}
+              {event.quoteRef && infoRow(t('eventDetail.quoteFieldLabel'), event.quoteRef)}
+              {event.eventManager?.name && infoRow(t('eventDetail.contactFieldLabel'), event.eventManager.name)}
+              {event.eventManager?.phone && infoRow(t('eventDetail.phoneFieldLabel'), event.eventManager.phone, `tel:${event.eventManager.phone}`)}
+              {event.eventManager?.email && infoRow(t('eventDetail.emailFieldLabel'), event.eventManager.email, `mailto:${event.eventManager.email}`)}
             </div>
             {event.phases && ['montaggio','smontaggio'].some(k => event.phases[k]) && (
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>

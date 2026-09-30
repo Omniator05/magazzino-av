@@ -6,6 +6,93 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-01',
+    date: '2026-10-01',
+    title: { it: 'Liste di carico più intelligenti e nuovo evento più veloce', en: 'Smarter loading lists and a faster new event' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: 'Liste separate in Pronto/Carico, tutte insieme nello Scarico', en: 'Separate lists in Ready/Load, merged in Return' },
+        text: {
+          it: 'La sera si scarica di corsa senza guardare da quale lista viene ogni pezzo: in Scarico tutte le liste dell\'evento si vedono insieme per default, con i bottoni delle singole liste che restano come filtro se serve.',
+          en: 'In the evening things get unloaded fast without checking which list each piece came from: in Return all of the event\'s lists show together by default, with each list\'s button still there as an optional filter.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Cambio lista automatico', en: 'Automatic list switching' },
+        text: {
+          it: 'In Pronto e Carico, finita una lista lo scanner passa da solo alla prossima non ancora completa, con un avviso.',
+          en: 'In Ready and Load, once a list is finished the scanner switches on its own to the next incomplete one, with a notice.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Un solo scan per rientrare più pezzi', en: 'One scan returns several items' },
+        text: {
+          it: 'In Scarico, scansionando un oggetto generico presente su più liste rientrano insieme tutte le unità ancora da rientrare, non serve più scansionare lista per lista.',
+          en: 'In Return, scanning a generic item that appears on several lists returns every unit still outstanding at once — no need to scan it once per list anymore.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Nuovo evento più veloce', en: 'Faster new event' },
+        text: {
+          it: '"+" apre subito il form vuoto invece di chiedere prima se vuoto o da template — il template si può comunque aggiungere dopo dalla pagina evento.',
+          en: '"+" now opens the blank form right away instead of asking blank-or-template first — a template can still be applied afterwards from the event page.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Data evento in un solo campo', en: 'Event date in a single field' },
+        text: {
+          it: 'Tocca un giorno per un evento di un giorno solo, un secondo giorno diverso per un periodo — un campo in meno da compilare.',
+          en: 'Tap one day for a single-day event, a second different day for a date range — one field less to fill in.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Riferimento preventivo e responsabile evento', en: 'Quote reference and event manager' },
+        text: {
+          it: 'Ogni evento può avere un riferimento preventivo e un responsabile con telefono ed email — visibili in cima alla pagina evento, toccando il numero parte la chiamata.',
+          en: 'Every event can have a quote reference and a manager with phone and email — shown at the top of the event page, tapping the number starts a call.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Calendario: eventi prima, rent/install dopo', en: 'Calendar: events first, rent/install after' },
+        text: {
+          it: 'Aprendo un giorno, gli eventi normali compaiono sempre prima dei rent/install.',
+          en: 'Opening a day, regular events now always appear before rent/installations.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Rent e installazioni lunghi meno invadenti nel calendario', en: 'Long rents and installations take up less room on the calendar' },
+        text: {
+          it: 'Un rent che dura mesi non riempie più ogni giorno del mese: nella griglia compare solo a inizio e fine, ma toccando un giorno qualunque dell\'intervallo si vede comunque.',
+          en: 'A rent that lasts months no longer fills every day of the month: in the grid it only shows on its start and end day, but tapping any day within its span still reveals it.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Scarico bloccato su "già pronto"', en: 'Return stuck on "already ready"' },
+        text: {
+          it: 'Se la fotocamera restava aperta cambiando fase, continuava a segnare tutto come "pronto" invece che come rientrato — ora la fase si aggiorna subito, senza dover riavviare la fotocamera.',
+          en: 'If the camera stayed open while switching phase, it kept marking everything as "ready" instead of returned — the phase now updates right away, no need to restart the camera.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Scansione sulla lista sbagliata', en: 'Scan landing on the wrong list' },
+        text: {
+          it: 'Con lo stesso oggetto su più liste, uno scan poteva completare in silenzio la riga sulla lista sbagliata invece di quella su cui si stava lavorando.',
+          en: 'With the same item on several lists, a scan could silently complete the row on the wrong list instead of the one actually being worked on.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-09-25',
     date: '2026-09-25',
     title: { it: 'Liste multiple, oggetti collegati e scheda oggetto a pagine', en: 'Multiple lists, linked items and a paged item sheet' },
