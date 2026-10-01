@@ -1,5 +1,6 @@
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../firebase'
+import { deleteEventFromGoogle } from './googleCalendar'
 
 // Aggiorna la giacenza (availableQty) al cambio di stato carico/rientro di
 // una riga evento. Se l'oggetto è un kit/bundle, aggiorna anche ogni
@@ -145,6 +146,12 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
     if (reset) await restoreEventInventory(event)
   }
   await deleteDoc(doc(db, 'events', event.id))
+  // Pulisce anche la copia su Google Calendar, se l'evento era stato
+  // sincronizzato — prima succedeva solo cancellando da Events.jsx, non da
+  // qui (usata anche da Calendar.jsx e Archive.jsx): un evento cancellato
+  // da lì restava "orfano" su Google. Unico punto da cui si cancella un
+  // evento, così la pulizia vale ovunque senza doverla ripetere.
+  deleteEventFromGoogle(event.googleEventId)
 }
 
 // Chiude un rent/install: restituisce la giacenza di tutto ciò che risulta

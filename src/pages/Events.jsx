@@ -12,7 +12,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
-import { pushEventToGoogle, deleteEventFromGoogle } from '../utils/googleCalendar'
+import { pushEventToGoogle } from '../utils/googleCalendar'
 import { db } from '../firebase'
 import { collection, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
@@ -450,12 +450,10 @@ export default function Events() {
     if (event.seriesId) {
       if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteSeriesMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
         await deleteEventWithInventoryCheck({ event, confirm, t })
-        deleteEventFromGoogle(event.googleEventId)
       }
     } else {
       if (await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('events.confirmDeleteMessage'), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true })) {
         await deleteEventWithInventoryCheck({ event, confirm, t })
-        deleteEventFromGoogle(event.googleEventId)
       }
     }
   }
