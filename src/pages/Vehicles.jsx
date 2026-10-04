@@ -11,13 +11,19 @@ import BackHomeButton from '../components/BackHomeButton'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import FabButton from '../components/FabButton'
+import DeadlinesField from '../components/DeadlinesField'
+import { syncDeadlineEvents } from '../utils/deadlines'
 
-const COLOR_PALETTE = ['#e63946', '#2563eb', '#16a085', '#9b59e0', '#ea580c', '#059669', '#4285F4', '#d4820a']
+const COLOR_PALETTE = ['#e63946', '#2563eb', '#16a085', '#9b59e0', '#ea580c', '#059669', '#4285F4', '#d4820a', '#000000', '#ffffff']
+// Scorciatoie per le scadenze più comuni di un furgone — restano comunque
+// testo libero (stessa struttura degli oggetti), sono solo bottoni che
+// precompilano l'etichetta.
+const VEHICLE_DEADLINE_LABELS = ['Assicurazione', 'Revisione', 'Bollo']
 // Campo emoji vuoto per davvero: niente valore preimpostato che sembri
 // "bloccato" lì. Se resta vuoto, l'icona mostra l'iniziale del nome (vedi
 // vehicleIcon sotto) — stesso pattern già usato per l'avatar utente altrove
 // nell'app — non l'emoji generica di un furgone.
-const EMPTY_FORM = { name: '', color: COLOR_PALETTE[0], emoji: '', plate: '' }
+const EMPTY_FORM = { name: '', color: COLOR_PALETTE[0], emoji: '', plate: '', deadlines: [] }
 // Icona di un furgone: emoji/testo personalizzato se impostato, altrimenti
 // l'iniziale del nome (maiuscola), altrimenti l'icona furgone generica come
 // ultima risorsa (nome vuoto non dovrebbe capitare, è obbligatorio a salvare).
@@ -52,29 +58,41 @@ export default function Vehicles() {
   const createVehicle = async () => {
     if (!form.name.trim()) { setError(t('vehicles.errorNameRequired')); return false }
     setError('')
-    await addDoc(collection(db, 'vehicles'), {
-      name: form.name.trim(),
+    const name = form.name.trim()
+    const ref = await addDoc(collection(db, 'vehicles'), {
+      name,
       color: form.color || null,
       emoji: form.emoji.trim() || null,
       plate: form.plate.trim() || null,
+      deadlines: [],
       teamId,
       active: true,
       createdAt: serverTimestamp(),
       createdBy: user.uid,
     })
+    // Le scadenze creano i propri eventi di calendario solo dopo che il
+    // furgone esiste davvero (serve il nome per il titolo dell'evento) —
+    // un secondo giro di scrittura, ma solo se ce n'è almeno una da salvare.
+    if (form.deadlines.length > 0) {
+      const deadlines = await syncDeadlineEvents([], form.deadlines, { subjectName: name, teamId, userId: user.uid })
+      await updateDoc(ref, { deadlines })
+    }
     setForm(EMPTY_FORM)
     return true
   }
 
   const saveEdit = async () => {
     if (!editForm.name.trim()) return false
+    const name = editForm.name.trim()
+    const deadlines = await syncDeadlineEvents(showDetail.deadlines || [], editForm.deadlines || [], { subjectName: name, teamId, userId: user.uid })
     await updateDoc(doc(db, 'vehicles', showDetail.id), {
-      name: editForm.name.trim(),
+      name,
       color: editForm.color || null,
       emoji: editForm.emoji.trim() || null,
       plate: editForm.plate.trim() || null,
+      deadlines,
     })
-    setShowDetail(d => ({ ...d, ...editForm }))
+    setShowDetail(d => ({ ...d, ...editForm, deadlines }))
     return true
   }
 
@@ -93,6 +111,9 @@ export default function Vehicles() {
       confirmLabel: t('vehicles.confirmDeleteLabel'),
       danger: true,
     }))) return false
+    // Toglie anche gli eventuali promemoria di calendario collegati alle
+    // scadenze — altrimenti un furgone eliminato lascerebbe eventi orfani.
+    await syncDeadlineEvents(showDetail.deadlines || [], [], { subjectName: showDetail.name, teamId, userId: user.uid })
     await deleteDoc(doc(db, 'vehicles', showDetail.id))
     return true
   }
@@ -103,7 +124,9 @@ export default function Vehicles() {
         <button key={c} onClick={() => onChange(c)} type="button"
           style={{
             width: 30, height: 30, borderRadius: '50%', background: c, flexShrink: 0,
-            border: value === c ? '3px solid var(--text)' : '2px solid transparent',
+            // Il bianco su sfondo chiaro sparirebbe con un bordo trasparente
+            // quando non selezionato — gli serve sempre un bordo visibile.
+            border: value === c ? '3px solid var(--text)' : c === '#ffffff' ? '2px solid var(--border)' : '2px solid transparent',
           }} />
       ))}
     </div>
@@ -112,7 +135,7 @@ export default function Vehicles() {
   const VehicleRow = ({ v }) => (
     <div className="item-row" onClick={() => {
       setShowDetail(v); setEditMode(false)
-      setEditForm({ name: v.name, color: v.color || COLOR_PALETTE[0], emoji: v.emoji || '', plate: v.plate || '' })
+      setEditForm({ name: v.name, color: v.color || COLOR_PALETTE[0], emoji: v.emoji || '', plate: v.plate || '', deadlines: v.deadlines || [] })
     }} style={{ cursor: 'pointer' }}>
       <div className="item-icon" style={{
         background: v.active !== false ? `${v.color || 'var(--blue)'}22` : 'rgba(144,144,176,0.1)',
@@ -191,6 +214,10 @@ export default function Vehicles() {
               <label>{t('vehicles.colorLabel')}</label>
               <ColorPicker value={form.color} onChange={c => setForm({ ...form, color: c })} />
             </div>
+            <div className="form-group">
+              <label>{t('deadlines.sectionLabel')}</label>
+              <DeadlinesField value={form.deadlines} onChange={deadlines => setForm({ ...form, deadlines })} quickLabels={VEHICLE_DEADLINE_LABELS} />
+            </div>
 
             <SaveButton onSave={createVehicle} onDone={createDrag.close} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full" style={{ marginTop: 12 }}>
               <Check size={16} /> {t('vehicles.createVehicle')}
@@ -257,6 +284,10 @@ export default function Vehicles() {
                 <div className="form-group" style={{ marginBottom: 6 }}>
                   <label>{t('vehicles.colorLabel')}</label>
                   <ColorPicker value={editForm.color} onChange={c => setEditForm({ ...editForm, color: c })} />
+                </div>
+                <div className="form-group">
+                  <label>{t('deadlines.sectionLabel')}</label>
+                  <DeadlinesField value={editForm.deadlines} onChange={deadlines => setEditForm({ ...editForm, deadlines })} quickLabels={VEHICLE_DEADLINE_LABELS} />
                 </div>
                 <SaveButton onSave={saveEdit} onDone={() => setEditMode(false)} onError={detailDrag.triggerJiggle} className="btn btn-primary btn-full" style={{ marginTop: 12 }} disabled={!editForm.name.trim()}>
                   {t('vehicles.saveChanges')}

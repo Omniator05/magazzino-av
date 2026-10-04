@@ -7,7 +7,10 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction, increment } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
-import { toggleWorkerAssignment, isWorkerUnavailable, vehicleConflictEvent } from '../utils/workerAssignment'
+import { toggleWorkerAssignment, isWorkerUnavailable, vehicleConflictEvent, externalVehicleConflictEvent } from '../utils/workerAssignment'
+import { deleteAssignmentBlock } from '../utils/assignmentBlocks'
+import { watchExternalVehicles, getOrCreateExternalVehicle } from '../utils/externalVehicles'
+import QuickExternalPopup from '../components/QuickExternalPopup'
 import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
@@ -217,22 +220,28 @@ export default function EventDetail() {
     setEditItem(null)
   }
   const itemEditDrag = useModalDrag(() => setEditItem(null), undefined, () => editItem && saveItemEdit(editItem))
-  const [showAssignModal, setShowAssignModal] = useState(false)
   const [workers, setWorkers] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [externalVehicles, setExternalVehicles] = useState([])
+  // Target del popup "nuovo furgone esterno": null | 'bulk' | id della riga
+  const [pendingExternalVehicleFor, setPendingExternalVehicleFor] = useState(null)
+  // Blocchi della timeline "Assegna personale" (collection assignmentBlocks)
+  // legati a QUESTO evento — qui servono solo per mostrare chi è assegnato
+  // con quali orari e per poter disassegnare correttamente anche chi è stato
+  // assegnato da lì (non solo dal vecchio sistema assignedWorkers).
+  const [assignmentBlocks, setAssignmentBlocks] = useState([])
   const [itemDetails, setItemDetails] = useState({}) // id/itemRef → { location, notes } dal catalogo
   const resolvedItemDetailIdsRef = useRef(new Set())
   const [unavailability, setUnavailability] = useState([])
   const [otherEvents, setOtherEvents] = useState([]) // per il controllo furgone già occupato su un altro carico in quei giorni
   const [activityLog, setActivityLog] = useState([])
-  const assignDrag = useModalDrag(() => setShowAssignModal(false))
   const [suggestionMaps, setSuggestionMaps] = useState(null)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
   // Suggerimenti scartati con lo swipe in QUESTA apertura del modal — escluderli
   // subito dal ranking (non solo dal render) è ciò che libera davvero lo slot
   // per il prossimo suggerimento migliore, non solo nasconde la riga.
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState(() => new Set())
-  useModalScrollLock(showAddItem || showExtraModal || showTemplatePicker || !!editItem || showAssignModal)
+  useModalScrollLock(showAddItem || showExtraModal || showTemplatePicker || !!editItem)
 
   const eventRef = doc(db, 'events', id)
 
@@ -303,6 +312,14 @@ export default function EventDetail() {
     const q = query(collection(db, 'vehicles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => setVehicles(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [teamId])
+
+  useEffect(() => watchExternalVehicles(teamId, setExternalVehicles), [teamId])
+
+  useEffect(() => {
+    if (!teamId || !id) return
+    const q = query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId), where('eventId', '==', id))
+    return onSnapshot(q, snap => setAssignmentBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [teamId, id])
 
   // Tutti gli eventi della squadra (con i rispettivi item/furgoni), per
   // sapere se un furgone è già sul carico di un altro evento in quei giorni.
@@ -588,19 +605,42 @@ export default function EventDetail() {
 
   // Furgone assegnato a una riga — è struttura del carico (come categoria/qty),
   // non stato di avanzamento: passa da updateEventItems per propagarsi alla serie.
-  const setItemVehicle = async (itemId, vehicleId) => {
-    const conflict = vehicleId ? vehicleConflictEvent(vehicleId, event, otherEvents) : null
+  // `raw` è il value del <select>: 'v:<id>' (flotta), 'e:<id>' (esterno già
+  // salvato), '' o '__none__' (nessuno) — vedi anche applyBulkVehicle, stessa
+  // convenzione.
+  const setItemVehicle = async (itemId, raw) => {
+    const vehicleId = raw.startsWith('v:') ? raw.slice(2) : null
+    const externalVehicleId = raw.startsWith('e:') ? raw.slice(2) : null
+    const externalVehicleName = externalVehicleId ? (externalVehicles.find(v => v.id === externalVehicleId)?.name || '') : null
+    const conflict = vehicleId
+      ? vehicleConflictEvent(vehicleId, event, otherEvents)
+      : externalVehicleId
+      ? externalVehicleConflictEvent(externalVehicleId, event, otherEvents)
+      : null
     if (conflict) {
-      const v = vehicles.find(x => x.id === vehicleId)
+      const name = vehicleId ? vehicles.find(x => x.id === vehicleId)?.name : externalVehicleName
       const ok = await confirm({
         title: t('eventDetail.confirmVehicleBusyTitle'),
-        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle'), eventName: conflict.name }),
+        message: t('eventDetail.confirmVehicleBusyMessage', { name: name || t('eventDetail.thisVehicle'), eventName: conflict.name }),
         confirmLabel: t('eventDetail.confirmVehicleBusyLabel'),
         danger: true,
       })
       if (!ok) return
     }
-    await updateEventItems(current => current.map(i => i.id !== itemId ? i : { ...i, vehicleId: vehicleId || null }))
+    await updateEventItems(current => current.map(i => i.id !== itemId ? i : { ...i, vehicleId, externalVehicleId, externalVehicleName }))
+  }
+
+  // Risolve il popup "nuovo furgone esterno" (vedi pendingExternalVehicleFor):
+  // crea/riusa il record in externalVehicles, poi applica l'assegnazione
+  // esattamente come una scelta normale dal menu — alla riga che l'ha aperto
+  // o, se aperto dal bottone in blocco, al select lì (l'utente preme comunque
+  // "Applica" dopo, coerente col resto del flusso bulk).
+  const confirmPendingExternalVehicle = async (name) => {
+    const id = await getOrCreateExternalVehicle(teamId, name, user.uid, externalVehicles)
+    const target = pendingExternalVehicleFor
+    setPendingExternalVehicleFor(null)
+    if (target === 'bulk') setBulkVehicleId(`e:${id}`)
+    else await setItemVehicle(target, `e:${id}`)
   }
 
   const toggleBulkSelect = (itemId) => {
@@ -618,22 +658,29 @@ export default function EventDetail() {
   }
 
   // Applica un furgone a tutti gli oggetti selezionati in un'unica scrittura,
-  // invece di un giro di select per ciascuna riga.
+  // invece di un giro di select per ciascuna riga. Stessa convenzione di
+  // valori di setItemVehicle ('v:'/'e:'/''/'__none__').
   const applyBulkVehicle = async () => {
     if (bulkSelectedIds.size === 0 || !bulkVehicleId) return
-    const vehicleId = bulkVehicleId === '__none__' ? null : bulkVehicleId
-    const conflict = vehicleId ? vehicleConflictEvent(vehicleId, event, otherEvents) : null
+    const vehicleId = bulkVehicleId.startsWith('v:') ? bulkVehicleId.slice(2) : null
+    const externalVehicleId = bulkVehicleId.startsWith('e:') ? bulkVehicleId.slice(2) : null
+    const externalVehicleName = externalVehicleId ? (externalVehicles.find(v => v.id === externalVehicleId)?.name || '') : null
+    const conflict = vehicleId
+      ? vehicleConflictEvent(vehicleId, event, otherEvents)
+      : externalVehicleId
+      ? externalVehicleConflictEvent(externalVehicleId, event, otherEvents)
+      : null
     if (conflict) {
-      const v = vehicles.find(x => x.id === vehicleId)
+      const name = vehicleId ? vehicles.find(x => x.id === vehicleId)?.name : externalVehicleName
       const ok = await confirm({
         title: t('eventDetail.confirmVehicleBusyTitle'),
-        message: t('eventDetail.confirmVehicleBusyMessage', { name: v?.name || t('eventDetail.thisVehicle'), eventName: conflict.name }),
+        message: t('eventDetail.confirmVehicleBusyMessage', { name: name || t('eventDetail.thisVehicle'), eventName: conflict.name }),
         confirmLabel: t('eventDetail.confirmVehicleBusyLabel'),
         danger: true,
       })
       if (!ok) return
     }
-    await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId } : i))
+    await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId, externalVehicleId, externalVehicleName } : i))
     exitBulkVehicleMode()
   }
 
@@ -1145,7 +1192,7 @@ export default function EventDetail() {
           </div>
         )}
         {catGrouped[cat].map(item => (
-          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} onSetVehicle={setItemVehicle} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
+          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
         ))}
       </div>
     ))
@@ -1218,6 +1265,51 @@ export default function EventDetail() {
     </div>
   )
 
+  // Chi è assegnato a questo evento, unendo le due fonti: i blocchi della
+  // timeline "Assegna personale" (orario proprio, anche esterni — vedi
+  // utils/externalVehicles.js per lo stesso schema lato furgoni) e il
+  // vecchio assignedWorkers per chi è stato assegnato solo da lì. Una
+  // persona con più blocchi sullo stesso evento (es. sia sull'evento che su
+  // una fase) mostra comunque solo il nome: il dettaglio per data è nel
+  // riepilogo (EventSummaryModal), qui basta il colpo d'occhio.
+  const peopleBlocksById = {}
+  assignmentBlocks.forEach(b => {
+    const pid = b.workerId || b.externalWorkerId
+    if (!pid) return
+    ;(peopleBlocksById[pid] ||= []).push(b)
+  })
+  const assignedFromBlocks = Object.entries(peopleBlocksById).map(([pid, list]) => {
+    const name = list[0].workerId ? workers.find(w => w.id === pid)?.name : list[0].externalWorkerName
+    if (!name) return null
+    const single = list.length === 1 ? list[0] : null
+    const isFullSpan = single && event.allDay === false && single.date === event.date && single.startTime === event.timeStart && single.endTime === event.timeEnd
+    return { key: pid, id: pid, name, hours: single && !isFullSpan ? `${single.startTime}–${single.endTime}` : null, kind: list[0].workerId ? 'worker' : 'external' }
+  }).filter(Boolean)
+  const blockPersonIds = new Set(Object.keys(peopleBlocksById))
+  const assignedLegacy = (event.assignedWorkers || [])
+    .filter(wid => !blockPersonIds.has(wid))
+    .map(wid => workers.find(w => w.id === wid))
+    .filter(Boolean)
+    .map(w => ({ key: w.id, id: w.id, name: w.name, hours: null, kind: 'worker' }))
+  const assignedPeople = [...assignedFromBlocks, ...assignedLegacy]
+
+  // Disassegna: se la persona ha blocchi (nuovo sistema) li cancella tutti —
+  // deleteAssignmentBlock tiene da sola assignedWorkers in sync, vedi
+  // utils/assignmentBlocks.js — altrimenti (solo vecchio sistema) fa il
+  // toggle diretto come prima.
+  const unassignPerson = async (person) => {
+    const myBlocks = assignmentBlocks.filter(b => b.workerId === person.id || b.externalWorkerId === person.id)
+    if (myBlocks.length === 0) {
+      if (person.kind === 'worker') await toggleWorkerAssignment(eventRef, event, person.id)
+      return
+    }
+    let remaining = assignmentBlocks
+    for (const b of myBlocks) {
+      await deleteAssignmentBlock(b, { eventsById: { [event.id]: event }, allBlocks: remaining })
+      remaining = remaining.filter(x => x.id !== b.id)
+    }
+  }
+
   return (
     <div className="page">
       {saveError && (
@@ -1264,12 +1356,13 @@ export default function EventDetail() {
                 copiare il numero. */}
             <div style={{ display:'flex', flexDirection:'column', gap:5, marginTop:4 }}>
               {infoRow(t('eventDetail.dateFieldLabel'),
-                event.dateEnd && event.dateEnd !== event.date
+                (event.dateEnd && event.dateEnd !== event.date
                   ? t('workerCalendar.dateRange', {
                       start: formatDate(event.date+'T12:00:00', { day:'numeric', month:'long' }, i18n.language),
                       end: formatDate(event.dateEnd+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language),
                     })
                   : `${formatDate(event.date+'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language)}${event.date === today ? ` · ${t('calendar.today').toUpperCase()}` : ''}`
+                ) + (!event.allDay && (event.timeStart || event.timeEnd) ? ` · ${[event.timeStart, event.timeEnd].filter(Boolean).join('–')}` : '')
               )}
               {event.location && infoRow(t('calendar.locationLabel'), event.location)}
               {event.quoteRef && infoRow(t('eventDetail.quoteFieldLabel'), event.quoteRef)}
@@ -1293,16 +1386,16 @@ export default function EventDetail() {
                 })}
               </div>
             )}
-            {/* Worker assegnati */}
+            {/* Worker assegnati — dal vecchio assignedWorkers e/o dai blocchi
+                della timeline "Assegna personale" (con orario, se diverso da
+                quello dell'intero evento), vedi assignedPeople sopra. */}
             <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:8 }}>
-              {(event.assignedWorkers || []).map(wid => {
-                const w = workers.find(x => x.id === wid)
-                if (!w) return null
-                const unavail = isWorkerUnavailable(wid, event, unavailability)
+              {assignedPeople.map(p => {
+                const unavail = p.kind === 'worker' ? isWorkerUnavailable(p.id, event, unavailability) : false
                 return (
-                  <span key={wid} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
-                    {unavail ? '⚠️' : '👷'} {w.name}
-                    <button onClick={() => toggleWorkerAssignment(eventRef, event, wid)} aria-label={t('eventDetail.unassignWorkerAria', { name: w.name })} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                  <span key={p.key} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
+                    {unavail ? '⚠️' : '👷'} {p.name}{p.hours && <span style={{ opacity:0.75, fontWeight:600 }}>&nbsp;· {p.hours}</span>}
+                    <button onClick={() => unassignPerson(p)} aria-label={t('eventDetail.unassignWorkerAria', { name: p.name })} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                   </span>
                 )
               })}
@@ -1315,8 +1408,12 @@ export default function EventDetail() {
                   + {t('eventDetail.newList')}
                 </button>
               )}
+              {/* Scorciatoia alla timeline "Assegna personale" (Calendar.jsx),
+                  già pronta su questo evento — niente più un modal proprio
+                  qui: gli orari (e gli esterni) vivono solo lì, un posto solo
+                  da mantenere invece di due sistemi paralleli. */}
               <button
-                onClick={() => setShowAssignModal(true)}
+                onClick={() => navigate('/calendar', { state: { assignEventId: event.id, assignDate: event.date } })}
                 style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--card2)', border:'1px dashed var(--border)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--text2)' }}
               >
                 {t('eventDetail.assign')}
@@ -1497,16 +1594,30 @@ export default function EventDetail() {
               <div style={{ display:'flex', gap:8 }}>
                 <select
                   value={bulkVehicleId}
-                  onChange={e => setBulkVehicleId(e.target.value)}
+                  onChange={e => {
+                    if (e.target.value === '__new_external__') { setPendingExternalVehicleFor('bulk'); return }
+                    setBulkVehicleId(e.target.value)
+                  }}
                   style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
                 >
                   <option value="">{t('eventDetail.chooseVehicle')}</option>
                   {vehicles.filter(v => v.active !== false).map(v => {
                     const conflict = vehicleConflictEvent(v.id, event, otherEvents)
                     return (
-                      <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
+                      <option key={v.id} value={`v:${v.id}`}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
                     )
                   })}
+                  {externalVehicles.length > 0 && (
+                    <optgroup label={t('eventDetail.externalVehiclesGroup')}>
+                      {externalVehicles.map(v => {
+                        const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
+                        return (
+                          <option key={v.id} value={`e:${v.id}`}>🚐 {v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
+                        )
+                      })}
+                    </optgroup>
+                  )}
+                  <option value="__new_external__">{t('eventDetail.addExternalVehicle')}</option>
                   <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
                 </select>
                 <button onClick={applyBulkVehicle} disabled={bulkSelectedIds.size === 0 || !bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: (bulkSelectedIds.size === 0 || !bulkVehicleId) ? 0.5 : 1 }}>
@@ -1528,14 +1639,12 @@ export default function EventDetail() {
                     style={{ position:'absolute', right:6, width:26, height:26, borderRadius:6, background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
                 )}
               </div>
-              {vehicles.length > 0 && (
-                <button
-                  onClick={() => setBulkVehicleMode(true)}
-                  style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}
-                >
-                  {t('eventDetail.assignVehicleToMultiple')}
-                </button>
-              )}
+              <button
+                onClick={() => setBulkVehicleMode(true)}
+                style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}
+              >
+                {t('eventDetail.assignVehicleToMultiple')}
+              </button>
             </div>
           )}
         </div>
@@ -1611,6 +1720,16 @@ export default function EventDetail() {
           else createList(name, listModal.mode === 'moveUnloaded' ? listModal.listId : null)
         }}
       />
+
+      {pendingExternalVehicleFor && (
+        <QuickExternalPopup
+          title={t('eventDetail.quickExternalVehicleTitle')}
+          description={t('eventDetail.quickExternalVehicleDesc')}
+          placeholder={t('eventDetail.externalVehiclePlaceholder')}
+          onConfirm={confirmPendingExternalVehicle}
+          onCancel={() => setPendingExternalVehicleFor(null)}
+        />
+      )}
 
       {showDiscardCart && (
         <div onClick={() => setShowDiscardCart(false)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
@@ -1835,58 +1954,6 @@ export default function EventDetail() {
                 )
               })}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal assegnazione worker */}
-      {showAssignModal && (
-        <div className={`modal-overlay${assignDrag.closing ? ' closing' : ''}`} onClick={assignDrag.onOverlayClick}>
-          <div className={`modal${assignDrag.jiggling ? ' modal-jiggle' : ''}${assignDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...assignDrag.props}>
-            <button className="close-btn" onClick={assignDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{t('eventDetail.assignWorkersTitle')}</h2>
-            <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('eventDetail.assignWorkersDesc')}</p>
-            {workers.length === 0 ? (
-              <p style={{ color:'var(--text2)', fontSize:13, fontStyle:'italic', textAlign:'center', padding:'20px 0' }}>{t('eventDetail.noWorkersRegistered')}</p>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:'50dvh', overflowY:'auto' }}>
-                {workers.map(w => {
-                  const isAssigned = (event.assignedWorkers || []).includes(w.id)
-                  const unavail = isWorkerUnavailable(w.id, event, unavailability)
-                  return (
-                    <button
-                      key={w.id}
-                      className="chip-no-press"
-                      onClick={() => toggleWorkerAssignment(eventRef, event, w.id)}
-                      style={{
-                        display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12,
-                        background: isAssigned ? 'rgba(79,195,247,0.10)' : 'var(--card2)',
-                        border: `1.5px solid ${isAssigned ? 'rgba(79,195,247,0.4)' : 'var(--border)'}`,
-                        textAlign:'left',
-                      }}
-                    >
-                      <span style={{ fontSize:22 }}>👷</span>
-                      <span style={{ flex:1, minWidth:0 }}>
-                        <span style={{ display:'block', fontWeight:700, fontSize:14, color:'var(--text)' }}>{w.name}</span>
-                        {unavail && <span style={{ display:'block', fontSize:11, color:'var(--red)', fontWeight:700, marginTop:1 }}>{t('eventDetail.workerUnavailable')}</span>}
-                      </span>
-                      <span style={{
-                        width:22, height:22, borderRadius:'50%', flexShrink:0,
-                        background: isAssigned ? 'var(--blue)' : 'transparent',
-                        border: `2px solid ${isAssigned ? 'var(--blue)' : 'var(--border)'}`,
-                        display:'flex', alignItems:'center', justifyContent:'center',
-                        color:'white', fontSize:13, fontWeight:900,
-                      }}>
-                        {isAssigned ? '✓' : ''}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-            <button onClick={() => setShowAssignModal(false)} className="btn btn-primary btn-full" style={{ marginTop:16 }}>
-              {t('eventDetail.done')}
-            </button>
           </div>
         </div>
       )}
@@ -2242,10 +2309,13 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, onSetVehicle, bulkMode, bulkSelected, onBulkToggle, allItems, event, otherEvents }) {
+function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, externalVehicles, onSetVehicle, onRequestExternalVehicle, bulkMode, bulkSelected, onBulkToggle, allItems, event, otherEvents }) {
   const { t } = useTranslation()
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
-  const vehicleConflict = vehicle ? vehicleConflictEvent(vehicle.id, event, otherEvents) : null
+  const externalVehicleName = item.externalVehicleId ? (externalVehicles.find(v => v.id === item.externalVehicleId)?.name || item.externalVehicleName) : null
+  const vehicleConflict = vehicle
+    ? vehicleConflictEvent(vehicle.id, event, otherEvents)
+    : item.externalVehicleId ? externalVehicleConflictEvent(item.externalVehicleId, event, otherEvents) : null
   const vehicleBusy = !!vehicleConflict
   // Stato di sola lettura pronto/carico/rientro — si aggiorna dallo scanner
   // (Avvia carico), qui è solo un riepilogo, non un controllo.
@@ -2315,6 +2385,9 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
             {vehicle && (
               <span title={vehicleConflict ? t('eventDetail.vehicleBusyTooltip', { eventName: vehicleConflict.name }) : undefined} style={{ background: vehicleBusy ? 'rgba(216,56,63,0.12)' : `${vehicle.color || 'var(--blue)'}22`, color: vehicleBusy ? 'var(--red)' : (vehicle.color || 'var(--blue)'), border: `1px solid ${vehicleBusy ? 'rgba(216,56,63,0.35)' : `${vehicle.color || 'var(--blue)'}55`}`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicleBusy ? '⚠️' : (vehicle.emoji || vehicle.name?.trim()?.charAt(0)?.toUpperCase() || '🚐')} {vehicle.name}</span>
             )}
+            {!vehicle && externalVehicleName && (
+              <span title={vehicleConflict ? t('eventDetail.vehicleBusyTooltip', { eventName: vehicleConflict.name }) : t('eventDetail.externalVehicleBadgeHint')} style={{ background: vehicleBusy ? 'rgba(216,56,63,0.12)' : 'rgba(124,111,205,0.14)', color: vehicleBusy ? 'var(--red)' : '#7c6fcd', border: `1px solid ${vehicleBusy ? 'rgba(216,56,63,0.35)' : 'rgba(124,111,205,0.4)'}`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicleBusy ? '⚠️' : '🚐'} {externalVehicleName}</span>
+            )}
             {(item.instanceNumbers || []).length > 0 && (
               <span style={{
                 background: damagedInstances.length ? 'rgba(248,113,113,0.15)' : 'rgba(148,163,184,0.15)',
@@ -2355,17 +2428,31 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
         {!bulkMode && (
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
           <select
-            value={item.vehicleId || ''}
-            onChange={e => onSetVehicle(item.id, e.target.value)}
-            style={{ fontSize:11, fontWeight:700, borderRadius:8, padding:'4px 6px', border:'1.5px solid var(--border)', background:'var(--card2)', color: vehicle ? (vehicle.color || 'var(--text2)') : 'var(--text3)', maxWidth:120 }}
+            value={item.vehicleId ? `v:${item.vehicleId}` : item.externalVehicleId ? `e:${item.externalVehicleId}` : ''}
+            onChange={e => {
+              if (e.target.value === '__new_external__') { onRequestExternalVehicle(); return }
+              onSetVehicle(item.id, e.target.value)
+            }}
+            style={{ fontSize:11, fontWeight:700, borderRadius:8, padding:'4px 6px', border:'1.5px solid var(--border)', background:'var(--card2)', color: vehicle ? (vehicle.color || 'var(--text2)') : externalVehicleName ? '#7c6fcd' : 'var(--text3)', maxWidth:120 }}
           >
             <option value="">{t('eventDetail.vehicleSelectPlaceholder')}</option>
             {vehicleOptions.map(v => {
               const conflict = vehicleConflictEvent(v.id, event, otherEvents)
               return (
-              <option key={v.id} value={v.id}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
+              <option key={v.id} value={`v:${v.id}`}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
               )
             })}
+            {externalVehicles.length > 0 && (
+              <optgroup label={t('eventDetail.externalVehiclesGroup')}>
+                {externalVehicles.map(v => {
+                  const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
+                  return (
+                    <option key={v.id} value={`e:${v.id}`}>🚐 {v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
+                  )
+                })}
+              </optgroup>
+            )}
+            <option value="__new_external__">{t('eventDetail.addExternalVehicle')}</option>
           </select>
           {/* Sola lettura: pronto/carico/rientro si spuntano dallo scanner
               (Avvia carico), non più da qui — avere due punti che scrivono

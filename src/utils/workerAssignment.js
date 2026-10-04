@@ -56,3 +56,21 @@ export function vehicleConflictEvent(vehicleId, event, otherEvents) {
 export function isVehicleUnavailable(vehicleId, event, otherEvents) {
   return !!vehicleConflictEvent(vehicleId, event, otherEvents)
 }
+
+// Stessa logica di vehicleConflictEvent ma per un furgone ESTERNO (non in
+// flotta, vedi utils/externalVehicles.js) — è comunque un'entità riusabile
+// con un id proprio, quindi può restare "occupato" su un altro evento allo
+// stesso modo di uno in flotta.
+export function externalVehicleConflictEvent(externalVehicleId, event, otherEvents) {
+  if (!externalVehicleId || !event?.date) return null
+  const evStart = event.date
+  const evEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+  const hit = otherEvents.find(other => {
+    if (other.id === event.id || !other.date) return false
+    const oStart = other.date
+    const oEnd = other.dateEnd && other.dateEnd >= other.date ? other.dateEnd : other.date
+    if (!(evStart <= oEnd && evEnd >= oStart)) return false
+    return (other.items || []).some(i => i.externalVehicleId === externalVehicleId && i.loaded && !i.returned)
+  })
+  return hit ? { id: hit.id, name: hit.name } : null
+}

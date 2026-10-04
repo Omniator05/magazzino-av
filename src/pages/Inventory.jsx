@@ -14,7 +14,7 @@ import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useCenteredModal } from '../hooks/useCenteredModal'
-import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download, Plus } from '../components/Icon'
+import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download, Plus, ChevronRight } from '../components/Icon'
 import FabButton from '../components/FabButton'
 import SaveButton from '../components/SaveButton'
 import Picker from '../components/Picker'
@@ -26,6 +26,8 @@ import { getCodeDisplay } from '../utils/codeDisplay'
 import LinkedItemsEditor from '../components/LinkedItemsEditor'
 import { getLinkedItems, linkedItemsToFields } from '../utils/linkedItems'
 import { QrCode, Barcode } from '../components/Icon'
+import DeadlinesField from '../components/DeadlinesField'
+import { syncDeadlineEvents } from '../utils/deadlines'
 
 // Colori pallino per la sezione Cronologia (dettaglio oggetto) — stessa
 // mappa azione→colore usata nel modale modifica riga di EventDetail.jsx.
@@ -37,19 +39,20 @@ const ACTIVITY_COLORS = {
   missing:'#ea580c', unmissing:'var(--text3)',
 }
 // Form oggetto. I dati tecnici (peso, consumo, portata, dimensioni in metri,
-// seriale) stanno nella sotto-pagina "Dettagli oggetto" del modal; restano
-// stringhe finché non si salva (vuoto = non compilato, null su Firestore).
+// seriale) restano stringhe finché non si salva (vuoto = non compilato,
+// null su Firestore) — elenco riusato per decidere se la sezione "Dettagli
+// oggetto" del modal parte aperta o chiusa (vedi sotto).
 const DETAIL_FIELDS = ['weightKg', 'peakPowerW', 'loadCapacityKg', 'widthM', 'lengthM', 'heightM', 'serialNumber']
 const emptyItemForm = () => ({
   name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi',
-  weightKg:'', peakPowerW:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[],
+  weightKg:'', peakPowerW:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[], deadlines:[],
 })
 const itemToForm = item => ({
   name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'',
   brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
   weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', loadCapacityKg:item.loadCapacityKg ?? '',
   widthM:item.widthM ?? '', lengthM:item.lengthM ?? '', heightM:item.heightM ?? '', serialNumber:item.serialNumber || '',
-  linkedItems:getLinkedItems(item),
+  linkedItems:getLinkedItems(item), deadlines:item.deadlines || [],
 })
 // "1,5" o "1.5" → 1.5; vuoto/zero/non numerico → null (distingue "non compilato" da "davvero zero")
 const parseDecimal = v => v !== '' && v != null ? (parseFloat(String(v).replace(',', '.')) || null) : null
@@ -159,8 +162,13 @@ export default function Inventory() {
   const [importProgress, setImportProgress] = useState(0)
   const [form, setForm] = useState(emptyItemForm)
   const [linkedSearch, setLinkedSearch] = useState('')
-  // Pagina visibile nel modal oggetto: prima pagina o una delle sotto-pagine
-  const [modalPage, setModalPage] = useState('main') // 'main' | 'details' | 'linked'
+  // Override manuale apertura/chiusura delle sezioni secondarie nel modal
+  // oggetto (Dettagli/Scadenze/Collegati) — per default una sezione si apre
+  // da sola solo se ha già qualcosa dentro, altrimenti resta chiusa per
+  // tenere il modal corto; un tap sull'intestazione vince sempre sul
+  // default. Azzerato a ogni apertura del modal (openAdd/openEdit) così un
+  // oggetto non eredita le sezioni aperte/chiuse di quello aperto prima.
+  const [modalSectionToggle, setModalSectionToggle] = useState({})
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
@@ -272,7 +280,7 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
-  const openAdd = () => { setSelected(null); setForm(emptyItemForm()); setLinkedSearch(''); setModalPage('main'); setShowModal(true) }
+  const openAdd = () => { setSelected(null); setForm(emptyItemForm()); setLinkedSearch(''); setModalSectionToggle({}); setShowModal(true) }
   const openEdit = item => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
@@ -284,7 +292,7 @@ export default function Inventory() {
       setKitLinkedSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm(itemToForm(item)); setLinkedSearch(''); setModalPage('main'); setShowModal(true)
+      setSelected(item); setForm(itemToForm(item)); setLinkedSearch(''); setModalSectionToggle({}); setShowModal(true)
     }
   }
 
@@ -339,29 +347,37 @@ export default function Inventory() {
       const prevBroken = selected.brokenQty || 0
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems) })
+      const deadlines = await syncDeadlineEvents(selected.deadlines || [], form.deadlines || [], { subjectName: form.name, teamId, userId: user.uid })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes, ...details, ...linkedItemsToFields(form.linkedItems),
-        teamId, createdAt:serverTimestamp(), createdBy: user.uid
+        deadlines:[], teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
+      if (form.deadlines.length > 0) {
+        const deadlines = await syncDeadlineEvents([], form.deadlines, { subjectName: form.name, teamId, userId: user.uid })
+        await updateDoc(ref, { deadlines })
+      }
     }
     return true
   }
 
-  const deleteItem = async id => {
+  const deleteItem = async item => {
     if (await confirm({ title: t('inventory.confirmDeleteItemTitle'), message: t('inventory.confirmDeleteItemMessage'), confirmLabel: t('inventory.confirmDeleteItemLabel'), danger: true })) {
-      await deleteDoc(doc(db, 'items', id))
+      // Toglie anche gli eventuali promemoria di calendario collegati alle
+      // scadenze — altrimenti un oggetto eliminato lascerebbe eventi orfani.
+      if (item.deadlines?.length) await syncDeadlineEvents(item.deadlines, [], { subjectName: item.name, teamId, userId: user.uid })
+      await deleteDoc(doc(db, 'items', item.id))
       setShowDetail(null)
     }
   }
 
   const openDetail = item => {
-    setShowDetail(item); setHistoryInstanceFilter(null); setShowFullHistory(false)
+    setShowDetail(item)
   }
 
   // Etichette come immagine PNG 680×180 pronta per il software della stampante
@@ -496,6 +512,12 @@ export default function Inventory() {
   }
 
   const [activeFilter, setActiveFilter] = useState(navState?.filter || 'all')
+  // Override manuale dell'utente sull'apertura/chiusura di una categoria —
+  // per default decide da sola (vedi groupedFiltered più sotto: aperta se
+  // c'è qualcosa che richiede attenzione o se si sta cercando/filtrando),
+  // ma un tap sulla freccia vince sempre sul default finché non cambia
+  // ricerca/filtro.
+  const [manualCollapse, setManualCollapse] = useState({})
 
   const filtered = items.filter(i => {
     const matchSearch = !search ||
@@ -562,6 +584,14 @@ export default function Inventory() {
   // "Fuori" — altrove restano nella loro categoria come tutti gli altri.
   const showForgottenGroup = activeFilter === 'out'
   const forgottenItems = showForgottenGroup ? filtered.filter(isForgottenItem) : []
+  // Un oggetto "richiede attenzione" se c'è qualcosa da fare su di lui (fuori,
+  // rotto, sotto scorta minima, kit incompleto) — una categoria con almeno
+  // uno così parte aperta di default, le altre (tutto a posto) collassate:
+  // si vede subito cosa serve senza scorrere categorie già ok.
+  const itemNeedsAttention = i =>
+    (i.availableQty || 0) < (i.totalQty || 0) || (i.brokenQty || 0) > 0 ||
+    (i.category === 'Consumabili' && (i.minStock || 0) > 0 && (i.availableQty || 0) <= i.minStock) ||
+    kitHasIncompleteInstance(i)
   const groupedFiltered = [
     ...(forgottenItems.length > 0 ? [{ cat: '__forgotten__', catItems: forgottenItems, isForgottenGroup: true }] : []),
     ...CATEGORY_ORDER.map(cat => ({
@@ -570,7 +600,8 @@ export default function Inventory() {
         ? filtered.filter(i => !MAIN_CATS.includes(i.category) && !(showForgottenGroup && isForgottenItem(i)))
         : filtered.filter(i => i.category === cat && !(showForgottenGroup && isForgottenItem(i))),
     })).filter(g => g.catItems.length > 0),
-  ]
+  ].map(g => ({ ...g, needsAttention: g.isForgottenGroup || g.catItems.some(itemNeedsAttention) }))
+  const narrowed = search.trim() !== '' || activeFilter !== 'all'
 
   return (
     <div className="page">
@@ -847,39 +878,163 @@ export default function Inventory() {
         ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
             {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={activeFilter === 'out' ? getOutEventNames(item) : null} />)}
           </div>
-        : groupedFiltered.map(({ cat, catItems, isForgottenGroup }) => (
-          <div key={cat} style={{ background:'var(--card)', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
-            {/* Intestazione categoria (o gruppo "dimenticati", sempre in cima) */}
-            <div style={{ padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : 'var(--bg2)', borderBottom: isForgottenGroup ? '1px solid rgba(245,166,35,0.3)' : '1px solid var(--border)', display:'flex', alignItems:'center', gap:8 }}>
-              {isForgottenGroup && <span style={{ color:'var(--accent2)', display:'flex' }}><Warn size={14} /></span>}
-              <span style={{ fontWeight:700, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
-              <span style={{ fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text3)', marginLeft:'auto', fontWeight: isForgottenGroup ? 700 : 400 }}>{catItems.length}</span>
-            </div>
-            {catItems.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={isForgottenGroup || activeFilter === 'out' ? getOutEventNames(item) : null} />)}
-          </div>
-        ))
+        : groupedFiltered.map(({ cat, catItems, isForgottenGroup, needsAttention }) => {
+            // Il gruppo "dimenticati" resta sempre aperto (è già un avviso a
+            // sé); le altre categorie aprono di default solo se c'è qualcosa
+            // che richiede attenzione o se si sta cercando/filtrando — un tap
+            // dell'utente sulla freccia vince sempre sul default.
+            const defaultOpen = isForgottenGroup || needsAttention || narrowed
+            const open = manualCollapse[cat] != null ? !manualCollapse[cat] : defaultOpen
+            return (
+              <div key={cat} style={{ background:'var(--card)', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
+                {/* Intestazione categoria (o gruppo "dimenticati", sempre in cima) —
+                    cliccabile per aprire/chiudere, non solo decorativa. */}
+                <button type="button" className="btn-no-anim" onClick={() => setManualCollapse(c => ({ ...c, [cat]: open }))}
+                  aria-expanded={open}
+                  style={{ width:'100%', padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : 'var(--bg2)', borderBottom: open ? `1px solid ${isForgottenGroup ? 'rgba(245,166,35,0.3)' : 'var(--border)'}` : 'none', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
+                  {isForgottenGroup && <span style={{ color:'var(--accent2)', display:'flex' }}><Warn size={14} /></span>}
+                  <span style={{ fontWeight:700, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
+                  {!isForgottenGroup && needsAttention && (
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent2)', flexShrink:0 }} />
+                  )}
+                  <span style={{ fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text3)', marginLeft:'auto', fontWeight: isForgottenGroup ? 700 : 400 }}>{catItems.length}</span>
+                  <span style={{ color:'var(--text3)', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
+                </button>
+                {open && catItems.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={isForgottenGroup || activeFilter === 'out' ? getOutEventNames(item) : null} />)}
+              </div>
+            )
+          })
       }
 
       {/* Modal aggiunta/modifica */}
-      {/* Modal aggiunta/modifica articolo */}
-      {showModal && (
+      {/* Modal aggiunta/modifica articolo — informazioni di base sempre
+          visibili, le altre tre sezioni sono accordion sempre chiusi per
+          default (anche se già contengono dati): tiene il modal corto
+          invece di scrollare tutto sempre aperto. */}
+      {showModal && (() => {
+        const detailsFilledCount = DETAIL_FIELDS.filter(k => String(form[k] ?? '').trim() !== '').length
+        const deadlinesCount = (form.deadlines || []).length
+        const linkedCount = (form.linkedItems || []).length
+        const detailsOpen = modalSectionToggle.details === true
+        const deadlinesOpen = modalSectionToggle.deadlines === true
+        const linkedOpen = modalSectionToggle.linked === true
+        const sectionHeader = (key, label, open, count) => (
+          <button type="button" className="btn-no-anim" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
+            aria-expanded={open}
+            style={{ width:'100%', padding:'4px 0 10px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
+            <span style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>{label}</span>
+            {count > 0 && <span style={{ fontSize:12, color:'var(--text2)', fontWeight:600 }}>· {count}</span>}
+            <span style={{ marginLeft:'auto', color:'var(--text3)', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
+          </button>
+        )
+        return (
         <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
           <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
             <button className="close-btn" onClick={myDrag.close} aria-label={t("common.close")}>✕</button>
-            {modalPage !== 'main' && (
-              <>
-                <button type="button" onClick={() => setModalPage('main')} aria-label={t('common.back')}
-                  style={{ display:'inline-flex', alignItems:'center', gap:4, background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:700, padding:'4px 0', marginBottom:6 }}>
-                  ← {t('common.back')}
-                </button>
-                <h2>{modalPage === 'details' ? t('inventory.detailsPageTitle') : t('inventory.linkedPageTitle')}</h2>
-                <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16 }}>{form.name || t('inventory.newItemTitle')}</p>
-              </>
-            )}
-            {modalPage === 'details' && (
-              <>
-                <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginBottom:14 }}>{t('inventory.detailsPageHint')}</p>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
+
+            <div>
+              <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
+              <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
+                <Picker
+                  value={form.category}
+                  onChange={category => setForm({...form, category})}
+                  ariaLabel={t('inventory.categoryLabel')}
+                  options={CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
+                />
+              </div>
+              {/* Unità di misura — solo Consumabili: non tutti si contano allo
+                  stesso modo (moquette/gonna palco a metri, nastro a rotoli,
+                  taniche a pezzi). Determina in cosa si esprime la giacenza
+                  sotto, quindi va scelta PRIMA della quantità. */}
+              {form.category === 'Consumabili' && (
+                <div className="form-group">
+                  <label>{t('inventory.consumableUnitLabel')}</label>
+                  <div style={{ display:'flex', gap:8 }}>
+                    {CONSUMABLE_UNITS.map(u => (
+                      <button key={u} type="button" onClick={() => setForm({...form, consumableUnit:u})}
+                        aria-pressed={form.consumableUnit === u}
+                        style={{
+                          flex:1, padding:'10px 8px', borderRadius:8, fontSize:13, fontWeight:700,
+                          background: form.consumableUnit === u ? 'var(--accent)' : 'var(--card2)',
+                          color: form.consumableUnit === u ? '#fff' : 'var(--text2)',
+                          border: `1px solid ${form.consumableUnit === u ? 'var(--accent)' : 'var(--border)'}`,
+                        }}>
+                        {t(`inventory.consumableUnit_${u}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
+                <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})} aria-label={t('eventDetail.decreaseQtyAria')}
+                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                    <input type="number" min="1" value={form.qty}
+                      onChange={e => setForm({...form, qty:Math.max(1,parseInt(e.target.value)||1)})}
+                      onFocus={e => e.target.select()}
+                      style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
+                    <button onClick={() => setForm({...form, qty:form.qty+1})} aria-label={t('eventDetail.increaseQtyAria')}
+                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label style={{ color: form.brokenQty > 0 ? 'var(--red)' : undefined }}>
+                    {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
+                  </label>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})} aria-label={t('inventory.decreaseBrokenAria')}
+                      style={{ width:44, height:44, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                    <input type="number" min="0" max={form.qty} value={form.brokenQty}
+                      onChange={e => setForm({...form, brokenQty:Math.min(form.qty,Math.max(0,parseInt(e.target.value)||0))})}
+                      onFocus={e => e.target.select()}
+                      style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1, color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }} />
+                    <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})} aria-label={t('inventory.increaseBrokenAria')}
+                      style={{ width:44, height:44, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                  </div>
+                </div>
+              </div>
+              {form.brokenQty > 0 && (
+                <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:8, padding:'8px 12px', marginBottom:4, fontSize:13, color:'var(--red)', display:'flex', alignItems:'center', gap:6 }}>
+                  <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
+                </div>
+              )}
+              <div className="form-group"><label>{t('inventory.locationLabel')}</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('inventory.locationPlaceholder')} /></div>
+              <div className="form-group"><label>{t('inventory.notesLabel')}</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
+              {/* Soglia scorta minima — solo per Consumabili */}
+              {form.category === 'Consumabili' && (
+                <div className="form-group">
+                  <label>{t('inventory.minStockLabel')}</label>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
+                      <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})} aria-label={t('inventory.decreaseMinStockAria')}
+                        style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
+                      <input type="number" min="0" value={form.minStock||0}
+                        onChange={e => setForm({...form, minStock:Math.max(0,parseInt(e.target.value)||0)})}
+                        onFocus={e => e.target.select()}
+                        style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
+                      <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})} aria-label={t('inventory.increaseMinStockAria')}
+                        style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+                    </div>
+                  </div>
+                  {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
+                </div>
+              )}
+            </div>
+
+            <div style={{ height:1, background:'var(--border)', margin:'20px 0' }} />
+
+            <div style={{ height:1, background:'var(--border)', margin:'14px 0 4px' }} />
+
+            <div>
+              {sectionHeader('details', t('inventory.detailsPageTitle'), detailsOpen, detailsFilledCount)}
+              {detailsOpen && (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:4 }}>
                   <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.peakPowerLabel')}</label><input type="text" inputMode="numeric" value={form.peakPowerW} onChange={e => setForm({...form,peakPowerW:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.peakPowerPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.loadCapacityLabel')}</label><input type="text" inputMode="decimal" value={form.loadCapacityKg} onChange={e => setForm({...form,loadCapacityKg:e.target.value})} placeholder={t('inventory.loadCapacityPlaceholder')} /></div>
@@ -888,144 +1043,37 @@ export default function Inventory() {
                   <div className="form-group"><label>{t('inventory.lengthLabel')}</label><input type="text" inputMode="decimal" value={form.lengthM} onChange={e => setForm({...form,lengthM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.heightLabel')}</label><input type="text" inputMode="decimal" value={form.heightM} onChange={e => setForm({...form,heightM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
                 </div>
-                <button type="button" onClick={() => setModalPage('main')} className="btn btn-primary btn-full" style={{ marginTop:8 }}>{t('inventory.pageDone')}</button>
-              </>
-            )}
-            {modalPage === 'linked' && (
-              <>
-                <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginBottom:14 }}>{t('inventory.linkedPageHint')}</p>
+              )}
+            </div>
+
+            <div style={{ height:1, background:'var(--border)', margin:'4px 0' }} />
+
+            <div>
+              {sectionHeader('deadlines', t('deadlines.sectionLabel'), deadlinesOpen, deadlinesCount)}
+              {deadlinesOpen && <DeadlinesField value={form.deadlines} onChange={deadlines => setForm({...form, deadlines})} />}
+            </div>
+
+            <div style={{ height:1, background:'var(--border)', margin:'4px 0' }} />
+
+            <div>
+              {sectionHeader('linked', t('inventory.linkedPageTitle'), linkedOpen, linkedCount)}
+              {linkedOpen && (
                 <LinkedItemsEditor
                   items={items} selfId={selected?.id}
                   value={form.linkedItems} onChange={links => setForm({...form, linkedItems:links})}
                   search={linkedSearch} onSearchChange={setLinkedSearch}
                 />
-                <button type="button" onClick={() => setModalPage('main')} className="btn btn-primary btn-full" style={{ marginTop:16 }}>{t('inventory.pageDone')}</button>
-              </>
-            )}
-            {modalPage === 'main' && (<>
-            <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
-            <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
-            <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
-              <Picker
-                value={form.category}
-                onChange={category => setForm({...form, category})}
-                ariaLabel={t('inventory.categoryLabel')}
-                options={CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
-              />
+              )}
             </div>
-            {/* Unità di misura — solo Consumabili: non tutti si contano allo
-                stesso modo (moquette/gonna palco a metri, nastro a rotoli,
-                taniche a pezzi). Determina in cosa si esprime la giacenza
-                sotto, quindi va scelta PRIMA della quantità. */}
-            {form.category === 'Consumabili' && (
-              <div className="form-group">
-                <label>{t('inventory.consumableUnitLabel')}</label>
-                <div style={{ display:'flex', gap:8 }}>
-                  {CONSUMABLE_UNITS.map(u => (
-                    <button key={u} type="button" onClick={() => setForm({...form, consumableUnit:u})}
-                      aria-pressed={form.consumableUnit === u}
-                      style={{
-                        flex:1, padding:'10px 8px', borderRadius:8, fontSize:13, fontWeight:700,
-                        background: form.consumableUnit === u ? 'var(--accent)' : 'var(--card2)',
-                        color: form.consumableUnit === u ? '#fff' : 'var(--text2)',
-                        border: `1px solid ${form.consumableUnit === u ? 'var(--accent)' : 'var(--border)'}`,
-                      }}>
-                      {t(`inventory.consumableUnit_${u}`)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
-              <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})} aria-label={t('eventDetail.decreaseQtyAria')}
-                    style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                  <input type="number" min="1" value={form.qty}
-                    onChange={e => setForm({...form, qty:Math.max(1,parseInt(e.target.value)||1)})}
-                    onFocus={e => e.target.select()}
-                    style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
-                  <button onClick={() => setForm({...form, qty:form.qty+1})} aria-label={t('eventDetail.increaseQtyAria')}
-                    style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                </div>
-              </div>
-              <div className="form-group">
-                <label style={{ color: form.brokenQty > 0 ? 'var(--red)' : undefined }}>
-                  {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
-                </label>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})} aria-label={t('inventory.decreaseBrokenAria')}
-                    style={{ width:44, height:44, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                  <input type="number" min="0" max={form.qty} value={form.brokenQty}
-                    onChange={e => setForm({...form, brokenQty:Math.min(form.qty,Math.max(0,parseInt(e.target.value)||0))})}
-                    onFocus={e => e.target.select()}
-                    style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1, color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }} />
-                  <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})} aria-label={t('inventory.increaseBrokenAria')}
-                    style={{ width:44, height:44, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                </div>
-              </div>
-            </div>
-            {form.brokenQty > 0 && (
-              <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:8, padding:'8px 12px', marginBottom:4, fontSize:13, color:'var(--red)', display:'flex', alignItems:'center', gap:6 }}>
-                <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
-              </div>
-            )}
-            <div className="form-group"><label>{t('inventory.locationLabel')}</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('inventory.locationPlaceholder')} /></div>
 
-
-            <div className="form-group"><label>{t('inventory.notesLabel')}</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
-
-            {/* Soglia scorta minima — solo per Consumabili */}
-            {form.category === 'Consumabili' && (
-              <div className="form-group">
-                <label>{t('inventory.minStockLabel')}</label>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
-                    <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})} aria-label={t('inventory.decreaseMinStockAria')}
-                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                    <input type="number" min="0" value={form.minStock||0}
-                      onChange={e => setForm({...form, minStock:Math.max(0,parseInt(e.target.value)||0)})}
-                      onFocus={e => e.target.select()}
-                      style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
-                    <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})} aria-label={t('inventory.increaseMinStockAria')}
-                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                  </div>
-                </div>
-                {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
-              </div>
-            )}
-
-            {/* Sotto-pagine: tengono corta la prima pagina, restano in `form`
-                finché non si salva qui sotto. */}
-            {(() => {
-              const detailsFilled = DETAIL_FIELDS.filter(k => String(form[k] ?? '').trim() !== '').length
-              const linkedCount = form.linkedItems.length
-              const pageBtn = { flex:1, minWidth:0, textAlign:'left', padding:'11px 12px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', display:'flex', flexDirection:'column', gap:2 }
-              return (
-                <div style={{ display:'flex', gap:10, marginBottom:8 }}>
-                  <button type="button" className="btn-no-anim" onClick={() => setModalPage('details')} style={pageBtn}>
-                    <span style={{ fontSize:13.5, fontWeight:800 }}>{t('inventory.detailsButton')} ›</span>
-                    <span style={{ fontSize:11.5, color:'var(--text2)' }}>{detailsFilled > 0 ? t('inventory.detailsFilled', { count: detailsFilled }) : t('inventory.detailsEmpty')}</span>
-                  </button>
-                  <button type="button" className="btn-no-anim" onClick={() => setModalPage('linked')} style={pageBtn}>
-                    <span style={{ fontSize:13.5, fontWeight:800 }}>{t('inventory.linkedButton')} ›</span>
-                    <span style={{ fontSize:11.5, color:'var(--text2)' }}>{linkedCount > 0 ? t('inventory.linkedCount', { count: linkedCount }) : t('inventory.linkedEmpty')}</span>
-                  </button>
-                </div>
-              )
-            })()}
-            <div style={{ display:'flex', gap:10, marginTop:8 }}>
-              {selected && <button onClick={() => { setShowModal(false); deleteItem(selected.id) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              {selected && <button onClick={() => { setShowModal(false); deleteItem(selected) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
               <SaveButton onSave={saveItem} onDone={myDrag.close} onError={myDrag.triggerJiggle} className="btn btn-primary" style={{ flex:2 }}><Save size={16} /> {t('inventory.save')}</SaveButton>
             </div>
-            </>)}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Modal dettaglio — un solo flusso verticale: titolo e stato subito in
           cima, storico subito sotto senza dover toccare nulla per vederlo,

@@ -35,6 +35,7 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
   const [hoverDate, setHoverDate] = useState(null)
   const containerRef = useRef(null)
   const [popupLeft, setPopupLeft] = useState(null)
+  const [popupAbove, setPopupAbove] = useState(false)
   const init = start ? new Date(start + 'T12:00:00') : new Date()
   const [view, setView] = useState({ year: init.getFullYear(), month: init.getMonth() })
 
@@ -47,15 +48,18 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
 
   // Stesso clamp anti-overflow già applicato a DateField.jsx — qui il
   // popup è più largo (griglia più leggibile per un intervallo), quindi la
-  // misura va rifatta con la sua larghezza reale.
+  // misura va rifatta con la sua larghezza reale. Stessa misura decide
+  // anche se aprire sopra invece che sotto quando non c'è spazio sotto.
   useLayoutEffect(() => {
     if (!open || !containerRef.current) return
-    const POPUP_W = 252, MARGIN = 8
+    const POPUP_W = 252, POPUP_H = 340, MARGIN = 8
     const compute = () => {
       const rect = containerRef.current.getBoundingClientRect()
       let left = rect.width - POPUP_W
       if (rect.left + left < MARGIN) left = MARGIN - rect.left
       setPopupLeft(left)
+      const spaceBelow = window.innerHeight - rect.bottom
+      setPopupAbove(spaceBelow < POPUP_H && rect.top > spaceBelow)
     }
     compute()
     window.addEventListener('resize', compute)
@@ -132,7 +136,7 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', width: 252, ...(popupLeft != null ? { left: popupLeft } : { right: 0 }), background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 13, padding: '10px 10px 8px', boxShadow: '0 8px 28px rgba(0,0,0,0.14)', zIndex: 100 }}>
+        <div style={{ position: 'absolute', ...(popupAbove ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }), width: 252, ...(popupLeft != null ? { left: popupLeft } : { right: 0 }), background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 13, padding: '10px 10px 8px', boxShadow: '0 8px 28px rgba(0,0,0,0.14)', zIndex: 100 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <button type="button" className="drf-nav-btn" onClick={prevMonth} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>‹</button>
             <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{MONTHS[view.month]} {view.year}</span>

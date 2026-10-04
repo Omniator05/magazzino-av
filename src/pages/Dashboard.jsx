@@ -13,6 +13,7 @@ import Profile from './Profile'
 import TutorialModal from '../components/TutorialModal'
 import GettingStartedWidget from '../components/GettingStartedWidget'
 import TodayReminderModal from '../components/TodayReminderModal'
+import DeadlineReminderModal from '../components/DeadlineReminderModal'
 import ProUpsell from '../components/ProUpsell'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
@@ -109,6 +110,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   const navigate = useNavigate()
   const [showProfile, setShowProfile] = useState(false)
   const [items, setItems]   = useState([])
+  const [vehicles, setVehicles] = useState([])
   const [tasks, setTasks]   = useState([])
   const [events, setEvents] = useState([])
   const [itemsLoaded, setItemsLoaded]   = useState(false)
@@ -127,9 +129,12 @@ export default function Dashboard({ toggleTheme, theme }) {
   useEffect(() => {
     if (!teamId) return
     const u1 = onSnapshot(query(collection(db, 'items'),  where('teamId','==',teamId), orderBy('name')),  s => { setItems(s.docs.map(d => ({ id:d.id,...d.data() }))); setItemsLoaded(true) })
-    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => { setEvents(s.docs.map(d => ({ id:d.id,...d.data() }))); setEventsLoaded(true) })
+    // isDeadlineReminder: promemoria scadenze auto-generati (vedi utils/deadlines.js)
+    // — compaiono solo in Calendario, mai tra i "prossimi eventi" qui.
+    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => { setEvents(s.docs.map(d => ({ id:d.id,...d.data() })).filter(e => !e.isDeadlineReminder)); setEventsLoaded(true) })
     const u3 = onSnapshot(query(collection(db, 'tasks'),  where('teamId','==',teamId)),                   s => setTasks(s.docs.map(d => ({ id:d.id,...d.data() }))))
-    return () => { u1(); u2(); u3() }
+    const u4 = onSnapshot(query(collection(db, 'vehicles'), where('teamId','==',teamId)),                 s => setVehicles(s.docs.map(d => ({ id:d.id,...d.data() }))))
+    return () => { u1(); u2(); u3(); u4() }
   }, [teamId])
 
   // Resoconto settimanale: solo il lunedì, una volta a settimana (per dispositivo).
@@ -700,7 +705,10 @@ export default function Dashboard({ toggleTheme, theme }) {
       {/* Non insieme al resoconto settimanale (si sovrapporrebbero il lunedì
           mattina) — quello prevale, questo arriva al prossimo giro. */}
       {!showOverlay && !showRecapBanner && !showRecapModal && (
-        <TodayReminderModal events={events} today={today} navigate={navigate} />
+        <>
+          <TodayReminderModal events={events} today={today} navigate={navigate} />
+          <DeadlineReminderModal vehicles={vehicles} items={items} today={today} />
+        </>
       )}
 
       <GettingStartedWidget teamId={teamId} items={items} events={events} dataReady={itemsLoaded && eventsLoaded} />

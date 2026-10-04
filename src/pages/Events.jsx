@@ -10,6 +10,7 @@ import { EventListSkeleton } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
+import TimeField from '../components/TimeField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
 import { pushEventToGoogle } from '../utils/googleCalendar'
@@ -286,7 +287,7 @@ export default function Events() {
   const [closingInstallation, setClosingInstallation] = useState(null)
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
-  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
+  const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', allDay:true, timeStart:'', timeEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
   // Flusso unico di creazione evento (Calendar.jsx monta lo stesso componente):
   // vedi src/components/CreateEventFlow.jsx.
   const [createFlowOpen, setCreateFlowOpen] = useState(false)
@@ -313,7 +314,9 @@ export default function Events() {
   useEffect(() => {
     if (!teamId) return
     const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
-    return onSnapshot(q, snap => { setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false) })
+    // isDeadlineReminder: promemoria scadenze auto-generati (vedi utils/deadlines.js)
+    // — compaiono solo in Calendario, mai tra le liste di carico vere.
+    return onSnapshot(q, snap => { setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => !e.isDeadlineReminder)); setLoading(false) })
   }, [teamId])
 
   // ── Import da Google Calendar (i collaboratori scrivono lì, non in app) ──
@@ -415,7 +418,9 @@ export default function Events() {
     e.stopPropagation()
     setEditing(event)
     setForm({
-      name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'', location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{},
+      name:event.name||'', date:event.date||'', dateEnd:event.dateEnd||'',
+      allDay: event.allDay !== false, timeStart: event.timeStart||'', timeEnd: event.timeEnd||'',
+      location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{},
       quoteRef: event.quoteRef||'', managerName: event.eventManager?.name||'', managerPhone: event.eventManager?.phone||'', managerEmail: event.eventManager?.email||'',
     })
     setShowModal(true)
@@ -430,6 +435,7 @@ export default function Events() {
       const updated = {
         name: form.name.trim(), date: form.date,
         dateEnd: form.dateEnd || null,
+        allDay: form.allDay, timeStart: form.allDay ? null : (form.timeStart || null), timeEnd: form.allDay ? null : (form.timeEnd || null),
         location: form.location.trim(), notes: form.notes.trim(),
         type: form.type || 'event',
         phases: form.phases || {},
@@ -441,7 +447,7 @@ export default function Events() {
       pushEventToGoogle(editing.id)
       setShowModal(false)
       setEditing(null)
-      setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
+      setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', allDay:true, timeStart:'', timeEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
     } finally { setSaving(false) }
   }
 
@@ -652,7 +658,33 @@ export default function Events() {
             </div>
             <div className="form-group">
               <label>{t('calendar.startDateLabel')}</label>
-              <DateField value={form.date} onChange={v => setForm({...form,date:v})} />
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <DateField value={form.date} onChange={v => setForm({...form,date:v})} />
+                </div>
+                <button type="button" onClick={() => setForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={form.allDay}
+                  style={{
+                    flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
+                    background: form.allDay ? 'var(--accent)' : 'var(--card2)',
+                    color: form.allDay ? '#fff' : 'var(--text2)',
+                    border: `1px solid ${form.allDay ? 'var(--accent)' : 'var(--border)'}`,
+                    fontSize:13, fontWeight:700, whiteSpace:'nowrap',
+                  }}>
+                  {form.allDay && <IconCheckSm />} {t('events.allDayLabel')}
+                </button>
+              </div>
+              {!form.allDay && (
+                <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <label htmlFor="ev-time-start" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
+                    <TimeField value={form.timeStart} onChange={v => setForm(f => ({ ...f, timeStart:v }))} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <label htmlFor="ev-time-end" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
+                    <TimeField value={form.timeEnd} onChange={v => setForm(f => ({ ...f, timeEnd:v }))} clearable />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>{t('calendar.endDateLabel')} {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintInstallation')}</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintEvent')}</span>}</label>
@@ -660,7 +692,7 @@ export default function Events() {
             </div>
             {form.type !== 'installation' && (
               <div className="form-group">
-                <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+                <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')}</label>
                 {PHASE_CONFIG.map(p => (
                   <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                     <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>

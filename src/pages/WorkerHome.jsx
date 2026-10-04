@@ -52,8 +52,10 @@ export default function WorkerHome() {
   useEffect(() => {
     if (!teamId) return
     const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
+    // isDeadlineReminder: promemoria scadenze auto-generati (vedi utils/deadlines.js)
+    // — compaiono solo in Calendario, mai tra gli eventi del magazziniere.
     return onSnapshot(q, snap => {
-      setEvents(snap.docs.map(d => ({ id:d.id, ...d.data() })))
+      setEvents(snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(e => !e.isDeadlineReminder))
     })
   }, [teamId])
 

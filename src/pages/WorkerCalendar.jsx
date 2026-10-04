@@ -449,7 +449,22 @@ export default function WorkerCalendar() {
           {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
-            selectedEvents.map(({ event: ev, assigned: mine, phases }) => (
+            selectedEvents.map(({ event: ev, assigned: mine, phases }) => {
+              // Promemoria scadenza (vedi utils/deadlines.js): non è una vera
+              // lista di carico, non si apre — si cambia dalla scheda
+              // furgone/oggetto che l'ha generato.
+              if (ev.isDeadlineReminder) {
+                return (
+                  <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:12, background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'13px 14px', marginBottom:8 }}>
+                    <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background:'var(--text3)' }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                    </div>
+                    <span style={{ flexShrink:0, fontSize:11, fontWeight:700, color:'var(--text2)', background:'var(--card2)', border:'1px solid var(--border)', borderRadius:8, padding:'3px 9px' }}>{t('deadlines.reminderBadge')}</span>
+                  </div>
+                )
+              }
+              return (
                 <div
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
@@ -479,7 +494,8 @@ export default function WorkerCalendar() {
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
                 </div>
-              ))
+              )
+            })
           )}
           {selectedGoogleEvents.length > 0 && (
             <div style={{ marginTop: selectedEvents.length > 0 ? 14 : 0 }}>

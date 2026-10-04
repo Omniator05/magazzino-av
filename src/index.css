@@ -79,7 +79,8 @@ button {
     box-shadow: 0 2px 8px rgba(0,0,0,0.10);
   }
 }
-button.btn-no-anim:hover {
+button.btn-no-anim:hover,
+button.btn-no-anim:not(:disabled):active {
   filter: none;
   transform: none;
   box-shadow: none;
@@ -101,6 +102,36 @@ button.chip-no-press:not(:disabled):active {
   box-shadow: none;
 }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Navigazione settimana in StaffTimeline (Assegna personale): l'ombra
+   fluttuante di default non si legge su sfondi pieni o assenti — qui una
+   tinta di sfondo più marcata sostituisce ombra/brightness generici. Lo
+   sfondo di base è inline (background: var(--card2)/none), quindi qui serve
+   !important per vincere la specificità dell'inline style — stesso pattern
+   già usato in TimeField.jsx per .tf-input:focus. */
+button.staff-nav-btn:hover,
+button.staff-nav-btn:not(:disabled):active {
+  filter: none;
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.staff-nav-btn:hover { background: var(--card3) !important; }
+}
+button.staff-nav-btn:not(:disabled):active { background: var(--card3) !important; transform: scale(0.96); }
+button.staff-nav-today:hover,
+button.staff-nav-today:not(:disabled):active {
+  filter: none;
+  box-shadow: none;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.staff-nav-today:hover { background: var(--card2) !important; }
+  /* "Oggi" è grigio quando si è su un'altra settimana — l'hover lo
+     riaccende di rosso per anticipare che il tap riporta alla data odierna. */
+  button.staff-nav-today:hover .staff-nav-today-label { color: var(--accent) !important; }
+}
+button.staff-nav-today:not(:disabled):active { background: var(--card2) !important; }
+button.staff-nav-today:not(:disabled):active .staff-nav-today-label { color: var(--accent) !important; }
 
 /* Modal creazione/modifica utente: tante interazioni ravvicinate (menu
    ruolo, permesso magazzino, toggle...) — l'effetto "schiacciato" standard

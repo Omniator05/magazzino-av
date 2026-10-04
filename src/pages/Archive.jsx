@@ -47,7 +47,10 @@ export default function Archive() {
       if (after) q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date', 'desc'), startAfter(after), limit(PAGE_SIZE * 3))
 
       const snap = await getDocs(q)
-      const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      // isDeadlineReminder: promemoria scadenze auto-generati (vedi utils/deadlines.js),
+      // items sempre vuoto e data spesso passata — finirebbero in archivio
+      // senza esserci mai stati, compaiono solo in Calendario.
+      const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => !e.isDeadlineReminder)
 
       // Un evento va in archivio se:
       // 1. La data è passata, E lista vuota (nessun articolo) OPPURE tutti gli

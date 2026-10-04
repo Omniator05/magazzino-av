@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
@@ -9,10 +9,14 @@ import { Pin, User, List, Wrench, Check } from '../components/Icon'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
-import { toggleWorkerAssignment, isWorkerUnavailable } from '../utils/workerAssignment'
+import TimeField from '../components/TimeField'
+import StaffTimeline from '../components/StaffTimeline'
+import EventSummaryModal from '../components/EventSummaryModal'
+import TaskSummaryModal from '../components/TaskSummaryModal'
 import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
 import { formatDate, capitalize } from '../utils/formatDate'
 import CreateEventFlow from '../components/CreateEventFlow'
@@ -78,21 +82,43 @@ export default function Calendar() {
   const [googleEvents, setGoogleEvents] = useState([])
   const [unavailability, setUnavailability] = useState([])
   const [workers, setWorkers] = useState([])
+  const [assignmentBlocks, setAssignmentBlocks] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
 
-  // Modalità "Assegna personale" — vista alternativa alla griglia, lista degli
-  // eventi del mese con i worker assegnati sempre visibili.
+  // Modalità "Assegna personale" — timeline settimanale (StaffTimeline.jsx),
+  // alternativa alla griglia mensile. Pensata quasi esclusivamente per
+  // desktop (7 colonne affiancate, tanta info): su telefono il toggle
+  // sparisce e, se ci si arriva comunque (es. finestra ridotta mentre era
+  // già aperta), si torna automaticamente alla griglia.
   const [mode, setMode] = useState('grid') // 'grid' | 'assign'
-  const [selectedWorkerId, setSelectedWorkerId] = useState(null) // tap-tap mobile
-  const [dragOverEventId, setDragOverEventId] = useState(null)   // feedback drag desktop
-  const [draggedWorkerId, setDraggedWorkerId] = useState(null)   // chi si sta trascinando, per l'anteprima "non disponibile"
-  const [showPastAssign, setShowPastAssign] = useState(false)    // includi eventi già passati
+  const isMobile = useIsMobile()
+  useEffect(() => { if (isMobile && mode === 'assign') setMode('grid') }, [isMobile, mode])
+
+  // Arrivo come scorciatoia dal bottone "Assegna" nella lista di carico
+  // (EventDetail.jsx) — passa a "Assegna personale" già sulla settimana e
+  // sull'evento giusti, invece di un modal separato lì. Lo stato di
+  // navigazione va consumato una volta sola (altrimenti un refresh o un
+  // back/forward ci farebbero tornare qui di continuo).
+  const { state: navState } = useLocation()
+  const [focusAssign, setFocusAssign] = useState(null) // {eventId, date}
+  useEffect(() => {
+    if (navState?.assignEventId && navState?.assignDate) {
+      setMode('assign')
+      setFocusAssign({ eventId: navState.assignEventId, date: navState.assignDate })
+      window.history.replaceState({}, '')
+    }
+  }, [navState])
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
   // Flusso unico di creazione evento, condiviso con Events.jsx — vedi
   // src/components/CreateEventFlow.jsx.
   const [showCreate, setShowCreate] = useState(false)
+  // Tap su un evento già esistente (griglia o timeline) apre un riepilogo
+  // rapido invece di saltare dritti alla lista di carico — vedi EventSummaryModal.jsx.
+  const [summaryEvent, setSummaryEvent] = useState(null)
+  // Stesso riepilogo, versione per i task liberi (niente lista di carico) — vedi TaskSummaryModal.jsx.
+  const [summaryTask, setSummaryTask] = useState(null)
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
@@ -208,6 +234,7 @@ export default function Calendar() {
       await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), {
         name: editForm.name.trim(), date: editForm.date,
         dateEnd: editForm.dateEnd || null,
+        allDay: editForm.allDay, timeStart: editForm.allDay ? null : (editForm.timeStart || null), timeEnd: editForm.allDay ? null : (editForm.timeEnd || null),
         location: editForm.location.trim(), notes: editForm.notes.trim(),
         phases: editForm.phases || {},
         quoteRef: (editForm.quoteRef || '').trim(),
@@ -236,25 +263,6 @@ export default function Calendar() {
     await deleteDoc(doc(db, 'unavailability', id))
   }
 
-  // Assegnazione worker → evento, usata sia dal drag desktop sia dal tap-tap
-  // mobile sia dalla ✕ sui chip già assegnati (rimozione, mai conferma).
-  const handleAssign = async (ev, workerId) => {
-    if (!workerId) return
-    const alreadyAssigned = (ev.assignedWorkers || []).includes(workerId)
-    if (!alreadyAssigned && isWorkerUnavailable(workerId, ev, unavailability)) {
-      const w = workers.find(x => x.id === workerId)
-      const ok = await confirm({
-        title: t('calendar.confirmUnavailableTitle'),
-        message: t('calendar.confirmUnavailableMessage', { name: w?.name || t('calendar.thisWorker'), event: ev.name }),
-        confirmLabel: t('calendar.confirmUnavailableLabel'),
-        danger: true,
-      })
-      if (!ok) return
-    }
-    await toggleWorkerAssignment(doc(db, 'events', ev.id), ev, workerId)
-    setSelectedWorkerId(null)
-  }
-
   const PHASE_FORM_CONFIG = [
     { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
     { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
@@ -264,7 +272,9 @@ export default function Calendar() {
     e.stopPropagation()
     setEditingEvent(ev)
     setEditForm({
-      name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'', location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
+      name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'',
+      allDay: ev.allDay !== false, timeStart: ev.timeStart||'', timeEnd: ev.timeEnd||'',
+      location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
       quoteRef: ev.quoteRef||'', managerName: ev.eventManager?.name||'', managerPhone: ev.eventManager?.phone||'', managerEmail: ev.eventManager?.email||'',
     })
   }
@@ -301,23 +311,20 @@ export default function Calendar() {
     })
   }, [teamId])
 
-  const cells = getMonthGrid(cursor.year, cursor.month)
-
-  // Eventi del mese in vista (per la modalità "Assegna personale"), con
-  // overlap multi-giorno — un evento appare una sola volta anche se lungo.
-  // Di default nasconde i già passati (si assegna personale a ciò che deve
-  // ancora succedere), con un toggle per farli ricomparire.
-  const monthStart = toDateStr(new Date(cursor.year, cursor.month, 1))
-  const monthEnd = toDateStr(new Date(cursor.year, cursor.month + 1, 0))
-  const monthEvents = events
-    .filter(ev => {
-      if (!ev.date) return false
-      const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
-      if (end < monthStart || ev.date > monthEnd) return false
-      if (!showPastAssign && end < todayStr) return false
-      return true
+  // Tutti i blocchi della timeline "Assegna personale" (collection
+  // assignmentBlocks) — sia i task liberi (senza eventId, usati sotto per
+  // tasksByDate) sia quelli legati a un evento/fase (usati da
+  // EventSummaryModal per mostrare chi è assegnato con quali orari, vedi
+  // sotto nel JSX).
+  useEffect(() => {
+    if (!teamId) return
+    const q = query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId))
+    return onSnapshot(q, snap => {
+      setAssignmentBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-    .sort((a, b) => a.date.localeCompare(b.date))
+  }, [teamId])
+
+  const cells = getMonthGrid(cursor.year, cursor.month)
 
   // Raggruppa eventi per data — tutti i giorni tra inizio e fine
   const eventsByDate = {}
@@ -334,12 +341,17 @@ export default function Calendar() {
     }
   })
   // Un evento normale è quasi sempre ciò che si sta cercando aprendo un
-  // giorno (un rent/install spesso occupa il giorno per settimane, ma è
-  // "rumore di fondo" rispetto a un evento puntuale) — gli eventi vengono
-  // prima, i rent/install dopo, sia nei puntini del mese che nell'elenco del
-  // giorno selezionato (entrambi leggono da eventsByDate). Sort stabile:
-  // l'ordine tra eventi dello stesso tipo resta quello originale.
-  Object.values(eventsByDate).forEach(list => list.sort((a, b) => (a.type === 'installation') - (b.type === 'installation')))
+  // giorno — gli eventi vengono prima, le fasi (montaggio/smontaggio) subito
+  // dopo, i task liberi (creati dalla timeline "Assegna personale") dopo
+  // ancora, i rent/install sempre per ultimi (un rent/install spesso occupa
+  // il giorno per settimane, è "rumore di fondo" rispetto al resto), i
+  // promemoria scadenza (non sono una vera prenotazione) ultimissimi — sia
+  // nella griglia mensile che nell'elenco del giorno selezionato (entrambi
+  // leggono da eventsByDate/phasesByDate/tasksByDate con questo stesso
+  // ordine, vedi più sotto dove si uniscono). Sort stabile: l'ordine tra
+  // eventi dello stesso rango resta quello originale.
+  const eventRank = e => e.isDeadlineReminder ? 4 : e.type === 'installation' ? 3 : 0
+  Object.values(eventsByDate).forEach(list => list.sort((a, b) => eventRank(a) - eventRank(b)))
 
   // Indice fasi: data → array di { event, key, color, label }
   const PHASE_META = {
@@ -354,6 +366,16 @@ export default function Calendar() {
       if (!phasesByDate[date]) phasesByDate[date] = []
       phasesByDate[date].push({ event: e, key, ...PHASE_META[key] })
     })
+  })
+
+  // Task liberi per data (sempre un solo giorno, niente da espandere) — solo
+  // i blocchi SENZA eventId, quelli legati a un evento/fase restano
+  // rappresentati dall'evento stesso (vedi EventSummaryModal più sotto).
+  const tasksByDate = {}
+  assignmentBlocks.filter(b => !b.eventId).forEach(b => {
+    if (!b.date) return
+    if (!tasksByDate[b.date]) tasksByDate[b.date] = []
+    tasksByDate[b.date].push(b)
   })
 
   // Eventi Google raggruppati per data (stessa logica multi-giorno degli eventi normali)
@@ -384,6 +406,7 @@ export default function Calendar() {
   const selectedPhases = phasesByDate[selectedDate] || []
   // Aggiungi anche gli eventi con fasi nel giorno selezionato (non già presenti come evento del giorno)
   const selectedPhaseEvents = selectedPhases.filter(p => !selectedEvents.some(e => e.id === p.event.id))
+  const selectedTasks = selectedDate ? (tasksByDate[selectedDate] || []) : []
   const selectedAbsences = selectedDate ? absencesOnDate(selectedDate) : []
   const selectedGoogleEvents = selectedDate ? (googleEventsByDate[selectedDate] || []) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
@@ -398,36 +421,46 @@ export default function Calendar() {
             <p>{t('calendar.totalEvents', { count: events.length })}</p>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
-              aria-pressed={reportMode}
-              style={{
-                background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
-                border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
-                color: reportMode ? 'var(--accent)' : 'var(--text2)',
-                borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
-              }}>
-              {t('calendar.reportAbsence')}
-            </button>
+            {/* Il flusso "tocca primo/ultimo giorno" dipende dalla griglia
+                mensile: in "Assegna personale" non c'è nulla su cui toccare,
+                quindi il bottone resterebbe acceso senza poter funzionare. */}
+            {mode === 'grid' && (
+              <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
+                aria-pressed={reportMode}
+                style={{
+                  background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
+                  border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
+                  color: reportMode ? 'var(--accent)' : 'var(--text2)',
+                  borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
+                }}>
+                {t('calendar.reportAbsence')}
+              </button>
+            )}
             <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
           </div>
         </div>
 
-        {/* Toggle griglia / assegna personale */}
+        {/* Toggle griglia / assegna personale — solo desktop, la timeline
+            settimanale non è pensata per schermi stretti (vedi isMobile sopra) */}
+        {!isMobile && (
         <div style={{ display:'flex', gap:3, marginTop:22, background:'var(--card2)', borderRadius:10, padding:3, width:'fit-content', margin:'22px auto 0' }}>
           <button onClick={() => setMode('grid')} aria-pressed={mode === 'grid'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'grid' ? 'var(--accent)' : 'transparent', color: mode === 'grid' ? 'white' : 'var(--text2)' }}>
             {t('calendar.viewGrid')}
           </button>
-          <button onClick={() => setMode('assign')} aria-pressed={mode === 'assign'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
+          <button onClick={() => { if (reportMode) cancelReportMode(); setMode('assign') }} aria-pressed={mode === 'assign'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
             {t('calendar.viewAssign')}
           </button>
         </div>
+        )}
 
-        {/* Navigazione mese */}
+        {/* Navigazione mese — solo in griglia, la timeline settimanale ha la propria */}
+        {mode === 'grid' && (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
           <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
           <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
           <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
         </div>
+        )}
 
         {mode === 'grid' && reportMode && (
           <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
@@ -514,31 +547,41 @@ export default function Calendar() {
                     )}
                   </div>
                 )}
-                {/* Nomi evento (fino a 2 righe, troncati) invece dei puntini — include
-                    anche le fasi (montaggio/smontaggio) che cadono in un giorno diverso
-                    da quello dell'evento vero e proprio: altrimenti lì restava solo il
-                    puntino colorato qui sotto, senza dire di quale lavoro si tratta. */}
+                {/* Nomi evento (fino a 2 righe, troncati) in una card del colore
+                    dell'evento, come Google Calendar — niente più puntino separato,
+                    il colore è la card stessa: si legge meglio e occupa meno
+                    spazio in orizzontale. Include anche le fasi (montaggio/
+                    smontaggio) che cadono in un giorno diverso da quello
+                    dell'evento vero e proprio. */}
                 {(() => {
                   const dayPhasesOnly = (phasesByDate[dStr] || []).filter(p => !dayEvents.some(e => e.id === p.event.id))
+                  const dayTasksOnly = tasksByDate[dStr] || []
+                  // Ordine di priorità fisso: evento vero > fase (montaggio/
+                  // smontaggio) > task libero > rent/install > promemoria
+                  // scadenza — stesso rango di eventRank sopra.
                   const titleRows = [
                     ...dayEvents.map(ev => {
                       const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
-                      return { key: ev.id, name: ev.name, color: ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)' }
+                      const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
+                      return { key: ev.id, name: ev.name, isReminder: ev.isDeadlineReminder, rank, color: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)' }
                     }),
-                    ...dayPhasesOnly.map(p => ({ key: `${p.event.id}-${p.key}`, name: p.event.name, color: p.color })),
-                  ]
+                    ...dayPhasesOnly.map(p => ({ key: `${p.event.id}-${p.key}`, name: p.event.name, rank: 1, color: p.color })),
+                    ...dayTasksOnly.map(b => {
+                      const isAssigned = isWorker && b.workerId === user?.uid
+                      return { key: `tk${b.id}`, name: b.label || t('staffTimeline.untitledTask'), rank: 2, color: isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--blue)', isTask: true, task: b }
+                    }),
+                  ].sort((a, b) => a.rank - b.rank)
                   if (titleRows.length === 0) return null
                   return (
-                    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:1 }}>
+                    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>
                       {titleRows.slice(0, 2).map(row => (
                         <span key={row.key} style={{
-                          display:'flex', alignItems:'center', gap:3,
-                          fontSize:10, fontWeight:700, lineHeight:1.2, color:'var(--text)',
-                          maxWidth:'100%', opacity: isPast ? 0.55 : 1,
-                        }}>
-                          <span style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:row.color }} />
-                          <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.name}</span>
-                        </span>
+                          display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.35,
+                          padding:'1.5px 4px', borderRadius:4, maxWidth:'100%',
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                          background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.color,
+                          color: row.isReminder ? 'var(--text3)' : '#fff',
+                        }}>{row.name}</span>
                       ))}
                       {titleRows.length > 2 && (
                         <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - 2}</span>
@@ -595,29 +638,75 @@ export default function Calendar() {
       )}
 
       {/* Pannello giorno selezionato — qui il testo è leggibile per intero */}
-      {mode === 'grid' && selectedDate && (
+      {mode === 'grid' && selectedDate && (() => {
+        const isSelectedDayPast = selectedDate < todayStr
+        return (
         <div style={{ padding:'0 16px 24px' }}>
           <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
             {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
             {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
-          {selectedEvents.length === 0 && selectedPhaseEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
+          {selectedEvents.length === 0 && selectedPhaseEvents.length === 0 && selectedTasks.length === 0 && selectedGoogleEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
             <>
-              {[...selectedEvents.map(ev => ({ ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), dotColor: ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' })),
-                ...selectedPhaseEvents.map(p => ({ ev: p.event, phaseOnDay: p, dotColor: p.color, borderColor: p.color + '44' }))
-              ].map(({ ev, phaseOnDay, dotColor, borderColor }) => {
+              {[
+                // Stesso ordine di priorità della griglia mensile: evento
+                // vero > fase > rent/install > task libero > promemoria.
+                ...selectedEvents.map(ev => ({ ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), rank: ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0, dotColor: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' })),
+                ...selectedPhaseEvents.map(p => ({ ev: p.event, phaseOnDay: p, rank: 1, dotColor: p.color, borderColor: p.color + '44' })),
+                ...selectedTasks.map(b => ({ task: b, rank: 2, dotColor: 'var(--blue)', borderColor: 'var(--border)' })),
+              ].sort((a, b) => a.rank - b.rank).map(({ ev, task, phaseOnDay, dotColor, borderColor }) => {
+                // Il giorno selezionato è uno solo per tutta questa lista: se
+                // è passato, il colore identificativo (puntino, bordo, badge
+                // fase) si legge in grigio invece che nel colore vivo del tipo.
+                if (isSelectedDayPast) { dotColor = 'var(--text2)'; borderColor = 'var(--border)' }
+
+                // Task libero (creato dalla timeline "Assegna personale"):
+                // riga semplice, niente location/fase/matita-cestino — il
+                // tap apre il riepilogo (TaskSummaryModal), niente lista di
+                // carico perché non è un evento Roadcase vero.
+                if (task) {
+                  return (
+                    <div key={`tk${task.id}`}
+                      onClick={() => setSummaryTask(task)}
+                      style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
+                    >
+                      <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{task.label || t('staffTimeline.untitledTask')}</p>
+                        <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{task.startTime} – {task.endTime}</p>
+                      </div>
+                    </div>
+                  )
+                }
+
                 const assignedNames = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean)
+                // Promemoria scadenza (vedi utils/deadlines.js): non è una vera
+                // lista di carico, non si apre e non si modifica/cancella da
+                // qui — si cambia dalla scheda furgone/oggetto che l'ha
+                // generato, altrimenti la scadenza e l'evento finirebbero
+                // disallineati.
+                if (ev.isDeadlineReminder) {
+                  return (
+                    <div key={ev.id} style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12 }}>
+                      <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
+                      </div>
+                      <span style={{ flexShrink:0, fontSize:11, fontWeight:700, color:'var(--text2)', background:'var(--card2)', border:'1px solid var(--border)', borderRadius:8, padding:'3px 9px' }}>{t('deadlines.reminderBadge')}</span>
+                    </div>
+                  )
+                }
                 return (
                   <div key={ev.id + (phaseOnDay?.key||'')}
-                    onClick={() => navigate(`/events/${ev.id}`)}
+                    onClick={() => setSummaryEvent(ev)}
                     style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
                   >
                     <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />
                       <button type="button" className="btn-no-anim"
-                        onClick={e => { e.stopPropagation(); navigate(`/events/${ev.id}`) }}
+                        onClick={e => { e.stopPropagation(); setSummaryEvent(ev) }}
                         aria-label={t('events.openEventAria', { name: ev.name })}
                         style={{ flex:1, minWidth:0, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
                       >
@@ -625,11 +714,19 @@ export default function Calendar() {
                           {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                         </p>
                         {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
-                        {phaseOnDay && (
-                          <span style={{ display:'inline-block', marginTop:5, background: phaseOnDay.color + '18', color: phaseOnDay.color, border:`1px solid ${phaseOnDay.color}44`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
-                            {phaseOnDay.label}
-                          </span>
-                        )}
+                        {phaseOnDay && (() => {
+                          // var(--text2) non si può concatenare con un suffisso
+                          // alpha come un hex: colore/sfondo/bordo grigi vanno
+                          // scelti a parte invece di derivarli dalla stessa stringa.
+                          const phaseColor = isSelectedDayPast ? 'var(--text2)' : phaseOnDay.color
+                          const phaseBg = isSelectedDayPast ? 'var(--card2)' : phaseOnDay.color + '18'
+                          const phaseBorder = isSelectedDayPast ? 'var(--border)' : phaseOnDay.color + '44'
+                          return (
+                            <span style={{ display:'inline-block', marginTop:5, background: phaseBg, color: phaseColor, border:`1px solid ${phaseBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
+                              {phaseOnDay.label}
+                            </span>
+                          )
+                        })()}
                         {assignedNames.length > 0 && (
                           <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:7 }}>
                             {assignedNames.map(name => (
@@ -726,131 +823,12 @@ export default function Calendar() {
             </div>
           )}
         </div>
-      )}
+        )
+      })()}
 
-      {/* Vista "Assegna personale" — striscia worker draggable/tap + lista eventi del mese come drop target */}
+      {/* Vista "Assegna personale" — timeline settimanale ore per persona, vedi StaffTimeline.jsx */}
       {mode === 'assign' && (
-        <>
-          <div style={{ padding:'14px 16px 4px' }}>
-            <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>
-              {t('calendar.workersLabel')} {selectedWorkerId ? t('calendar.workersHint') : ''}
-            </p>
-            <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:8, WebkitOverflowScrolling:'touch' }}>
-              {workers.filter(w => w.active !== false).length === 0 && (
-                <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noActiveWorkers')}</p>
-              )}
-              {workers.filter(w => w.active !== false).map(w => {
-                const isSelected = selectedWorkerId === w.id
-                return (
-                  <button key={w.id}
-                    className="chip-no-press"
-                    draggable
-                    onDragStart={e => {
-                      e.dataTransfer.setData('text/plain', w.id)
-                      setDraggedWorkerId(w.id)
-                      // Il ghost di drag nativo del browser a volte ignora il border-radius
-                      // sui <button> e mostra un rettangolo: forziamo un clone ovale come immagine.
-                      const ghost = e.currentTarget.cloneNode(true)
-                      ghost.style.position = 'absolute'
-                      ghost.style.top = '-1000px'
-                      ghost.style.left = '-1000px'
-                      ghost.style.borderRadius = '20px'
-                      ghost.style.overflow = 'hidden'
-                      document.body.appendChild(ghost)
-                      e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2)
-                      setTimeout(() => ghost.remove(), 0)
-                    }}
-                    onDragEnd={() => setDraggedWorkerId(null)}
-                    onClick={() => setSelectedWorkerId(id => id === w.id ? null : w.id)}
-                    aria-pressed={isSelected}
-                    style={{
-                      flexShrink:0, display:'flex', alignItems:'center', gap:6,
-                      padding:'8px 14px', borderRadius:20,
-                      background: isSelected ? 'rgba(216,56,63,0.12)' : 'var(--card)',
-                      border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
-                      boxShadow: isSelected ? '0 0 0 3px rgba(216,56,63,0.15)' : 'none',
-                      fontSize:13, fontWeight:700, color: isSelected ? 'var(--accent)' : 'var(--text)',
-                      cursor:'grab', whiteSpace:'nowrap',
-                    }}
-                  >
-                    👷 {w.name || t('common.noName')}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div style={{ padding:'8px 16px 24px' }}>
-            <button onClick={() => setShowPastAssign(v => !v)} aria-pressed={showPastAssign}
-              style={{ background: showPastAssign ? 'var(--card2)' : 'transparent', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:700, marginBottom:10 }}>
-              {showPastAssign ? '✓ ' : ''}{t('calendar.seePast')}
-            </button>
-            {monthEvents.length === 0 ? (
-              <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'20px 0', textAlign:'center' }}>
-                {t(showPastAssign ? 'calendar.noEventsInMonth' : 'calendar.noFutureEventsInMonth', { month: capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language)) })}
-              </p>
-            ) : monthEvents.map(ev => {
-              const assigned = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)).filter(Boolean)
-              const isDragOver = dragOverEventId === ev.id
-              // Chi si sta per assegnare — trascinato (desktop) o già selezionato
-              // col tap (mobile, dove non esiste un vero "hover"): se quella
-              // persona risulta assente in questi giorni, la card lo mostra
-              // subito (grigia + avviso), prima ancora del conferma-comunque
-              // che scatta al drop/tap in handleAssign.
-              const previewWorkerId = draggedWorkerId || selectedWorkerId
-              const previewUnavail = !!previewWorkerId && isWorkerUnavailable(previewWorkerId, ev, unavailability)
-              const previewWorker = previewUnavail ? workers.find(w => w.id === previewWorkerId) : null
-              return (
-                <div key={ev.id}
-                  onDragOver={e => e.preventDefault()}
-                  onDragEnter={e => { e.preventDefault(); setDragOverEventId(ev.id) }}
-                  onDragLeave={e => {
-                    // dragenter/dragleave scattano anche sui figli (testo, badge...): se il
-                    // mouse si sposta su un figlio interno alla card, relatedTarget resta
-                    // dentro currentTarget e non dobbiamo togliere l'evidenziazione.
-                    if (e.currentTarget.contains(e.relatedTarget)) return
-                    setDragOverEventId(id => id === ev.id ? null : id)
-                  }}
-                  onDrop={e => { e.preventDefault(); setDragOverEventId(null); setDraggedWorkerId(null); handleAssign(ev, e.dataTransfer.getData('text/plain')) }}
-                  onClick={() => { if (selectedWorkerId) handleAssign(ev, selectedWorkerId) }}
-                  style={{
-                    background: previewUnavail ? 'rgba(144,144,176,0.12)' : (isDragOver ? 'rgba(216,56,63,0.06)' : 'var(--card)'),
-                    border: previewUnavail ? `2px dashed ${isDragOver ? 'var(--red)' : 'var(--border2)'}` : (isDragOver ? '2px dashed var(--accent)' : '1px solid var(--border)'),
-                    opacity: previewUnavail && !isDragOver ? 0.65 : 1,
-                    borderRadius:14, padding:'13px 14px', marginBottom:8,
-                    cursor: selectedWorkerId ? 'pointer' : 'default',
-                    transition:'background 0.15s, border-color 0.15s, opacity 0.15s',
-                  }}
-                >
-                  <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', display:'flex', alignItems:'center', gap:6 }}>
-                    {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
-                  </p>
-                  <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
-                    {formatDate(ev.date + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
-                    {ev.dateEnd && ev.dateEnd !== ev.date ? ` → ${formatDate(ev.dateEnd + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}` : ''}
-                  </p>
-                  {previewUnavail && (
-                    <p style={{ fontSize:12, fontWeight:700, color:'var(--red)', marginTop:5, display:'flex', alignItems:'center', gap:4 }}>
-                      {t('calendar.dragUnavailableWarning', { name: previewWorker?.name || t('calendar.thisWorker') })}
-                    </p>
-                  )}
-                  <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:8 }}>
-                    {assigned.length === 0 && <span style={{ fontSize:12, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</span>}
-                    {assigned.map(w => {
-                      const unavail = isWorkerUnavailable(w.id, ev, unavailability)
-                      return (
-                        <span key={w.id} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
-                          {unavail ? '⚠️' : '👷'} {w.name || t('common.noName')}
-                          <button onClick={e => { e.stopPropagation(); handleAssign(ev, w.id) }} aria-label={t('eventDetail.unassignWorkerAria', { name: w.name || t('common.noName') })} style={{ width:20, height:20, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
-                        </span>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </>
+        <StaffTimeline teamId={teamId} events={events} workers={workers} unavailability={unavailability} user={user} focusAssign={focusAssign} onFocusAssignConsumed={() => setFocusAssign(null)} />
       )}
 
       {/* FAB nuovo evento — solo in vista griglia, in "Assegna personale" lascia spazio alla lista */}
@@ -912,6 +890,17 @@ export default function Calendar() {
         onCreated={(eventId, { fromTemplate }) => { if (fromTemplate) navigate(`/events/${eventId}`) }}
       />
 
+      {/* Riepilogo rapido evento — tap su un evento già esistente, sia in
+          griglia che nella timeline "Assegna personale" */}
+      {summaryEvent && (
+        <EventSummaryModal event={summaryEvent} date={selectedDate} blocks={assignmentBlocks} workers={workers} onClose={() => setSummaryEvent(null)} />
+      )}
+
+      {/* Stesso riepilogo per i task liberi — niente shortcut lista di carico */}
+      {summaryTask && (
+        <TaskSummaryModal block={summaryTask} workers={workers} onClose={() => setSummaryTask(null)} />
+      )}
+
       {/* Modal modifica evento */}
       {editingEvent && (
         <div className={`modal-overlay${editDrag.closing ? ' closing' : ''}`} onClick={editDrag.onOverlayClick}>
@@ -924,14 +913,40 @@ export default function Calendar() {
             </div>
             <div className="form-group">
               <label>{t('calendar.startDateLabel')}</label>
-              <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
+                </div>
+                <button type="button" onClick={() => setEditForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={editForm.allDay}
+                  style={{
+                    flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
+                    background: editForm.allDay ? 'var(--accent)' : 'var(--card2)',
+                    color: editForm.allDay ? '#fff' : 'var(--text2)',
+                    border: `1px solid ${editForm.allDay ? 'var(--accent)' : 'var(--border)'}`,
+                    fontSize:13, fontWeight:700, whiteSpace:'nowrap',
+                  }}>
+                  {editForm.allDay && <Check size={12} />} {t('events.allDayLabel')}
+                </button>
+              </div>
+              {!editForm.allDay && (
+                <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <label htmlFor="cal-edit-time-start" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
+                    <TimeField value={editForm.timeStart} onChange={v => setEditForm(f => ({ ...f, timeStart:v }))} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <label htmlFor="cal-edit-time-end" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
+                    <TimeField value={editForm.timeEnd} onChange={v => setEditForm(f => ({ ...f, timeEnd:v }))} clearable />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>{t('calendar.endDateLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
               <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder={t('common.noneOption')} onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
             </div>
             <div className="form-group">
-              <label>{t('calendar.phasesLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+              <label>{t('calendar.phasesLabel')}</label>
               {PHASE_FORM_CONFIG.map(p => (
                 <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
                   <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>

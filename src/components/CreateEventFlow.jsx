@@ -10,6 +10,7 @@ import { generateDates } from '../utils/recurrence'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import DateField from './DateField'
 import DateRangeField from './DateRangeField'
+import TimeField from './TimeField'
 
 const IconCalendarSm = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -35,6 +36,7 @@ const IconRepeat = () => (
 
 const blankForm = (initialDate) => ({
   name:'', date: initialDate || new Date().toISOString().split('T')[0], dateEnd:'',
+  allDay:true, timeStart:'', timeEnd:'',
   location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{},
   quoteRef:'', managerName:'', managerPhone:'', managerEmail:'',
 })
@@ -116,6 +118,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
       const base = {
         name: form.name.trim(), location: form.location.trim(),
         notes: form.notes.trim(), dateEnd: form.dateEnd || null,
+        allDay: form.allDay, timeStart: form.allDay ? null : (form.timeStart || null), timeEnd: form.allDay ? null : (form.timeEnd || null),
         items: pendingTemplateItems || [],
         lists: pendingTemplateItems ? pendingLists.lists : [],
         mainListName: pendingTemplateItems ? pendingLists.mainListName : '',
@@ -188,50 +191,44 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
               <input id="cef-name" value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('calendar.eventNamePlaceholder')} />
             </div>
             <div className="form-group">
-              <label>{t('calendar.eventDateLabel')} {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintInstallation')}</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintEvent')}</span>}</label>
+              <label>{t('calendar.eventDateLabel')}</label>
               {/* Un solo campo stile "booking" al posto di inizio/fine
                   separati: un tap = giorno singolo, un secondo tap su un
                   giorno diverso estende fino a lì. dateEnd resta '' per un
-                  giorno singolo (stessa convenzione letta altrove in app). */}
-              <DateRangeField
-                start={form.date}
-                end={form.dateEnd || form.date}
-                onChange={(s, e) => setForm(f => ({ ...f, date: s, dateEnd: e === s ? '' : e }))}
-              />
-            </div>
-            {form.type !== 'installation' && (
-              <div className="form-group">
-                <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-                {PHASE_CONFIG.map(p => (
-                  <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
-                    <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <DateField value={form.phases?.[p.key] || ''} clearable placeholder="—"
-                        onChange={v => setForm(f => { const ph = {...(f.phases||{})}; if (v) ph[p.key] = v; else delete ph[p.key]; return {...f, phases:ph} })} />
-                    </div>
+                  giorno singolo (stessa convenzione letta altrove in app).
+                  Interruttore "Tutto il giorno" accanto, non sotto: stessa
+                  riga della barra data invece di impilarli. */}
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <DateRangeField
+                    start={form.date}
+                    end={form.dateEnd || form.date}
+                    onChange={(s, e) => setForm(f => ({ ...f, date: s, dateEnd: e === s ? '' : e }))}
+                  />
+                </div>
+                <button type="button" onClick={() => setForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={form.allDay}
+                  style={{
+                    flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
+                    background: form.allDay ? 'var(--accent)' : 'var(--card2)',
+                    color: form.allDay ? '#fff' : 'var(--text2)',
+                    border: `1px solid ${form.allDay ? 'var(--accent)' : 'var(--border)'}`,
+                    fontSize:13, fontWeight:700, whiteSpace:'nowrap',
+                  }}>
+                  {form.allDay && <IconCheckSm />} {t('events.allDayLabel')}
+                </button>
+              </div>
+              {!form.allDay && (
+                <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <label htmlFor="cef-time-start" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
+                    <TimeField value={form.timeStart} onChange={v => setForm(f => ({ ...f, timeStart:v }))} />
                   </div>
-                ))}
-              </div>
-            )}
-            <div className="form-group">
-              <label htmlFor="cef-location">{t('calendar.locationLabel')}</label>
-              <input id="cef-location" value={form.location} onChange={e => setForm({...form, location:e.target.value})} placeholder={t('calendar.locationPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cef-notes">{t('calendar.notesLabel')}</label>
-              <textarea id="cef-notes" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cef-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input id="cef-quote" value={form.quoteRef} onChange={e => setForm({...form, quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cef-manager-name">{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input id="cef-manager-name" value={form.managerName} onChange={e => setForm({...form, managerName:e.target.value})} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
-              <div style={{ display:'flex', gap:8 }}>
-                <input value={form.managerPhone} onChange={e => setForm({...form, managerPhone:e.target.value})} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
-                <input value={form.managerEmail} onChange={e => setForm({...form, managerEmail:e.target.value})} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
-              </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <label htmlFor="cef-time-end" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
+                    <TimeField value={form.timeEnd} onChange={v => setForm(f => ({ ...f, timeEnd:v }))} clearable />
+                  </div>
+                </div>
+              )}
             </div>
             {form.type !== 'installation' && (
               <>
@@ -259,8 +256,40 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
                     </p>
                   </div>
                 )}
+                <div className="form-group">
+                  <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')}</label>
+                  {PHASE_CONFIG.map(p => (
+                    <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
+                      <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <DateField value={form.phases?.[p.key] || ''} clearable placeholder="—"
+                          onChange={v => setForm(f => { const ph = {...(f.phases||{})}; if (v) ph[p.key] = v; else delete ph[p.key]; return {...f, phases:ph} })} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
+            <div className="form-group">
+              <label htmlFor="cef-location">{t('calendar.locationLabel')}</label>
+              <input id="cef-location" value={form.location} onChange={e => setForm({...form, location:e.target.value})} placeholder={t('calendar.locationPlaceholder')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cef-notes">{t('calendar.notesLabel')}</label>
+              <textarea id="cef-notes" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cef-quote">{t('events.quoteRefLabel')}</label>
+              <input id="cef-quote" value={form.quoteRef} onChange={e => setForm({...form, quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="cef-manager-name">{t('events.eventManagerLabel')}</label>
+              <input id="cef-manager-name" value={form.managerName} onChange={e => setForm({...form, managerName:e.target.value})} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
+              <div style={{ display:'flex', gap:8 }}>
+                <input value={form.managerPhone} onChange={e => setForm({...form, managerPhone:e.target.value})} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
+                <input value={form.managerEmail} onChange={e => setForm({...form, managerEmail:e.target.value})} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+              </div>
+            </div>
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? t('common.saving')

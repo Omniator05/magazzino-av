@@ -21,6 +21,7 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
   const [popupLeft, setPopupLeft] = useState(null)
+  const [popupAbove, setPopupAbove] = useState(false)
   const init = value ? new Date(value + 'T12:00:00') : new Date()
   const [view, setView] = useState({ year: init.getFullYear(), month: init.getMonth() })
 
@@ -37,15 +38,20 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
   // affiancati a metà larghezza, come "Dal"/"Al" in InventoryItemHistory)
   // fa uscire il popup dallo schermo a sinistra. Qui si misura lo spazio
   // reale e si clampa dentro il margine, senza toccare il comportamento
-  // esistente ovunque ci sia già abbastanza spazio.
+  // esistente ovunque ci sia già abbastanza spazio. Stessa misura decide
+  // anche se aprire sopra invece che sotto, quando il campo è in fondo a un
+  // modal scorrevole e sotto non c'entrerebbe (es. dentro DeadlinesField) —
+  // altrimenti bisognerebbe scrollare per vedere il calendario appena aperto.
   useLayoutEffect(() => {
     if (!open || !containerRef.current) return
-    const POPUP_W = 210, MARGIN = 8
+    const POPUP_W = 210, POPUP_H = 320, MARGIN = 8
     const compute = () => {
       const rect = containerRef.current.getBoundingClientRect()
       let left = rect.width - POPUP_W
       if (rect.left + left < MARGIN) left = MARGIN - rect.left
       setPopupLeft(left)
+      const spaceBelow = window.innerHeight - rect.bottom
+      setPopupAbove(spaceBelow < POPUP_H && rect.top > spaceBelow)
     }
     compute()
     window.addEventListener('resize', compute)
@@ -100,7 +106,7 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', width: 210, ...(popupLeft != null ? { left: popupLeft } : { right: 0 }), background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 13, padding: '9px 9px 7px', boxShadow: '0 8px 28px rgba(0,0,0,0.14)', zIndex: 100 }}>
+        <div style={{ position: 'absolute', ...(popupAbove ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }), width: 210, ...(popupLeft != null ? { left: popupLeft } : { right: 0 }), background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 13, padding: '9px 9px 7px', boxShadow: '0 8px 28px rgba(0,0,0,0.14)', zIndex: 100 }}>
           {/* Navigazione mese */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <button type="button" className="df-nav-btn" onClick={prevMonth} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>‹</button>
