@@ -7,7 +7,7 @@ import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestor
 import DateBadge from '../components/DateBadge'
 import LogoutButton from '../components/LogoutButton'
 import TutorialModal from '../components/TutorialModal'
-import { Unload, Recurring, Pin, Box, Gear, Search, ChevronRight, Plus } from '../components/Icon'
+import { Unload, Recurring, Pin, Box, Gear, Search, ChevronRight, Plus, User } from '../components/Icon'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import DailyQuip from '../components/DailyQuip'
@@ -26,7 +26,7 @@ const greetingKey = () => {
 
 export default function WorkerHome() {
   const { t, i18n } = useTranslation()
-  const { profile, logout, team, teamId, showOverlay } = useAuth()
+  const { user, profile, logout, team, teamId, showOverlay } = useAuth()
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const [showProfile, setShowProfile] = useState(false)
   const [events, setEvents] = useState([])
@@ -347,6 +347,14 @@ export default function WorkerHome() {
           animation: evtSpin 10s linear infinite;
         }
         .evt-soft::after { opacity: 0.18; }
+        /* Evento assegnato a te (non oggi, altrimenti vince evt-today) —
+           stesso bordo rotante soffuso ma in rosso, per distinguerlo a
+           colpo d'occhio da uno non tuo senza dover leggere il badge. */
+        .evt-mine::before, .evt-mine::after {
+          background: conic-gradient(from var(--evtAngle), rgba(230,57,70,0.55), rgba(148,163,184,0.12), rgba(230,57,70,0.55));
+          animation: evtSpin 10s linear infinite;
+        }
+        .evt-mine::after { opacity: 0.18; }
 
         @media (prefers-reduced-motion:reduce){
           [style*="whOrb"]{animation:none!important}
@@ -372,7 +380,7 @@ export default function WorkerHome() {
             <p style={{ padding:'0 16px 12px', color:'var(--text2)', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.resultsCount', { count: searchResults.length })}</p>
             {searchResults.length === 0
               ? <p style={{ padding:'20px 16px', color:'var(--text2)', textAlign:'center' }}>{t('events.noResultsFor', { search })}</p>
-              : searchResults.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)
+              : searchResults.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} loadListsOn={loadListsOn} />)
             }
           </>
         ) : (
@@ -384,7 +392,7 @@ export default function WorkerHome() {
               <p style={{ color:'#ea580c', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', display:'inline-flex', alignItems:'center', gap:6 }}><Unload size={15} /> {t('workerHome.toUnload')}</p>
               <div style={{ flex:1, height:1, background:'rgba(234,88,12,0.25)' }} />
             </div>
-            {daScaricare.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} forceState="daScaricare" loadListsOn={loadListsOn} />)}
+            {daScaricare.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} forceState="daScaricare" loadListsOn={loadListsOn} />)}
           </div>
         )}
 
@@ -412,7 +420,7 @@ export default function WorkerHome() {
                   <span className="section-label" style={{ color:'var(--blue)', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={13} /> {t('workerHome.recurring')}</span>
                   <span style={{ background:'rgba(79,195,247,0.15)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>{pinnedRecurring.length}</span>
                 </button>
-                {openSections.recurring && pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
+                {openSections.recurring && pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} loadListsOn={loadListsOn} />)}
               </div>
             )}
 
@@ -427,7 +435,7 @@ export default function WorkerHome() {
                 </button>
                 {openSections.upcoming && (
                   <>
-                    {visibleSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
+                    {visibleSingle.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} loadListsOn={loadListsOn} />)}
                     {hiddenCount > 0 && (
                       <div style={{ padding:'4px 16px 8px' }}>
                         <button onClick={() => setVisibleCount(c => c + EVENT_CAP)}
@@ -452,7 +460,7 @@ export default function WorkerHome() {
                   <span className="section-label" style={{ color:'#5b4fcf', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.installations')}</span>
                   <span style={{ background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installations.length}</span>
                 </button>
-                {openSections.installations && installations.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} loadListsOn={loadListsOn} />)}
+                {openSections.installations && installations.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} loadListsOn={loadListsOn} />)}
               </div>
             )}
           </>
@@ -470,7 +478,7 @@ export default function WorkerHome() {
   )
 }
 
-function EventCard({ ev, today, navigate, forceState, loadListsOn }) {
+function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
   const { t, i18n } = useTranslation()
   const items    = ev.items || []
   const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
@@ -478,6 +486,10 @@ function EventCard({ ev, today, navigate, forceState, loadListsOn }) {
   const total    = loadListsOn ? items.length : 0
   const isToday  = ev.date === today
   const daScaricare = loadListsOn && forceState === 'daScaricare'
+  // Assegnato personalmente (assignedWorkers) — dimensione indipendente
+  // dalla fase/urgenza sopra: un bordo/badge a parte invece di toccare
+  // iconGradient, che già comunica a colpo d'occhio lo stato del carico.
+  const isMine = !!uid && (ev.assignedWorkers || []).includes(uid)
 
   let phase = 'prep'
   if (total > 0 && returned === total)  phase = 'done'
@@ -507,13 +519,13 @@ function EventCard({ ev, today, navigate, forceState, loadListsOn }) {
     ? '#e63946'
     : '#a8dadc'
 
-  const cardBorder = daScaricare ? 'rgba(234,88,12,0.4)' : isToday ? 'rgba(220,38,38,0.4)' : 'var(--border)'
+  const cardBorder = daScaricare ? 'rgba(234,88,12,0.4)' : isToday ? 'rgba(220,38,38,0.4)' : isMine ? 'rgba(230,57,70,0.4)' : 'var(--border)'
   const dateStr = ev.date ? formatDate(ev.date+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
 
   return (
     <div onClick={() => navigate(`/events/${ev.id}`)}
-      className={isToday ? 'evt-card evt-today' : 'evt-card evt-soft'}
-      style={{ margin:'0 16px 10px', background:'var(--card)', border: isToday ? '1.5px solid transparent' : `1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+      className={isToday ? 'evt-card evt-today' : isMine ? 'evt-card evt-mine' : 'evt-card evt-soft'}
+      style={{ margin:'0 16px 10px', background:'var(--card)', border: (isToday || isMine) ? '1.5px solid transparent' : `1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.08)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)' }}
     >
@@ -546,6 +558,7 @@ function EventCard({ ev, today, navigate, forceState, loadListsOn }) {
           {ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + formatDate(ev.dateEnd+'T12:00:00', {day:'numeric', month:'long'}, i18n.language) : ''}
         </p>
         {ev.location && <p style={{ fontSize:11, color:'var(--text2)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
+        {isMine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:3, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> {t('workerCalendar.assignedToYouInline')}</p>}
       </div>
     </div>
   )

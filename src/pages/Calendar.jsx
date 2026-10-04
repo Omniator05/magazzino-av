@@ -402,7 +402,15 @@ export default function Calendar() {
     .filter(u => dStr >= u.startDate && dStr <= u.endDate)
     .map(u => ({ ...u, workerName: workers.find(w => w.id === u.workerId)?.name || t('common.unknown') }))
 
-  const selectedEvents = eventsByDate[selectedDate] || []
+  // Stesso filtro della griglia qui sotto: un rent/install compare solo il
+  // giorno di inizio e quello di fine, non su ogni giorno intermedio del
+  // suo periodo — altrimenti "occupa" il pannello anche quando non c'è
+  // nulla da fare quel giorno.
+  const selectedEvents = (eventsByDate[selectedDate] || []).filter(ev => {
+    if (ev.type !== 'installation') return true
+    const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
+    return selectedDate === ev.date || selectedDate === end
+  })
   const selectedPhases = phasesByDate[selectedDate] || []
   // Aggiungi anche gli eventi con fasi nel giorno selezionato (non già presenti come evento del giorno)
   const selectedPhaseEvents = selectedPhases.filter(p => !selectedEvents.some(e => e.id === p.event.id))
@@ -487,10 +495,9 @@ export default function Calendar() {
             const dStr = toDateStr(cell.dateObj)
             // Un rent/install può durare mesi: ripeterlo su ogni giorno della
             // griglia mensile lo fa sembrare "occupato" anche nei giorni in
-            // cui non c'è nulla da fare. Qui, SOLO nella griglia, un
-            // rent/install compare solo il giorno di inizio e quello di
-            // fine — aprendo un giorno intermedio (vedi selectedEvents più
-            // sotto, che legge eventsByDate senza questo filtro) resta comunque visibile.
+            // cui non c'è nulla da fare. Un rent/install compare solo il
+            // giorno di inizio e quello di fine — stesso filtro su
+            // selectedEvents più sotto, per il pannello del giorno selezionato.
             const dayEvents = (eventsByDate[dStr] || []).filter(ev => {
               if (ev.type !== 'installation') return true
               const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
@@ -554,7 +561,16 @@ export default function Calendar() {
                     smontaggio) che cadono in un giorno diverso da quello
                     dell'evento vero e proprio. */}
                 {(() => {
-                  const dayPhasesOnly = (phasesByDate[dStr] || []).filter(p => !dayEvents.some(e => e.id === p.event.id))
+                  // Prima una fase lo stesso giorno dell'evento vero spariva
+                  // del tutto (per non ripetere due volte lo stesso nome) —
+                  // ma così, es. uno smontaggio in giornata, non si vedeva
+                  // più da nessuna parte. Resta sempre una riga a sé, con
+                  // l'etichetta della fase ("Smontaggio") invece di ripetere
+                  // il nome — la card dell'evento vero sopra mostra comunque
+                  // il nome reale (qui nella griglia resta sempre quello, i
+                  // due tag "Evento"/fase affiancati sono solo nel pannello
+                  // del giorno selezionato e nel modal, dove c'è più spazio).
+                  const dayPhasesAll = phasesByDate[dStr] || []
                   const dayTasksOnly = tasksByDate[dStr] || []
                   // Ordine di priorità fisso: evento vero > fase (montaggio/
                   // smontaggio) > task libero > rent/install > promemoria
@@ -565,7 +581,10 @@ export default function Calendar() {
                       const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
                       return { key: ev.id, name: ev.name, isReminder: ev.isDeadlineReminder, rank, color: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)' }
                     }),
-                    ...dayPhasesOnly.map(p => ({ key: `${p.event.id}-${p.key}`, name: p.event.name, rank: 1, color: p.color })),
+                    ...dayPhasesAll.map(p => {
+                      const coincides = dayEvents.some(e => e.id === p.event.id)
+                      return { key: `${p.event.id}-${p.key}`, name: coincides ? p.label : p.event.name, rank: 1, color: p.color }
+                    }),
                     ...dayTasksOnly.map(b => {
                       const isAssigned = isWorker && b.workerId === user?.uid
                       return { key: `tk${b.id}`, name: b.label || t('staffTimeline.untitledTask'), rank: 2, color: isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--blue)', isTask: true, task: b }
@@ -651,12 +670,27 @@ export default function Calendar() {
           ) : (
             <>
               {[
-                // Stesso ordine di priorità della griglia mensile: evento
-                // vero > fase > rent/install > task libero > promemoria.
-                ...selectedEvents.map(ev => ({ ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), rank: ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0, dotColor: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' })),
-                ...selectedPhaseEvents.map(p => ({ ev: p.event, phaseOnDay: p, rank: 1, dotColor: p.color, borderColor: p.color + '44' })),
+                // Ordine di priorità nel pannello: eventi assegnati a te >
+                // eventi/fasi > task libero > rent/install > promemoria —
+                // "assegnato" conta solo per un admin che è anche worker
+                // (isWorker), altrimenti tutti gli eventi restano allo
+                // stesso livello, non ha senso distinguerli per un admin
+                // puro. coincides: true solo quando l'evento vero è DAVVERO
+                // anche oggi (selectedEvents), non quando la riga esiste
+                // solo perché c'è una fase quel giorno (selectedPhaseEvents,
+                // dove ev è solo "di chi è" la fase) — serve a decidere se
+                // aggiungere anche il tag "Evento" accanto a quello fase.
+                ...selectedEvents.map(ev => {
+                  const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
+                  const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : isAssigned ? 0 : 1
+                  return { ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), coincides: true, rank, dotColor: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' }
+                }),
+                ...selectedPhaseEvents.map(p => {
+                  const isAssigned = isWorker && (p.event.assignedWorkers || []).includes(user?.uid)
+                  return { ev: p.event, phaseOnDay: p, coincides: false, rank: isAssigned ? 0 : 1, dotColor: p.color, borderColor: p.color + '44' }
+                }),
                 ...selectedTasks.map(b => ({ task: b, rank: 2, dotColor: 'var(--blue)', borderColor: 'var(--border)' })),
-              ].sort((a, b) => a.rank - b.rank).map(({ ev, task, phaseOnDay, dotColor, borderColor }) => {
+              ].sort((a, b) => a.rank - b.rank).map(({ ev, task, phaseOnDay, coincides, dotColor, borderColor }) => {
                 // Il giorno selezionato è uno solo per tutta questa lista: se
                 // è passato, il colore identificativo (puntino, bordo, badge
                 // fase) si legge in grigio invece che nel colore vivo del tipo.
@@ -721,10 +755,24 @@ export default function Calendar() {
                           const phaseColor = isSelectedDayPast ? 'var(--text2)' : phaseOnDay.color
                           const phaseBg = isSelectedDayPast ? 'var(--card2)' : phaseOnDay.color + '18'
                           const phaseBorder = isSelectedDayPast ? 'var(--border)' : phaseOnDay.color + '44'
+                          const eventColor = isSelectedDayPast ? 'var(--text2)' : 'var(--accent)'
+                          const eventBg = isSelectedDayPast ? 'var(--card2)' : 'rgba(230,57,70,0.12)'
+                          const eventBorder = isSelectedDayPast ? 'var(--border)' : 'rgba(230,57,70,0.35)'
                           return (
-                            <span style={{ display:'inline-block', marginTop:5, background: phaseBg, color: phaseColor, border:`1px solid ${phaseBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
-                              {phaseOnDay.label}
-                            </span>
+                            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:5 }}>
+                              {/* coincides: il titolo sopra è già il nome vero,
+                                  ma da solo non dice che oggi è ANCHE la fase —
+                                  il tag "Evento" accanto a quello fase rende
+                                  esplicito che vanno fatti entrambi oggi. */}
+                              {coincides && (
+                                <span style={{ display:'inline-block', background: eventBg, color: eventColor, border:`1px solid ${eventBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
+                                  {t('calendar.genericEventTag')}
+                                </span>
+                              )}
+                              <span style={{ display:'inline-block', background: phaseBg, color: phaseColor, border:`1px solid ${phaseBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
+                                {phaseOnDay.label}
+                              </span>
+                            </div>
                           )
                         })()}
                         {assignedNames.length > 0 && (

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -12,6 +11,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import DateField from '../components/DateField'
 import Toast from '../components/Toast'
+import EventSummaryModal from '../components/EventSummaryModal'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { awaitIfOnline } from '../utils/offlineSave'
 import SegmentedControl from '../components/SegmentedControl'
@@ -56,7 +56,6 @@ export default function WorkerCalendar() {
   const { t, i18n } = useTranslation()
   const { user, profile, teamId } = useAuth()
   const confirm = useConfirm()
-  const navigate = useNavigate()
   const isOnline = useOnlineStatus()
   const today = new Date()
   const todayStr = toDateStr(today)
@@ -68,6 +67,14 @@ export default function WorkerCalendar() {
   const [selectedDate, setSelectedDate] = useState(todayStr)
   const [toast, setToast] = useState('')
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
+  // Riepilogo evento al tap — stesso componente e stesso comportamento
+  // dell'admin (Calendar.jsx), invece di saltare dritti alla lista di
+  // carico. Servono anche workers (per risolvere i nomi degli assegnati,
+  // non solo "io sì/no") e i blocchi orari della timeline "Assegna
+  // personale" (assignmentBlocks), per mostrare l'orario quando c'è.
+  const [workers, setWorkers] = useState([])
+  const [assignmentBlocks, setAssignmentBlocks] = useState([])
+  const [summaryEvent, setSummaryEvent] = useState(null)
 
   // Flusso "Segnala assenza"
   const [reportMode, setReportMode] = useState(false)
@@ -96,6 +103,20 @@ export default function WorkerCalendar() {
       setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
   }, [user, teamId])
+
+  useEffect(() => {
+    if (!teamId) return
+    const q = query(collection(db, 'profiles'), where('teamId', '==', teamId), orderBy('name'))
+    return onSnapshot(q, snap => {
+      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
+    })
+  }, [teamId])
+
+  useEffect(() => {
+    if (!teamId) return
+    const q = query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId))
+    return onSnapshot(q, snap => setAssignmentBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [teamId])
 
   // Eventi importati da Google Calendar (sync giornaliero in sola lettura, vedi /api/sync-google-calendar)
   useEffect(() => {
@@ -281,14 +302,30 @@ export default function WorkerCalendar() {
   const sortedUnavailability = [...unavailability]
     .sort((a,b) => a.startDate.localeCompare(b.startDate))
   const selectedItems = selectedDate ? dayItems(selectedDate) : []
+  // Ordine fisso nel pannello del giorno selezionato: prima gli eventi
+  // assegnati a te, poi gli altri eventi, poi i rent/install (che qui, a
+  // differenza della griglia dove comparivano solo su inizio/fine, erano
+  // ripetuti su ogni giorno del loro periodo) — resi via sempre e solo
+  // sull'inizio/fine, stessa regola della griglia mensile, per non
+  // "occupare" ogni giorno intermedio anche in questo pannello. I
+  // promemoria scadenza restano sempre ultimissimi, non sono prenotazioni.
   const selectedEvents = (() => {
     const m = new Map()
     selectedItems.forEach(it => {
-      const cur = m.get(it.event.id) || { event: it.event, assigned: it.assigned, phases: [] }
+      if (it.event.type === 'installation') {
+        const end = it.event.dateEnd && it.event.dateEnd >= it.event.date ? it.event.dateEnd : it.event.date
+        if (selectedDate !== it.event.date && selectedDate !== end) return
+      }
+      // coincides: true solo se l'evento vero ricade DAVVERO su questo
+      // giorno (non solo una sua fase) — serve a decidere se aggiungere
+      // anche il tag "Evento" accanto a quello fase più sotto.
+      const cur = m.get(it.event.id) || { event: it.event, assigned: it.assigned, phases: [], coincides: false }
       if (it.phaseLabel) cur.phases.push({ label: it.phaseLabel, color: it.phaseColor })
+      else cur.coincides = true
       m.set(it.event.id, cur)
     })
-    return [...m.values()]
+    const rank = ({ event: ev, assigned }) => ev.isDeadlineReminder ? 3 : ev.type === 'installation' ? 2 : assigned ? 0 : 1
+    return [...m.values()].sort((a, b) => rank(a) - rank(b))
   })()
   const selectedGoogleEvents = selectedDate ? dayGoogleEvents(selectedDate) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
@@ -306,7 +343,7 @@ export default function WorkerCalendar() {
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={startReportMode}
                 style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
-                {t('workerCalendar.reportAbsence')}
+                {t('calendar.reportAbsence')}
               </button>
               <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
             </div>
@@ -344,9 +381,25 @@ export default function WorkerCalendar() {
         <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
           {cells.map((cell, i) => {
             const dStr = toDateStr(cell.dateObj)
-            const items = dayItems(dStr)
+            // Un rent/install può durare mesi: ripeterlo su ogni giorno della
+            // griglia lo fa sembrare "occupato" anche quando non c'è nulla da
+            // fare — qui, SOLO nella griglia (il pannello del giorno selezionato
+            // sotto resta invariato), un rent/install compare solo il giorno di
+            // inizio e quello di fine. Stessa regola di Calendar.jsx lato admin.
+            const itemsRaw = dayItems(dStr).filter(it => {
+              if (it.phaseLabel || it.event.type !== 'installation') return true
+              const end = it.event.dateEnd && it.event.dateEnd >= it.event.date ? it.event.dateEnd : it.event.date
+              return dStr === it.event.date || dStr === end
+            })
+            // Se l'evento vero compare già questo giorno, la sua fase (stessa
+            // data, es. smontaggio in giornata) resta comunque una riga a sé
+            // — altrimenti sparisce del tutto, non si vede più da nessuna
+            // parte che è anche il giorno dello smontaggio — solo l'etichetta
+            // cambia (fase invece di ripetere il nome, già sulla riga sopra).
+            const dayEventsOnly = itemsRaw.filter(it => !it.phaseLabel)
+            const items = itemsRaw
             const googleItems = dayGoogleEvents(dStr)
-            const hasMyEvent = items.some(it => it.assigned)
+            const hasMyEvent = items.some(it => it.assigned && !it.event.isDeadlineReminder)
             const unavail = isUnavailable(dStr)
             const isToday = dStr === todayStr
             const isPast = dStr < todayStr
@@ -372,18 +425,19 @@ export default function WorkerCalendar() {
                 onMouseEnter={() => { if (reportMode && rangeStart) setHoverDate(dStr) }}
                 style={{
                   position:'relative',
-                  minHeight:52,
+                  minHeight:78,
                   borderRadius:10,
-                  padding:'5px 3px',
+                  padding:'5px 3px 4px',
                   background: bg,
                   border,
                   opacity: cell.current ? (isPast ? 0.45 : 1) : 0.3,
                   display:'flex',
                   flexDirection:'column',
                   alignItems:'center',
-                  gap:4,
+                  gap:2,
                   overflow:'hidden',
                   cursor:'pointer',
+                  transition:'background 0.1s ease, border-color 0.1s ease',
                 }}
               >
                 <span style={{
@@ -392,25 +446,55 @@ export default function WorkerCalendar() {
                 }}>
                   {cell.day}
                 </span>
-                {/* Un puntino per elemento, tutti uguali (rosso/blu) — anche
-                    gli eventi importati da Google diventano un puntino blu
-                    come gli altri, non serve distinguerli qui. Container a
-                    tutta larghezza invece di un max-width stretto: prima ci
-                    stavano 3 puntini per riga, c'è spazio per il doppio. */}
-                {(items.length > 0 || googleItems.length > 0) && (
-                  <div style={{ display:'flex', gap:2, flexWrap:'wrap', justifyContent:'center', width:'100%' }}>
-                    {items.map((it, i) => (
-                      <span key={`e${i}`} style={{
-                        width:5, height:5, borderRadius:'50%', flexShrink:0,
-                        background: it.color,
-                        opacity: isPast ? 0.55 : 1,
-                      }} />
-                    ))}
-                    {googleItems.map((_, i) => (
-                      <span key={`g${i}`} style={{ width:5, height:5, borderRadius:'50%', flexShrink:0, background:'var(--blue)', opacity: isPast ? 0.55 : 1 }} />
-                    ))}
-                  </div>
-                )}
+                {/* Nomi evento (fino a 2 righe, troncati) in una card del colore
+                    assegnato/non assegnato — stesso stile "Google Calendar"
+                    dell'ammin (Calendar.jsx), un puntino da solo non diceva
+                    cosa fosse. Colore resta semplice apposta (rosso se
+                    assegnato a te, blu altrimenti, grigio per i promemoria
+                    scadenza): niente colori extra per tipo evento senza una
+                    legenda che li spieghi, vedi dayItems più sopra. */}
+                {(() => {
+                  const rank = it => it.event.isDeadlineReminder ? 4 : it.phaseLabel ? 1 : it.event.type === 'installation' ? 3 : 0
+                  const titleItems = [...items].sort((a, b) => rank(a) - rank(b))
+                  if (titleItems.length === 0 && googleItems.length === 0) return null
+                  // La riga della card evento mostra sempre il nome vero; la
+                  // fase (se coincide con l'evento vero) mostra la sua
+                  // etichetta ("Smontaggio") invece di ripetere il nome — i
+                  // due tag "Evento"/fase affiancati sono solo nel pannello
+                  // del giorno selezionato e nel modal, dove c'è più spazio
+                  // per non doverli stringere qui nella griglia.
+                  const rowText = it => {
+                    if (!it.phaseLabel) return it.event.name
+                    const coincides = dayEventsOnly.some(e => e.event.id === it.event.id)
+                    return coincides ? it.phaseLabel : it.event.name
+                  }
+                  return (
+                    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>
+                      {titleItems.slice(0, 2).map(it => (
+                        <span key={it.phaseLabel ? `${it.event.id}-${it.phaseLabel}` : it.event.id} style={{
+                          display:'flex', alignItems:'center', gap:2, fontSize:9.5, fontWeight:700, lineHeight:1.35,
+                          padding:'1.5px 4px', borderRadius:4, maxWidth:'100%',
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                          background: it.event.isDeadlineReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : it.color,
+                          color: it.event.isDeadlineReminder ? 'var(--text3)' : '#fff',
+                        }}>
+                          {it.event.type === 'installation' && <Wrench size={9} />}
+                          <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {rowText(it)}
+                          </span>
+                        </span>
+                      ))}
+                      {titleItems.length > 2 && (
+                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleItems.length - 2}</span>
+                      )}
+                      {googleItems.length > 0 && (
+                        <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'center' }}>
+                          <span style={{ width:6, height:6, borderRadius:2, flexShrink:0, background:'#4285F4', opacity: isPast ? 0.55 : 1 }} />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
                 {unavail && (
                   <div style={{
                     position:'absolute', inset:0,
@@ -449,7 +533,7 @@ export default function WorkerCalendar() {
           {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
-            selectedEvents.map(({ event: ev, assigned: mine, phases }) => {
+            selectedEvents.map(({ event: ev, assigned: mine, phases, coincides }) => {
               // Promemoria scadenza (vedi utils/deadlines.js): non è una vera
               // lista di carico, non si apre — si cambia dalla scheda
               // furgone/oggetto che l'ha generato.
@@ -467,7 +551,7 @@ export default function WorkerCalendar() {
               return (
                 <div
                   key={ev.id}
-                  onClick={() => navigate(`/events/${ev.id}`)}
+                  onClick={() => setSummaryEvent(ev)}
                   style={{
                     display:'flex', alignItems:'center', gap:12, cursor:'pointer',
                     background: mine ? 'rgba(216,56,63,0.06)' : 'var(--card)',
@@ -483,6 +567,18 @@ export default function WorkerCalendar() {
                     {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                     {phases.length > 0 && (
                       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:5 }}>
+                        {/* Il titolo sopra è già il nome vero, ma da solo non
+                            dice che oggi è ANCHE la fase — il tag "Evento"
+                            accanto a quello fase rende esplicito che vanno
+                            fatti entrambi oggi. Solo se coincides: se questo
+                            giorno è solo una data di fase (es. montaggio il
+                            giorno prima dell'evento), niente tag "Evento" —
+                            l'evento non è oggi, vedi selectedEvents sopra. */}
+                        {coincides && (
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(230,57,70,0.12)', color:'var(--accent)', border:'1px solid rgba(230,57,70,0.35)', borderRadius:6, padding:'1px 8px', fontSize:11, fontWeight:700 }}>
+                            <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent)' }} /> {t('calendar.genericEventTag')}
+                          </span>
+                        )}
                         {phases.map((p, i) => (
                           <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, background:p.color+'18', color:p.color, border:`1px solid ${p.color}44`, borderRadius:6, padding:'1px 8px', fontSize:11, fontWeight:700 }}>
                             <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}
@@ -554,6 +650,10 @@ export default function WorkerCalendar() {
             </div>
           ))}
         </div>
+      )}
+
+      {summaryEvent && (
+        <EventSummaryModal event={summaryEvent} date={selectedDate} blocks={assignmentBlocks} workers={workers} onClose={() => setSummaryEvent(null)} />
       )}
 
       {/* Modal conferma nuova indisponibilità */}

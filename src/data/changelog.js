@@ -6,6 +6,85 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-04',
+    date: '2026-10-04',
+    title: { it: 'Nuova timeline per assegnare il personale, furgoni esterni e scadenze', en: 'New staff-assignment timeline, external vans and deadlines' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: 'Assegna personale su una timeline oraria', en: 'Assign staff on an hourly timeline' },
+        text: {
+          it: 'La sezione "Assegna personale" del calendario è ora una griglia settimanale con le ore: trascina (o tocca) un magazziniere su un evento, una fase di montaggio/smontaggio o un rent/install per assegnarlo con l\'orario preciso — vale anche per il personale esterno, non registrato nell\'app. Si possono creare anche attività libere toccando due celle vuote, che compaiono poi anche nel calendario normale.',
+          en: 'The calendar\'s "Assign staff" section is now a weekly hourly grid: drag (or tap) a warehouse worker onto an event, a setup/teardown phase or a rent/install to assign them with a precise time — works for external staff too, not just people registered in the app. Free tasks can also be created by tapping two empty cells, and then show up in the regular calendar too.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Furgoni esterni nella lista di carico', en: 'External vans in the loading list' },
+        text: {
+          it: 'Si può assegnare anche un furgone esterno (noleggiato), non solo quelli di flotta — resta in un elenco riutilizzabile per la prossima volta, come già succede per il personale esterno.',
+          en: 'You can now also assign an external (rented) van, not just fleet ones — it\'s saved to a reusable list for next time, same as external staff.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Scadenze su furgoni e oggetti di magazzino', en: 'Deadlines on vans and warehouse items' },
+        text: {
+          it: 'Furgoni e oggetti importanti possono avere scadenze libere (assicurazione, revisione, bollo...) con un promemoria automatico che compare in calendario.',
+          en: 'Vans and important items can now have free-form deadlines (insurance, inspection, road tax...) with an automatic reminder that shows up in the calendar.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Orario preciso sugli eventi', en: 'Precise time on events' },
+        text: {
+          it: 'Un evento può avere un orario di inizio e fine preciso in fase di creazione, non solo "tutto il giorno".',
+          en: 'An event can now have a precise start and end time when created, not just "all day".',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Calendario del magazziniere uguale a quello admin', en: 'Warehouse calendar matching the admin one' },
+        text: {
+          it: 'Stessa veste grafica dell\'admin: card con il nome dell\'evento invece dei puntini colorati, un tocco su un giorno apre l\'anteprima dell\'evento con orari e assegnati, i rent/install lunghi compaiono solo su inizio e fine invece di occupare ogni giorno.',
+          en: 'Same look as the admin calendar: cards with the event name instead of colored dots, tapping a day opens the event preview with times and who\'s assigned, long rents/installs only show on their start and end day instead of filling every day in between.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Evento a cui sei assegnato in evidenza nella home', en: 'Your assigned event stands out on the home page' },
+        text: {
+          it: 'Nella home del magazziniere, l\'evento a cui sei assegnato ha un bordo rosso e il tag "Assegnato a te", per riconoscerlo a colpo d\'occhio tra gli altri.',
+          en: 'On the warehouse home page, the event you\'re assigned to has a red border and an "Assigned to you" tag, so it stands out from the rest.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Ordine degli eventi del giorno', en: 'Order of the day\'s events' },
+        text: {
+          it: 'Toccando una data, gli eventi a cui sei assegnato compaiono per primi, poi gli altri eventi, poi i rent/install — per admin e magazziniere.',
+          en: 'Tapping a date, events you\'re assigned to show up first, then other events, then rents/installs — for both admin and warehouse staff.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Montaggio o smontaggio lo stesso giorno dell\'evento', en: 'Setup or teardown on the same day as the event' },
+        text: {
+          it: 'Se il montaggio o lo smontaggio cade lo stesso giorno dell\'evento, ora si vedono entrambi, con un tag "Evento" accanto a quello della fase — prima uno dei due spariva.',
+          en: 'If setup or teardown falls on the same day as the event, both now show, with an "Event" tag next to the phase one — before, one of the two used to disappear.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Assegnazione a montaggio/smontaggio', en: 'Assigning to setup/teardown' },
+        text: {
+          it: 'Corretto un bug che impediva di assegnare un magazziniere a una fase di montaggio o smontaggio dalla nuova timeline.',
+          en: 'Fixed a bug that prevented assigning a warehouse worker to a setup or teardown phase from the new timeline.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-10-01',
     date: '2026-10-01',
     title: { it: 'Liste di carico più intelligenti e nuovo evento più veloce', en: 'Smarter loading lists and a faster new event' },

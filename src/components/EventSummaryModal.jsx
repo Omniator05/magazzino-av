@@ -20,6 +20,22 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
   // diversa da event.date (vedi StaffTimeline.jsx/Calendar.jsx, stessa
   // convenzione di assignmentBlocks: b.eventId + b.date).
   const summaryDate = date || event.date
+  // Se questo giorno è anche una data di montaggio/smontaggio dell'evento
+  // (capita spesso con lo smontaggio lo stesso giorno) va segnalato: prima
+  // questo modal non sapeva nulla delle fasi, quindi sul giorno coincidente
+  // sembrava un evento "normale" senza nessun indizio dello smontaggio.
+  const PHASE_META = {
+    montaggio: { color: '#2563eb', label: t('calendar.legendAssembly') },
+    smontaggio: { color: '#ea580c', label: t('calendar.legendDisassembly') },
+  }
+  const phasesToday = Object.entries(event.phases || {})
+    .filter(([key, pdate]) => pdate === summaryDate && PHASE_META[key])
+    .map(([key]) => PHASE_META[key])
+  // Il tag "Evento" (oltre a quelli di fase) ha senso solo se l'evento vero
+  // e proprio ricade DAVVERO su questo giorno — altrimenti (es. il montaggio
+  // è il giorno prima dell'evento) qui c'è solo la fase, non l'evento.
+  const eventSpanEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
+  const eventHappensToday = summaryDate >= event.date && summaryDate <= eventSpanEnd
   const eventOwnRange = (event.allDay === false && event.timeStart && event.timeEnd) ? [event.timeStart, event.timeEnd] : null
   // Assegnazioni con orario proprio (timeline "Assegna personale",
   // collection assignmentBlocks) per QUESTO giorno — include anche gli
@@ -71,6 +87,27 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
         <h2 style={{ display:'flex', alignItems:'center', gap:8 }}>
           {event.type === 'installation' && <Wrench size={17} />}{event.name}
         </h2>
+
+        {phasesToday.length > 0 && (
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
+            {/* Il titolo sopra è già il nome vero, ma da solo non dice che
+                oggi è ANCHE la fase — un tag "Evento" accanto a quello della
+                fase ("Smontaggio") rende esplicito che vanno fatti entrambi
+                lo stesso giorno. Solo se l'evento ricade DAVVERO oggi: se
+                questo giorno è solo una data di fase (es. montaggio il
+                giorno prima), niente tag "Evento" — l'evento non è oggi. */}
+            {eventHappensToday && (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(230,57,70,0.12)', color:'var(--accent)', border:'1px solid rgba(230,57,70,0.35)', borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:800 }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent)' }} /> {t('calendar.genericEventTag')}
+              </span>
+            )}
+            {phasesToday.map(p => (
+              <span key={p.label} style={{ display:'inline-flex', alignItems:'center', gap:5, background:p.color+'18', color:p.color, border:`1px solid ${p.color}44`, borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:800 }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}
+              </span>
+            ))}
+          </div>
+        )}
 
         <Row icon={<Calendar size={15} />} label={t('eventDetail.dateFieldLabel')}>
           <p style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>{dateLabel}</p>

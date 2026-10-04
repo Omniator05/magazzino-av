@@ -7,6 +7,31 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-04',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Il calendario ha una nuova sezione "Assegna personale": una timeline settimanale con le ore per assegnare i magazzinieri (anche esterni) a eventi, montaggi/smontaggi e rent/install con l\'orario preciso',
+        'Si possono assegnare anche furgoni esterni (noleggiati) nella lista di carico, non solo quelli di flotta',
+        'Furgoni e oggetti importanti possono avere scadenze (assicurazione, revisione, bollo...) con promemoria automatico in calendario',
+        'Gli eventi possono avere un orario di inizio e fine preciso, non solo "tutto il giorno"',
+        'Il calendario del magazziniere ora si legge come quello admin: card con il nome dell\'evento, anteprima al tocco, rent/install lunghi solo su inizio e fine',
+        'Nella home del magazziniere, l\'evento a cui sei assegnato è evidenziato in rosso con il tag "Assegnato a te"',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'The calendar has a new "Assign staff" section: a weekly hourly timeline to assign warehouse staff (including external people) to events, setup/teardown and rent/install, with precise times',
+        'External (rented) vans can now be assigned in the loading list, not just fleet ones',
+        'Vans and important items can now have deadlines (insurance, inspection, road tax...) with an automatic calendar reminder',
+        'Events can now have a precise start and end time, not just "all day"',
+        'The warehouse calendar now looks like the admin one: cards with the event name, a tap-to-preview, long rents/installs only on start and end day',
+        'On the warehouse home page, the event you\'re assigned to is highlighted in red with an "Assigned to you" tag',
+      ],
+    },
+  },
+  {
     version: '2026-09-17',
     it: {
       title: 'Novità di oggi',
