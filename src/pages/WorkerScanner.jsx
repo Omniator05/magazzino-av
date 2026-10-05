@@ -634,6 +634,15 @@ export default function WorkerScanner() {
   // essere l'intero evento come nel caso non-multiList, ma i bottoni lista
   // restano visibili sotto come filtro facoltativo verso una singola lista.
   const eventLists = getEventLists(event)
+  // La principale "eliminata" (vedi EventDetail.jsx, deleteList) resta
+  // comunque in eventLists — è implicita, non un documento vero, quindi deve
+  // restare sempre selezionabile per logica (spostamenti, auto-switch) — ma
+  // non va mostrata come tab qui se è vuota, altrimenti riappare la lista
+  // appena cancellata. Si "auto-ripara" da sola non appena ci torna dentro
+  // un oggetto (mainListEmpty torna false).
+  const mainListEmpty = !allEventItems.some(i => rowListId(i) === MAIN_LIST_ID)
+  let visibleLists = eventLists.filter(l => !(l.id === MAIN_LIST_ID && event?.mainListHidden && mainListEmpty))
+  if (visibleLists.length === 0) visibleLists = eventLists.filter(l => l.id === MAIN_LIST_ID)
   // Spostata qui (serve anche all'effetto di cambio-lista automatico più
   // sotto, dichiarato prima del return anticipato — non solo nel JSX finale).
   const listLabel = l => l?.name || (l?.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
@@ -1204,7 +1213,7 @@ export default function WorkerScanner() {
                 </button>
               )
             })()}
-            {eventLists.map(l => {
+            {visibleLists.map(l => {
               const rows = allEventItems.filter(i => rowListId(i) === l.id && !i.mancante)
               const doneCount = rows.filter(i => i[doneField]).length
               const isActive = l.id === activeList

@@ -10,6 +10,7 @@ import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import DateField from '../components/DateField'
+import TimeField from '../components/TimeField'
 import Toast from '../components/Toast'
 import EventSummaryModal from '../components/EventSummaryModal'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
@@ -83,6 +84,11 @@ export default function WorkerCalendar() {
   const [pendingRange, setPendingRange] = useState(null)
   const [reasonInput, setReasonInput] = useState('')
   const [typeInput, setTypeInput] = useState('ferie')
+  // Assenza di qualche ora invece che tutto il giorno (es. "non ci sarò la
+  // mattina") — solo per un giorno singolo, vedi gating nel modal sotto.
+  const [allDayInput, setAllDayInput] = useState(true)
+  const [startTimeInput, setStartTimeInput] = useState('')
+  const [endTimeInput, setEndTimeInput] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [savingUnavail, setSavingUnavail] = useState(false)
   const [unavailOpen, setUnavailOpen] = useState(false)
@@ -221,11 +227,19 @@ export default function WorkerCalendar() {
     if (!pendingRange || !user) return
     setSavingUnavail(true)
     try {
+      // Le ore hanno senso solo su un giorno singolo — se l'intervallo è poi
+      // stato allargato a più giorni dopo aver attivato "solo alcune ore"
+      // (il campo sparisce, ma allDayInput resta quello di prima), qui si
+      // forza comunque "tutto il giorno" invece di salvare ore non più valide.
+      const allDay = pendingRange.end !== pendingRange.start || allDayInput !== false
       const data = {
         startDate: pendingRange.start,
         endDate: pendingRange.end,
         reason: reasonInput.trim(),
         type: typeInput || 'altro',
+        allDay,
+        startTime: allDay ? null : (startTimeInput || null),
+        endTime: allDay ? null : (endTimeInput || null),
       }
       if (editingId) {
         // awaitIfOnline: offline non aspettiamo la conferma del server
@@ -269,6 +283,9 @@ export default function WorkerCalendar() {
       setPendingRange(null)
       setReasonInput('')
       setTypeInput('ferie')
+      setAllDayInput(true)
+      setStartTimeInput('')
+      setEndTimeInput('')
       setEditingId(null)
       setSelectedDate(todayStr)
     } finally { setSavingUnavail(false) }
@@ -279,12 +296,18 @@ export default function WorkerCalendar() {
     setPendingRange({ start: u.startDate, end: u.endDate })
     setReasonInput(u.reason || '')
     setTypeInput(u.type || 'altro')
+    setAllDayInput(u.allDay !== false)
+    setStartTimeInput(u.startTime || '')
+    setEndTimeInput(u.endTime || '')
   }
 
   const closeAbsenceModal = () => {
     setPendingRange(null)
     setReasonInput('')
     setTypeInput('ferie')
+    setAllDayInput(true)
+    setStartTimeInput('')
+    setEndTimeInput('')
     setEditingId(null)
   }
 
@@ -633,6 +656,9 @@ export default function WorkerCalendar() {
                     ? formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)
                     : `${formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language)} → ${formatDate(u.endDate+'T12:00:00', { day:'numeric', month:'short', year:'numeric' }, i18n.language)}`
                   }
+                  {u.allDay === false && (u.startTime || u.endTime) && (
+                    <span style={{ fontWeight:600, color:'var(--text2)' }}>{u.startTime || '?'}–{u.endTime || '?'}</span>
+                  )}
                   <AbsenceTypeBadge type={u.type} />
                 </p>
                 {u.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{u.reason}</p>}
@@ -674,6 +700,35 @@ export default function WorkerCalendar() {
               <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
               <DateField value={pendingRange.end} min={pendingRange.start} onChange={v => setPendingRange(r => ({ ...r, end:v }))} />
             </div>
+            {pendingRange.end === pendingRange.start && (
+              <div className="form-group">
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <label style={{ marginBottom:0 }}>{t('calendar.absenceHoursLabel')}</label>
+                  <button type="button" onClick={() => setAllDayInput(a => !a)} aria-pressed={allDayInput}
+                    style={{
+                      flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
+                      background: allDayInput ? 'var(--accent)' : 'var(--card2)',
+                      color: allDayInput ? '#fff' : 'var(--text2)',
+                      border: `1px solid ${allDayInput ? 'var(--accent)' : 'var(--border)'}`,
+                      fontSize:13, fontWeight:700, whiteSpace:'nowrap',
+                    }}>
+                    {t('events.allDayLabel')}
+                  </button>
+                </div>
+                {!allDayInput && (
+                  <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <label style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
+                      <TimeField value={startTimeInput} onChange={setStartTimeInput} />
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <label style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
+                      <TimeField value={endTimeInput} onChange={setEndTimeInput} clearable />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="form-group">
               <label>{t('calendar.absenceTypeLabel')}</label>
               <SegmentedControl options={absenceTypeOptions(t)} value={typeInput} onChange={setTypeInput} />

@@ -74,7 +74,7 @@ export default function TabBar() {
   )
 
   return (
-    <nav style={{
+    <nav className="tabbar-nav" style={{
       position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 44px)',
       transform:'translateX(-50%)', zIndex:100,
     }}>

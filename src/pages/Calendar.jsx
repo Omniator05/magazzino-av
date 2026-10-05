@@ -90,9 +90,16 @@ export default function Calendar() {
   // desktop (7 colonne affiancate, tanta info): su telefono il toggle
   // sparisce e, se ci si arriva comunque (es. finestra ridotta mentre era
   // già aperta), si torna automaticamente alla griglia.
-  const [mode, setMode] = useState('grid') // 'grid' | 'assign'
+  // Ricordata tra una visita e l'altra (sessionStorage, si perde solo
+  // chiudendo la scheda): così se si era su "Assegna personale" e si passa
+  // un attimo su un'altra pagina (es. la lista di carico di un evento), si
+  // ritrova la stessa vista al ritorno invece di ripartire dalla griglia.
+  const [mode, setMode] = useState(() => {
+    try { return sessionStorage.getItem('calendar_mode') === 'assign' ? 'assign' : 'grid' } catch { return 'grid' }
+  })
   const isMobile = useIsMobile()
   useEffect(() => { if (isMobile && mode === 'assign') setMode('grid') }, [isMobile, mode])
+  useEffect(() => { try { sessionStorage.setItem('calendar_mode', mode) } catch {} }, [mode])
 
   // Arrivo come scorciatoia dal bottone "Assegna" nella lista di carico
   // (EventDetail.jsx) — passa a "Assegna personale" già sulla settimana e
@@ -122,7 +129,7 @@ export default function Calendar() {
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
-  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'', type:'ferie' })
+  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'', type:'ferie', allDay:true, startTime:'', endTime:'' })
   const [savingAbsence, setSavingAbsence] = useState(false)
   // null = si sta creando una nuova assenza, altrimenti id di quella in modifica
   const [editingAbsenceId, setEditingAbsenceId] = useState(null)
@@ -147,7 +154,7 @@ export default function Calendar() {
       } else {
         const start = dStr <= rangeStart ? dStr : rangeStart
         const end = dStr <= rangeStart ? rangeStart : dStr
-        setAbsenceForm({ startDate: start, endDate: end, reason: '', type: 'ferie' })
+        setAbsenceForm({ startDate: start, endDate: end, reason: '', type: 'ferie', allDay:true, startTime:'', endTime:'' })
         setEditingAbsenceId(null)
         setShowAbsenceModal(true)
         setReportMode(false)
@@ -164,11 +171,21 @@ export default function Calendar() {
     if (!absenceForm.startDate) return
     setSavingAbsence(true)
     try {
+      const endDate = absenceForm.endDate || absenceForm.startDate
+      // Le ore hanno senso solo su un giorno singolo — se il modal era stato
+      // messo su "solo alcune ore" e POI si allarga l'intervallo a più
+      // giorni (il campo ore sparisce, ma allDay/startTime/endTime restano
+      // quelli di prima nello stato), qui si forza comunque "tutto il
+      // giorno" invece di salvare ore ormai non più visibili/valide.
+      const allDay = endDate !== absenceForm.startDate || absenceForm.allDay !== false
       const data = {
         startDate: absenceForm.startDate,
-        endDate: absenceForm.endDate || absenceForm.startDate,
+        endDate,
         reason: absenceForm.reason.trim(),
         type: absenceForm.type || 'altro',
+        allDay,
+        startTime: allDay ? null : (absenceForm.startTime || null),
+        endTime: allDay ? null : (absenceForm.endTime || null),
       }
       if (editingAbsenceId) {
         // Modifica: workerId/teamId/createdAt dell'originale restano invariati.
@@ -210,14 +227,14 @@ export default function Calendar() {
         }
       }
       if (!isOnline) showToast(t('common.savedOfflineToast'))
-      setAbsenceForm({ startDate:'', endDate:'', reason:'', type:'ferie' })
+      setAbsenceForm({ startDate:'', endDate:'', reason:'', type:'ferie', allDay:true, startTime:'', endTime:'' })
       setEditingAbsenceId(null)
       setShowAbsenceModal(false)
     } finally { setSavingAbsence(false) }
   }
 
   const openEditAbsence = (a) => {
-    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '', type: a.type || 'altro' })
+    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '', type: a.type || 'altro', allDay: a.allDay !== false, startTime: a.startTime || '', endTime: a.endTime || '' })
     setEditingAbsenceId(a.id)
     setShowAbsenceModal(true)
   }
@@ -819,8 +836,12 @@ export default function Calendar() {
                 <div key={a.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(144,144,176,0.08)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
                   <span style={{ flexShrink:0, color:'var(--text2)' }}><User size={18} /></span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', display:'flex', alignItems:'center', gap:7 }}>
-                      {a.workerName} <AbsenceTypeBadge type={a.type} />
+                    <p style={{ fontWeight:700, fontSize:14, color:'var(--text)', display:'flex', alignItems:'center', gap:7, flexWrap:'wrap' }}>
+                      {a.workerName}
+                      {a.allDay === false && (a.startTime || a.endTime) && (
+                        <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>{a.startTime || '?'}–{a.endTime || '?'}</span>
+                      )}
+                      <AbsenceTypeBadge type={a.type} />
                     </p>
                     <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>
                       {a.reason || t('calendar.noReasonSpecified')}
@@ -852,6 +873,9 @@ export default function Calendar() {
                       {a.startDate === a.endDate
                         ? formatDate(a.startDate+'T12:00:00', {day:'numeric',month:'long',year:'numeric'}, i18n.language)
                         : `${formatDate(a.startDate+'T12:00:00', {day:'numeric',month:'short'}, i18n.language)} → ${formatDate(a.endDate+'T12:00:00', {day:'numeric',month:'short',year:'numeric'}, i18n.language)}`}
+                      {a.allDay === false && (a.startTime || a.endTime) && (
+                        <span style={{ fontWeight:600, color:'var(--text2)' }}>{a.startTime || '?'}–{a.endTime || '?'}</span>
+                      )}
                       <AbsenceTypeBadge type={a.type} />
                     </p>
                     {a.reason && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{a.reason}</p>}
@@ -913,6 +937,38 @@ export default function Calendar() {
               <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
               <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder={t('calendar.singleDayPlaceholder')} onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
             </div>
+            {/* Solo per un'assenza di un giorno solo — "qualche ora" su più
+                giorni non ha senso con un unico orario, vedi commento su
+                allDay in addAbsence sopra. */}
+            {(!absenceForm.endDate || absenceForm.endDate === absenceForm.startDate) && (
+              <div className="form-group">
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <label style={{ marginBottom:0 }}>{t('calendar.absenceHoursLabel')}</label>
+                  <button type="button" onClick={() => setAbsenceForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={absenceForm.allDay}
+                    style={{
+                      flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
+                      background: absenceForm.allDay ? 'var(--accent)' : 'var(--card2)',
+                      color: absenceForm.allDay ? '#fff' : 'var(--text2)',
+                      border: `1px solid ${absenceForm.allDay ? 'var(--accent)' : 'var(--border)'}`,
+                      fontSize:13, fontWeight:700, whiteSpace:'nowrap',
+                    }}>
+                    {t('events.allDayLabel')}
+                  </button>
+                </div>
+                {!absenceForm.allDay && (
+                  <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <label style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
+                      <TimeField value={absenceForm.startTime} onChange={v => setAbsenceForm(f => ({ ...f, startTime:v }))} />
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <label style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
+                      <TimeField value={absenceForm.endTime} onChange={v => setAbsenceForm(f => ({ ...f, endTime:v }))} clearable />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="form-group">
               <label>{t('calendar.absenceTypeLabel')}</label>
               <SegmentedControl options={absenceTypeOptions(t)} value={absenceForm.type} onChange={v => setAbsenceForm(f => ({...f, type:v}))} />

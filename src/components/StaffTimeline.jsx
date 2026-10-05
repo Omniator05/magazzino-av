@@ -199,7 +199,15 @@ const PHASE_COLORS = { montaggio: '#2563eb', smontaggio: '#ea580c' }
 export default function StaffTimeline({ teamId, events, workers, unavailability, user, focusAssign, onFocusAssignConsumed }) {
   const { t, i18n } = useTranslation()
   const confirm = useConfirm()
-  const [weekStart, setWeekStart] = useState(() => startOfDay(new Date()))
+  // Settimana e filtri ricordati tra una visita e l'altra (sessionStorage,
+  // si perde solo chiudendo la scheda) — altrimenti ogni volta che si passa
+  // di qui (es. per aprire la lista di carico di un evento e tornare
+  // indietro) la vista ripartiva da oggi con tutti i filtri riattivati.
+  // Letto una sola volta al mount (useState, non ricalcolato ad ogni render).
+  const [savedView] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('staffTimeline_view')) } catch { return null }
+  })
+  const [weekStart, setWeekStart] = useState(() => savedView?.weekStart ? startOfDay(new Date(savedView.weekStart + 'T12:00:00')) : startOfDay(new Date()))
   const [blocks, setBlocks] = useState([])
   const [externalWorkers, setExternalWorkers] = useState([])
   const [shownExternalIds, setShownExternalIds] = useState([])
@@ -215,9 +223,16 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // Filtro attività — eventi, rent/install e fasi montaggio-smontaggio sono
   // spesso "rumore di fondo" diverso a seconda di chi pianifica le ore,
   // quindi si possono togliere dalla vista uno alla volta.
-  const [showEvents, setShowEvents] = useState(true)
-  const [showInstallations, setShowInstallations] = useState(true)
-  const [showPhases, setShowPhases] = useState(true)
+  const [showEvents, setShowEvents] = useState(savedView?.showEvents ?? true)
+  const [showInstallations, setShowInstallations] = useState(savedView?.showInstallations ?? true)
+  const [showPhases, setShowPhases] = useState(savedView?.showPhases ?? true)
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('staffTimeline_view', JSON.stringify({
+        weekStart: toDateStr(weekStart), showEvents, showInstallations, showPhases,
+      }))
+    } catch {}
+  }, [weekStart, showEvents, showInstallations, showPhases])
 
   useEffect(() => {
     if (!teamId) return

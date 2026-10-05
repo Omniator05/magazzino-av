@@ -228,6 +228,19 @@ select {
   padding-bottom: env(safe-area-inset-bottom);
   min-height: 80px;
 }
+/* Selezione multipla nella lista di carico (EventDetail.jsx): la tab bar
+   sfuma invece di sparire di scatto, lasciando il posto alla barra azioni
+   in blocco che occupa la stessa fascia in basso. La tab bar vera è il nav
+   "tabbar-nav" (pillola flottante, vedi TabBar.jsx) — non il vecchio
+   ".tab-bar" sopra, rimasto da un design precedente e non più montato da
+   nessuna parte. */
+.tabbar-nav {
+  transition: opacity 0.2s ease;
+}
+body.select-mode .tabbar-nav {
+  opacity: 0;
+  pointer-events: none;
+}
 .tab-bar button {
   flex: 1;
   display: flex;

@@ -7,7 +7,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
-import { Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from '../components/Icon'
+import { Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from '../components/Icon'
 import BackHomeButton from '../components/BackHomeButton'
 import DeleteButton from '../components/DeleteButton'
 import EditButton from '../components/EditButton'
@@ -49,8 +49,12 @@ export default function SettingsWorkHoursWorker() {
   const [formError, setFormError] = useState('')
 
   const [editingAbsence, setEditingAbsence] = useState(null)
-  const [absenceForm, setAbsenceForm] = useState({ startDate: '', endDate: '', reason: '', type: 'ferie' })
-  useModalScrollLock(showModal || !!editingAbsence)
+  // Separato da editingAbsence (che tiene il documento in modifica): qui
+  // l'admin sta aggiungendo una nuova assenza per conto del magazziniere,
+  // non c'è ancora un documento — vedi saveAbsenceEdit più sotto.
+  const [creatingAbsence, setCreatingAbsence] = useState(false)
+  const [absenceForm, setAbsenceForm] = useState({ startDate: '', endDate: '', reason: '', type: 'ferie', allDay: true, startTime: '', endTime: '' })
+  useModalScrollLock(showModal || !!editingAbsence || creatingAbsence)
 
   useEffect(() => {
     if (!workerId) return
@@ -192,32 +196,50 @@ export default function SettingsWorkHoursWorker() {
   // "questo l'hai cambiato tu di nascosto".
   const openEditAbsence = (u) => {
     setEditingAbsence(u)
-    setAbsenceForm({ startDate: u.startDate, endDate: u.endDate, reason: u.reason || '', type: u.type || 'altro' })
+    setAbsenceForm({ startDate: u.startDate, endDate: u.endDate, reason: u.reason || '', type: u.type || 'altro', allDay: u.allDay !== false, startTime: u.startTime || '', endTime: u.endTime || '' })
   }
-  const closeAbsenceModal = () => setEditingAbsence(null)
+  // Un magazziniere può avvisare a voce invece che dall'app (es. "non ci
+  // sarò la mattina") — qui l'admin la registra per conto suo, sulla sua
+  // pagina, invece di dover aspettare che la segnali lui/lei stesso.
+  const openNewAbsence = () => {
+    setAbsenceForm({ startDate: '', endDate: '', reason: '', type: 'ferie', allDay: true, startTime: '', endTime: '' })
+    setCreatingAbsence(true)
+  }
+  const closeAbsenceModal = () => { setEditingAbsence(null); setCreatingAbsence(false) }
 
   // Ritorna true solo se ha davvero salvato — SaveButton mostra spinner poi
   // spunta solo in quel caso, e chiude il modal con la sua dissolvenza
   // (absenceDrag.close, passato come onDone) invece di farlo sparire di
   // scatto come faceva prima con un setEditingAbsence(null) diretto.
   const saveAbsenceEdit = async () => {
-    if (!editingAbsence || !absenceForm.startDate) return false
+    if (!absenceForm.startDate) return false
+    const endDate = absenceForm.endDate || absenceForm.startDate
+    // Le ore hanno senso solo su un giorno singolo — vedi stesso guard in
+    // Calendar.jsx/WorkerCalendar.jsx.
+    const allDay = endDate !== absenceForm.startDate || absenceForm.allDay !== false
     const data = {
       startDate: absenceForm.startDate,
-      endDate: absenceForm.endDate || absenceForm.startDate,
+      endDate,
       reason: absenceForm.reason.trim(),
       type: absenceForm.type || 'altro',
+      allDay,
+      startTime: allDay ? null : (absenceForm.startTime || null),
+      endTime: allDay ? null : (absenceForm.endTime || null),
     }
-    await updateDoc(doc(db, 'unavailability', editingAbsence.id), data)
-    const datesChanged = data.startDate !== editingAbsence.startDate || data.endDate !== editingAbsence.endDate
-    if (datesChanged && editingAbsence.workerId !== user.uid) {
-      await addDoc(collection(db, 'notifications'), {
-        teamId, type: 'absence_edited', workerId: editingAbsence.workerId,
-        editedByName: myProfile?.name || myProfile?.username || t('common.noName'),
-        oldStartDate: editingAbsence.startDate, oldEndDate: editingAbsence.endDate,
-        startDate: data.startDate, endDate: data.endDate,
-        seenBy: [], createdAt: serverTimestamp(),
-      })
+    if (editingAbsence) {
+      await updateDoc(doc(db, 'unavailability', editingAbsence.id), data)
+      const datesChanged = data.startDate !== editingAbsence.startDate || data.endDate !== editingAbsence.endDate
+      if (datesChanged && editingAbsence.workerId !== user.uid) {
+        await addDoc(collection(db, 'notifications'), {
+          teamId, type: 'absence_edited', workerId: editingAbsence.workerId,
+          editedByName: myProfile?.name || myProfile?.username || t('common.noName'),
+          oldStartDate: editingAbsence.startDate, oldEndDate: editingAbsence.endDate,
+          startDate: data.startDate, endDate: data.endDate,
+          seenBy: [], createdAt: serverTimestamp(),
+        })
+      }
+    } else {
+      await addDoc(collection(db, 'unavailability'), { ...data, workerId, teamId, createdAt: serverTimestamp() })
     }
     return true
   }
@@ -242,7 +264,7 @@ export default function SettingsWorkHoursWorker() {
   const submitAbsenceForm = async () => {
     if (await saveAbsenceEdit()) { showToast(t('workHours.absenceSavedToast')); absenceDrag.close() }
   }
-  const absenceDrag = useModalDrag(closeAbsenceModal, undefined, submitAbsenceForm, !!editingAbsence)
+  const absenceDrag = useModalDrag(closeAbsenceModal, undefined, submitAbsenceForm, !!editingAbsence || creatingAbsence)
 
   if (workerLoaded && !worker) {
     return (
@@ -355,34 +377,44 @@ export default function SettingsWorkHoursWorker() {
 
       {/* Assenze — modificabili (non solo cancellabili): vedi
           saveAbsenceEdit per l'avviso al worker quando le date cambiano
-          davvero. Sempre visibili, indipendenti dal periodo qui sopra. */}
-      {sortedAbsences.length > 0 && (
-        <div style={{ margin: '0 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
-          <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>{t('workHours.absencesTitle')}</p>
-          {displayAbsences.map(u => {
-            const isLeaving = !!fadingAbsences[u.id] && !sortedAbsences.some(a => a.id === u.id)
-            return (
-              <div key={u.id} style={{
-                display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg3)', borderRadius: 10, padding: '9px 10px', marginBottom: 6,
-                opacity: isLeaving ? 0 : 1, transform: isLeaving ? 'scale(0.97)' : 'scale(1)',
-                transition: 'opacity 0.25s ease, transform 0.25s ease', pointerEvents: isLeaving ? 'none' : 'auto',
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {u.startDate === u.endDate
-                      ? formatDate(u.startDate + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }, i18n.language)
-                      : `${formatDate(u.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(u.endDate + 'T12:00:00', { day: 'numeric', month: 'short', year: 'numeric' }, i18n.language)}`}
-                    <AbsenceTypeBadge type={u.type} />
-                  </p>
-                  {u.reason && <p style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 1 }}>{u.reason}</p>}
-                </div>
-                <EditButton onClick={() => openEditAbsence(u)} size={32} ariaLabel={t('common.edit')} />
-                <DeleteButton onDelete={() => removeAbsence(u)} onDone={() => onAbsenceDeleted(u)} size={32} />
-              </div>
-            )
-          })}
+          davvero. Sempre visibili, indipendenti dal periodo qui sopra.
+          L'intestazione (col "+") resta anche a zero assenze: è il solo
+          punto dove l'admin può registrarne una per conto del magazziniere,
+          es. se l'ha avvisato a voce di un'assenza imminente. */}
+      <div style={{ margin: '0 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: sortedAbsences.length > 0 ? 10 : 0 }}>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{t('workHours.absencesTitle')}</p>
+          <button onClick={openNewAbsence} aria-label={t('workHours.newAbsenceTitle')}
+            style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Plus size={15} />
+          </button>
         </div>
-      )}
+        {displayAbsences.map(u => {
+          const isLeaving = !!fadingAbsences[u.id] && !sortedAbsences.some(a => a.id === u.id)
+          return (
+            <div key={u.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg3)', borderRadius: 10, padding: '9px 10px', marginBottom: 6,
+              opacity: isLeaving ? 0 : 1, transform: isLeaving ? 'scale(0.97)' : 'scale(1)',
+              transition: 'opacity 0.25s ease, transform 0.25s ease', pointerEvents: isLeaving ? 'none' : 'auto',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {u.startDate === u.endDate
+                    ? formatDate(u.startDate + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }, i18n.language)
+                    : `${formatDate(u.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(u.endDate + 'T12:00:00', { day: 'numeric', month: 'short', year: 'numeric' }, i18n.language)}`}
+                  {u.allDay === false && (u.startTime || u.endTime) && (
+                    <span style={{ fontWeight: 600, color: 'var(--text2)' }}>{u.startTime || '?'}–{u.endTime || '?'}</span>
+                  )}
+                  <AbsenceTypeBadge type={u.type} />
+                </p>
+                {u.reason && <p style={{ fontSize: 11.5, color: 'var(--text2)', marginTop: 1 }}>{u.reason}</p>}
+              </div>
+              <EditButton onClick={() => openEditAbsence(u)} size={32} ariaLabel={t('common.edit')} />
+              <DeleteButton onDelete={() => removeAbsence(u)} onDone={() => onAbsenceDeleted(u)} size={32} />
+            </div>
+          )
+        })}
+      </div>
 
       {/* Ferie — sola lettura: il monte annuale si imposta nella scheda
           utente in Impostazioni, non qui. */}
@@ -454,11 +486,11 @@ export default function SettingsWorkHoursWorker() {
         </div>
       )}
 
-      {editingAbsence && (
+      {(editingAbsence || creatingAbsence) && (
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...absenceDrag.props}>
             <button className="close-btn" onClick={absenceDrag.close} aria-label={t('common.close')}>✕</button>
-            <h2>{t('workHours.editAbsenceTitle')}</h2>
+            <h2>{creatingAbsence ? t('workHours.newAbsenceTitle') : t('workHours.editAbsenceTitle')}</h2>
             <div className="form-group">
               <label>{t('calendar.firstDay')}</label>
               <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, startDate: v, endDate: f.endDate < v ? v : f.endDate }))} />
@@ -467,6 +499,35 @@ export default function SettingsWorkHoursWorker() {
               <label>{t('calendar.lastDay')}</label>
               <DateField value={absenceForm.endDate} min={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, endDate: v }))} />
             </div>
+            {(!absenceForm.endDate || absenceForm.endDate === absenceForm.startDate) && (
+              <div className="form-group">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ marginBottom: 0 }}>{t('calendar.absenceHoursLabel')}</label>
+                  <button type="button" onClick={() => setAbsenceForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={absenceForm.allDay}
+                    style={{
+                      flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 20,
+                      background: absenceForm.allDay ? 'var(--accent)' : 'var(--card2)',
+                      color: absenceForm.allDay ? '#fff' : 'var(--text2)',
+                      border: `1px solid ${absenceForm.allDay ? 'var(--accent)' : 'var(--border)'}`,
+                      fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+                    }}>
+                    {t('events.allDayLabel')}
+                  </button>
+                </div>
+                {!absenceForm.allDay && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeStartLabel')}</label>
+                      <TimeField value={absenceForm.startTime} onChange={v => setAbsenceForm(f => ({ ...f, startTime: v }))} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeEndLabel')}</label>
+                      <TimeField value={absenceForm.endTime} onChange={v => setAbsenceForm(f => ({ ...f, endTime: v }))} clearable />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="form-group">
               <label>{t('calendar.absenceTypeLabel')}</label>
               <SegmentedControl options={absenceTypeOptions(t)} value={absenceForm.type} onChange={v => setAbsenceForm(f => ({ ...f, type: v }))} />

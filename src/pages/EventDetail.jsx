@@ -1,6 +1,8 @@
 import { useModalDrag } from '../hooks/useModalDrag'
+import { useIsMobile } from '../hooks/useIsMobile'
 import SaveButton from '../components/SaveButton'
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
@@ -80,6 +82,7 @@ export default function EventDetail() {
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [event, setEvent] = useState(null)
   const today = new Date().toISOString().split('T')[0]
   const [allItems, setAllItems] = useState([])
@@ -127,11 +130,31 @@ export default function EventDetail() {
   // che è quella nel catalogo del modale "aggiungi oggetto") — sempre
   // visibile in cima alla lista, utile quando la lista si allunga parecchio.
   const [itemListSearch, setItemListSearch] = useState('')
-  // Assegnazione furgone in blocco — evita di dover aprire il menu su ogni riga
-  // quando si vuole assegnare lo stesso furgone a più oggetti già in lista.
-  const [bulkVehicleMode, setBulkVehicleMode] = useState(false)
+  // Selezione multipla unificata — un solo bottone "Seleziona" invece di uno
+  // per azione: in questa modalità toccare un oggetto lo seleziona soltanto
+  // (niente modal dettaglio, vedi bulkMode su EventItemRow), poi una delle
+  // azioni della barra (furgone/lista/elimina/stato) si applica a tutti i
+  // selezionati insieme. bulkAction decide quale pannello extra mostrare
+  // sotto i chip (null = solo i chip, nessun pannello aperto).
+  const [selectMode, setSelectMode] = useState(false)
   const [bulkSelectedIds, setBulkSelectedIds] = useState(new Set())
+  const [bulkAction, setBulkAction] = useState(null) // null | 'vehicle' | 'moveExisting' | 'status' ('vehicle' solo su computer, vedi showBulkVehiclePicker sotto)
   const [bulkVehicleId, setBulkVehicleId] = useState('')
+  const [bulkMoveListId, setBulkMoveListId] = useState('')
+  // "Assegna furgone" in blocco: su telefono apre un popup a elenco invece
+  // del select inline (troppo piccolo da toccare) — un tap sceglie e applica
+  // subito, niente "Applica" separato. Il select rimane così com'era su
+  // computer (vedi actionPanel più sotto).
+  const [showBulkVehiclePicker, setShowBulkVehiclePicker] = useState(false)
+  const bulkVehiclePickerDrag = useModalDrag(() => setShowBulkVehiclePicker(false))
+  // Ultimo oggetto toccato con un tap semplice: àncora per lo shift+click
+  // "seleziona l'intervallo" su computer (stesso pattern tap-tap del
+  // selettore di date personalizzato, qui con shift invece di un secondo tap).
+  const [lastBulkClickId, setLastBulkClickId] = useState(null)
+  // Su telefono la barra azioni è troppo stretta per 5 chip affiancate: resta
+  // solo "Elimina" + "⋯", che apre questo menu verticale con le altre azioni
+  // (vedi composizione della barra più sotto).
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   // Liste di carico multiple (vedi utils/eventLists.js): lista in cui finiscono
   // gli oggetti aggiunti dal modal, e popup nome lista (nuova/rinomina/sposta).
   const [addTargetList, setAddTargetList] = useState(MAIN_LIST_ID)
@@ -241,7 +264,22 @@ export default function EventDetail() {
   // subito dal ranking (non solo dal render) è ciò che libera davvero lo slot
   // per il prossimo suggerimento migliore, non solo nasconde la riga.
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState(() => new Set())
-  useModalScrollLock(showAddItem || showExtraModal || showTemplatePicker || !!editItem)
+  useModalScrollLock(showAddItem || showExtraModal || showTemplatePicker || !!editItem || showBulkVehiclePicker)
+  // Tab bar e FAB "+" si dissolvono durante la selezione multipla — la tab
+  // bar vive fuori da questa pagina (App.jsx), quindi passa da una classe
+  // sul body invece che da uno stato React condiviso (vedi index.css).
+  useEffect(() => {
+    document.body.classList.toggle('select-mode', selectMode)
+    return () => document.body.classList.remove('select-mode')
+  }, [selectMode])
+  // Esc esce dalla selezione multipla (solo utile su computer, su telefono
+  // non c'è una tastiera che la invii).
+  useEffect(() => {
+    if (!selectMode) return
+    const onKeyDown = e => { if (e.key === 'Escape') exitSelectMode() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectMode])
 
   const eventRef = doc(db, 'events', id)
 
@@ -438,6 +476,14 @@ export default function EventDetail() {
   const targetListId = eventLists.some(l => l.id === addTargetList) ? addTargetList : MAIN_LIST_ID
   const targetListItems = eventItems.filter(e => rowListId(e) === targetListId)
   const listLabel = l => l.name || (l.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
+  // Blocchi da disegnare: la principale resta sempre scegliebile per
+  // aggiungere/spostare oggetti (eventLists sopra, usato da "+" e dal
+  // picker lista), ma sparisce dai blocchi quando è stata "eliminata" (vedi
+  // deleteList) ED è ancora vuota — mai a lista vuota di blocchi, altrimenti
+  // non ci sarebbe più nessun posto dove aggiungere il primo oggetto.
+  const mainListEmpty = !eventItems.some(i => rowListId(i) === MAIN_LIST_ID)
+  let visibleLists = eventLists.filter(l => !(l.id === MAIN_LIST_ID && event.mainListHidden && mainListEmpty))
+  if (visibleLists.length === 0) visibleLists = eventLists.filter(l => l.id === MAIN_LIST_ID)
 
   // Contenuti Brasserie per questa data (se un organizzatore ne ha configurata una)
   const brasserieArtistiSlots = brasserieWeek?.layers?.artisti || []
@@ -594,9 +640,19 @@ export default function EventDetail() {
     setListModal(null)
   }
 
+  // La lista principale non è un oggetto vero in event.lists (è implicita:
+  // le righe senza listId le appartengono), quindi "eliminarla" non può
+  // toglierla da un array — si segna mainListHidden, che la nasconde dai
+  // blocchi finché resta vuota (vedi visibleLists più sotto). Riappare da
+  // sola appena ci finisce dentro di nuovo un oggetto (dal picker "+" o
+  // spostandocene uno), niente da "ripristinare" a mano.
   const deleteList = async (listId) => {
     const ok = await confirm({ title: t('eventDetail.deleteListTitle'), message: t('eventDetail.deleteListMessage'), confirmLabel: t('eventDetail.deleteListLabel'), danger: true })
     if (!ok) return
+    if (listId === MAIN_LIST_ID) {
+      await updateEventItems(current => current, () => ({ mainListName: '', mainListHidden: true }))
+      return
+    }
     await updateEventItems(
       current => current,
       data => ({ lists: (data.lists || []).filter(l => l.id !== listId) })
@@ -632,18 +688,40 @@ export default function EventDetail() {
 
   // Risolve il popup "nuovo furgone esterno" (vedi pendingExternalVehicleFor):
   // crea/riusa il record in externalVehicles, poi applica l'assegnazione
-  // esattamente come una scelta normale dal menu — alla riga che l'ha aperto
-  // o, se aperto dal bottone in blocco, al select lì (l'utente preme comunque
-  // "Applica" dopo, coerente col resto del flusso bulk).
+  // esattamente come una scelta normale dal menu — alla riga che l'ha aperto,
+  // o se aperto dal bottone in blocco applica subito (sia dal popup telefono
+  // sia dal select computer, un tap/applica in meno per entrambi).
   const confirmPendingExternalVehicle = async (name) => {
     const id = await getOrCreateExternalVehicle(teamId, name, user.uid, externalVehicles)
     const target = pendingExternalVehicleFor
     setPendingExternalVehicleFor(null)
-    if (target === 'bulk') setBulkVehicleId(`e:${id}`)
+    if (target === 'bulk') { setBulkVehicleId(`e:${id}`); await applyBulkVehicle(`e:${id}`) }
     else await setItemVehicle(target, `e:${id}`)
   }
 
-  const toggleBulkSelect = (itemId) => {
+  // Tap semplice: aggiunge/toglie solo quell'oggetto (comportamento di
+  // sempre) e sposta l'àncora. Shift+tap (solo computer, serve una
+  // tastiera): seleziona l'intero intervallo visivo tra l'àncora e
+  // l'oggetto appena toccato, in aggiunta a quanto già selezionato — stesso
+  // idioma di file manager/email, àncora ferma finché non si fa un tap
+  // semplice altrove. orderedVisibleItemIds riflette l'ordine liste→
+  // categoria→riga con cui le righe sono davvero disegnate (vedi sotto).
+  const toggleBulkSelect = (itemId, shiftKey) => {
+    if (shiftKey && lastBulkClickId) {
+      const ids = orderedVisibleItemIds
+      const fromIdx = ids.indexOf(lastBulkClickId)
+      const toIdx = ids.indexOf(itemId)
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+        setBulkSelectedIds(prev => {
+          const next = new Set(prev)
+          ids.slice(start, end + 1).forEach(id => next.add(id))
+          return next
+        })
+        return
+      }
+    }
+    setLastBulkClickId(itemId)
     setBulkSelectedIds(prev => {
       const next = new Set(prev)
       next.has(itemId) ? next.delete(itemId) : next.add(itemId)
@@ -651,19 +729,27 @@ export default function EventDetail() {
     })
   }
 
-  const exitBulkVehicleMode = () => {
-    setBulkVehicleMode(false)
+  const exitSelectMode = () => {
+    setSelectMode(false)
     setBulkSelectedIds(new Set())
+    setBulkAction(null)
     setBulkVehicleId('')
+    setBulkMoveListId('')
+    setLastBulkClickId(null)
+    setMobileMoreOpen(false)
+    setShowBulkVehiclePicker(false)
   }
 
   // Applica un furgone a tutti gli oggetti selezionati in un'unica scrittura,
   // invece di un giro di select per ciascuna riga. Stessa convenzione di
-  // valori di setItemVehicle ('v:'/'e:'/''/'__none__').
-  const applyBulkVehicle = async () => {
-    if (bulkSelectedIds.size === 0 || !bulkVehicleId) return
-    const vehicleId = bulkVehicleId.startsWith('v:') ? bulkVehicleId.slice(2) : null
-    const externalVehicleId = bulkVehicleId.startsWith('e:') ? bulkVehicleId.slice(2) : null
+  // valori di setItemVehicle ('v:'/'e:'/''/'__none__'). `value` esplicito per
+  // il popup telefono (un tap = scelta + applica, niente stato intermedio da
+  // aspettare) — senza, usa bulkVehicleId come il select su computer.
+  const applyBulkVehicle = async (value) => {
+    const chosen = value !== undefined ? value : bulkVehicleId
+    if (bulkSelectedIds.size === 0 || !chosen) return
+    const vehicleId = chosen.startsWith('v:') ? chosen.slice(2) : null
+    const externalVehicleId = chosen.startsWith('e:') ? chosen.slice(2) : null
     const externalVehicleName = externalVehicleId ? (externalVehicles.find(v => v.id === externalVehicleId)?.name || '') : null
     const conflict = vehicleId
       ? vehicleConflictEvent(vehicleId, event, otherEvents)
@@ -681,7 +767,106 @@ export default function EventDetail() {
       if (!ok) return
     }
     await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId, externalVehicleId, externalVehicleName } : i))
-    exitBulkVehicleMode()
+    setShowBulkVehiclePicker(false)
+    exitSelectMode()
+  }
+
+  // Sposta tutti gli oggetti selezionati in un'altra lista GIÀ ESISTENTE, in
+  // un'unica scrittura — stesso schema di applyBulkVehicle sopra, ma su
+  // moveRowToList (già gestisce id univoci/itemRef, vedi utils/eventLists.js).
+  const applyBulkMove = async () => {
+    if (bulkSelectedIds.size === 0 || !bulkMoveListId) return
+    await updateEventItems(current => {
+      const taken = new Set(current.map(i => i.id))
+      return current.map(i => bulkSelectedIds.has(i.id) ? moveRowToList(i, bulkMoveListId, taken) : i)
+    })
+    exitSelectMode()
+  }
+
+  // Variante "lista NUOVA" di applyBulkMove sopra — crea la lista e ci
+  // sposta dentro i selezionati in un colpo solo, invece di crearla vuota e
+  // doverci spostare gli oggetti con un secondo giro. Richiamata dal popup
+  // nome lista (listModal.mode === 'moveSelected').
+  const createListAndMoveSelected = async (name) => {
+    if (bulkSelectedIds.size === 0) { setListModal(null); return }
+    const listId = newListId()
+    await updateEventItems(
+      current => {
+        const taken = new Set(current.map(i => i.id))
+        return current.map(i => bulkSelectedIds.has(i.id) ? moveRowToList(i, listId, taken) : i)
+      },
+      data => ({ lists: [...(data.lists || []), { id: listId, name }] })
+    )
+    setListModal(null)
+    exitSelectMode()
+  }
+
+  // Elimina in blocco — stessa logica di removeFromEvent (riga singola) per
+  // ogni selezionato: chi è ancora "fuori" (caricato, non rientrato) libera
+  // la giacenza prima di sparire dalla lista, altrimenti il magazzino
+  // risulterebbe per sempre più scarico di quanto sia davvero.
+  const applyBulkDelete = async () => {
+    if (bulkSelectedIds.size === 0) return
+    const toDelete = eventItems.filter(i => bulkSelectedIds.has(i.id))
+    const stillOut = toDelete.filter(i => i.loaded && !i.returned)
+    const ok = await confirm({
+      title: t('eventDetail.bulkDeleteTitle', { count: toDelete.length }),
+      message: stillOut.length > 0 ? t('eventDetail.bulkDeleteMessageWithOut', { count: stillOut.length }) : t('eventDetail.bulkDeleteMessage'),
+      confirmLabel: t('eventDetail.bulkDeleteLabel'),
+      danger: true,
+    })
+    if (!ok) return
+    await updateEventItems(current => current.filter(i => !bulkSelectedIds.has(i.id)))
+    for (const item of stillOut) {
+      await syncKitAwareInventory({
+        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+        isBundle: item.isBundle, category: item.category, qty: item.qty, sign: 1,
+      })
+    }
+    toDelete.forEach(item => logItemActivity({
+      teamId, eventId, eventName: event?.name, itemId: item.id, itemName: item.name,
+      catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+      listId: rowListId(item), action: 'removed', profile, userId: user?.uid,
+    }))
+    exitSelectMode()
+  }
+
+  // Imposta uno stato ASSOLUTO (non un toggle come lo scanner) su tutti i
+  // selezionati insieme — semplificazione voluta per l'uso in blocco: niente
+  // verifica "consumabile intatto?" né rientro parziale qui, quelle restano
+  // sfumature da gestire singolarmente dallo scanner quando servono. La
+  // giacenza si muove solo per le righe il cui "impegno" (caricato e non
+  // rientrato) cambia DAVVERO rispetto a prima, non per tutte quelle toccate
+  // — stessa idea di sign/delta di syncKitAwareInventory, vedi WorkerScanner.jsx.
+  const BULK_STATUS_FLAGS = {
+    pending:  { pronto: false, loaded: false, returned: false },
+    pronto:   { pronto: true,  loaded: false, returned: false },
+    loaded:   { pronto: true,  loaded: true,  returned: false },
+    returned: { pronto: true,  loaded: true,  returned: true },
+  }
+  const applyBulkStatus = async (status) => {
+    if (bulkSelectedIds.size === 0) return
+    const flags = BULK_STATUS_FLAGS[status]
+    const touched = eventItems.filter(i => bulkSelectedIds.has(i.id) && !i.isExtra)
+    await updateEventItems(current => current.map(i => {
+      if (!bulkSelectedIds.has(i.id) || i.isExtra) return i
+      return {
+        ...i, ...flags,
+        ...(!flags.loaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] } } : {}),
+        ...(!flags.returned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
+        ...(flags.returned ? { returnedConsumed: false } : {}),
+      }
+    }))
+    for (const row of touched) {
+      const wasOut = row.loaded && !row.returned
+      const isOut = flags.loaded && !flags.returned
+      if (wasOut === isOut) continue
+      await syncKitAwareInventory({
+        catalogItemId: row.itemRef || row.id, isBundle: row.isBundle, category: row.category,
+        qty: row.qty, sign: isOut ? -1 : 1,
+      })
+    }
+    exitSelectMode()
   }
 
   // Aggiunge al carrello temporaneo (non chiude il modal)
@@ -1166,8 +1351,11 @@ export default function EventDetail() {
   const filteredEventItems = itemListSearch.trim()
     ? eventItems.filter(i => i.name?.toLowerCase().includes(itemListSearch.trim().toLowerCase()))
     : eventItems
-  // Righe di UNA lista raggruppate per categoria (stessa resa di sempre).
-  const renderGroupedItems = (rows) => {
+  // Raggruppa le righe di UNA lista per categoria, nell'ordine di CAT_ORDER
+  // — unica fonte per sia il rendering (renderGroupedItems) sia l'ordine
+  // "visivo" piatto usato dallo shift+click (orderedVisibleItemIds sotto),
+  // così i due non possono disallinearsi.
+  const groupByCategory = (rows) => {
     const catGrouped = {}
     rows.forEach(item => {
       // Categorie "orfane" finiscono in Altro invece di sparire: un articolo può
@@ -1180,6 +1368,19 @@ export default function EventDetail() {
       catGrouped[cat].push(item)
     })
     const catKeys = CAT_ORDER.filter(c => catGrouped[c])
+    return { catGrouped, catKeys }
+  }
+  // Ordine "visivo" piatto di tutte le righe mostrate ora in tutte le liste
+  // visibili (stessa lista→categoria→riga di renderGroupedItems) — serve
+  // solo a calcolare l'intervallo di uno shift+click nella selezione multipla.
+  const orderedVisibleItemIds = visibleLists.flatMap(l => {
+    const rows = filteredEventItems.filter(i => rowListId(i) === l.id)
+    const { catGrouped, catKeys } = groupByCategory(rows)
+    return catKeys.flatMap(cat => catGrouped[cat].map(item => item.id))
+  })
+  // Righe di UNA lista raggruppate per categoria (stessa resa di sempre).
+  const renderGroupedItems = (rows) => {
+    const { catGrouped, catKeys } = groupByCategory(rows)
     const multiCat = catKeys.length > 1
     return catKeys.map(cat => (
       <div key={cat}>
@@ -1192,15 +1393,13 @@ export default function EventDetail() {
           </div>
         )}
         {catGrouped[cat].map(item => (
-          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={bulkVehicleMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
+          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={selectMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
         ))}
       </div>
     ))
   }
-  const groupedEventItems = renderGroupedItems(filteredEventItems)
-
-  // Un blocco per lista quando l'evento ne ha più di una: intestazione FUORI
-  // dalla card (il menu ⋯ non viene tagliato dall'overflow arrotondato).
+  // Un blocco per lista (intestazione FUORI dalla card, il menu ⋯ non viene
+  // tagliato dall'overflow arrotondato).
   const renderListBlock = (l) => {
     const all = eventItems.filter(i => rowListId(i) === l.id)
     const rows = filteredEventItems.filter(i => rowListId(i) === l.id)
@@ -1208,13 +1407,25 @@ export default function EventDetail() {
     const hasUnloaded = all.some(i => !i.loaded)
     const menuOpen = listMenuId === l.id
     const menuBtn = { display:'block', width:'100%', textAlign:'left', padding:'11px 14px', fontSize:13, fontWeight:600, background:'transparent', color:'var(--text)', borderRadius:0 }
+    // La principale si può eliminare (nasconde, vedi deleteList) solo se
+    // vuota E esiste almeno un'altra lista dove far confluire i prossimi
+    // oggetti — altrimenti l'azione non avrebbe un posto dove "andare".
+    const canDelete = l.id === MAIN_LIST_ID ? (all.length === 0 && multiList) : all.length === 0
+    // Evento appena creato, nessun oggetto da nessuna parte: stessa
+    // schermata guidata di sempre (icona + "tocca +" + scorciatoia
+    // template) invece del generico "lista vuota" — solo sulla principale,
+    // le altre liste vuote (evento già avviato) restano col messaggio corto.
+    const showOnboarding = l.id === MAIN_LIST_ID && eventItems.length === 0
     return (
       <div key={l.id} style={{ margin:'16px 16px 0' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
           <p style={{ flex:1, minWidth:0, fontWeight:800, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{listLabel(l)}</p>
           <span style={{ fontSize:12, color:'var(--text2)', flexShrink:0 }}>{t('eventDetail.listCounts', { loaded: loadedCount, total: all.length })}</span>
+          {/* Sfuma e si disattiva durante la selezione multipla, come il FAB
+              in fondo pagina — niente da aggiungere mentre si stanno
+              modificando oggetti già in lista (vedi commento sul FAB). */}
           <button onClick={() => openAddModal(l.id)} aria-label={t('eventDetail.addToThisListAria', { name: listLabel(l) })}
-            style={{ width:30, height:30, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            style={{ width:30, height:30, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: selectMode ? 0 : 1, pointerEvents: selectMode ? 'none' : 'auto', transition:'opacity 0.2s ease' }}>
             <Plus size={15} />
           </button>
           <div style={{ position:'relative', flexShrink:0 }}>
@@ -1228,7 +1439,7 @@ export default function EventDetail() {
                   {hasUnloaded && (
                     <button style={{ ...menuBtn, borderTop:'1px solid var(--border)' }} onClick={() => { setListMenuId(null); setListModal({ mode:'moveUnloaded', listId:l.id, name:'' }) }}>{t('eventDetail.moveUnloadedToNewList')}</button>
                   )}
-                  {l.id !== MAIN_LIST_ID && all.length === 0 && (
+                  {canDelete && (
                     <button style={{ ...menuBtn, borderTop:'1px solid var(--border)', color:'var(--red)' }} onClick={() => { setListMenuId(null); deleteList(l.id) }}>{t('eventDetail.deleteListLabel')}</button>
                   )}
                 </div>
@@ -1237,18 +1448,29 @@ export default function EventDetail() {
           </div>
         </div>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-          {all.length === 0
-            ? <p style={{ padding:'22px 20px', textAlign:'center', color:'var(--text2)', fontSize:13 }}>{t('eventDetail.emptyListShort')}</p>
-            : rows.length === 0
-              ? <p style={{ padding:'18px 20px', textAlign:'center', color:'var(--text3)', fontSize:13 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
-              : renderGroupedItems(rows)}
+          {showOnboarding
+            ? <div className="empty-state" style={{ padding:'40px 20px' }}>
+                <p style={{ fontSize:32 }}>📋</p>
+                <h3>{t('eventDetail.emptyListTitle')}</h3>
+                <p>{t('eventDetail.emptyListDescBefore')} <strong style={{ color:'var(--accent)' }}>+</strong> {t('eventDetail.emptyListDescAfter')}</p>
+                {templates.length > 0 && (
+                  <button
+                    onClick={() => setShowTemplatePicker(true)}
+                    style={{ marginTop:14, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px solid rgba(90,82,201,0.35)', color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
+                  >
+                    {t('eventDetail.useTemplate')}
+                  </button>
+                )}
+              </div>
+            : all.length === 0
+              ? <p style={{ padding:'22px 20px', textAlign:'center', color:'var(--text2)', fontSize:13 }}>{t('eventDetail.emptyListShort')}</p>
+              : rows.length === 0
+                ? <p style={{ padding:'18px 20px', textAlign:'center', color:'var(--text3)', fontSize:13 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
+                : renderGroupedItems(rows)}
         </div>
       </div>
     )
   }
-  const loadedTotal = eventItems.filter(i => i.loaded).length
-  const listLinkBtn = { background:'transparent', color:'var(--text2)', fontSize:13, fontWeight:700, padding:'6px 4px', display:'inline-flex', alignItems:'center', gap:5 }
-
   // Riga "etichetta + valore" per il blocco info sotto il nome evento
   // (data/location/preventivo/contatto) — stessa forma per tutte le righe
   // invece di un badge diverso per ognuna, per essere leggibili in un colpo
@@ -1579,18 +1801,53 @@ export default function EventDetail() {
           questa squadra (Impostazioni → Moduli); nome/data/luogo/note
           dell'evento sopra restano visibili in ogni caso. */}
       {loadListsOn && <>
-      {/* Ricerca oggetti + assegnazione furgone in blocco, stessa riga */}
-      {eventItems.length > 0 && (
-        <div style={{ margin:'12px 16px 0' }}>
-          {bulkVehicleMode ? (
-            <div style={{ background:'var(--card)', border:'1.5px solid var(--accent)', borderRadius:'var(--radius)', padding:'12px 14px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                <p style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</p>
-                <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={() => setBulkSelectedIds(new Set(eventItems.map(i => i.id)))} style={{ background:'transparent', color:'var(--blue)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectAll')}</button>
-                  <button onClick={() => setBulkSelectedIds(new Set())} style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700 }}>{t('eventDetail.selectNone')}</button>
-                </div>
-              </div>
+      {/* Ricerca oggetti + selezione multipla */}
+      {eventItems.length > 0 && (() => {
+        const chipStyle = (active, danger) => ({
+          flexShrink:0, whiteSpace:'nowrap', padding:'8px 14px', borderRadius:20, fontSize:13, fontWeight:700,
+          background: active ? 'var(--accent)' : danger ? 'rgba(220,38,38,0.08)' : 'var(--card2)',
+          color: active ? '#fff' : danger ? 'var(--red)' : 'var(--text2)',
+          border: `1px solid ${active ? 'var(--accent)' : danger ? 'rgba(220,38,38,0.25)' : 'var(--border)'}`,
+        })
+        // Chip delle azioni — stessa fila su telefono e computer, solo la
+        // cornice che la contiene cambia posizione (vedi sotto). "Elimina"
+        // chiede conferma da sé (confirm()), non serve un pannello; "Nuova
+        // lista" apre il popup nome lista già usato per crearne una.
+        const actionChips = (
+          <div style={{ display:'flex', gap:6, overflowX:'auto', WebkitOverflowScrolling:'touch', paddingBottom:2 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', flexShrink:0, alignSelf:'center', paddingRight:2 }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
+            <button onClick={() => setBulkAction(a => a === 'vehicle' ? null : 'vehicle')} aria-pressed={bulkAction === 'vehicle'} style={chipStyle(bulkAction === 'vehicle')}>{t('eventDetail.assignVehicleToMultiple')}</button>
+            {multiList && (
+              <button onClick={() => setBulkAction(a => a === 'moveExisting' ? null : 'moveExisting')} aria-pressed={bulkAction === 'moveExisting'} style={chipStyle(bulkAction === 'moveExisting')}>{t('eventDetail.moveToListExisting')}</button>
+            )}
+            <button onClick={() => setListModal({ mode:'moveSelected', name:'' })} style={chipStyle(false)}>{t('eventDetail.moveToListNew')}</button>
+            <button onClick={() => setBulkAction(a => a === 'status' ? null : 'status')} aria-pressed={bulkAction === 'status'} style={chipStyle(bulkAction === 'status')}>{t('eventDetail.bulkStatusAction')}</button>
+            <button onClick={applyBulkDelete} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</button>
+          </div>
+        )
+        // Select "sposta in lista esistente" — unico tra i pannelli ancora
+        // uguale su computer e telefono (serve comunque una select, quindi
+        // tanto vale la stessa base bianca su entrambi).
+        const moveExistingPanel = (
+          <div style={{ display:'flex', gap:8 }}>
+            <select
+              value={bulkMoveListId}
+              onChange={e => setBulkMoveListId(e.target.value)}
+              style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
+            >
+              <option value="">{t('eventDetail.chooseTargetList')}</option>
+              {eventLists.map(l => <option key={l.id} value={l.id}>{listLabel(l)}</option>)}
+            </select>
+            <button onClick={applyBulkMove} disabled={!bulkMoveListId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: bulkMoveListId ? 1 : 0.5 }}>
+              {t('eventDetail.apply')}
+            </button>
+          </div>
+        )
+        // Pannello completo per il computer: select furgone inline (niente
+        // popup lì, c'è spazio) + sposta lista + i 4 bottoni stato affiancati.
+        const actionPanel = bulkAction && (
+          <div>
+            {bulkAction === 'vehicle' && (
               <div style={{ display:'flex', gap:8 }}>
                 <select
                   value={bulkVehicleId}
@@ -1620,13 +1877,66 @@ export default function EventDetail() {
                   <option value="__new_external__">{t('eventDetail.addExternalVehicle')}</option>
                   <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
                 </select>
-                <button onClick={applyBulkVehicle} disabled={bulkSelectedIds.size === 0 || !bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: (bulkSelectedIds.size === 0 || !bulkVehicleId) ? 0.5 : 1 }}>
+                <button onClick={applyBulkVehicle} disabled={!bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: bulkVehicleId ? 1 : 0.5 }}>
                   {t('eventDetail.apply')}
                 </button>
               </div>
-              <button onClick={exitBulkVehicleMode} style={{ marginTop:10, width:'100%', background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px', fontSize:12, fontWeight:700 }}>{t('common.cancel')}</button>
-            </div>
-          ) : (
+            )}
+            {bulkAction === 'moveExisting' && moveExistingPanel}
+            {bulkAction === 'status' && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                <button onClick={() => applyBulkStatus('pending')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.statusPending')}</button>
+                <button onClick={() => applyBulkStatus('pronto')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.statusActionReady')}</button>
+                <button onClick={() => applyBulkStatus('loaded')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.loadedButton')}</button>
+                <button onClick={() => applyBulkStatus('returned')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.returnedButton')}</button>
+              </div>
+            )}
+          </div>
+        )
+        // "⋯" su telefono: se un pannello è già aperto lo richiude e torna
+        // all'elenco delle azioni, invece di sommare i due (comportamento
+        // "indietro"), altrimenti apre/chiude semplicemente l'elenco.
+        const toggleMobileMore = () => {
+          if (bulkAction) { setBulkAction(null); setMobileMoreOpen(true) }
+          else setMobileMoreOpen(o => !o)
+        }
+        // Pillola flottante, non più riga a tutta larghezza su sfondo
+        // bianco — ogni voce si allarga solo quanto serve al suo testo.
+        // Riusata anche per i 4 bottoni stato su telefono (sempre in
+        // verticale lì, mai affiancati come sul computer).
+        const menuRowStyle = { display:'flex', alignItems:'center', whiteSpace:'nowrap', padding:'11px 16px', borderRadius:20, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, fontWeight:700, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }
+        // Elenco verticale delle azioni diverse da "Elimina" (che resta
+        // sempre a vista sulla barra) — una voce per azione, si chiude da
+        // sola non appena ne scegli una. Allineate a destra, niente pannello
+        // comune dietro. "Assegna furgone" apre direttamente il popup a
+        // elenco (vedi showBulkVehiclePicker), non il pannello col select.
+        const mobileMoreMenu = (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+            <button onClick={() => { setMobileMoreOpen(false); setShowBulkVehiclePicker(true) }} style={menuRowStyle}>{t('eventDetail.assignVehicleToMultiple')}</button>
+            {multiList && (
+              <button onClick={() => { setBulkAction('moveExisting'); setMobileMoreOpen(false) }} style={menuRowStyle}>{t('eventDetail.moveToListExisting')}</button>
+            )}
+            <button onClick={() => { setMobileMoreOpen(false); setListModal({ mode:'moveSelected', name:'' }) }} style={menuRowStyle}>{t('eventDetail.moveToListNew')}</button>
+            <button onClick={() => { setBulkAction('status'); setMobileMoreOpen(false) }} style={menuRowStyle}>{t('eventDetail.bulkStatusAction')}</button>
+          </div>
+        )
+        // Versione telefono del pannello sopra la barra: solo moveExisting
+        // (select, serve la base bianca) e stato (pillole verticali come il
+        // menu sopra, niente base bianca) — il furgone passa dal popup.
+        const mobileActionPanel = bulkAction === 'moveExisting' ? (
+          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:10, boxShadow:'0 6px 20px rgba(0,0,0,0.12)', width:'min(320px, 100%)' }}>
+            {moveExistingPanel}
+          </div>
+        ) : bulkAction === 'status' ? (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+            <button onClick={() => applyBulkStatus('pending')} style={menuRowStyle}>{t('eventDetail.statusPending')}</button>
+            <button onClick={() => applyBulkStatus('pronto')} style={menuRowStyle}>{t('eventDetail.statusActionReady')}</button>
+            <button onClick={() => applyBulkStatus('loaded')} style={menuRowStyle}>{t('eventDetail.loadedButton')}</button>
+            <button onClick={() => applyBulkStatus('returned')} style={menuRowStyle}>{t('eventDetail.returnedButton')}</button>
+          </div>
+        ) : null
+        return (
+          <div style={{ margin:'12px 16px 0' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, minWidth:0 }}>
                 <svg style={{ position:'absolute', left:10, pointerEvents:'none' }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -1640,54 +1950,69 @@ export default function EventDetail() {
                 )}
               </div>
               <button
-                onClick={() => setBulkVehicleMode(true)}
-                style={{ background:'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}
+                onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+                style={{ background: selectMode ? 'var(--card2)' : 'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}
               >
-                {t('eventDetail.assignVehicleToMultiple')}
+                {selectMode ? t('common.cancel') : t('eventDetail.selectItems')}
               </button>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* Lista articoli — una sola card finché l'evento ha una lista sola
-          (resa identica a prima), un blocco per lista da quando ce ne sono di più. */}
-      {multiList ? (
-        <>
-          {eventLists.map(renderListBlock)}
-        </>
-      ) : (
-        <>
-      <div style={{ margin:'12px 16px 0', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-        {eventItems.length === 0
-          ? <div className="empty-state" style={{ padding:'40px 20px' }}>
-              <p style={{ fontSize:32 }}>📋</p>
-              <h3>{t('eventDetail.emptyListTitle')}</h3>
-              <p>{t('eventDetail.emptyListDescBefore')} <strong style={{ color:'var(--accent)' }}>+</strong> {t('eventDetail.emptyListDescAfter')}</p>
-              {templates.length > 0 && (
-                <button
-                  onClick={() => setShowTemplatePicker(true)}
-                  style={{ marginTop:14, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px solid rgba(90,82,201,0.35)', color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
-                >
-                  {t('eventDetail.useTemplate')}
-                </button>
-              )}
-            </div>
-          : filteredEventItems.length === 0
-            ? <p style={{ padding:'24px 20px', textAlign:'center', color:'var(--text2)', fontSize:14 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
-            : <>{groupedEventItems}</>
-        }
-      </div>
+            {/* Desktop: barra azioni fissa sotto la ricerca mentre si scorre
+                la lista. Telefono: stessa barra ma in fondo allo schermo
+                (vedi sotto, fuori da questo contenitore) — qui non c'è
+                abbastanza spazio fisso senza rubarlo alla tab bar, che
+                infatti sfuma via (vedi useEffect su selectMode/.select-mode). */}
+            {selectMode && !isMobile && (
+              <div style={{ position:'sticky', top:8, zIndex:30, marginTop:8, background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>
+                {actionChips}
+                {actionPanel && <div style={{ marginTop:10 }}>{actionPanel}</div>}
+              </div>
+            )}
 
-          {loadedTotal > 0 && loadedTotal < eventItems.length && (
-            <div style={{ margin:'8px 16px 0' }}>
-              <button onClick={() => setListModal({ mode:'moveUnloaded', listId:MAIN_LIST_ID, name:'' })} style={listLinkBtn}>{t('eventDetail.moveUnloadedToNewList')}</button>
-            </div>
-          )}
-        </>
-      )}
+            {/* Telefono: niente barra bianca — solo "Elimina" + "⋯" flottanti,
+                alla stessa altezza da terra della tab bar (che intanto è
+                sfumata via), col conteggio a sinistra e i due bottoni a
+                destra. "⋯" apre verso l'alto, allineato a destra sopra sé
+                stesso, l'elenco delle altre azioni o il pannello di quella
+                scelta — con dietro un velo scuro (tocca per richiudere),
+                stacca meglio le pillole flottanti dalla lista sotto. */}
+            {selectMode && isMobile && createPortal(
+              <>
+                {(mobileMoreOpen || bulkAction) && (
+                  <div onClick={() => { setMobileMoreOpen(false); setBulkAction(null) }}
+                    style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
+                )}
+                <div style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 44px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
+                  {mobileMoreOpen && (
+                    <div style={{ display:'flex', justifyContent:'flex-end' }}>{mobileMoreMenu}</div>
+                  )}
+                  {mobileActionPanel && (
+                    <div style={{ display:'flex', justifyContent:'flex-end' }}>{mobileActionPanel}</div>
+                  )}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'7px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)', whiteSpace:'nowrap' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <button onClick={applyBulkDelete} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</button>
+                      <button onClick={toggleMobileMore} aria-expanded={mobileMoreOpen || !!bulkAction}
+                        style={{ ...chipStyle(mobileMoreOpen || !!bulkAction), padding:'8px 16px', fontSize:18, lineHeight:1, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>⋯</button>
+                    </div>
+                  </div>
+                </div>
+              </>,
+              document.body
+            )}
+          </div>
+        )
+      })()}
 
-      {/* FAB aggiungi articoli */}
+      {/* Lista articoli — un blocco per lista, sempre: dà sempre accesso al
+          menu (rinomina, sposta i non caricati, elimina se vuota) anche con
+          la sola principale, non solo da quando ce ne sono altre. */}
+      {visibleLists.map(renderListBlock)}
+
+      {/* FAB aggiungi articoli — sfuma via durante la selezione multipla,
+          stesso trattamento della tab bar (niente da aggiungere mentre si
+          stanno modificando oggetti già in lista). */}
       <button
         onClick={openAddModal}
         aria-label={t('eventDetail.addItemsAriaLabel')}
@@ -1697,6 +2022,7 @@ export default function EventDetail() {
           background:'var(--accent)', color:'white',
           display:'flex', alignItems:'center', justifyContent:'center',
           boxShadow:'0 6px 20px rgba(230,57,70,0.45)', border:'none',
+          opacity: selectMode ? 0 : 1, pointerEvents: selectMode ? 'none' : 'auto', transition:'opacity 0.2s ease',
         }}
       >
         <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
@@ -1709,7 +2035,7 @@ export default function EventDetail() {
       <ListNameModal
         open={!!listModal}
         title={listModal?.mode === 'rename' ? t('eventDetail.renameListTitle') : listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedTitle') : t('eventDetail.newListTitle')}
-        message={listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedMessage') : undefined}
+        message={listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedMessage') : listModal?.mode === 'moveSelected' ? t('eventDetail.moveSelectedMessage', { count: bulkSelectedIds.size }) : undefined}
         initialName={listModal?.name || ''}
         placeholder={t('eventDetail.listNamePlaceholder')}
         confirmLabel={listModal?.mode === 'rename' ? t('common.save') : t('eventDetail.createListLabel')}
@@ -1717,6 +2043,7 @@ export default function EventDetail() {
         onCancel={() => setListModal(null)}
         onConfirm={name => {
           if (listModal.mode === 'rename') renameList(listModal.listId, name)
+          else if (listModal.mode === 'moveSelected') createListAndMoveSelected(name)
           else createList(name, listModal.mode === 'moveUnloaded' ? listModal.listId : null)
         }}
       />
@@ -1729,6 +2056,48 @@ export default function EventDetail() {
           onConfirm={confirmPendingExternalVehicle}
           onCancel={() => setPendingExternalVehicleFor(null)}
         />
+      )}
+
+      {/* Popup "Assegna furgone" in blocco su telefono — un elenco a tap
+          invece del select inline (vedi showBulkVehiclePicker sopra), stesso
+          pattern a elenco del picker dei template poco sopra. */}
+      {showBulkVehiclePicker && (
+        <div className={`modal-overlay${bulkVehiclePickerDrag.closing ? ' closing' : ''}`} onClick={bulkVehiclePickerDrag.onOverlayClick}>
+          <div className={`modal${bulkVehiclePickerDrag.jiggling ? ' modal-jiggle' : ''}${bulkVehiclePickerDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...bulkVehiclePickerDrag.props}>
+            <button className="close-btn" onClick={bulkVehiclePickerDrag.close} aria-label={t("common.close")}>✕</button>
+            <h2>{t('eventDetail.assignVehicleToMultiple')}</h2>
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:16, maxHeight:'55dvh', overflowY:'auto' }}>
+              {vehicles.filter(v => v.active !== false).map(v => {
+                const conflict = vehicleConflictEvent(v.id, event, otherEvents)
+                return (
+                  <button key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)}
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15 }}>
+                    {v.emoji ? v.emoji + ' ' : ''}{v.name}
+                    {conflict && <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>&nbsp;{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
+                  </button>
+                )
+              })}
+              {externalVehicles.map(v => {
+                const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
+                return (
+                  <button key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)}
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15 }}>
+                    🚐 {v.name}
+                    {conflict && <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>&nbsp;{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
+                  </button>
+                )
+              })}
+              <button onClick={() => { setShowBulkVehiclePicker(false); setPendingExternalVehicleFor('bulk') }}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px dashed var(--border)', textAlign:'left', fontWeight:700, fontSize:15, color:'var(--accent)' }}>
+                {t('eventDetail.addExternalVehicle')}
+              </button>
+              <button onClick={() => applyBulkVehicle('__none__')}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'transparent', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15, color:'var(--text2)' }}>
+                {t('eventDetail.noVehicleRemove')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showDiscardCart && (
@@ -2353,7 +2722,8 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
             (le azioni a destra restano bottoni separati, non annidati qui). */}
         <button type="button"
           className="btn-no-anim"
-          onClick={() => bulkMode ? onBulkToggle(item.id) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0, listId: rowListId(item) })}
+          onClick={e => bulkMode ? onBulkToggle(item.id, e.shiftKey) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0, listId: rowListId(item) })}
+          onMouseDown={e => { if (bulkMode && e.shiftKey) e.preventDefault() }}
           aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
           aria-pressed={bulkMode ? bulkSelected : undefined}
           style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
