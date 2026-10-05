@@ -36,7 +36,16 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
   // è il giorno prima dell'evento) qui c'è solo la fase, non l'evento.
   const eventSpanEnd = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
   const eventHappensToday = summaryDate >= event.date && summaryDate <= eventSpanEnd
-  const eventOwnRange = (event.allDay === false && event.timeStart && event.timeEnd) ? [event.timeStart, event.timeEnd] : null
+  // Orario "proprio" di QUESTO giorno: prima l'eventuale orario su misura
+  // per questa data (event.dayTimes, impostato da StaffTimeline.jsx toccando
+  // il titolo della card su un evento multi-giorno), altrimenti l'orario
+  // generale dell'evento SOLO se questo è il suo giorno di riferimento
+  // (event.date) — sugli altri giorni "di passaggio" senza orario su misura
+  // non c'è un orario proprio da mostrare, resta "Tutto il giorno".
+  const dayOverride = event.dayTimes?.[summaryDate]
+  const eventOwnRange = dayOverride?.timeStart && dayOverride?.timeEnd
+    ? [dayOverride.timeStart, dayOverride.timeEnd]
+    : (summaryDate === event.date && event.allDay === false && event.timeStart && event.timeEnd) ? [event.timeStart, event.timeEnd] : null
   // Assegnazioni con orario proprio (timeline "Assegna personale",
   // collection assignmentBlocks) per QUESTO giorno — include anche gli
   // esterni, invisibili in assignedWorkers (solo profili interni, vedi
@@ -66,9 +75,7 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
   const dateLabel = event.dateEnd && event.dateEnd !== event.date
     ? `${formatDate(event.date + 'T12:00:00', { day:'numeric', month:'long' }, i18n.language)} → ${formatDate(event.dateEnd + 'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language)}`
     : capitalize(formatDate(event.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language))
-  const timeLabel = event.allDay === false && event.timeStart && event.timeEnd
-    ? `${event.timeStart} – ${event.timeEnd}`
-    : t('events.allDayLabel')
+  const timeLabel = eventOwnRange ? `${eventOwnRange[0]} – ${eventOwnRange[1]}` : t('events.allDayLabel')
 
   const Row = ({ icon, label, children }) => (
     <div style={{ display:'flex', gap:12, padding:'10px 0', borderBottom:'1px solid var(--border)' }}>

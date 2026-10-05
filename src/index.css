@@ -133,6 +133,21 @@ button.staff-nav-today:not(:disabled):active {
 button.staff-nav-today:not(:disabled):active { background: var(--card2) !important; }
 button.staff-nav-today:not(:disabled):active .staff-nav-today-label { color: var(--accent) !important; }
 
+/* Titolo di una lista di carico (EventDetail.jsx): tap-tap per
+   collassarla/espanderla. Stesso motivo di staff-nav-today sopra — è un
+   bottone "piatto" (sfondo trasparente), il filtro/ombra generico di sopra
+   non si vede: qui una leggera tinta di sfondo segnala che è toccabile. */
+button.list-title-btn:hover,
+button.list-title-btn:not(:disabled):active {
+  filter: none;
+  box-shadow: none;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.list-title-btn:hover { background: var(--card2) !important; }
+}
+button.list-title-btn:not(:disabled):active { background: var(--card2) !important; }
+
 /* Modal creazione/modifica utente: tante interazioni ravvicinate (menu
    ruolo, permesso magazzino, toggle...) — l'effetto "schiacciato" standard
    lì risultava troppo marcato. Attenuato solo qui, non nel resto dell'app. */
@@ -913,6 +928,14 @@ body.select-mode .tabbar-nav {
 .delete-btn-check { display: flex; color: var(--green); animation: deleteBtnPop 0.28s cubic-bezier(0.16,1,0.3,1) both; }
 @keyframes deleteBtnSpin { to { transform: rotate(360deg); } }
 @keyframes deleteBtnPop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+
+/* Menu a comparsa (es. "⋯" di una lista di carico, azioni rapide su
+   telefono): nasce piccolo dall'angolo da cui si apre invece di comparire
+   di scatto — stessa curva ease-out-espo di deleteBtnPop sopra, nessun
+   rimbalzo. Il punto di partenza (transformOrigin) lo decide chi lo usa,
+   in base a dove si apre il menu rispetto al bottone che lo apre. */
+.menu-pop { animation: menuPopIn 0.2s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes menuPopIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 
 /* Scroll lock utility */
 .scroll-locked { overflow: hidden !important; position: fixed; width: 100%; }

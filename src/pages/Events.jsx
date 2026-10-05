@@ -147,12 +147,25 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
         style={{ flex:1, minWidth:0, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', cursor:'pointer', font:'inherit', color:'inherit' }}
       >
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
-          <h3 style={{ fontSize:15, fontWeight:700, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{event.name}</h3>
+          <h3 style={{ fontSize:15, fontWeight:700, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>{event.name}</h3>
+          {/* Qui finisce anche un rent/install scaduto (vedi daScaricare
+              sopra) — senza questo tag perderebbe l'unico segno che lo
+              distingue da un evento normale, visibile invece sulla sua
+              card originale in "Installazioni". */}
+          {event.type === 'installation' && (
+            <span className="install-tag" style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+          )}
         </div>
         {loadListsOn && (
           <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
             {(daScaricare || isToday) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
-            {daScaricare ? t('events.daScaricareCount', { count: total-returned }) : isToday ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
+            {daScaricare
+              // Un rent/install scaduto va chiuso anche se non c'è più
+              // nulla da rientrare fisicamente (total-returned potrebbe
+              // essere 0) — "0 da rientrare" leggerebbe come "niente da
+              // fare", il contrario del messaggio voluto.
+              ? (event.type === 'installation' ? t('events.installationEnded') : t('events.daScaricareCount', { count: total-returned }))
+              : isToday ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
           </p>
         )}
         {(event.location || (event.phases && phaseConfig.some(p => event.phases[p.key]))) && (
@@ -187,11 +200,9 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
   const items     = inst.items || []
   const loaded    = items.filter(i => i.loaded).length
   const total     = items.length
-  // NB: il campo scritto su Firestore è sempre "dateEnd" (stesso nome usato
-  // dagli eventi normali per la data di fine multi-giorno) — "endDate" non
-  // viene mai salvato su un documento evento, solo usato localmente nel
-  // form per calcolare le occorrenze ricorrenti future (vedi CreateEventFlow.jsx).
-  const isExpired = inst.dateEnd && inst.dateEnd < today
+  // Niente più stato "scaduto" qui: un rent/install con dateEnd passato non
+  // arriva mai a questa card — è già stato spostato per intero nella
+  // sezione "Da scaricare" (vedi installations/daScaricareSingle sopra).
   // "Oggi" per un rent/install = comincia oggi, cioè va preparato/caricato
   // oggi — stessa idea di isToday per gli eventi normali, così una riga che
   // altrimenti si perde in mezzo a tutte le altre nella sezione Rent/Install
@@ -200,12 +211,10 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
   // terzo colore da imparare a riconoscere in più).
   const isToday = inst.date === today
 
-  const cardBorder = (isToday || isExpired) ? 'rgba(220,38,38,0.4)' : 'var(--dash-card-border)'
+  const cardBorder = isToday ? 'rgba(220,38,38,0.4)' : 'var(--dash-card-border)'
   const iconColor = isToday ? 'var(--accent)' : '#7c6fea'
-  const statusColor = isToday ? '#dc2626' : isExpired ? '#dc2626' : loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)'
-  const baseStatusText = isExpired
-    ? t('events.expiredBadge')
-    : total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })
+  const statusColor = isToday ? '#dc2626' : loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)'
+  const baseStatusText = total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })
   const statusText = isToday ? t('events.todayStatus', { status: baseStatusText.toLowerCase() }) : baseStatusText
 
   return (
@@ -241,7 +250,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
         </div>
         {loadListsOn && (
           <p style={{ fontSize:12, fontWeight:600, color:statusColor, display:'flex', alignItems:'center', gap:5 }}>
-            {(isToday || isExpired) && <Dot size={7} color="#dc2626" />}
+            {isToday && <Dot size={7} color="#dc2626" />}
             {statusText}
           </p>
         )}
@@ -253,7 +262,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
           larghezza sotto, ora un'icona in fila con le altre due). */}
       <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
         <button onClick={() => onClose(inst)} aria-label={t('events.closeInstallationBtn')} title={t('events.closeInstallationBtn')}
-          style={{ width:44, height:44, borderRadius:12, background: isExpired ? 'rgba(220,38,38,0.10)' : '#ede9fe', color: isExpired ? '#dc2626' : '#5b4fcf', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          style={{ width:44, height:44, borderRadius:12, background:'#ede9fe', color:'#5b4fcf', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
           <IconCheckSm />
         </button>
         <EditButton onClick={e => onEdit(e, inst)} size={44} ariaLabel={t('events.editInstallationAria')} />
@@ -353,8 +362,13 @@ export default function Events() {
   // "oggi" è già in pratica il primo della lista essendo la data più vicina
   // fra quelle mostrate. Qui va promosso esplicitamente in cima, così si
   // vede a colpo d'occhio anche in mezzo a rent più vecchi.
+  // Un rent/install SCADUTO (dateEnd passato) non resta anche qui: passa
+  // per intero nella sezione "Da scaricare" sopra (vedi daScaricareSingle),
+  // arancione e in cima — se restasse ANCHE qui finirebbe duplicato, in due
+  // sezioni con due trattamenti diversi (qui era rosso "Scaduto") invece di
+  // "salire" chiaramente in cima a una sola.
   const installations  = events
-    .filter(e => e.type === 'installation' && !e.archived)
+    .filter(e => e.type === 'installation' && !e.archived && !(e.dateEnd && e.dateEnd < today))
     .sort((a, b) => (a.date === today) === (b.date === today) ? 0 : a.date === today ? -1 : 1)
 
   // Un evento rimane "attivo" se:

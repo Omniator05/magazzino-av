@@ -121,6 +121,11 @@
     "rents_other": "{{count}} rent/installs starting",
     "dismiss": "Got it"
   },
+  "rentalEndedReminder": {
+    "title": "Rentals to close",
+    "desc": "These rent/installs are past their end date but not closed yet.",
+    "dismiss": "Got it"
+  },
   "calendar": {
     "title": "Calendar",
     "totalEvents_one": "{{count}} event total",
@@ -241,7 +246,10 @@
     "errorNoPerson": "Choose who to assign",
     "errorNoLabel": "Link an event or write a label",
     "confirmDeleteTitle": "Delete block",
-    "confirmDeleteMessage": "Delete this time block?"
+    "confirmDeleteMessage": "Delete this time block?",
+    "dayHoursTitle": "Hours for this day",
+    "dayHoursHint": "Tap to set this day's hours",
+    "resetDayHours": "Reset"
   },
   "inventory": {
     "title": "Warehouse",
@@ -994,7 +1002,6 @@
     "editInstallationAria": "Edit installation",
     "deleteInstallationAria": "Delete installation",
     "openEventAria": "Open {{name}}",
-    "expiredBadge": "Expired — mark as closed",
     "installLabel": "Rent/Install",
     "emptyListShort": "Empty list",
     "inListShort_one": "{{count}} in list",
@@ -1036,6 +1043,7 @@
     "confirmDeleteSeriesMessage": "Delete ONLY this event in the series?",
     "confirmDeleteMessage": "Delete this event?",
     "daScaricareCount": "{{count}} to return",
+    "installationEnded": "Rental ended — close it",
     "todayStatus": "TODAY · {{status}}",
     "statusEmptyList": "Empty list",
     "statusInList": "{{count}} items in list",

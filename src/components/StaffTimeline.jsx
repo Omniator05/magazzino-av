@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, doc, updateDoc, deleteField } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useConfirm } from '../context/ConfirmProvider'
 import { formatDate, capitalize } from '../utils/formatDate'
@@ -8,6 +8,7 @@ import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
 import AssignmentBlockModal from './AssignmentBlockModal'
+import EventDayHoursModal from './EventDayHoursModal'
 import QuickExternalPopup from './QuickExternalPopup'
 import EventSummaryModal from './EventSummaryModal'
 import { ChevronLeft, ChevronRight, Plus, Wrench } from './Icon'
@@ -51,6 +52,12 @@ const DEFAULT_END = `${String(TIMELINE_END_HOUR).padStart(2, '0')}:00`
 // corsie di altezza variabile, si disegnano come divisori espliciti (vedi
 // render più sotto).
 const VERTICAL_GRID_BG = `repeating-linear-gradient(to right, var(--border) 0, var(--border) 1px, transparent 1px, transparent calc(100%/${TIMELINE_HOURS}))`
+// Righello orario sopra la griglia — un'etichetta ogni 2 ore (le linee
+// verticali restano una per ogni ora, questo è solo il testo): senza non
+// c'era alcun riferimento a che ora corrispondesse una colonna, solo le
+// linee senza numeri.
+const RULER_STEP_HOURS = 2
+const RULER_HOURS = Array.from({ length: Math.floor(TIMELINE_HOURS / RULER_STEP_HOURS) + 1 }, (_, i) => TIMELINE_START_HOUR + i * RULER_STEP_HOURS)
 
 function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -114,9 +121,15 @@ function laneFromClientY(clientY, rect, laneTop, laneHeights) {
   return laneTop.length - 1
 }
 // Un evento compare nei giorni che tocca (anche multi-giorno, come
-// eventsByDate in Calendar.jsx): sul giorno con l'orario vero usa quello,
-// sugli altri giorni "di passaggio" occupa l'intera fascia (è comunque in corso).
+// eventsByDate in Calendar.jsx): se QUEL giorno ha un orario su misura
+// (event.dayTimes, impostato toccando il titolo della card — vedi
+// dayHoursModal più sotto) usa quello; sul giorno con l'orario "proprio"
+// dell'evento (event.date, se non è "tutto il giorno") usa quello; sugli
+// altri giorni "di passaggio" occupa l'intera fascia (è comunque in corso,
+// nessun orario più preciso impostato).
 function eventTimeForDay(ev, date) {
+  const custom = ev.dayTimes?.[date]
+  if (custom?.timeStart && custom?.timeEnd) return [custom.timeStart, custom.timeEnd]
   if (ev.date === date && ev.allDay === false && ev.timeStart && ev.timeEnd) return [ev.timeStart, ev.timeEnd]
   return [DEFAULT_START, DEFAULT_END]
 }
@@ -215,6 +228,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const [draggedPerson, setDraggedPerson] = useState(null)
   const [modalState, setModalState] = useState(null)
   const [summaryTarget, setSummaryTarget] = useState(null) // {event, date} — riepilogo di un evento/fase già esistente
+  const [dayHoursModal, setDayHoursModal] = useState(null) // {event, date} — orario su misura di QUEL giorno (eventi multi-giorno)
   const [pendingQuickExternal, setPendingQuickExternal] = useState(null) // {item}
   const [rangeSelect, setRangeSelect] = useState(null) // {date, lane, startHour}
   const [hoverHour, setHoverHour] = useState(null)
@@ -393,6 +407,19 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   }
   const openCreateTask = (date, startTime, endTime) => setModalState({ mode: 'create', date, startTime, endTime })
   const closeModal = () => setModalState(null)
+
+  // Orario su misura di un giorno di un evento multi-giorno (vedi
+  // eventTimeForDay sopra) — campo annidato (dayTimes.<data>) così si scrive
+  // solo quel giorno senza leggere/riscrivere l'intera mappa. deleteField()
+  // per "ripristina" invece di un oggetto vuoto: altrimenti la chiave
+  // resterebbe lì con valore vuoto invece di sparire davvero.
+  const saveDayHours = async (event, date, startTime, endTime) => {
+    await updateDoc(doc(db, 'events', event.id), { [`dayTimes.${date}`]: { timeStart: startTime, timeEnd: endTime } })
+    return true
+  }
+  const resetDayHours = async (event, date) => {
+    await updateDoc(doc(db, 'events', event.id), { [`dayTimes.${date}`]: deleteField() })
+  }
 
   // Arrivo come scorciatoia da EventDetail.jsx (bottone "Assegna" nella
   // lista di carico, vedi Calendar.jsx) — salta alla settimana dell'evento e
@@ -646,6 +673,20 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                       {capitalize(formatDate(d, { weekday: 'short' }, i18n.language))} {d.getDate()}
                     </span>
                   </div>
+                  {/* Righello orario: un numero ogni 2 ore, allineato alle
+                      stesse linee verticali della griglia sotto (vedi
+                      RULER_HOURS/VERTICAL_GRID_BG) — prima non c'era alcun
+                      riferimento a quale ora cadesse una colonna. */}
+                  <div style={{ position: 'relative', height: 16, borderBottom: '1px solid var(--border)', background: 'var(--bg2)' }}>
+                    {RULER_HOURS.map(h => (
+                      <span key={h} style={{
+                        position: 'absolute', top: 0, bottom: 0, left: `${(h - TIMELINE_START_HOUR) / TIMELINE_HOURS * 100}%`,
+                        display: 'flex', alignItems: 'center',
+                        transform: h === TIMELINE_START_HOUR ? 'translateX(2px)' : h === TIMELINE_END_HOUR ? 'translateX(calc(-100% - 2px))' : 'translateX(-50%)',
+                        fontSize: 9.5, fontWeight: 700, color: 'var(--text3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                      }}>{h}</span>
+                    ))}
+                  </div>
                   <div
                     onClick={e => handleGridClick(e, date)}
                     onMouseMove={e => {
@@ -684,6 +725,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                       const typeColor = isTask ? 'var(--blue)' : item.type === 'phase' ? PHASE_META[item.phaseKey].color : (item.event.type === 'installation' ? '#7c6fcd' : 'var(--accent)')
                       const bg = isPast ? 'var(--text2)' : typeColor
                       const isDragOver = dragOverKey === item.key
+                      // Solo per un evento vero su più giorni ha senso un
+                      // orario su misura per QUESTO giorno — un evento di un
+                      // giorno solo si modifica già dal form evento, una
+                      // fase non ha questo concetto.
+                      const isMultiDayEvent = item.type === 'event' && item.event.dateEnd && item.event.dateEnd !== item.event.date
                       const openOrAssign = () => {
                         setRangeSelect(null); setHoverHour(null)
                         if (selectedPerson) { handleDropOrTap(item, selectedPerson); return }
@@ -708,7 +754,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                             transition: 'filter 0.1s ease, box-shadow 0.1s ease',
                           }}
                         >
-                          <span style={{ fontSize: 11, fontWeight: 700, height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          <span
+                            onClick={isMultiDayEvent && !selectedPerson ? e => { e.stopPropagation(); setDayHoursModal({ event: item.event, date }) } : undefined}
+                            title={isMultiDayEvent ? t('staffTimeline.dayHoursHint') : undefined}
+                            style={{ fontSize: 11, fontWeight: 700, height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, textDecoration: isMultiDayEvent && !selectedPerson ? 'underline dotted' : 'none', textUnderlineOffset: 2 }}>
                             {item.type === 'event' && item.event.type === 'installation' && <Wrench size={11} />}{title}
                           </span>
                           {/* Una riga per CORSIA, non per persona — chi non si sovrappone
@@ -827,6 +876,23 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           onAssign={() => { const target = summaryTarget; setSummaryTarget(null); openCreateForEvent(target.event, target.date) }}
         />
       )}
+
+      {dayHoursModal && (() => {
+        const override = dayHoursModal.event.dayTimes?.[dayHoursModal.date]
+        const [defaultStart, defaultEnd] = eventTimeForDay(dayHoursModal.event, dayHoursModal.date)
+        return (
+          <EventDayHoursModal
+            event={dayHoursModal.event}
+            date={dayHoursModal.date}
+            hasOverride={!!override}
+            initialStart={override?.timeStart || defaultStart}
+            initialEnd={override?.timeEnd || defaultEnd}
+            onClose={() => setDayHoursModal(null)}
+            onSave={(startTime, endTime) => saveDayHours(dayHoursModal.event, dayHoursModal.date, startTime, endTime)}
+            onReset={() => resetDayHours(dayHoursModal.event, dayHoursModal.date)}
+          />
+        )
+      })()}
     </div>
   )
 }

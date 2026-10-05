@@ -6,6 +6,61 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-06',
+    date: '2026-10-06',
+    title: { it: 'Selezione multipla ridisegnata, assenze a ore e orari su misura per gli eventi lunghi', en: 'Redesigned multi-select, hourly absences and custom hours for multi-day events' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: 'Selezione multipla ridisegnata nelle liste di carico', en: 'Redesigned multi-select in loading lists' },
+        text: {
+          it: 'Un solo bottone "Seleziona" al posto di azioni separate: su telefono i bottoni restano flottanti e ben visibili sopra la lista (shift+clic e Esc su computer), il furgone si sceglie da un elenco invece che da una select piccola, e lo stato (pronto/caricato/rientrato) si può cambiare su tutti gli oggetti selezionati in un colpo solo.',
+          en: 'One "Select" button instead of separate actions: on phone the buttons stay floating and clearly visible above the list (shift+click and Esc on desktop), the vehicle is picked from a list instead of a small dropdown, and the status (ready/loaded/returned) can be changed on all selected items at once.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Liste di carico più comode da gestire', en: 'Loading lists, easier to manage' },
+        text: {
+          it: 'Ogni lista si può chiudere e riaprire per non dover scorrere oltre quelle su cui non si sta lavorando; una lista appena creata compare subito in cima invece che in fondo. La lista principale non si può più eliminare per sbaglio — resta sempre possibile rinominarla.',
+          en: 'Each list can be collapsed and reopened so you don\'t have to scroll past the ones you\'re not working on; a newly created list now shows up first instead of last. The main list can no longer be deleted by mistake — it can still be renamed.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Assenza di poche ore, non solo tutta la giornata', en: 'A few hours off, not just a whole day' },
+        text: {
+          it: 'Segnalando un\'assenza di un solo giorno ora si può scegliere un orario preciso (es. solo la mattina) invece che per forza l\'intera giornata. L\'admin può anche registrare un\'assenza per conto di un magazziniere dalla sua pagina ore di lavoro, utile quando viene avvisato a voce.',
+          en: 'When reporting a single-day absence you can now set a precise time range (e.g. just the morning) instead of always the whole day. Admins can also log an absence on a warehouse worker\'s behalf from their hours page, handy when told about it in person.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: '"Assegna personale" ricorda la vista e mostra l\'orario', en: '"Assign staff" remembers the view and shows the time' },
+        text: {
+          it: 'La settimana e i filtri (eventi/rent-install/fasi) restano quelli impostati se si esce dalla pagina e si torna indietro, invece di ripartire sempre da oggi. Sopra ogni colonna ora c\'è un riferimento orario, prima assente.',
+          en: 'The week and filters (events/rent-install/phases) stay as set if you leave the page and come back, instead of always starting over from today. Each column now has a time reference above it, missing before.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Orario su misura per ogni giorno di un evento lungo', en: 'Custom hours for each day of a multi-day event' },
+        text: {
+          it: 'Un evento di più giorni non impegna più l\'intera giornata su ogni data che tocca: toccando il titolo della sua card in "Assegna personale" si può impostare un orario diverso per quel giorno specifico (es. montaggio la mattina, spettacolo la sera). Si vede anche nel riepilogo del calendario e nella lista di carico dell\'evento.',
+          en: 'A multi-day event no longer takes up the whole day on every date it spans: tapping its card\'s title in "Assign staff" lets you set different hours for that specific day (e.g. setup in the morning, show in the evening). It also shows up in the calendar summary and in the event\'s loading list.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Rent/install scaduti più visibili', en: 'Expired rent/installs are more visible' },
+        text: {
+          it: 'Un rent/install il cui noleggio è terminato ora sale in cima alla lista eventi, arancione come le card "da scaricare", invece di restare nella sua sezione senza saltare all\'occhio. Un nuovo promemoria avvisa quando ce n\'è uno da chiudere.',
+          en: 'A rent/install whose rental period has ended now jumps to the top of the events list, orange like "to unload" cards, instead of staying in its own section without standing out. A new reminder flags when one needs closing.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-10-04',
     date: '2026-10-04',
     title: { it: 'Nuova timeline per assegnare il personale, furgoni esterni e scadenze', en: 'New staff-assignment timeline, external vans and deadlines' },

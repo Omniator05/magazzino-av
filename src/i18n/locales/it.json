@@ -121,6 +121,11 @@
     "rents_other": "{{count}} rent/install da iniziare",
     "dismiss": "Ho capito"
   },
+  "rentalEndedReminder": {
+    "title": "Noleggi da chiudere",
+    "desc": "Questi rent/install sono scaduti ma non ancora chiusi.",
+    "dismiss": "Ho capito"
+  },
   "calendar": {
     "title": "Calendario",
     "totalEvents_one": "{{count}} evento totale",
@@ -241,7 +246,10 @@
     "errorNoPerson": "Scegli chi assegnare",
     "errorNoLabel": "Collega un evento o scrivi un'etichetta",
     "confirmDeleteTitle": "Elimina blocco",
-    "confirmDeleteMessage": "Eliminare questo blocco orario?"
+    "confirmDeleteMessage": "Eliminare questo blocco orario?",
+    "dayHoursTitle": "Orario di questo giorno",
+    "dayHoursHint": "Tocca per impostare l'orario di questo giorno",
+    "resetDayHours": "Ripristina"
   },
   "inventory": {
     "title": "Magazzino",
@@ -994,7 +1002,6 @@
     "editInstallationAria": "Modifica installazione",
     "deleteInstallationAria": "Elimina installazione",
     "openEventAria": "Apri {{name}}",
-    "expiredBadge": "Scaduta — segna come chiusa",
     "installLabel": "Rent/Install",
     "emptyListShort": "Lista vuota",
     "inListShort_one": "{{count}} in lista",
@@ -1036,6 +1043,7 @@
     "confirmDeleteSeriesMessage": "Elimina SOLO questo evento della serie?",
     "confirmDeleteMessage": "Eliminare questo evento?",
     "daScaricareCount": "{{count}} da rientrare",
+    "installationEnded": "Noleggio terminato — da chiudere",
     "todayStatus": "OGGI · {{status}}",
     "statusEmptyList": "Lista vuota",
     "statusInList": "{{count}} oggetti in lista",

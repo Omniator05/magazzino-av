@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-06',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Liste di carico: selezione multipla ridisegnata (su telefono bottoni flottanti più chiari, furgone assegnato da un elenco, cambia stato in blocco), liste collassabili per non scorrere sempre tutto, le nuove compaiono in cima e la lista principale non si elimina più per sbaglio (solo rinominare)',
+        'Si può segnalare un\'assenza di poche ore invece di tutta la giornata, e l\'admin può registrarne una per conto di un magazziniere dalla sua pagina ore di lavoro',
+        '"Assegna personale" ricorda settimana e filtri se si esce e si torna, ora mostra l\'orario sopra le colonne, e su un evento di più giorni si può impostare un orario diverso per ciascun giorno (si vede anche in calendario e nella lista di carico)',
+        'I rent/install scaduti non restano più nascosti: saltano in cima alla lista eventi, arancioni, con un promemoria dedicato per non dimenticarsi di chiuderli',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Loading lists: redesigned multi-select (clearer floating buttons on phone, vehicle assignment from a list, bulk status change), collapsible lists so you don\'t always scroll through everything, new lists show up first, and the main list can no longer be deleted by mistake (only renamed)',
+        'You can report an absence of just a few hours instead of a whole day, and admins can log one on a warehouse worker\'s behalf from their hours page',
+        '"Assign staff" remembers the week and filters you had open, now shows the time above the columns, and a multi-day event can have different hours set for each day (also reflected in the calendar and the loading list)',
+        'Expired rent/installs no longer stay hidden: they jump to the top of the events list, in orange, with a dedicated reminder so closing them doesn\'t get forgotten',
+      ],
+    },
+  },
+  {
     version: '2026-10-04',
     it: {
       title: 'Novità di oggi',

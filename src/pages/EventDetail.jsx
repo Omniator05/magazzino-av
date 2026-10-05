@@ -160,6 +160,21 @@ export default function EventDetail() {
   const [addTargetList, setAddTargetList] = useState(MAIN_LIST_ID)
   const [listModal, setListModal] = useState(null) // { mode:'new'|'rename'|'moveUnloaded', listId?, name? }
   const [listMenuId, setListMenuId] = useState(null) // menu ⋯ aperto su una lista
+  // Liste chiuse (solo intestazione, niente righe sotto) — comodo con tanti
+  // blocchi: si evita di dover scorrere oltre quelli su cui non si sta
+  // lavorando ora. Non persistito: riparte aperta ad ogni visita.
+  const [collapsedLists, setCollapsedLists] = useState(() => new Set())
+  const toggleListCollapsed = (listId) => {
+    // Chiude anche il menu ⋯ se per caso era aperto (su un'altra lista, o
+    // su questa stessa) — un tap sulla freccia con un menu aperto deve fare
+    // entrambe le cose insieme, non solo chiudere il menu.
+    setListMenuId(null)
+    setCollapsedLists(prev => {
+      const next = new Set(prev)
+      next.has(listId) ? next.delete(listId) : next.add(listId)
+      return next
+    })
+  }
   const [editItem, setEditItem] = useState(null)
   const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances, listId }) => {
     // L'assegnazione a unità specifiche (kit o oggetto singolo) resta solo se
@@ -624,7 +639,10 @@ export default function EventDetail() {
         const taken = new Set(current.map(i => i.id))
         return current.map(i => (rowListId(i) === moveFromListId && !i.loaded) ? moveRowToList(i, listId, taken) : i)
       },
-      data => ({ lists: [...(data.lists || []), { id: listId, name }] })
+      // In cima (non in fondo): è la lista appena creata, quella su cui si
+      // sta per lavorare — vederla subito evita di dover scorrere tutte le
+      // altre per trovarla.
+      data => ({ lists: [{ id: listId, name }, ...(data.lists || [])] })
     )
     setListModal(null)
     if (!moveFromListId) setAddTargetList(listId)
@@ -640,19 +658,13 @@ export default function EventDetail() {
     setListModal(null)
   }
 
-  // La lista principale non è un oggetto vero in event.lists (è implicita:
-  // le righe senza listId le appartengono), quindi "eliminarla" non può
-  // toglierla da un array — si segna mainListHidden, che la nasconde dai
-  // blocchi finché resta vuota (vedi visibleLists più sotto). Riappare da
-  // sola appena ci finisce dentro di nuovo un oggetto (dal picker "+" o
-  // spostandocene uno), niente da "ripristinare" a mano.
+  // La principale non si può più eliminare (solo rinominare, vedi
+  // canDelete in renderListBlock) — il bottone non compare per lei, questo
+  // guard resta solo come rete di sicurezza.
   const deleteList = async (listId) => {
+    if (listId === MAIN_LIST_ID) return
     const ok = await confirm({ title: t('eventDetail.deleteListTitle'), message: t('eventDetail.deleteListMessage'), confirmLabel: t('eventDetail.deleteListLabel'), danger: true })
     if (!ok) return
-    if (listId === MAIN_LIST_ID) {
-      await updateEventItems(current => current, () => ({ mainListName: '', mainListHidden: true }))
-      return
-    }
     await updateEventItems(
       current => current,
       data => ({ lists: (data.lists || []).filter(l => l.id !== listId) })
@@ -795,7 +807,7 @@ export default function EventDetail() {
         const taken = new Set(current.map(i => i.id))
         return current.map(i => bulkSelectedIds.has(i.id) ? moveRowToList(i, listId, taken) : i)
       },
-      data => ({ lists: [...(data.lists || []), { id: listId, name }] })
+      data => ({ lists: [{ id: listId, name }, ...(data.lists || [])] })
     )
     setListModal(null)
     exitSelectMode()
@@ -1407,20 +1419,33 @@ export default function EventDetail() {
     const hasUnloaded = all.some(i => !i.loaded)
     const menuOpen = listMenuId === l.id
     const menuBtn = { display:'block', width:'100%', textAlign:'left', padding:'11px 14px', fontSize:13, fontWeight:600, background:'transparent', color:'var(--text)', borderRadius:0 }
-    // La principale si può eliminare (nasconde, vedi deleteList) solo se
-    // vuota E esiste almeno un'altra lista dove far confluire i prossimi
-    // oggetti — altrimenti l'azione non avrebbe un posto dove "andare".
-    const canDelete = l.id === MAIN_LIST_ID ? (all.length === 0 && multiList) : all.length === 0
+    // La principale non si elimina più (si può solo rinominare) — troppo
+    // ambiguo dove "vanno" gli oggetti aggiunti di default una volta sparita.
+    const canDelete = l.id !== MAIN_LIST_ID && all.length === 0
     // Evento appena creato, nessun oggetto da nessuna parte: stessa
     // schermata guidata di sempre (icona + "tocca +" + scorciatoia
     // template) invece del generico "lista vuota" — solo sulla principale,
     // le altre liste vuote (evento già avviato) restano col messaggio corto.
     const showOnboarding = l.id === MAIN_LIST_ID && eventItems.length === 0
+    const collapsed = collapsedLists.has(l.id)
     return (
       <div key={l.id} style={{ margin:'16px 16px 0' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-          <p style={{ flex:1, minWidth:0, fontWeight:800, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{listLabel(l)}</p>
-          <span style={{ fontSize:12, color:'var(--text2)', flexShrink:0 }}>{t('eventDetail.listCounts', { loaded: loadedCount, total: all.length })}</span>
+          {/* Titolo+conteggio tap-tap: apre/chiude il blocco sotto, invece
+              di un bottoncino freccia a parte — tocco più comodo, e lascia
+              "+"/"⋯" liberi come bottoni separati. zIndex sopra il velo
+              invisibile "chiudi menu" qui sotto (zIndex:19): altrimenti con
+              un menu ⋯ aperto il tap qui veniva assorbito solo per
+              chiuderlo, senza comunque collassare la lista — ora chiude
+              ENTRAMBI in un unico tocco (vedi toggleListCollapsed). */}
+          <button className="list-title-btn" onClick={() => toggleListCollapsed(l.id)} aria-expanded={!collapsed}
+            style={{ position:'relative', zIndex:20, display:'flex', alignItems:'center', gap:6, flex:1, minWidth:0, background:'transparent', border:'none', padding:'5px 6px', margin:'-5px -6px', borderRadius:8, textAlign:'left' }}>
+            <span style={{ color:'var(--text2)', display:'flex', flexShrink:0, transition:'transform 0.2s', transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+            <p style={{ flex:1, minWidth:0, fontWeight:800, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{listLabel(l)}</p>
+            <span style={{ fontSize:12, color:'var(--text2)', flexShrink:0 }}>{t('eventDetail.listCounts', { loaded: loadedCount, total: all.length })}</span>
+          </button>
           {/* Sfuma e si disattiva durante la selezione multipla, come il FAB
               in fondo pagina — niente da aggiungere mentre si stanno
               modificando oggetti già in lista (vedi commento sul FAB). */}
@@ -1434,7 +1459,7 @@ export default function EventDetail() {
             {menuOpen && (
               <>
                 <div onClick={() => setListMenuId(null)} style={{ position:'fixed', inset:0, zIndex:19 }} />
-                <div style={{ position:'absolute', right:0, top:'calc(100% + 4px)', minWidth:230, zIndex:20, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 8px 28px rgba(0,0,0,0.14)', overflow:'hidden' }}>
+                <div className="menu-pop" style={{ position:'absolute', right:0, top:'calc(100% + 4px)', minWidth:230, zIndex:20, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 8px 28px rgba(0,0,0,0.14)', overflow:'hidden', transformOrigin:'top right' }}>
                   <button style={menuBtn} onClick={() => { setListMenuId(null); setListModal({ mode:'rename', listId:l.id, name:l.name }) }}>{t('eventDetail.renameList')}</button>
                   {hasUnloaded && (
                     <button style={{ ...menuBtn, borderTop:'1px solid var(--border)' }} onClick={() => { setListMenuId(null); setListModal({ mode:'moveUnloaded', listId:l.id, name:'' }) }}>{t('eventDetail.moveUnloadedToNewList')}</button>
@@ -1447,26 +1472,35 @@ export default function EventDetail() {
             )}
           </div>
         </div>
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-          {showOnboarding
-            ? <div className="empty-state" style={{ padding:'40px 20px' }}>
-                <p style={{ fontSize:32 }}>📋</p>
-                <h3>{t('eventDetail.emptyListTitle')}</h3>
-                <p>{t('eventDetail.emptyListDescBefore')} <strong style={{ color:'var(--accent)' }}>+</strong> {t('eventDetail.emptyListDescAfter')}</p>
-                {templates.length > 0 && (
-                  <button
-                    onClick={() => setShowTemplatePicker(true)}
-                    style={{ marginTop:14, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px solid rgba(90,82,201,0.35)', color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
-                  >
-                    {t('eventDetail.useTemplate')}
-                  </button>
-                )}
-              </div>
-            : all.length === 0
-              ? <p style={{ padding:'22px 20px', textAlign:'center', color:'var(--text2)', fontSize:13 }}>{t('eventDetail.emptyListShort')}</p>
-              : rows.length === 0
-                ? <p style={{ padding:'18px 20px', textAlign:'center', color:'var(--text3)', fontSize:13 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
-                : renderGroupedItems(rows)}
+        {/* Sempre montato (non più if/else): si anima con grid-template-rows
+            invece di sparire di scatto — il contenuto si restringe verso il
+            titolo appena sopra (transformOrigin:'top'), come se vi si
+            raggruppasse dentro, invece di un semplice taglio netto. Stessa
+            curva ease-out-espo (niente rimbalzi) dei menu a comparsa sotto. */}
+        <div style={{ display:'grid', gridTemplateRows: collapsed ? '0fr' : '1fr', transition:'grid-template-rows 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
+          <div style={{ overflow:'hidden', opacity: collapsed ? 0 : 1, transform: collapsed ? 'scale(0.97)' : 'scale(1)', transformOrigin:'top', transition:'opacity 0.22s ease, transform 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
+            <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+              {showOnboarding
+                ? <div className="empty-state" style={{ padding:'40px 20px' }}>
+                    <p style={{ fontSize:32 }}>📋</p>
+                    <h3>{t('eventDetail.emptyListTitle')}</h3>
+                    <p>{t('eventDetail.emptyListDescBefore')} <strong style={{ color:'var(--accent)' }}>+</strong> {t('eventDetail.emptyListDescAfter')}</p>
+                    {templates.length > 0 && (
+                      <button
+                        onClick={() => setShowTemplatePicker(true)}
+                        style={{ marginTop:14, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px solid rgba(90,82,201,0.35)', color:'#7c6fcd', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', gap:6 }}
+                      >
+                        {t('eventDetail.useTemplate')}
+                      </button>
+                    )}
+                  </div>
+                : all.length === 0
+                  ? <p style={{ padding:'22px 20px', textAlign:'center', color:'var(--text2)', fontSize:13 }}>{t('eventDetail.emptyListShort')}</p>
+                  : rows.length === 0
+                    ? <p style={{ padding:'18px 20px', textAlign:'center', color:'var(--text3)', fontSize:13 }}>{t('eventDetail.noItemsMatchSearch', { query: itemListSearch })}</p>
+                    : renderGroupedItems(rows)}
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -1504,7 +1538,16 @@ export default function EventDetail() {
     const name = list[0].workerId ? workers.find(w => w.id === pid)?.name : list[0].externalWorkerName
     if (!name) return null
     const single = list.length === 1 ? list[0] : null
-    const isFullSpan = single && event.allDay === false && single.date === event.date && single.startTime === event.timeStart && single.endTime === event.timeEnd
+    // "Orario proprio" di QUEL giorno — l'eventuale orario su misura
+    // (event.dayTimes, da StaffTimeline.jsx) prima di quello generale
+    // dell'evento, stessa logica di EventSummaryModal.jsx: senza, un blocco
+    // che copre esattamente l'orario su misura del giorno mostrerebbe
+    // comunque "· HH:MM–HH:MM" come se fosse un orario speciale.
+    const dayOverride = single && event.dayTimes?.[single.date]
+    const expected = dayOverride?.timeStart && dayOverride?.timeEnd
+      ? [dayOverride.timeStart, dayOverride.timeEnd]
+      : (single && single.date === event.date && event.allDay === false) ? [event.timeStart, event.timeEnd] : null
+    const isFullSpan = single && expected && single.startTime === expected[0] && single.endTime === expected[1]
     return { key: pid, id: pid, name, hours: single && !isFullSpan ? `${single.startTime}–${single.endTime}` : null, kind: list[0].workerId ? 'worker' : 'external' }
   }).filter(Boolean)
   const blockPersonIds = new Set(Object.keys(peopleBlocksById))
@@ -1585,6 +1628,23 @@ export default function EventDetail() {
                     })
                   : `${formatDate(event.date+'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language)}${event.date === today ? ` · ${t('calendar.today').toUpperCase()}` : ''}`
                 ) + (!event.allDay && (event.timeStart || event.timeEnd) ? ` · ${[event.timeStart, event.timeEnd].filter(Boolean).join('–')}` : '')
+              )}
+              {/* Orari su misura per singoli giorni (impostati da "Assegna
+                  personale" su un evento multi-giorno, vedi
+                  StaffTimeline.jsx/EventDayHoursModal.jsx) — un evento di
+                  più giorni non ha un unico orario valido per tutti, qui si
+                  vede a colpo d'occhio quali giorni ne hanno uno diverso. */}
+              {event.dayTimes && Object.keys(event.dayTimes).length > 0 && (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'3px 10px', marginLeft:16 }}>
+                  {Object.entries(event.dayTimes)
+                    .filter(([, v]) => v?.timeStart && v?.timeEnd)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([d, v]) => (
+                      <span key={d} style={{ fontSize:12.5, color:'var(--text2)', fontWeight:600 }}>
+                        {formatDate(d+'T12:00:00', { day:'numeric', month:'short' }, i18n.language)}: {v.timeStart}–{v.timeEnd}
+                      </span>
+                    ))}
+                </div>
               )}
               {event.location && infoRow(t('calendar.locationLabel'), event.location)}
               {event.quoteRef && infoRow(t('eventDetail.quoteFieldLabel'), event.quoteRef)}
@@ -1970,24 +2030,25 @@ export default function EventDetail() {
             )}
 
             {/* Telefono: niente barra bianca — solo "Elimina" + "⋯" flottanti,
-                alla stessa altezza da terra della tab bar (che intanto è
-                sfumata via), col conteggio a sinistra e i due bottoni a
-                destra. "⋯" apre verso l'alto, allineato a destra sopra sé
-                stesso, l'elenco delle altre azioni o il pannello di quella
-                scelta — con dietro un velo scuro (tocca per richiudere),
-                stacca meglio le pillole flottanti dalla lista sotto. */}
+                più in alto rispetto alla tab bar (che intanto è sfumata via)
+                così restano comode da vedere/toccare anche con il pollice,
+                col conteggio a sinistra e i due bottoni a destra. "⋯" apre
+                verso l'alto, allineato a destra sopra sé stesso, l'elenco
+                delle altre azioni o il pannello di quella scelta — con
+                dietro un velo scuro (tocca per richiudere), stacca meglio
+                le pillole flottanti dalla lista sotto. */}
             {selectMode && isMobile && createPortal(
               <>
                 {(mobileMoreOpen || bulkAction) && (
                   <div onClick={() => { setMobileMoreOpen(false); setBulkAction(null) }}
                     style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
                 )}
-                <div style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 44px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
+                <div style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 100px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
                   {mobileMoreOpen && (
-                    <div style={{ display:'flex', justifyContent:'flex-end' }}>{mobileMoreMenu}</div>
+                    <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>{mobileMoreMenu}</div>
                   )}
                   {mobileActionPanel && (
-                    <div style={{ display:'flex', justifyContent:'flex-end' }}>{mobileActionPanel}</div>
+                    <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>{mobileActionPanel}</div>
                   )}
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
                     <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'7px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)', whiteSpace:'nowrap' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
