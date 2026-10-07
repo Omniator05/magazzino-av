@@ -602,30 +602,45 @@ export default function Calendar() {
                   // del giorno selezionato e nel modal, dove c'è più spazio).
                   const dayPhasesAll = phasesByDate[dStr] || []
                   const dayTasksOnly = tasksByDate[dStr] || []
-                  // Montaggio e smontaggio lo stesso giorno (installazione in
-                  // giornata): invece di due righe separate che si "mangiano"
-                  // i 2 slot visibili della cella, diventano UNA riga sola
-                  // colorata a metà coi due colori fase — più compatta e si
-                  // vede a colpo d'occhio che coincidono.
                   const phaseGroups = {}
                   dayPhasesAll.forEach(p => { (phaseGroups[p.event.id] ||= []).push(p) })
-                  const dayPhaseRows = Object.values(phaseGroups).map(group => {
-                    const coincides = dayEvents.some(e => e.id === group[0].event.id)
-                    if (group.length > 1) {
-                      return { key: `${group[0].event.id}-phases`, name: coincides ? group.map(p => p.label).join(' + ') : group[0].event.name, rank: 1, split: group.map(p => p.color) }
-                    }
-                    const p = group[0]
-                    return { key: `${p.event.id}-${p.key}`, name: coincides ? p.label : p.event.name, rank: 1, color: p.color }
+                  // Un evento NON produce mai più di una riga per giorno: se
+                  // oggi è anche montaggio e/o smontaggio di quell'evento, la
+                  // fase si fonde nella STESSA card (colore diviso a metà —
+                  // evento+fase, o le due fasi se coincidono entrambe) invece
+                  // di restare una seconda riga separata che sembra un altro
+                  // evento. mergedEventIds tiene traccia di chi è già stato
+                  // "assorbito" così dopo non viene ripetuto tra le fasi.
+                  const mergedEventIds = new Set()
+                  const eventRows = dayEvents.map(ev => {
+                    const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
+                    const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
+                    const baseColor = ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)'
+                    const phasesToday = !ev.isDeadlineReminder && phaseGroups[ev.id]
+                    if (!phasesToday) return { key: ev.id, name: ev.name, isReminder: ev.isDeadlineReminder, rank, color: baseColor }
+                    mergedEventIds.add(ev.id)
+                    const split = phasesToday.length > 1 ? phasesToday.map(p => p.color) : [baseColor, phasesToday[0].color]
+                    return { key: ev.id, name: ev.name, rank, split }
                   })
+                  // Fasi rimaste "orfane" (l'evento vero non compare oggi in
+                  // griglia — es. giorno di smontaggio fuori dal range
+                  // date/dateEnd mostrato): restano una riga a sé, col nome
+                  // vero dell'evento (non più un'etichetta "Montaggio" generica
+                  // che da sola non direbbe più di chi è).
+                  const dayPhaseRows = Object.values(phaseGroups)
+                    .filter(group => !mergedEventIds.has(group[0].event.id))
+                    .map(group => {
+                      if (group.length > 1) {
+                        return { key: `${group[0].event.id}-phases`, name: group[0].event.name, rank: 1, split: group.map(p => p.color) }
+                      }
+                      const p = group[0]
+                      return { key: `${p.event.id}-${p.key}`, name: p.event.name, rank: 1, color: p.color }
+                    })
                   // Ordine di priorità fisso: evento vero > fase (montaggio/
                   // smontaggio) > task libero > rent/install > promemoria
                   // scadenza — stesso rango di eventRank sopra.
                   const titleRows = [
-                    ...dayEvents.map(ev => {
-                      const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
-                      const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
-                      return { key: ev.id, name: ev.name, isReminder: ev.isDeadlineReminder, rank, color: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)' }
-                    }),
+                    ...eventRows,
                     ...dayPhaseRows,
                     ...dayTasksOnly.map(b => {
                       const isAssigned = isWorker && b.workerId === user?.uid

@@ -47,7 +47,7 @@ export async function enablePushNotifications() {
   const messaging = getMessaging(app)
   const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration })
   if (!token) return false
-  await authedPost('/api/register-push-token', { token, action: 'register' })
+  await authedPost('/api/push', { token, action: 'register' })
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
   return true
 }
@@ -56,7 +56,7 @@ export async function disablePushNotifications() {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   localStorage.removeItem(TOKEN_STORAGE_KEY)
   if (!token) return
-  await authedPost('/api/register-push-token', { token, action: 'unregister' }).catch(() => {})
+  await authedPost('/api/push', { token, action: 'unregister' }).catch(() => {})
   try {
     await deleteToken(getMessaging(app))
   } catch {
@@ -68,5 +68,5 @@ export async function disablePushNotifications() {
 // Fire-and-forget come pushEventToGoogle: chi chiama (es. notifyListChanged
 // in EventDetail.jsx) non deve aspettare né gestire l'esito.
 export function notifyTeamPush({ title, body, url }) {
-  authedPost('/api/send-push', { title, body, url }).catch(() => {})
+  authedPost('/api/push', { action: 'send', title, body, url }).catch(() => {})
 }
