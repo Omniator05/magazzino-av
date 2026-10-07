@@ -98,7 +98,10 @@ export default function WorkerCalendar() {
     if (!teamId) return
     const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
-      setAllEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => !e.archived))
+      // `archived` (solo i rent/install chiusi, vedi Calendar.jsx per lo
+      // stesso cambiamento) non va più tolto da qui: resta visibile sul suo
+      // giorno in calendario invece di sparire del tutto dopo la chiusura.
+      setAllEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
   }, [teamId])
 

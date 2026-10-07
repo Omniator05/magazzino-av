@@ -62,15 +62,18 @@ const RULER_HOURS = Array.from({ length: Math.floor(TIMELINE_HOURS / RULER_STEP_
 function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-// La finestra di 7 giorni parte sempre da oggi, non dal lunedì della
-// settimana corrente: qui il passato non serve mai (solo consultazione, non
-// si assegna nessuno a un evento già concluso), quindi non ha senso
-// sprecarci una colonna. Spostandosi di 7 giorni alla volta la colonna 0
-// resta sempre lo stesso giorno della settimana di oggi — l'allineamento
-// non peggiora navigando, è solo un punto di partenza diverso da Lun-Dom.
 function startOfDay(d) {
   const m = new Date(d)
   m.setHours(0, 0, 0, 0)
+  return m
+}
+// Lunedì della settimana che contiene d — la colonna 0 è sempre lunedì,
+// più comodo da leggere a colpo d'occhio (settimana lavorativa intera)
+// invece di doversi orientare rispetto a "oggi", che può cadere ovunque.
+function startOfWeek(d) {
+  const m = startOfDay(d)
+  const day = m.getDay() // 0=domenica..6=sabato
+  m.setDate(m.getDate() + (day === 0 ? -6 : 1 - day))
   return m
 }
 function addDays(d, n) {
@@ -220,7 +223,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const [savedView] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('staffTimeline_view')) } catch { return null }
   })
-  const [weekStart, setWeekStart] = useState(() => savedView?.weekStart ? startOfDay(new Date(savedView.weekStart + 'T12:00:00')) : startOfDay(new Date()))
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(savedView?.weekStart ? new Date(savedView.weekStart + 'T12:00:00') : new Date()))
   const [blocks, setBlocks] = useState([])
   const [externalWorkers, setExternalWorkers] = useState([])
   const [shownExternalIds, setShownExternalIds] = useState([])
@@ -339,12 +342,25 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
             const assigned = blocks.filter(b => b.eventId === ev.id && b.date === date)
             return { key: `ph${ev.id}-${key}`, type: 'phase', event: ev, phaseKey: key, date, startTime: DEFAULT_START, endTime: DEFAULT_END, rank: 1, assigned, ...assignedMeta(assigned) }
           }))
-      const dayTasks = blocks
-        .filter(b => b.date === date && !b.eventId)
-        .map(b => {
-          const assigned = (b.workerId || b.externalWorkerId) ? [b] : []
-          return { key: `tk${b.id}`, type: 'task', block: b, date, startTime: b.startTime, endTime: b.endTime, rank: 2, assigned, ...assignedMeta(assigned) }
-        })
+      // Più persone sullo stesso task libero: i blocchi che condividono
+      // taskGroupId sono la STESSA commissione (una card, una riga a testa,
+      // come un evento con più assegnati) — non più un blocco = un task.
+      // b.id come ripiego per i blocchi creati prima di taskGroupId: restano
+      // task "solisti" finché non gli si trascina sopra una seconda persona
+      // (a quel punto il nuovo blocco eredita lo stesso id come taskGroupId,
+      // vedi assignToTaskGroup, e si raggruppano da soli).
+      const dayTaskBlocks = blocks.filter(b => b.date === date && !b.eventId)
+      const taskGroupsByGid = {}
+      dayTaskBlocks.forEach(b => {
+        const gid = b.taskGroupId || b.id
+        ;(taskGroupsByGid[gid] ||= []).push(b)
+      })
+      const dayTasks = Object.entries(taskGroupsByGid).map(([gid, group]) => {
+        const startTime = group.reduce((min, b) => (b.startTime < min ? b.startTime : min), group[0].startTime)
+        const endTime = group.reduce((max, b) => (b.endTime > max ? b.endTime : max), group[0].endTime)
+        const assigned = group.filter(b => b.workerId || b.externalWorkerId)
+        return { key: `tk${gid}`, type: 'task', block: group[0], taskGroupId: gid, date, startTime, endTime, rank: 2, assigned, ...assignedMeta(assigned) }
+      })
       map[date] = [...dayEventItems, ...dayPhaseItems, ...dayTasks]
     })
     return map
@@ -428,7 +444,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // si riapre da solo a ogni re-render.
   useEffect(() => {
     if (!focusAssign) return
-    setWeekStart(startOfDay(new Date(focusAssign.date + 'T12:00:00')))
+    setWeekStart(startOfWeek(new Date(focusAssign.date + 'T12:00:00')))
     const ev = events.find(e => e.id === focusAssign.eventId)
     if (ev) openCreateForEvent(ev, focusAssign.date)
     onFocusAssignConsumed?.()
@@ -461,27 +477,45 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     }, { eventsById, allBlocks: blocks })
   }
 
-  // Assegna/sostituisce la persona su un TASK libero (un solo slot persona
-  // per task — per più persone sulla stessa commissione si creano più task).
-  const assignToTask = async (block, person) => {
+  // Assegna/disassegna una persona su un TASK libero — stesso toggle di
+  // assignToEvent sopra, ma raggruppato per taskGroupId invece che eventId:
+  // più persone possono condividere lo stesso task (una card, una riga a
+  // testa), ritrascinare la stessa persona la rimuove. Il nuovo blocco
+  // eredita orario e nome dalla card così com'è ora (item.startTime/
+  // endTime/block.label), non quelli predefiniti del timeline.
+  const assignToTaskGroup = async (item, person) => {
     if (!person) return
-    await updateAssignmentBlock(block.id, block, {
+    const existing = item.assigned.find(b =>
+      person.kind === 'worker' ? b.workerId === person.id : b.externalWorkerId === person.id)
+    if (existing) { await deleteAssignmentBlock(existing, { eventsById, allBlocks: blocks }); return }
+    if (person.kind === 'worker' && isWorkerUnavailable(person.id, { date: item.date, dateEnd: item.date }, unavailability)) {
+      const ok = await confirm({
+        title: t('calendar.confirmUnavailableTitle'),
+        message: t('calendar.confirmUnavailableMessage', { name: person.name, event: item.block.label || '' }),
+        confirmLabel: t('calendar.confirmUnavailableLabel'),
+        danger: true,
+      })
+      if (!ok) return
+    }
+    await createAssignmentBlock({
+      teamId, date: item.date, startTime: item.startTime, endTime: item.endTime,
       workerId: person.kind === 'worker' ? person.id : null,
       externalWorkerId: person.kind === 'external' ? person.id : null,
       externalWorkerName: person.kind === 'external' ? person.name : null,
+      eventId: null, taskGroupId: item.taskGroupId, label: item.block.label || '', createdBy: user.uid,
     }, { eventsById, allBlocks: blocks })
   }
 
   // Una fase (montaggio/smontaggio) è legata allo stesso evento della card
   // principale, solo su una data diversa — va assegnata con assignToEvent
   // esattamente come l'evento vero (item.event + item.date), NON con
-  // assignToTask: le fasi non hanno un item.block proprio (quello esiste
-  // solo per i task liberi), quindi finirci dentro avrebbe sempre fallito.
+  // assignToTaskGroup: le fasi non hanno un item.taskGroupId proprio (quello
+  // esiste solo per i task liberi), quindi finirci dentro avrebbe sempre fallito.
   const handleDropOrTap = (item, person) => {
     if (!person) return
     if (person.kind === 'quick-external') { setPendingQuickExternal({ item }); return }
     if (item.type === 'event' || item.type === 'phase') assignToEvent(item.event, item.date, person)
-    else assignToTask(item.block, person)
+    else assignToTaskGroup(item, person)
     setSelectedPerson(null)
   }
 
@@ -491,7 +525,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     const person = { id, kind: 'external', name }
     const { item } = pendingQuickExternal
     if (item.type === 'event' || item.type === 'phase') await assignToEvent(item.event, item.date, person)
-    else await assignToTask(item.block, person)
+    else await assignToTaskGroup(item, person)
     setPendingQuickExternal(null)
     setSelectedPerson(null)
   }
@@ -511,9 +545,27 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       description: payload.description || '',
     }
     if (modalState.mode === 'create') {
-      await createAssignmentBlock({ ...shared, teamId, date: modalState.date, createdBy: user.uid }, { eventsById, allBlocks: blocks })
+      // Un task libero nasce con un taskGroupId tutto suo — serve per poter
+      // aggiungere altre persone in seguito (trascinandole sulla card,
+      // vedi assignToTaskGroup) restando la STESSA commissione invece di
+      // crearne una seconda indipendente. Id generato lato client senza una
+      // scrittura a parte (stesso trucco del doc() "vuoto" di Firestore).
+      const taskGroupId = shared.eventId ? null : doc(collection(db, 'assignmentBlocks')).id
+      await createAssignmentBlock({ ...shared, taskGroupId, teamId, date: modalState.date, createdBy: user.uid }, { eventsById, allBlocks: blocks })
     } else {
       await updateAssignmentBlock(modalState.block.id, modalState.block, shared, { eventsById, allBlocks: blocks })
+      // Nome/descrizione del task vanno allineati su TUTTI i blocchi dello
+      // stesso taskGroupId (più persone, stessa commissione) — altrimenti
+      // la card continuerebbe a mostrare il vecchio nome se si fosse
+      // modificato lo slot di una persona diversa da quella "rappresentante".
+      // Stesso ripiego b.taskGroupId||b.id di itemsByDay: un task creato
+      // prima di taskGroupId non ha il campo, ma resta comunque il gruppo
+      // giusto se nel frattempo gli si è aggiunta una seconda persona.
+      if (!shared.eventId) {
+        const gid = modalState.block.taskGroupId || modalState.block.id
+        const siblings = blocks.filter(b => !b.eventId && (b.taskGroupId || b.id) === gid && b.id !== modalState.block.id)
+        await Promise.all(siblings.map(b => updateDoc(doc(db, 'assignmentBlocks', b.id), { label: shared.label, description: shared.description })))
+      }
     }
     if (externalWorkerId) setShownExternalIds(ids => (ids.includes(externalWorkerId) ? ids : [...ids, externalWorkerId]))
     return true
@@ -555,7 +607,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     <div style={{ padding: '14px 16px 32px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <button className="staff-nav-btn" onClick={() => setWeekStart(w => addDays(w, -7))} aria-label={t('staffTimeline.prevWeekAria')} style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--card2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)' }}><ChevronLeft size={16} /></button>
-        <button className="staff-nav-today" onClick={() => setWeekStart(startOfDay(new Date()))} style={{ textAlign: 'center', background: 'none', border: 'none', padding: '4px 16px', borderRadius: 10 }}>
+        <button className="staff-nav-today" onClick={() => setWeekStart(startOfWeek(new Date()))} style={{ textAlign: 'center', background: 'none', border: 'none', padding: '4px 16px', borderRadius: 10 }}>
           <p style={{ fontSize: 15, fontWeight: 800 }}>{capitalize(weekRangeLabel)}</p>
           <p className="staff-nav-today-label" style={{ fontSize: 12.5, color: isCurrentWeek ? 'var(--accent)' : 'var(--text2)', fontWeight: 800 }}>{t('calendar.today')}</p>
         </button>

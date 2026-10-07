@@ -1,5 +1,3 @@
-import { ensureInstanceList, reconcileInstanceNumbers } from './kitInstances'
-
 // Liste di carico multiple per evento. `event.items` resta UN array piatto
 // (tutto il resto dell'app — disponibilità, "da scaricare", storico oggetto,
 // sync giacenza — continua a leggerlo così), ogni riga porta solo un
@@ -49,17 +47,6 @@ export const moveRowToList = (row, listId, takenIds) => {
     takenIds.add(id)
   }
   return { ...rest, id, itemRef: row.id, listId: target }
-}
-
-// Baule/i di un kit da assegnare a una nuova riga, evitando quelli già presi
-// da altre righe dello stesso kit nello stesso evento (es. in un'altra
-// lista). Se i liberi non bastano si ripiega su tutti: meglio un baule
-// condiviso che una riga senza assegnazione.
-export const pickInstanceNumbers = (instances, totalQty, qty, usedNumbers = []) => {
-  const all = ensureInstanceList(instances, totalQty ?? qty)
-  const used = new Set(usedNumbers)
-  const free = all.filter(i => !used.has(i.number))
-  return reconcileInstanceNumbers(free.length >= qty ? free : all, [], qty)
 }
 
 // Righe dell'evento a cui può riferirsi una scansione di un oggetto di

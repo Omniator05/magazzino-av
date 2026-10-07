@@ -300,7 +300,13 @@ export default function Calendar() {
     if (!teamId) return
     const q = query(collection(db, 'events'), where('teamId', '==', teamId), orderBy('date'))
     return onSnapshot(q, snap => {
-      setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => !e.archived))
+      // `archived` (solo i rent/install chiusi, vedi closeInstallationEvent
+      // in utils/kitInventory.js) non va più tolto da qui: un noleggio
+      // chiuso deve restare visibile sul proprio giorno in calendario per
+      // poterlo ritrovare in futuro, non sparire del tutto. Continua a
+      // sparire solo dalle sezioni "attive"/"da scaricare" di Events.jsx,
+      // che lo escludono a parte — qui serve solo come promemoria storico.
+      setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
   }, [teamId])
 

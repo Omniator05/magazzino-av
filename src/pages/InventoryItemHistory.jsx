@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, doc, onSnapshot, query, where, orderBy } from 'firebase/firestore'
 import { eventRowIncludesItem, itemCommittedElsewhere } from '../utils/kitInventory'
-import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
+import { ensureInstanceList } from '../utils/kitInstances'
 import { formatDate } from '../utils/formatDate'
 import { todayStr } from '../utils/workHours'
 import BackHomeButton from '../components/BackHomeButton'
@@ -106,13 +106,12 @@ export default function InventoryItemHistory() {
   const freeQty = Math.max(0, maxAvail - committedQty)
 
   // Riga pronta per un evento nuovo, stessa forma di rowsToAdd in
-  // EventDetail.jsx/confirmCart — per i kit assegna già i bauli fisici
-  // (preferendo quelli senza componenti mancanti), non solo nome/categoria.
+  // EventDetail.jsx/confirmCart — niente baule fisico assegnato in
+  // automatico per i kit, solo nome/categoria/quantità (vedi EventDetail.jsx).
   const newListItem = item ? {
     id: item.id, name: item.name, category: item.category, qty: 1, loaded: false, returned: false,
     isKit: item.isKit || false, kitSize: item.kitSize || null,
     isBundle: item.isBundle || false, components: item.components || null,
-    ...(item.isBundle ? { instanceNumbers: reconcileInstanceNumbers(ensureInstanceList(item.instances, item.totalQty ?? 1), [], 1) } : {}),
   } : null
 
   if (itemLoaded && !item) {

@@ -26,7 +26,7 @@ import { syncKitAwareInventory, itemCommittedElsewhere, closeInstallationEvent }
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import ListNameModal from '../components/ListNameModal'
 import { linkedAdditionsFor } from '../utils/linkedItems'
-import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, listRowId, moveRowToList, pickInstanceNumbers } from '../utils/eventLists'
+import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, listRowId, moveRowToList } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import JSZip from 'jszip'
 
@@ -1021,13 +1021,10 @@ export default function EventDetail() {
       // Solo nella lista di destinazione: lo stesso oggetto in un'altra lista
       // è una riga normale, non un duplicato "mancante".
       const alreadyExists = targetListItems.some(e => !e.isExtra && (e.id === c.id || e.itemRef === c.id))
-      // Kit: assegna in automatico i bauli fisici, preferendo quelli senza
-      // componenti mancanti (vedi src/utils/kitInstances.js) — l'utente può
-      // poi cambiarli a mano dalla modifica riga.
-      const instanceNumbers = c.isBundle
-        ? pickInstanceNumbers(c.instances, c.totalQty, c.qty,
-            eventItems.filter(e => rowListId(e) !== targetListId && (e.itemRef || e.id) === c.id).flatMap(e => e.instanceNumbers || []))
-        : null
+      // Kit: niente baule fisico assegnato in automatico — solo la quantità,
+      // come per un oggetto normale. L'admin assegna un baule specifico a
+      // mano dalla modifica riga solo se/quando serve davvero tracciarlo.
+      const instanceNumbers = null
       if (alreadyExists) {
         // Riga separata con id unico, itemRef punta all'articolo Firebase originale
         return {
