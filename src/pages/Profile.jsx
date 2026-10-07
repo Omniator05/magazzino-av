@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
@@ -8,6 +8,7 @@ import { useCenteredModal } from '../hooks/useCenteredModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import SegmentedControl from '../components/SegmentedControl'
 import { hasUnseenWhatsNew } from '../utils/whatsNew'
+import { isPushAvailable, isPushEnabled, enablePushNotifications, disablePushNotifications } from '../utils/pushNotifications'
 
 const AVATARS = [
   // Espressioni — le più usate come avatar
@@ -45,6 +46,38 @@ const IconLock = () => (
   </svg>
 )
 
+const IconBell = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+  </svg>
+)
+
+// Stesso pattern "pillola col pallino" di Switch in SettingsModules.jsx —
+// duplicato qui (non estratto in un componente condiviso) perché per ora è
+// l'unico altro punto che ne ha bisogno in tutta l'app.
+function Switch({ enabled, onClick, disabled, label }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={enabled}
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: 46, height: 26, borderRadius: 13, flexShrink: 0, position: 'relative',
+        background: enabled ? 'var(--accent)' : 'var(--border)',
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 3, left: enabled ? 23 : 3,
+        width: 20, height: 20, borderRadius: '50%', background: '#fff',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s ease',
+      }} />
+    </button>
+  )
+}
+
 // Card modale (non più pagina a sé) aperta sopra Dashboard/WorkerHome tramite
 // tap sull'avatar — evita i bordi vuoti laterali che una pagina "page-narrow"
 // centrata avrebbe su desktop, dato che ora il contenuto è compatto.
@@ -73,6 +106,36 @@ export default function Profile({ onClose }) {
   const [pwdError,    setPwdError]    = useState('')
   const [pwdOk,       setPwdOk]       = useState(false)
   const [pwdOpen,     setPwdOpen]     = useState(false)
+
+  // null finché non si sa se il browser/dispositivo supporta le push (es. su
+  // iPhone serve l'app installata in Home — vedi testo mostrato quando false).
+  const [pushSupported, setPushSupported] = useState(null)
+  const [pushEnabled,   setPushEnabled]   = useState(false)
+  const [pushBusy,      setPushBusy]      = useState(false)
+  const [pushError,     setPushError]     = useState('')
+  useEffect(() => {
+    isPushAvailable().then(setPushSupported)
+    setPushEnabled(isPushEnabled())
+  }, [])
+
+  const togglePush = async () => {
+    setPushError('')
+    setPushBusy(true)
+    try {
+      if (pushEnabled) {
+        await disablePushNotifications()
+        setPushEnabled(false)
+      } else {
+        const ok = await enablePushNotifications()
+        if (ok) setPushEnabled(true)
+        else setPushError(t('profile.pushPermissionDenied'))
+      }
+    } catch {
+      setPushError(t('profile.pushGenericError'))
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   const avatar  = profile?.avatar || null
   const initial = (profile?.name || profile?.username || '?').charAt(0).toUpperCase()
@@ -304,6 +367,38 @@ export default function Profile({ onClose }) {
             </div>
           </div>
         </GroupCard>
+
+        {/* Gruppo: Notifiche push — solo se il browser/dispositivo le supporta
+            (richiede anche la chiave VAPID lato Firebase, vedi .env.example);
+            altrimenti si spiega perché non sono disponibili invece di
+            mostrare un toggle che non farebbe nulla. */}
+        {pushSupported !== false && (
+          <GroupCard label={t('profile.sectionNotifications')}>
+            <Row first>
+              <span style={{ color: 'var(--text2)', flexShrink: 0, display: 'flex' }}><IconBell /></span>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{t('profile.pushToggleLabel')}</span>
+              <Switch
+                enabled={pushEnabled}
+                onClick={togglePush}
+                disabled={pushBusy || pushSupported === null}
+                label={t('profile.pushToggleLabel')}
+              />
+            </Row>
+            <p style={{ padding: '0 16px 14px', fontSize: 12, color: 'var(--text2)', lineHeight: 1.4 }}>
+              {t('profile.pushToggleHint')}
+            </p>
+            {pushError && (
+              <p style={{ padding: '0 16px 14px', fontSize: 12.5, color: 'var(--accent)', fontWeight: 600, lineHeight: 1.4 }}>{pushError}</p>
+            )}
+          </GroupCard>
+        )}
+        {pushSupported === false && (
+          <GroupCard label={t('profile.sectionNotifications')}>
+            <p style={{ padding: '14px 16px', fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>
+              {t('profile.pushUnavailableHint')}
+            </p>
+          </GroupCard>
+        )}
 
         {/* Emoji picker — stesso stile popup centrato, sopra al popup Profilo */}
         {showEmojiPicker && (

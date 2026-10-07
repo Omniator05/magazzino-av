@@ -67,5 +67,5 @@ export async function requireTeamMember(req) {
   const teamSnap = await teamRef.get()
   if (!teamSnap.exists) { const e = new Error('Squadra non trovata'); e.status = 404; throw e }
 
-  return { db, teamRef, team: teamSnap.data(), teamId: profile.teamId, profile }
+  return { db, teamRef, team: teamSnap.data(), teamId: profile.teamId, profile, uid: decoded.uid }
 }

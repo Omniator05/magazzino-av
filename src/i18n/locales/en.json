@@ -551,6 +551,8 @@
     "qtyChangeUnloadTitle": "Change the quantity?",
     "qtyChangeUnloadMessage": "\"{{name}}\" is already loaded. Changing the quantity from {{from}} to {{to}} cancels the load: stock becomes available again and the item will need to be loaded again.",
     "qtyChangeUnloadLabel": "Change and cancel load",
+    "pushListChangedTitle": "Loading list updated",
+    "pushListChangedBody": "An admin updated the list while it was being loaded",
     "mainListName": "Main list",
     "listUnnamed": "Untitled list",
     "newList": "New list",
@@ -1160,7 +1162,8 @@
     "eventNotesToggle": "Event notes",
     "itemInfoToggle": "Item details",
     "decreaseQty": "Decrease quantity",
-    "increaseQty": "Increase quantity"
+    "increaseQty": "Increase quantity",
+    "listChangedToast": "The loading list was updated by the admin"
   },
   "workerInventory": {
     "scan": "📷 Scan",
@@ -1504,6 +1507,12 @@
     "saving": "Saving...",
     "saved": "Saved!",
     "sectionSecurity": "Security",
+    "sectionNotifications": "Notifications",
+    "pushToggleLabel": "Push notifications",
+    "pushToggleHint": "Get notified on this device when an admin updates a loading list that's already in progress, even if the app is closed.",
+    "pushPermissionDenied": "Permission denied: enable notifications for this site from your browser/phone settings.",
+    "pushGenericError": "Couldn't enable push notifications on this device.",
+    "pushUnavailableHint": "Not available on this device/browser. On iPhone: add the app to your Home Screen (Safari → Share → Add to Home Screen) to enable them.",
     "currentPassword": "Current password",
     "newPassword": "New password",
     "confirmPassword": "Confirm new password",

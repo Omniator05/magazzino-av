@@ -110,6 +110,7 @@ export default function WorkerScanner() {
   const [listSwitchMsg, setListSwitchMsg] = useState('')
   const [error, setError] = useState(null)
   const [saveError, setSaveError] = useState('')
+  const [listChangedMsg, setListChangedMsg] = useState('')
   // Sovrascritture ottimistiche per pronto/carico/rientro/mancante: senza,
   // il bottone resta fermo fino al giro di andata/ritorno della transazione
   // Firestore (fino a un secondo con la connessione del magazzino) — con
@@ -271,6 +272,27 @@ export default function WorkerScanner() {
       if (snap.exists()) setEvent({ id: snap.id, ...snap.data() })
     })
   }, [id])
+
+  // Avviso "poco impattante" quando l'admin tocca la lista mentre si sta già
+  // caricando (vedi notifyListChanged in EventDetail.jsx): un banner che si
+  // nota e sparisce da solo, mai un popup che blocca lo scanner. Si ignora
+  // apposta lo snapshot iniziale (altrimenti, riaprendo lo scanner, spunterebbe
+  // per notifiche ormai vecchie che nessuno ha più bisogno di vedere).
+  const listChangedFirstSnapRef = useRef(true)
+  useEffect(() => {
+    if (!teamId || !id) return
+    listChangedFirstSnapRef.current = true
+    return onSnapshot(
+      query(collection(db, 'notifications'), where('teamId', '==', teamId), where('type', '==', 'list_changed'), where('eventId', '==', id)),
+      snap => {
+        if (listChangedFirstSnapRef.current) { listChangedFirstSnapRef.current = false; return }
+        if (snap.docChanges().some(c => c.type === 'added')) {
+          setListChangedMsg(t('workerScanner.listChangedToast'))
+          setTimeout(() => setListChangedMsg(''), 5000)
+        }
+      }
+    )
+  }, [teamId, id, t])
 
   // Se si cambia evento senza smontare il componente (raro, ma capita dal
   // link diretto /events/:id/scan), riparti da 'pronto' finché l'effetto
@@ -909,6 +931,16 @@ export default function WorkerScanner() {
           <Warn size={16} />
           <p style={{ color:'#fff', fontSize:13, fontWeight:600, lineHeight:1.4 }}>{saveError}</p>
           <button onClick={() => setSaveError('')} aria-label={t('common.close')} style={{ background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:16, fontWeight:700, flexShrink:0, padding:'0 2px' }}>✕</button>
+        </div>
+      )}
+      {/* Avviso "la lista è cambiata" — stesso idioma del banner sopra ma
+          intenzionalmente poco invasivo (nessuna icona d'allarme, nessun
+          colore rosso, si chiude da solo): deve notarsi senza interrompere
+          chi sta scansionando, vedi notifyListChanged in EventDetail.jsx. */}
+      {listChangedMsg && (
+        <div role="status" style={{ position:'fixed', top: saveError ? 78 : 16, left:'50%', transform:'translateX(-50%)', zIndex:998, background:'var(--card)', border:'1.5px solid var(--blue)', borderRadius:14, padding:'10px 18px', maxWidth:'90vw', boxShadow:'0 8px 32px rgba(0,0,0,0.25)', display:'flex', alignItems:'center', gap:9, color:'var(--blue)' }}>
+          <Check size={15} />
+          <p style={{ color:'var(--text)', fontSize:13, fontWeight:600, lineHeight:1.4 }}>{listChangedMsg}</p>
         </div>
       )}
 

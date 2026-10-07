@@ -551,6 +551,8 @@
     "qtyChangeUnloadTitle": "Modificare la quantità?",
     "qtyChangeUnloadMessage": "\"{{name}}\" risulta già caricato. Cambiando la quantità da {{from}} a {{to}} il carico viene annullato: la giacenza torna disponibile e l'oggetto andrà ricaricato.",
     "qtyChangeUnloadLabel": "Modifica e annulla carico",
+    "pushListChangedTitle": "Lista di carico aggiornata",
+    "pushListChangedBody": "Un admin ha aggiornato la lista mentre era in corso di carico",
     "mainListName": "Lista principale",
     "listUnnamed": "Lista senza nome",
     "newList": "Nuova lista",
@@ -1160,7 +1162,8 @@
     "eventNotesToggle": "Note evento",
     "itemInfoToggle": "Dettagli oggetto",
     "decreaseQty": "Diminuisci quantità",
-    "increaseQty": "Aumenta quantità"
+    "increaseQty": "Aumenta quantità",
+    "listChangedToast": "La lista è stata aggiornata dall'admin"
   },
   "workerInventory": {
     "scan": "📷 Scansiona",
@@ -1504,6 +1507,12 @@
     "saving": "Salvataggio...",
     "saved": "Salvato!",
     "sectionSecurity": "Sicurezza",
+    "sectionNotifications": "Notifiche",
+    "pushToggleLabel": "Notifiche push",
+    "pushToggleHint": "Avvisa su questo dispositivo quando un admin aggiorna una lista di carico già in corso, anche ad app chiusa.",
+    "pushPermissionDenied": "Permesso negato: abilita le notifiche per questo sito dalle impostazioni del browser/telefono.",
+    "pushGenericError": "Non è stato possibile attivare le notifiche push su questo dispositivo.",
+    "pushUnavailableHint": "Non disponibili su questo dispositivo/browser. Su iPhone: aggiungi l'app alla schermata Home (Safari → Condividi → Aggiungi a Home) per poterle attivare.",
     "currentPassword": "Password attuale",
     "newPassword": "Nuova password",
     "confirmPassword": "Conferma nuova password",

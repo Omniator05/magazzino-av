@@ -435,8 +435,15 @@ export default function Calendar() {
     return selectedDate === ev.date || selectedDate === end
   })
   const selectedPhases = phasesByDate[selectedDate] || []
-  // Aggiungi anche gli eventi con fasi nel giorno selezionato (non già presenti come evento del giorno)
-  const selectedPhaseEvents = selectedPhases.filter(p => !selectedEvents.some(e => e.id === p.event.id))
+  // Aggiungi anche gli eventi con fasi nel giorno selezionato (non già
+  // presenti come evento del giorno) — raggruppate per evento, non per
+  // singola fase: un'installazione con montaggio E smontaggio lo stesso
+  // giorno resta UNA riga con due badge, non due righe duplicate.
+  const selectedPhaseGroups = {}
+  selectedPhases.filter(p => !selectedEvents.some(e => e.id === p.event.id)).forEach(p => {
+    (selectedPhaseGroups[p.event.id] ||= { event: p.event, phases: [] }).phases.push(p)
+  })
+  const selectedPhaseEvents = Object.values(selectedPhaseGroups)
   const selectedTasks = selectedDate ? (tasksByDate[selectedDate] || []) : []
   const selectedAbsences = selectedDate ? absencesOnDate(selectedDate) : []
   const selectedGoogleEvents = selectedDate ? (googleEventsByDate[selectedDate] || []) : []
@@ -595,6 +602,21 @@ export default function Calendar() {
                   // del giorno selezionato e nel modal, dove c'è più spazio).
                   const dayPhasesAll = phasesByDate[dStr] || []
                   const dayTasksOnly = tasksByDate[dStr] || []
+                  // Montaggio e smontaggio lo stesso giorno (installazione in
+                  // giornata): invece di due righe separate che si "mangiano"
+                  // i 2 slot visibili della cella, diventano UNA riga sola
+                  // colorata a metà coi due colori fase — più compatta e si
+                  // vede a colpo d'occhio che coincidono.
+                  const phaseGroups = {}
+                  dayPhasesAll.forEach(p => { (phaseGroups[p.event.id] ||= []).push(p) })
+                  const dayPhaseRows = Object.values(phaseGroups).map(group => {
+                    const coincides = dayEvents.some(e => e.id === group[0].event.id)
+                    if (group.length > 1) {
+                      return { key: `${group[0].event.id}-phases`, name: coincides ? group.map(p => p.label).join(' + ') : group[0].event.name, rank: 1, split: group.map(p => p.color) }
+                    }
+                    const p = group[0]
+                    return { key: `${p.event.id}-${p.key}`, name: coincides ? p.label : p.event.name, rank: 1, color: p.color }
+                  })
                   // Ordine di priorità fisso: evento vero > fase (montaggio/
                   // smontaggio) > task libero > rent/install > promemoria
                   // scadenza — stesso rango di eventRank sopra.
@@ -604,10 +626,7 @@ export default function Calendar() {
                       const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
                       return { key: ev.id, name: ev.name, isReminder: ev.isDeadlineReminder, rank, color: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)' }
                     }),
-                    ...dayPhasesAll.map(p => {
-                      const coincides = dayEvents.some(e => e.id === p.event.id)
-                      return { key: `${p.event.id}-${p.key}`, name: coincides ? p.label : p.event.name, rank: 1, color: p.color }
-                    }),
+                    ...dayPhaseRows,
                     ...dayTasksOnly.map(b => {
                       const isAssigned = isWorker && b.workerId === user?.uid
                       return { key: `tk${b.id}`, name: b.label || t('staffTimeline.untitledTask'), rank: 2, color: isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--blue)', isTask: true, task: b }
@@ -621,7 +640,7 @@ export default function Calendar() {
                           display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.35,
                           padding:'1.5px 4px', borderRadius:4, maxWidth:'100%',
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                          background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.color,
+                          background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.split ? `linear-gradient(90deg, ${row.split[0]} 50%, ${row.split[1]} 50%)` : row.color,
                           color: row.isReminder ? 'var(--text3)' : '#fff',
                         }}>{row.name}</span>
                       ))}
@@ -706,14 +725,14 @@ export default function Calendar() {
                 ...selectedEvents.map(ev => {
                   const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
                   const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : isAssigned ? 0 : 1
-                  return { ev, phaseOnDay: selectedPhases.find(p => p.event.id === ev.id), coincides: true, rank, dotColor: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' }
+                  return { ev, phasesOnDay: selectedPhases.filter(p => p.event.id === ev.id), coincides: true, rank, dotColor: ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : 'var(--accent)', borderColor: 'var(--border)' }
                 }),
-                ...selectedPhaseEvents.map(p => {
-                  const isAssigned = isWorker && (p.event.assignedWorkers || []).includes(user?.uid)
-                  return { ev: p.event, phaseOnDay: p, coincides: false, rank: isAssigned ? 0 : 1, dotColor: p.color, borderColor: p.color + '44' }
+                ...selectedPhaseEvents.map(({ event, phases }) => {
+                  const isAssigned = isWorker && (event.assignedWorkers || []).includes(user?.uid)
+                  return { ev: event, phasesOnDay: phases, coincides: false, rank: isAssigned ? 0 : 1, dotColor: phases[0].color, borderColor: phases[0].color + '44' }
                 }),
                 ...selectedTasks.map(b => ({ task: b, rank: 2, dotColor: 'var(--blue)', borderColor: 'var(--border)' })),
-              ].sort((a, b) => a.rank - b.rank).map(({ ev, task, phaseOnDay, coincides, dotColor, borderColor }) => {
+              ].sort((a, b) => a.rank - b.rank).map(({ ev, task, phasesOnDay, coincides, dotColor, borderColor }) => {
                 // Il giorno selezionato è uno solo per tutta questa lista: se
                 // è passato, il colore identificativo (puntino, bordo, badge
                 // fase) si legge in grigio invece che nel colore vivo del tipo.
@@ -756,7 +775,7 @@ export default function Calendar() {
                   )
                 }
                 return (
-                  <div key={ev.id + (phaseOnDay?.key||'')}
+                  <div key={ev.id}
                     onClick={() => setSummaryEvent(ev)}
                     style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
                   >
@@ -771,13 +790,10 @@ export default function Calendar() {
                           {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                         </p>
                         {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
-                        {phaseOnDay && (() => {
+                        {phasesOnDay && phasesOnDay.length > 0 && (() => {
                           // var(--text2) non si può concatenare con un suffisso
                           // alpha come un hex: colore/sfondo/bordo grigi vanno
                           // scelti a parte invece di derivarli dalla stessa stringa.
-                          const phaseColor = isSelectedDayPast ? 'var(--text2)' : phaseOnDay.color
-                          const phaseBg = isSelectedDayPast ? 'var(--card2)' : phaseOnDay.color + '18'
-                          const phaseBorder = isSelectedDayPast ? 'var(--border)' : phaseOnDay.color + '44'
                           const eventColor = isSelectedDayPast ? 'var(--text2)' : 'var(--accent)'
                           const eventBg = isSelectedDayPast ? 'var(--card2)' : 'rgba(230,57,70,0.12)'
                           const eventBorder = isSelectedDayPast ? 'var(--border)' : 'rgba(230,57,70,0.35)'
@@ -785,16 +801,26 @@ export default function Calendar() {
                             <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:5 }}>
                               {/* coincides: il titolo sopra è già il nome vero,
                                   ma da solo non dice che oggi è ANCHE la fase —
-                                  il tag "Evento" accanto a quello fase rende
-                                  esplicito che vanno fatti entrambi oggi. */}
+                                  il tag "Evento" accanto a quelli fase rende
+                                  esplicito che vanno fatti entrambi oggi. Se
+                                  montaggio e smontaggio coincidono lo stesso
+                                  giorno, qui compaiono ENTRAMBI i badge (non
+                                  solo il primo). */}
                               {coincides && (
                                 <span style={{ display:'inline-block', background: eventBg, color: eventColor, border:`1px solid ${eventBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
                                   {t('calendar.genericEventTag')}
                                 </span>
                               )}
-                              <span style={{ display:'inline-block', background: phaseBg, color: phaseColor, border:`1px solid ${phaseBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
-                                {phaseOnDay.label}
-                              </span>
+                              {phasesOnDay.map(phase => {
+                                const phaseColor = isSelectedDayPast ? 'var(--text2)' : phase.color
+                                const phaseBg = isSelectedDayPast ? 'var(--card2)' : phase.color + '18'
+                                const phaseBorder = isSelectedDayPast ? 'var(--border)' : phase.color + '44'
+                                return (
+                                  <span key={phase.key} style={{ display:'inline-block', background: phaseBg, color: phaseColor, border:`1px solid ${phaseBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
+                                    {phase.label}
+                                  </span>
+                                )
+                              })}
                             </div>
                           )
                         })()}

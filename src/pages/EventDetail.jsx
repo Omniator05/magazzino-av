@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
-import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction, increment } from 'firebase/firestore'
+import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction, increment, addDoc, serverTimestamp } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
 import { toggleWorkerAssignment, isWorkerUnavailable, vehicleConflictEvent, externalVehicleConflictEvent } from '../utils/workerAssignment'
 import { deleteAssignmentBlock } from '../utils/assignmentBlocks'
@@ -23,6 +23,7 @@ import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
 import { syncKitAwareInventory, itemCommittedElsewhere, closeInstallationEvent } from '../utils/kitInventory'
+import { notifyTeamPush } from '../utils/pushNotifications'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import ListNameModal from '../components/ListNameModal'
 import { linkedAdditionsFor } from '../utils/linkedItems'
@@ -175,6 +176,27 @@ export default function EventDetail() {
       return next
     })
   }
+  // Avviso "poco impattante" per chi sta caricando: se nella lista c'è già
+  // almeno una riga caricata (il furgone è in corso di carico o già fatto) e
+  // l'admin aggiunge/toglie/modifica una riga, scrive una notifica leggera
+  // che WorkerScanner intercetta in tempo reale con un piccolo banner — mai
+  // un popup bloccante, deve notarsi e basta, non interrompere lo scanner.
+  // Se il carico non è ancora iniziato, non c'è nessuno da avvisare.
+  // In più, per chi non ha lo scanner aperto in quel momento, una vera push
+  // (solo se l'ha attivata da Profilo): stesso innesco, canale diverso.
+  const notifyListChanged = () => {
+    if (!eventItems.some(i => i.loaded && !i.returned)) return
+    addDoc(collection(db, 'notifications'), {
+      teamId, type: 'list_changed', eventId,
+      editedByName: profile?.name || profile?.username || t('common.noName'),
+      seenBy: [], createdAt: serverTimestamp(),
+    }).catch(() => {})
+    notifyTeamPush({
+      title: event?.name || t('eventDetail.pushListChangedTitle'),
+      body: t('eventDetail.pushListChangedBody'),
+      url: `/events/${eventId}/scan`,
+    })
+  }
   const [editItem, setEditItem] = useState(null)
   const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances, listId }) => {
     // L'assegnazione a unità specifiche (kit o oggetto singolo) resta solo se
@@ -205,6 +227,7 @@ export default function EventDetail() {
     // altrimenti sbagliata per sempre (il rientro restituirebbe la nuova). Il
     // carico va rifatto, e scalerà la quantità giusta.
     const localRow = eventItems.find(i => i.id === id)
+    const qtyActuallyChanged = !!localRow && !localRow.isExtra && !localRow.returned && (localRow.qty || 1) !== qty
     const qtyChangeUnloads = !!localRow && !localRow.isExtra && localRow.loaded && !localRow.returned && (localRow.qty || 1) !== qty
     if (qtyChangeUnloads) {
       const ok = await confirm({
@@ -221,9 +244,18 @@ export default function EventDetail() {
       return current.map(i => {
         if (i.id !== id) return i
         let updated = { ...i, qty, eventNote: eventNote || '', mancante: mancante || false, ...(includeInstanceNumbers ? { instanceNumbers: finalInstanceNumbers } : {}) }
-        if (i.loaded && !i.returned && !i.isExtra && (i.qty || 1) !== qty) {
+        const qtyChanged = !i.isExtra && !i.returned && (i.qty || 1) !== qty
+        if (qtyChanged && i.loaded) {
           unloadedRow = i
-          updated = { ...updated, loaded: false, scannedInstances: { ...(i.scannedInstances || {}), load: [] } }
+          updated = { ...updated, loaded: false, scannedInstances: { ...(updated.scannedInstances || {}), load: [] } }
+        }
+        // La quantità è cambiata mentre l'oggetto era già "pronto" (o in
+        // carico): torna "da preparare" così i magazzinieri lo rivedono con
+        // la quantità giusta invece di continuare a considerarlo pronto —
+        // a differenza del carico, qui non serve conferma: non tocca la
+        // giacenza, è solo un flag di avanzamento.
+        if (qtyChanged && i.pronto) {
+          updated = { ...updated, pronto: false, scannedInstances: { ...(updated.scannedInstances || {}), pronto: [] } }
         }
         // Cambio lista dal modal di modifica riga
         return (listId && listId !== rowListId(i)) ? moveRowToList(updated, listId, taken) : updated
@@ -242,6 +274,7 @@ export default function EventDetail() {
         listId: rowListId(unloadedRow), action: 'unloaded', profile, userId: user?.uid,
       })
     }
+    if (qtyActuallyChanged) notifyListChanged()
     // Solo se lo stato "mancante" è davvero cambiato — non ogni salvataggio
     // della modifica riga tocca per forza questo campo. "wasMancante" è
     // congelato al valore di apertura del modale (vedi onEdit in
@@ -1070,6 +1103,7 @@ export default function EventDetail() {
       catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
       listId: rowListId(row), action: 'added', profile, userId: user?.uid,
     })))
+    if (rowsCapped.length > 0) notifyListChanged()
     setCart([])
     setSearch('')
     if (rowsSkipped > 0) {
@@ -1113,6 +1147,7 @@ export default function EventDetail() {
       catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
       listId: rowListId(item), action: 'removed', profile, userId: user?.uid,
     })
+    notifyListChanged()
   }
 
   // Un articolo già nella lista di destinazione non si può riaggiungere (in
