@@ -18,6 +18,7 @@ import StaffTimeline from '../components/StaffTimeline'
 import EventSummaryModal from '../components/EventSummaryModal'
 import TaskSummaryModal from '../components/TaskSummaryModal'
 import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
+import { notifyEventTimeChangedIfNeeded } from '../utils/pushNotifications'
 import { formatDate, capitalize } from '../utils/formatDate'
 import CreateEventFlow from '../components/CreateEventFlow'
 import Toast from '../components/Toast'
@@ -248,7 +249,7 @@ export default function Calendar() {
     if (!editForm.name.trim() || !editForm.date) return
     setSaving(true)
     try {
-      await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), {
+      const updated = {
         name: editForm.name.trim(), date: editForm.date,
         dateEnd: editForm.dateEnd || null,
         allDay: editForm.allDay, timeStart: editForm.allDay ? null : (editForm.timeStart || null), timeEnd: editForm.allDay ? null : (editForm.timeEnd || null),
@@ -258,7 +259,9 @@ export default function Calendar() {
         eventManager: {
           name: (editForm.managerName || '').trim(), phone: (editForm.managerPhone || '').trim(), email: (editForm.managerEmail || '').trim(),
         },
-      }), isOnline)
+      }
+      await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), updated), isOnline)
+      notifyEventTimeChangedIfNeeded(editingEvent.id, editingEvent, updated)
       if (!isOnline) showToast(t('common.savedOfflineToast'))
       setEditingEvent(null)
     } finally { setSaving(false) }

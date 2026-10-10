@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { Pin, Cart, Box, Wrench, Warn, Check, Filter, Kit } from '../components/Icon'
 import { parseScannedCode } from '../utils/generateCode'
 import DailyQuip from '../components/DailyQuip'
+import { notifyTeamPush } from '../utils/pushNotifications'
 
 // Stessa lista di Inventory.jsx (vista admin) — usata qui solo per il
 // filtro categoria del menu filtri avanzati, vedi sotto.
@@ -138,6 +139,14 @@ export default function WorkerInventory() {
     const newAvailable = Math.max(0, item.totalQty - newBroken - prevOut)
     await updateDoc(doc(db, 'items', item.id), { brokenQty: newBroken, availableQty: newAvailable })
     setDetail(d => d?.id === item.id ? { ...d, brokenQty: newBroken, availableQty: newAvailable } : d)
+    if (newBroken > prevBroken) {
+      notifyTeamPush({
+        title: t('inventory.pushBrokenTitle'),
+        body: t('inventory.pushBrokenBody', { name: item.name }),
+        url: '/inventory',
+        audience: { type: 'admins' },
+      })
+    }
   }
 
   // Aggiusta la qty di un consumabile (es. bombole usate)

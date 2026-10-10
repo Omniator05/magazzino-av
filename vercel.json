@@ -21,6 +21,7 @@
     }
   ],
   "crons": [
-    { "path": "/api/sync-google-pull", "schedule": "0 5 * * *" }
+    { "path": "/api/sync-google-pull", "schedule": "0 5 * * *" },
+    { "path": "/api/push", "schedule": "0 6 * * *" }
   ]
 }

@@ -8,6 +8,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate } from '../utils/formatDate'
 import { generateDates } from '../utils/recurrence'
 import { pushEventToGoogle } from '../utils/googleCalendar'
+import { notifyTeamPush } from '../utils/pushNotifications'
 import DateField from './DateField'
 import DateRangeField from './DateRangeField'
 import TimeField from './TimeField'
@@ -134,6 +135,15 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
       }
       const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
       pushEventToGoogle(ref.id)
+      // Solo admin, solo una volta (anche se ricorrente — un digest per ogni
+      // occorrenza sarebbe rumore): gli altri admin sanno che è stato
+      // aggiunto un nuovo evento, non serve saperlo per ciascuna data futura.
+      notifyTeamPush({
+        title: t('calendar.pushNewEventTitle'),
+        body: t('calendar.pushNewEventBody', { name: base.name, date: formatDate(form.date + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language) }),
+        url: `/events/${ref.id}`,
+        audience: { type: 'admins' },
+      })
       for (const date of futureDates) {
         const r = await addDoc(collection(db, 'events'), { ...base, date, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
         pushEventToGoogle(r.id)

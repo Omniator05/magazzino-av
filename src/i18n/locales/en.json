@@ -202,7 +202,9 @@
     "confirmRemoveAbsenceTitle": "Remove absence",
     "confirmRemoveAbsenceMessage": "Remove this absence?",
     "confirmRemoveAbsenceLabel": "Remove",
-    "thisWorker": "This staff member"
+    "thisWorker": "This staff member",
+    "pushNewEventTitle": "New event on the calendar",
+    "pushNewEventBody": "{{name}} — {{date}}"
   },
   "staffTimeline": {
     "prevWeekAria": "Previous week",
@@ -249,7 +251,11 @@
     "confirmDeleteMessage": "Delete this time block?",
     "dayHoursTitle": "Hours for this day",
     "dayHoursHint": "Tap to set this day's hours",
-    "resetDayHours": "Reset"
+    "resetDayHours": "Reset",
+    "pushAssignedTitle": "New event assigned",
+    "pushAssignedBody": "You've been assigned: {{name}}",
+    "pushTimeChangedTitle": "Time changed",
+    "pushTimeChangedBody": "{{name}}: new time {{start}}–{{end}}"
   },
   "inventory": {
     "title": "Warehouse",
@@ -468,7 +474,9 @@
       "totalQty": "Total quantity", "available": "Available", "location": "Location",
       "kit": "Kit", "piecesPerCase": "Pieces per case", "code": "Code", "notes": "Notes",
       "yes": "Yes", "no": "No"
-    }
+    },
+    "pushBrokenTitle": "Item marked broken",
+    "pushBrokenBody": "{{name}} was marked as broken"
   },
   "eventDetail": {
     "loading": "Loading...",

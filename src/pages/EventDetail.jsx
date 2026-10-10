@@ -1,5 +1,6 @@
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useLongPress } from '../hooks/useLongPress'
 import SaveButton from '../components/SaveButton'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -163,8 +164,23 @@ export default function EventDetail() {
   const [listMenuId, setListMenuId] = useState(null) // menu ⋯ aperto su una lista
   // Liste chiuse (solo intestazione, niente righe sotto) — comodo con tanti
   // blocchi: si evita di dover scorrere oltre quelli su cui non si sta
-  // lavorando ora. Non persistito: riparte aperta ad ogni visita.
-  const [collapsedLists, setCollapsedLists] = useState(() => new Set())
+  // lavorando ora. Persistito per evento (localStorage, stesso pattern di
+  // sessionStorage usato dal "mode" di Calendar.jsx, ma per-entità invece che
+  // globale): si ritrova la stessa vista anche chiudendo e riaprendo l'evento.
+  const loadCollapsedLists = (id) => {
+    try {
+      const saved = localStorage.getItem(`collapsed_lists_${id}`)
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch { return new Set() }
+  }
+  const [collapsedLists, setCollapsedLists] = useState(() => loadCollapsedLists(eventId))
+  // Il componente non rimonta cambiando solo il parametro di rotta (stesso
+  // Route): se mai capita di passare da un evento all'altro senza remount,
+  // questo effetto ricarica le liste chiuse giuste per il NUOVO evento.
+  useEffect(() => { setCollapsedLists(loadCollapsedLists(eventId)) }, [eventId])
+  useEffect(() => {
+    try { localStorage.setItem(`collapsed_lists_${eventId}`, JSON.stringify([...collapsedLists])) } catch {}
+  }, [collapsedLists, eventId])
   const toggleListCollapsed = (listId) => {
     // Chiude anche il menu ⋯ se per caso era aperto (su un'altra lista, o
     // su questa stessa) — un tap sulla freccia con un menu aperto deve fare
@@ -176,25 +192,27 @@ export default function EventDetail() {
       return next
     })
   }
-  // Avviso "poco impattante" per chi sta caricando: se nella lista c'è già
-  // almeno una riga caricata (il furgone è in corso di carico o già fatto) e
-  // l'admin aggiunge/toglie/modifica una riga, scrive una notifica leggera
-  // che WorkerScanner intercetta in tempo reale con un piccolo banner — mai
-  // un popup bloccante, deve notarsi e basta, non interrompere lo scanner.
-  // Se il carico non è ancora iniziato, non c'è nessuno da avvisare.
-  // In più, per chi non ha lo scanner aperto in quel momento, una vera push
-  // (solo se l'ha attivata da Profilo): stesso innesco, canale diverso.
+  // Banner "poco impattante" nello scanner: solo se il carico è già in corso
+  // (almeno una riga caricata) — qui sì vogliamo restare discreti, è pensato
+  // per chi ha lo schermo aperto in quel momento, non deve notarsi per ogni
+  // modifica a una lista che nessuno sta ancora toccando.
+  // La push invece è per chi NON ha l'app aperta: copre il caso più ampio
+  // chiesto esplicitamente (qualunque modifica a una riga, non solo a carico
+  // iniziato), quindi non ha lo stesso filtro — manda sempre, mirata a admin
+  // + magazzinieri assegnati a questo evento (mai tutta la squadra).
   const notifyListChanged = () => {
-    if (!eventItems.some(i => i.loaded && !i.returned)) return
-    addDoc(collection(db, 'notifications'), {
-      teamId, type: 'list_changed', eventId,
-      editedByName: profile?.name || profile?.username || t('common.noName'),
-      seenBy: [], createdAt: serverTimestamp(),
-    }).catch(() => {})
+    if (eventItems.some(i => i.loaded && !i.returned)) {
+      addDoc(collection(db, 'notifications'), {
+        teamId, type: 'list_changed', eventId,
+        editedByName: profile?.name || profile?.username || t('common.noName'),
+        seenBy: [], createdAt: serverTimestamp(),
+      }).catch(() => {})
+    }
     notifyTeamPush({
       title: event?.name || t('eventDetail.pushListChangedTitle'),
       body: t('eventDetail.pushListChangedBody'),
       url: `/events/${eventId}/scan`,
+      audience: { type: 'event', eventId },
     })
   }
   const [editItem, setEditItem] = useState(null)
@@ -783,6 +801,16 @@ export default function EventDetail() {
     setLastBulkClickId(null)
     setMobileMoreOpen(false)
     setShowBulkVehiclePicker(false)
+  }
+
+  // Pressione prolungata su una riga (soprattutto da cellulare, vedi
+  // useLongPress): entra in selezione con QUELLA riga già scelta, invece di
+  // dover risalire al bottone "Seleziona" in alto e poi scendere di nuovo
+  // fino all'oggetto per selezionarlo.
+  const enterSelectModeWith = (itemId) => {
+    setSelectMode(true)
+    setLastBulkClickId(itemId)
+    setBulkSelectedIds(new Set([itemId]))
   }
 
   // Applica un furgone a tutti gli oggetti selezionati in un'unica scrittura,
@@ -1437,7 +1465,7 @@ export default function EventDetail() {
           </div>
         )}
         {catGrouped[cat].map(item => (
-          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={selectMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
+          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={selectMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} onLongPressSelect={enterSelectModeWith} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
         ))}
       </div>
     ))
@@ -2237,7 +2265,10 @@ export default function EventDetail() {
                   <button onClick={() => setSearch('')} aria-label={t('eventDetail.clearSearchAria')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'var(--card2)', borderRadius:'50%', width:20, height:20, fontSize:12, color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                 )}
               </div>
-              {/* Lista di destinazione — solo se l'evento ha più liste */}
+              {/* Lista di destinazione — solo se l'evento ha più liste.
+                  "+ Nuova lista" sta nella STESSA riga, come ultima pillola:
+                  stesso formato delle altre ma tratteggiata e verde, così
+                  resta chiaro che è un'azione "crea" e non una scelta. */}
               {multiList && (
                 <div style={{ marginTop:10 }}>
                   <p style={{ fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:6 }}>{t('eventDetail.addToListLabel')}</p>
@@ -2256,8 +2287,27 @@ export default function EventDetail() {
                         }}
                       >{listLabel(l)}</button>
                     ))}
+                    <button
+                      className="btn-no-anim"
+                      onClick={() => setListModal({ mode:'new', name:'' })}
+                      style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(26,158,92,0.10)', border:'1px dashed rgba(26,158,92,0.5)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--green)' }}
+                    >
+                      + {t('eventDetail.newList')}
+                    </button>
                   </div>
                 </div>
+              )}
+              {/* Con una sola lista oggi non c'è nessuna riga lista da
+                  condividere: il bottone resta comunque disponibile da solo,
+                  stessa pillola. */}
+              {!multiList && (
+                <button
+                  className="btn-no-anim"
+                  onClick={() => setListModal({ mode:'new', name:'' })}
+                  style={{ marginTop:10, display:'inline-flex', alignItems:'center', gap:5, background:'rgba(26,158,92,0.10)', border:'1px dashed rgba(26,158,92,0.5)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--green)' }}
+                >
+                  + {t('eventDetail.newList')}
+                </button>
               )}
               {/* Articolo extra */}
               <button
@@ -2771,8 +2821,16 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, externalVehicles, onSetVehicle, onRequestExternalVehicle, bulkMode, bulkSelected, onBulkToggle, allItems, event, otherEvents }) {
+function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, externalVehicles, onSetVehicle, onRequestExternalVehicle, bulkMode, bulkSelected, onBulkToggle, onLongPressSelect, allItems, event, otherEvents }) {
   const { t } = useTranslation()
+  // Pressione prolungata (soprattutto da cellulare): entra in selezione con
+  // questa riga già scelta, senza dover risalire al bottone "Seleziona" in
+  // alto. Se si è già in selezione il long press non fa nulla di diverso dal
+  // tap normale (che già alterna la spunta), quindi qui è un no-op.
+  const longPress = useLongPress(
+    () => { if (!bulkMode) onLongPressSelect(item.id) },
+    e => bulkMode ? onBulkToggle(item.id, e.shiftKey) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0, listId: rowListId(item) })
+  )
   const vehicle = vehicles.find(v => v.id === item.vehicleId)
   const externalVehicleName = item.externalVehicleId ? (externalVehicles.find(v => v.id === item.externalVehicleId)?.name || item.externalVehicleName) : null
   const vehicleConflict = vehicle
@@ -2815,8 +2873,8 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
             (le azioni a destra restano bottoni separati, non annidati qui). */}
         <button type="button"
           className="btn-no-anim"
-          onClick={e => bulkMode ? onBulkToggle(item.id, e.shiftKey) : onEdit({ id: item.id, name: item.name, qty: item.qty || 1, eventNote: item.eventNote || '', mancante: item.mancante || false, wasMancante: item.mancante || false, isBundle: item.isBundle || false, isExtra: item.isExtra || false, itemRef: item.itemRef || item.id, instanceNumbers: item.instanceNumbers || [], hadInstances: (item.instanceNumbers || []).length > 0, listId: rowListId(item) })}
-          onMouseDown={e => { if (bulkMode && e.shiftKey) e.preventDefault() }}
+          {...longPress}
+          onMouseDown={e => { if (bulkMode && e.shiftKey) e.preventDefault(); longPress.onMouseDown(e) }}
           aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
           aria-pressed={bulkMode ? bulkSelected : undefined}
           style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}

@@ -14,6 +14,7 @@ import TimeField from '../components/TimeField'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
 import { pushEventToGoogle } from '../utils/googleCalendar'
+import { notifyEventTimeChangedIfNeeded } from '../utils/pushNotifications'
 import { db } from '../firebase'
 import { collection, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
@@ -459,6 +460,7 @@ export default function Events() {
       }
       await updateDoc(doc(db, 'events', editing.id), updated)
       pushEventToGoogle(editing.id)
+      notifyEventTimeChangedIfNeeded(editing.id, editing, updated)
       setShowModal(false)
       setEditing(null)
       setForm({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', allDay:true, timeStart:'', timeEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })

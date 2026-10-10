@@ -10,6 +10,7 @@ import { generateItemCode, generateUnitCode } from '../utils/generateCode'
 import { eventRowIncludesItem } from '../utils/kitInventory'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import { formatDate } from '../utils/formatDate'
+import { notifyTeamPush } from '../utils/pushNotifications'
 import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
@@ -349,6 +350,16 @@ export default function Inventory() {
       const newAvailable = Math.max(0, qty - broken - prevOut)
       const deadlines = await syncDeadlineEvents(selected.deadlines || [], form.deadlines || [], { subjectName: form.name, teamId, userId: user.uid })
       await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
+      // Solo admin, solo quando aumenta (non quando si segna "riparato"): è
+      // l'unico verso che segnala davvero un problema da gestire.
+      if (broken > prevBroken) {
+        notifyTeamPush({
+          title: t('inventory.pushBrokenTitle'),
+          body: t('inventory.pushBrokenBody', { name: form.name }),
+          url: '/inventory',
+          audience: { type: 'admins' },
+        })
+      }
     } else {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {

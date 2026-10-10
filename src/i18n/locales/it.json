@@ -202,7 +202,9 @@
     "confirmRemoveAbsenceTitle": "Rimuovi assenza",
     "confirmRemoveAbsenceMessage": "Rimuovere questa assenza?",
     "confirmRemoveAbsenceLabel": "Rimuovi",
-    "thisWorker": "Questo worker"
+    "thisWorker": "Questo worker",
+    "pushNewEventTitle": "Nuovo evento in calendario",
+    "pushNewEventBody": "{{name}} — {{date}}"
   },
   "staffTimeline": {
     "prevWeekAria": "Settimana precedente",
@@ -249,7 +251,11 @@
     "confirmDeleteMessage": "Eliminare questo blocco orario?",
     "dayHoursTitle": "Orario di questo giorno",
     "dayHoursHint": "Tocca per impostare l'orario di questo giorno",
-    "resetDayHours": "Ripristina"
+    "resetDayHours": "Ripristina",
+    "pushAssignedTitle": "Nuovo evento assegnato",
+    "pushAssignedBody": "Ti è stato assegnato: {{name}}",
+    "pushTimeChangedTitle": "Orario modificato",
+    "pushTimeChangedBody": "{{name}}: nuovo orario {{start}}–{{end}}"
   },
   "inventory": {
     "title": "Magazzino",
@@ -468,7 +474,9 @@
       "totalQty": "Quantità totale", "available": "Disponibili", "location": "Posizione",
       "kit": "Kit", "piecesPerCase": "Pezzi per baule", "code": "Codice", "notes": "Note",
       "yes": "Sì", "no": "No"
-    }
+    },
+    "pushBrokenTitle": "Oggetto segnato rotto",
+    "pushBrokenBody": "{{name}} è stato segnato come rotto"
   },
   "eventDetail": {
     "loading": "Caricamento...",

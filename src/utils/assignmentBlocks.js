@@ -1,6 +1,8 @@
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { toggleWorkerAssignment } from './workerAssignment'
+import { notifyTeamPush } from './pushNotifications'
+import i18n from '../i18n'
 
 // Colore stabile per persona (interna o esterna): stesso id => sempre la
 // stessa tinta nella timeline, senza dover far scegliere un colore a mano
@@ -26,6 +28,16 @@ async function syncEventAssignment(eventsById, allBlocksAfter, workerId, eventId
   const alreadyIn = (event.assignedWorkers || []).includes(workerId)
   if (stillLinked === alreadyIn) return
   await toggleWorkerAssignment(doc(db, 'events', eventId), event, workerId)
+  // Solo quando è una VERA aggiunta (non una rimozione): il worker appena
+  // assegnato riceve una push mirata a lui, mai un broadcast alla squadra.
+  if (stillLinked && !alreadyIn) {
+    notifyTeamPush({
+      title: i18n.t('staffTimeline.pushAssignedTitle'),
+      body: i18n.t('staffTimeline.pushAssignedBody', { name: event.name || '' }),
+      url: `/events/${eventId}`,
+      audience: { type: 'user', userId: workerId },
+    })
+  }
 }
 
 export async function createAssignmentBlock(data, { eventsById, allBlocks }) {
@@ -41,6 +53,26 @@ export async function updateAssignmentBlock(id, oldBlock, newData, { eventsById,
   // vecchio che quello nuovo (potrebbero essere persone/eventi diversi).
   await syncEventAssignment(eventsById, after, oldBlock.workerId, oldBlock.eventId)
   await syncEventAssignment(eventsById, after, newData.workerId ?? oldBlock.workerId, newData.eventId ?? oldBlock.eventId)
+
+  // Avviso cambio orario: un blocco legato a un evento avvisa admin + tutti
+  // gli assegnati a quell'evento (potrebbe riguardarli anche se non sono
+  // loro quello spostato); un task libero avvisa solo la persona interna
+  // coinvolta (un esterno non ha un account/push da avvisare).
+  const eventId = newData.eventId ?? oldBlock.eventId
+  const timeChanged = (newData.startTime && newData.startTime !== oldBlock.startTime) || (newData.endTime && newData.endTime !== oldBlock.endTime)
+  if (timeChanged) {
+    const name = eventId ? (eventsById[eventId]?.name || '') : (newData.label ?? oldBlock.label ?? '')
+    const payload = {
+      title: i18n.t('staffTimeline.pushTimeChangedTitle'),
+      body: i18n.t('staffTimeline.pushTimeChangedBody', { name, start: newData.startTime ?? oldBlock.startTime, end: newData.endTime ?? oldBlock.endTime }),
+      url: eventId ? `/events/${eventId}` : '/calendar',
+    }
+    if (eventId) notifyTeamPush({ ...payload, audience: { type: 'event', eventId } })
+    else {
+      const workerId = newData.workerId ?? oldBlock.workerId
+      if (workerId) notifyTeamPush({ ...payload, audience: { type: 'user', userId: workerId } })
+    }
+  }
 }
 
 export async function deleteAssignmentBlock(block, { eventsById, allBlocks }) {
