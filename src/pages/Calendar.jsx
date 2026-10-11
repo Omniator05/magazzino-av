@@ -107,15 +107,27 @@ export default function Calendar() {
   // sull'evento giusti, invece di un modal separato lì. Lo stato di
   // navigazione va consumato una volta sola (altrimenti un refresh o un
   // back/forward ci farebbero tornare qui di continuo).
-  const { state: navState } = useLocation()
-  const [focusAssign, setFocusAssign] = useState(null) // {eventId, date}
+  const { state: navState, search: locSearch } = useLocation()
+  const [focusAssign, setFocusAssign] = useState(null) // {eventId?, date}
   useEffect(() => {
     if (navState?.assignEventId && navState?.assignDate) {
       setMode('assign')
       setFocusAssign({ eventId: navState.assignEventId, date: navState.assignDate })
       window.history.replaceState({}, '')
+      return
     }
-  }, [navState])
+    // Stessa scorciatoia ma arrivando da un link "esterno" alla navigazione
+    // in-app (una notifica push) — che non può portare un location.state —
+    // via query string: salta alla settimana giusta in Assegna personale,
+    // senza eventId (StaffTimeline gestisce già focusAssign senza eventId,
+    // vedi il suo useEffect: salta solo la settimana, nessuna modale).
+    const qs = new URLSearchParams(locSearch)
+    if (qs.get('mode') === 'assign' && qs.get('date')) {
+      setMode('assign')
+      setFocusAssign({ date: qs.get('date') })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [navState, locSearch])
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
@@ -397,11 +409,28 @@ export default function Calendar() {
   // Task liberi per data (sempre un solo giorno, niente da espandere) — solo
   // i blocchi SENZA eventId, quelli legati a un evento/fase restano
   // rappresentati dall'evento stesso (vedi EventSummaryModal più sotto).
-  const tasksByDate = {}
+  // Raggruppati per taskGroupId: più persone collegate alla stessa attività
+  // restano UNA voce con più assegnati, non una card a testa — stessa
+  // tecnica già usata in StaffTimeline.jsx (dayTasks/taskGroupsByGid). b.id
+  // come ripiego per i task creati prima che esistesse taskGroupId.
+  const taskGroupsByDate = {}
   assignmentBlocks.filter(b => !b.eventId).forEach(b => {
     if (!b.date) return
-    if (!tasksByDate[b.date]) tasksByDate[b.date] = []
-    tasksByDate[b.date].push(b)
+    const gid = b.taskGroupId || b.id
+    if (!taskGroupsByDate[b.date]) taskGroupsByDate[b.date] = {}
+    ;(taskGroupsByDate[b.date][gid] ||= []).push(b)
+  })
+  const tasksByDate = {}
+  Object.entries(taskGroupsByDate).forEach(([date, groups]) => {
+    tasksByDate[date] = Object.values(groups).map(group => ({
+      id: group[0].taskGroupId || group[0].id,
+      date,
+      label: group[0].label,
+      description: group[0].description,
+      startTime: group.reduce((min, b) => (b.startTime < min ? b.startTime : min), group[0].startTime),
+      endTime: group.reduce((max, b) => (b.endTime > max ? b.endTime : max), group[0].endTime),
+      assigned: group,
+    }))
   })
 
   // Eventi Google raggruppati per data (stessa logica multi-giorno degli eventi normali)
@@ -645,9 +674,9 @@ export default function Calendar() {
                   const titleRows = [
                     ...eventRows,
                     ...dayPhaseRows,
-                    ...dayTasksOnly.map(b => {
-                      const isAssigned = isWorker && b.workerId === user?.uid
-                      return { key: `tk${b.id}`, name: b.label || t('staffTimeline.untitledTask'), rank: 2, color: isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--blue)', isTask: true, task: b }
+                    ...dayTasksOnly.map(group => {
+                      const isAssigned = isWorker && group.assigned.some(b => b.workerId === user?.uid)
+                      return { key: `tk${group.id}`, name: group.label || t('staffTimeline.untitledTask'), rank: 2, color: isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--blue)', isTask: true, task: group }
                     }),
                   ].sort((a, b) => a.rank - b.rank)
                   if (titleRows.length === 0) return null
@@ -761,6 +790,12 @@ export default function Calendar() {
                 // tap apre il riepilogo (TaskSummaryModal), niente lista di
                 // carico perché non è un evento Roadcase vero.
                 if (task) {
+                  // Un nome a testa per ogni persona nel gruppo (vedi
+                  // taskGroupId in tasksByDate sopra) — stesso stile delle
+                  // pillole degli eventi assegnati poco più sotto.
+                  const taskAssignedNames = (task.assigned || [])
+                    .map(b => b.workerId ? workers.find(w => w.id === b.workerId)?.name : b.externalWorkerName)
+                    .filter(Boolean)
                   return (
                     <div key={`tk${task.id}`}
                       onClick={() => setSummaryTask(task)}
@@ -770,6 +805,15 @@ export default function Calendar() {
                       <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{task.label || t('staffTimeline.untitledTask')}</p>
                         <p style={{ fontSize:12, color:'var(--text2)', marginTop:1 }}>{task.startTime} – {task.endTime}</p>
+                        {taskAssignedNames.length > 0 && (
+                          <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:7 }}>
+                            {taskAssignedNames.map(name => (
+                              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>
+                                <User size={12} /> {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

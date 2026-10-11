@@ -13,9 +13,12 @@ export default function TaskSummaryModal({ block, workers, onClose }) {
   const drag = useModalDrag(onClose, undefined, undefined, true)
   useModalScrollLock(true)
 
-  const assignedName = block.workerId
-    ? (workers.find(w => w.id === block.workerId)?.name || t('common.unknown'))
-    : block.externalWorkerName
+  // block.assigned: array dei blocchi dello stesso taskGroupId (vedi
+  // tasksByDate in Calendar.jsx) — più persone collegate alla stessa
+  // attività, non più un solo assegnato per forza.
+  const assignedNames = (block.assigned || [])
+    .map(b => b.workerId ? (workers.find(w => w.id === b.workerId)?.name || t('common.unknown')) : b.externalWorkerName)
+    .filter(Boolean)
 
   const Row = ({ icon, label, children }) => (
     <div style={{ display:'flex', gap:12, padding:'10px 0', borderBottom:'1px solid var(--border)' }}>
@@ -42,10 +45,14 @@ export default function TaskSummaryModal({ block, workers, onClose }) {
           <p style={{ fontSize:14, fontWeight:600, color:'var(--text)' }}>{block.startTime} – {block.endTime}</p>
         </Row>
         <Row icon={<User size={15} />} label={t('eventSummary.assignedLabel')}>
-          {assignedName ? (
-            <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--blue)' }}>
-              <User size={11} /> {assignedName}
-            </span>
+          {assignedNames.length > 0 ? (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {assignedNames.map(name => (
+                <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--blue)' }}>
+                  <User size={11} /> {name}
+                </span>
+              ))}
+            </div>
           ) : (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
           )}

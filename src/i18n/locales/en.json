@@ -68,6 +68,7 @@
     "errorGeneric": "Something went wrong. Try again shortly."
   },
   "dashboard": {
+    "overdueRentBadge": "Needs closing",
     "greeting_night": "Good night,",
     "greeting_morning": "Good morning,",
     "greeting_afternoon": "Good afternoon,",
@@ -203,8 +204,7 @@
     "confirmRemoveAbsenceMessage": "Remove this absence?",
     "confirmRemoveAbsenceLabel": "Remove",
     "thisWorker": "This staff member",
-    "pushNewEventTitle": "New event on the calendar",
-    "pushNewEventBody": "{{name}} — {{date}}"
+    "pushNewEventTitle": "New event"
   },
   "staffTimeline": {
     "prevWeekAria": "Previous week",
@@ -234,6 +234,8 @@
     "assignLabel": "Assign",
     "assignPlaceholder": "Search a staff member or type a name...",
     "assignNewHint": "No match — \"{{name}}\" will be added as a new external on save",
+    "assignAddNew": "+ Add \"{{name}}\" as external",
+    "removePersonAria": "Remove {{name}}",
     "startLabel": "Start",
     "endLabel": "End",
     "eventLabel": "Linked event",
@@ -252,10 +254,8 @@
     "dayHoursTitle": "Hours for this day",
     "dayHoursHint": "Tap to set this day's hours",
     "resetDayHours": "Reset",
-    "pushAssignedTitle": "New event assigned",
-    "pushAssignedBody": "You've been assigned: {{name}}",
-    "pushTimeChangedTitle": "Time changed",
-    "pushTimeChangedBody": "{{name}}: new time {{start}}–{{end}}"
+    "pushAssignedTitle": "Event assigned",
+    "pushTimeChangedTitle": "Time changed"
   },
   "inventory": {
     "title": "Warehouse",
@@ -475,8 +475,7 @@
       "kit": "Kit", "piecesPerCase": "Pieces per case", "code": "Code", "notes": "Notes",
       "yes": "Yes", "no": "No"
     },
-    "pushBrokenTitle": "Item marked broken",
-    "pushBrokenBody": "{{name}} was marked as broken"
+    "pushBrokenTitle": "Item broken"
   },
   "eventDetail": {
     "loading": "Loading...",
@@ -496,7 +495,7 @@
     "allReturned": "✅ Everything returned! Event closed.",
     "missingItems_one": "{{count}} missing item — needs sourcing or adding",
     "missingItems_other": "{{count}} missing items — need sourcing or adding",
-    "closeInstallation": "✅ End Rent/Close Install",
+    "closeInstallation": "End Rent/Close Install",
     "confirmCloseInstallationTitle": "End Rent/Close Install",
     "confirmCloseInstallationMessage": "End this Rent/Install?",
     "confirmCloseInstallationLabel": "End",
@@ -559,8 +558,7 @@
     "qtyChangeUnloadTitle": "Change the quantity?",
     "qtyChangeUnloadMessage": "\"{{name}}\" is already loaded. Changing the quantity from {{from}} to {{to}} cancels the load: stock becomes available again and the item will need to be loaded again.",
     "qtyChangeUnloadLabel": "Change and cancel load",
-    "pushListChangedTitle": "Loading list updated",
-    "pushListChangedBody": "An admin updated the list while it was being loaded",
+    "pushListChangedTitle": "List updated",
     "mainListName": "Main list",
     "listUnnamed": "Untitled list",
     "newList": "New list",
@@ -1065,6 +1063,7 @@
   },
   "workerScanner": {
     "inOtherList": "In list: {{name}}",
+    "goToListAria": "Go to list {{name}}",
     "listSelectorAria": "Loading lists",
     "allLists": "All",
     "listSwitchedTo": "“{{from}}” done — switching to “{{to}}”",

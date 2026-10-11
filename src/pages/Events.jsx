@@ -368,14 +368,20 @@ export default function Events() {
   // arancione e in cima — se restasse ANCHE qui finirebbe duplicato, in due
   // sezioni con due trattamenti diversi (qui era rosso "Scaduto") invece di
   // "salire" chiaramente in cima a una sola.
+  // Un rent di un giorno solo lascia "data fine" vuota (solo "data inizio"
+  // compilata): senza questo fallback, un e.dateEnd vuoto rendeva "e.dateEnd
+  // && ..." sempre falso e un rent di un giorno scaduto non risultava MAI
+  // scaduto — bug che valeva anche per `installations`/`daScaricareSingle`
+  // sotto, spostata qui sopra apposta perché entrambe la usano.
+  const effectiveEndDate = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
+
   const installations  = events
-    .filter(e => e.type === 'installation' && !e.archived && !(e.dateEnd && e.dateEnd < today))
+    .filter(e => e.type === 'installation' && !e.archived && effectiveEndDate(e) >= today)
     .sort((a, b) => (a.date === today) === (b.date === today) ? 0 : a.date === today ? -1 : 1)
 
   // Un evento rimane "attivo" se:
   // 1. la data di FINE (o inizio, se monogiorno) è oggi o futura, OPPURE
   // 2. la data di fine è passata ma non tutti gli articoli sono rientrati
-  const effectiveEndDate = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
 
   const isActive = e => {
     if (effectiveEndDate(e) >= today) return true
@@ -403,7 +409,7 @@ export default function Events() {
       // passata) è la stessa urgenza di un evento dimenticato: va scaricato/
       // richiuso, quindi qui ci entra a pieno titolo invece di restare
       // invisibile nella sua sezione collassata.
-      return !e.archived && e.dateEnd && e.dateEnd < today
+      return !e.archived && effectiveEndDate(e) < today
     }
     if (effectiveEndDate(e) >= today) return false
     const its = e.items || []

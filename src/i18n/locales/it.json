@@ -68,6 +68,7 @@
     "errorGeneric": "Qualcosa è andato storto. Riprova tra poco."
   },
   "dashboard": {
+    "overdueRentBadge": "Da chiudere",
     "greeting_night": "Buonanotte,",
     "greeting_morning": "Buongiorno,",
     "greeting_afternoon": "Buon pomeriggio,",
@@ -203,8 +204,7 @@
     "confirmRemoveAbsenceMessage": "Rimuovere questa assenza?",
     "confirmRemoveAbsenceLabel": "Rimuovi",
     "thisWorker": "Questo worker",
-    "pushNewEventTitle": "Nuovo evento in calendario",
-    "pushNewEventBody": "{{name}} — {{date}}"
+    "pushNewEventTitle": "Nuovo evento"
   },
   "staffTimeline": {
     "prevWeekAria": "Settimana precedente",
@@ -234,6 +234,8 @@
     "assignLabel": "Assegna",
     "assignPlaceholder": "Cerca un magazziniere o scrivi un nome...",
     "assignNewHint": "Nessun risultato — al salvataggio \"{{name}}\" verrà aggiunto come nuovo esterno",
+    "assignAddNew": "+ Aggiungi \"{{name}}\" come esterno",
+    "removePersonAria": "Rimuovi {{name}}",
     "startLabel": "Inizio",
     "endLabel": "Fine",
     "eventLabel": "Evento collegato",
@@ -252,10 +254,8 @@
     "dayHoursTitle": "Orario di questo giorno",
     "dayHoursHint": "Tocca per impostare l'orario di questo giorno",
     "resetDayHours": "Ripristina",
-    "pushAssignedTitle": "Nuovo evento assegnato",
-    "pushAssignedBody": "Ti è stato assegnato: {{name}}",
-    "pushTimeChangedTitle": "Orario modificato",
-    "pushTimeChangedBody": "{{name}}: nuovo orario {{start}}–{{end}}"
+    "pushAssignedTitle": "Evento assegnato",
+    "pushTimeChangedTitle": "Orario modificato"
   },
   "inventory": {
     "title": "Magazzino",
@@ -475,8 +475,7 @@
       "kit": "Kit", "piecesPerCase": "Pezzi per baule", "code": "Codice", "notes": "Note",
       "yes": "Sì", "no": "No"
     },
-    "pushBrokenTitle": "Oggetto segnato rotto",
-    "pushBrokenBody": "{{name}} è stato segnato come rotto"
+    "pushBrokenTitle": "Oggetto rotto"
   },
   "eventDetail": {
     "loading": "Caricamento...",
@@ -496,7 +495,7 @@
     "allReturned": "✅ Tutto rientrato! Evento chiuso.",
     "missingItems_one": "{{count}} articolo mancante — da reperire o aggiungere",
     "missingItems_other": "{{count}} articoli mancanti — da reperire o aggiungere",
-    "closeInstallation": "✅ Termina Rent/Chiudi Install",
+    "closeInstallation": "Termina Rent/Chiudi Install",
     "confirmCloseInstallationTitle": "Termina Rent/Chiudi Install",
     "confirmCloseInstallationMessage": "Terminare questo Rent/Install?",
     "confirmCloseInstallationLabel": "Termina",
@@ -559,8 +558,7 @@
     "qtyChangeUnloadTitle": "Modificare la quantità?",
     "qtyChangeUnloadMessage": "\"{{name}}\" risulta già caricato. Cambiando la quantità da {{from}} a {{to}} il carico viene annullato: la giacenza torna disponibile e l'oggetto andrà ricaricato.",
     "qtyChangeUnloadLabel": "Modifica e annulla carico",
-    "pushListChangedTitle": "Lista di carico aggiornata",
-    "pushListChangedBody": "Un admin ha aggiornato la lista mentre era in corso di carico",
+    "pushListChangedTitle": "Lista modificata",
     "mainListName": "Lista principale",
     "listUnnamed": "Lista senza nome",
     "newList": "Nuova lista",
@@ -1065,6 +1063,7 @@
   },
   "workerScanner": {
     "inOtherList": "Nella lista: {{name}}",
+    "goToListAria": "Vai alla lista {{name}}",
     "listSelectorAria": "Liste di carico",
     "allLists": "Tutte",
     "listSwitchedTo": "«{{from}}» completata — passo a «{{to}}»",

@@ -122,7 +122,7 @@ export default function Inventory() {
   const { user, teamId, team, profile } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
-  const { state: navState } = useLocation()
+  const { state: navState, search: locationSearch } = useLocation()
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [showFilterMenu, setShowFilterMenu] = useState(false)
@@ -355,8 +355,8 @@ export default function Inventory() {
       if (broken > prevBroken) {
         notifyTeamPush({
           title: t('inventory.pushBrokenTitle'),
-          body: t('inventory.pushBrokenBody', { name: form.name }),
-          url: '/inventory',
+          body: form.name,
+          url: '/inventory?filter=broken',
           audience: { type: 'admins' },
         })
       }
@@ -522,7 +522,11 @@ export default function Inventory() {
     }
   }
 
-  const [activeFilter, setActiveFilter] = useState(navState?.filter || 'all')
+  // location.state (navigazione interna, es. da Dashboard) oppure ?filter=
+  // nell'URL — quest'ultimo serve ad aprire il filtro giusto da un link
+  // "esterno" alla navigazione in-app (es. una notifica push), che non può
+  // portare con sé un location.state.
+  const [activeFilter, setActiveFilter] = useState(navState?.filter || new URLSearchParams(locationSearch).get('filter') || 'all')
   // Override manuale dell'utente sull'apertura/chiusura di una categoria —
   // per default decide da sola (vedi groupedFiltered più sotto: aperta se
   // c'è qualcosa che richiede attenzione o se si sta cercando/filtrando),
@@ -585,7 +589,11 @@ export default function Inventory() {
   // (returnedConsumed) — in pratica lasciato fuori senza ripristinare la
   // giacenza. Va isolato in un gruppo suo, in cima, invece di restare
   // mescolato nella sua categoria normale dove passerebbe inosservato.
-  const isForgottenItem = (item) => events.some(ev => (ev.items || []).some(i =>
+  // category !== 'Consumabili': per un consumabile returnedConsumed non
+  // significa mai "dimenticato" — è il suo esito normale, "consumato" (vedi
+  // askConsumableIntact in WorkerScanner.jsx, che ora scala anche totalQty).
+  // Stessa esclusione già usata da isForgottenReturn in WorkerScanner.jsx.
+  const isForgottenItem = (item) => item.category !== 'Consumabili' && events.some(ev => (ev.items || []).some(i =>
     (i.id === item.id || i.itemRef === item.id) && i.returned && i.returnedConsumed
   ))
 

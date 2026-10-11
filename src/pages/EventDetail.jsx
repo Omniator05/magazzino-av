@@ -209,8 +209,8 @@ export default function EventDetail() {
       }).catch(() => {})
     }
     notifyTeamPush({
-      title: event?.name || t('eventDetail.pushListChangedTitle'),
-      body: t('eventDetail.pushListChangedBody'),
+      title: t('eventDetail.pushListChangedTitle'),
+      body: event?.name || '',
       url: `/events/${eventId}/scan`,
       audience: { type: 'event', eventId },
     })
@@ -2083,7 +2083,7 @@ export default function EventDetail() {
                 abbastanza spazio fisso senza rubarlo alla tab bar, che
                 infatti sfuma via (vedi useEffect su selectMode/.select-mode). */}
             {selectMode && !isMobile && (
-              <div style={{ position:'sticky', top:8, zIndex:30, marginTop:8, background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>
+              <div className="rc-bulk-bar" style={{ position:'sticky', top:8, zIndex:30, marginTop:8, background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>
                 {actionChips}
                 {actionPanel && <div style={{ marginTop:10 }}>{actionPanel}</div>}
               </div>
@@ -2103,7 +2103,7 @@ export default function EventDetail() {
                   <div onClick={() => { setMobileMoreOpen(false); setBulkAction(null) }}
                     style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
                 )}
-                <div style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 100px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
+                <div className="rc-bulk-bar" style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 100px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
                   {mobileMoreOpen && (
                     <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>{mobileMoreMenu}</div>
                   )}
@@ -2877,10 +2877,18 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
           onMouseDown={e => { if (bulkMode && e.shiftKey) e.preventDefault(); longPress.onMouseDown(e) }}
           aria-label={bulkMode ? t('eventDetail.bulkToggleAria', { name: item.name }) : t('eventDetail.editItemAria', { name: item.name })}
           aria-pressed={bulkMode ? bulkSelected : undefined}
-          style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer' }}
+          style={{
+            flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12, background:'transparent', border:'none', padding:0, margin:0, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer',
+            // La pressione prolungata (useLongPress) altrimenti viene
+            // "rubata" dalla selezione testo nativa di iOS/Android, che apre
+            // il menu Copia/Incolla sopra al dito invece di far scattare la
+            // selezione multipla — e quel popup porta con sé lo scroll della
+            // pagina per mostrarsi, la "risalita" improvvisa.
+            WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
+          }}
         >
         {bulkMode && (
-          <div style={{
+          <div className="rc-select-checkbox" style={{
             width:22, height:22, borderRadius:6, flexShrink:0,
             border: `2px solid ${bulkSelected ? 'var(--accent)' : 'var(--border)'}`,
             background: bulkSelected ? 'var(--accent)' : 'transparent',

@@ -21,7 +21,15 @@ export default function RentalEndedReminderModal({ events, today, navigate }) {
   const [closing, setClosing] = useState(false)
   useModalScrollLock(open)
 
-  const expiredRents = events.filter(e => e.type === 'installation' && !e.archived && e.dateEnd && e.dateEnd < today)
+  // Un rent di un giorno solo lascia "data fine" vuota (solo "data inizio"
+  // compilata) — senza il fallback a e.date, e.dateEnd vuoto rendeva questo
+  // controllo sempre falso: un rent di un giorno scaduto non risultava MAI
+  // scaduto, qualunque fosse la data.
+  const expiredRents = events.filter(e => {
+    if (e.type !== 'installation' || e.archived) return false
+    const end = e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
+    return end < today
+  })
 
   useEffect(() => {
     if (events.length === 0) return

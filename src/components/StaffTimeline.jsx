@@ -530,30 +530,46 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setSelectedPerson(null)
   }
 
+  // payload.people è sempre un array (una persona sola in modifica, anche
+  // più d'una in creazione — vedi AssignmentBlockModal.jsx) per non dover
+  // duplicare la logica di risoluzione esterno/sync in due forme diverse.
   const handleSubmit = async (payload) => {
-    let externalWorkerId = payload.externalWorkerId
-    if (payload.personType === 'external' && !externalWorkerId) {
-      externalWorkerId = await getOrCreateExternalWorker(teamId, payload.externalWorkerName, user.uid, externalWorkers)
-    }
     const shared = {
       startTime: payload.startTime, endTime: payload.endTime,
-      workerId: payload.workerId || null,
-      externalWorkerId: payload.personType === 'external' ? externalWorkerId : null,
-      externalWorkerName: payload.personType === 'external' ? payload.externalWorkerName : null,
       eventId: payload.eventId || null,
       label: payload.label || '',
       description: payload.description || '',
     }
+    const resolvePerson = async (person) => {
+      let externalWorkerId = person.externalWorkerId
+      if (person.personType === 'external' && !externalWorkerId) {
+        externalWorkerId = await getOrCreateExternalWorker(teamId, person.externalWorkerName, user.uid, externalWorkers)
+        if (externalWorkerId) setShownExternalIds(ids => (ids.includes(externalWorkerId) ? ids : [...ids, externalWorkerId]))
+      }
+      return {
+        workerId: person.workerId || null,
+        externalWorkerId: person.personType === 'external' ? externalWorkerId : null,
+        externalWorkerName: person.personType === 'external' ? person.externalWorkerName : null,
+      }
+    }
     if (modalState.mode === 'create') {
-      // Un task libero nasce con un taskGroupId tutto suo — serve per poter
-      // aggiungere altre persone in seguito (trascinandole sulla card,
-      // vedi assignToTaskGroup) restando la STESSA commissione invece di
-      // crearne una seconda indipendente. Id generato lato client senza una
+      // Un task libero nasce con un taskGroupId tutto suo, condiviso da
+      // TUTTE le persone collegate subito in creazione — serve anche per
+      // poterne aggiungere altre in seguito (trascinandole sulla card, vedi
+      // assignToTaskGroup) restando la STESSA commissione invece di crearne
+      // una seconda indipendente. Id generato lato client senza una
       // scrittura a parte (stesso trucco del doc() "vuoto" di Firestore).
+      // Sequenziale (non Promise.all): ogni createAssignmentBlock legge
+      // `blocks` per ricalcolare assignedWorkers, un giro alla volta evita
+      // ambiguità su quale snapshot vede cosa.
       const taskGroupId = shared.eventId ? null : doc(collection(db, 'assignmentBlocks')).id
-      await createAssignmentBlock({ ...shared, taskGroupId, teamId, date: modalState.date, createdBy: user.uid }, { eventsById, allBlocks: blocks })
+      for (const person of payload.people) {
+        const fields = await resolvePerson(person)
+        await createAssignmentBlock({ ...shared, ...fields, taskGroupId, teamId, date: modalState.date, createdBy: user.uid }, { eventsById, allBlocks: blocks })
+      }
     } else {
-      await updateAssignmentBlock(modalState.block.id, modalState.block, shared, { eventsById, allBlocks: blocks })
+      const fields = await resolvePerson(payload.people[0])
+      await updateAssignmentBlock(modalState.block.id, modalState.block, { ...shared, ...fields }, { eventsById, allBlocks: blocks })
       // Nome/descrizione del task vanno allineati su TUTTI i blocchi dello
       // stesso taskGroupId (più persone, stessa commissione) — altrimenti
       // la card continuerebbe a mostrare il vecchio nome se si fosse
@@ -567,7 +583,6 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         await Promise.all(siblings.map(b => updateDoc(doc(db, 'assignmentBlocks', b.id), { label: shared.label, description: shared.description })))
       }
     }
-    if (externalWorkerId) setShownExternalIds(ids => (ids.includes(externalWorkerId) ? ids : [...ids, externalWorkerId]))
     return true
   }
 

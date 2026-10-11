@@ -93,11 +93,7 @@ export function notifyEventTimeChangedIfNeeded(eventId, oldEvent, newFields) {
   if (!changed) return
   notifyTeamPush({
     title: i18n.t('staffTimeline.pushTimeChangedTitle'),
-    body: i18n.t('staffTimeline.pushTimeChangedBody', {
-      name: newFields.name || oldEvent.name || '',
-      start: newFields.timeStart || '--:--',
-      end: newFields.timeEnd || '--:--',
-    }),
+    body: `${newFields.name || oldEvent.name || ''} · ${newFields.timeStart || '--:--'}–${newFields.timeEnd || '--:--'}`,
     url: `/events/${eventId}`,
     audience: { type: 'event', eventId },
   })

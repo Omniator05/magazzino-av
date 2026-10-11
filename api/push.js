@@ -124,8 +124,8 @@ async function runDailyReminders(res) {
         const userIds = await resolveAudienceUserIds(db, teamId, { type: 'event', eventId: evDoc.id })
         const tokenDocs = await tokensForTeam(db, teamId, userIds)
         eventsSent += await sendToTokenDocs(admin, db, tokenDocs, {
-          title: ev.name || 'Evento di oggi',
-          body: `${missing} oggett${missing === 1 ? 'o' : 'i'} ancora da caricare`,
+          title: 'Da caricare',
+          body: `${ev.name || ''} · ${missing}`,
           url: `/events/${evDoc.id}`,
         })
       }
@@ -149,9 +149,9 @@ async function runDailyReminders(res) {
         const adminIds = await resolveAudienceUserIds(db, teamId, { type: 'admins' })
         const tokenDocs = await tokensForTeam(db, teamId, adminIds)
         reorderSent = await sendToTokenDocs(admin, db, tokenDocs, {
-          title: 'Scorta minima raggiunta',
-          body: `${low.length} consumabil${low.length === 1 ? 'e' : 'i'} da riordinare`,
-          url: '/inventory',
+          title: 'Scorta minima',
+          body: `${low.length} consumabil${low.length === 1 ? 'e' : 'i'}`,
+          url: '/inventory?filter=reorder',
         })
       }
 

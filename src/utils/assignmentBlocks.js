@@ -33,7 +33,7 @@ async function syncEventAssignment(eventsById, allBlocksAfter, workerId, eventId
   if (stillLinked && !alreadyIn) {
     notifyTeamPush({
       title: i18n.t('staffTimeline.pushAssignedTitle'),
-      body: i18n.t('staffTimeline.pushAssignedBody', { name: event.name || '' }),
+      body: event.name || '',
       url: `/events/${eventId}`,
       audience: { type: 'user', userId: workerId },
     })
@@ -62,10 +62,15 @@ export async function updateAssignmentBlock(id, oldBlock, newData, { eventsById,
   const timeChanged = (newData.startTime && newData.startTime !== oldBlock.startTime) || (newData.endTime && newData.endTime !== oldBlock.endTime)
   if (timeChanged) {
     const name = eventId ? (eventsById[eventId]?.name || '') : (newData.label ?? oldBlock.label ?? '')
+    const date = newData.date ?? oldBlock.date
     const payload = {
       title: i18n.t('staffTimeline.pushTimeChangedTitle'),
-      body: i18n.t('staffTimeline.pushTimeChangedBody', { name, start: newData.startTime ?? oldBlock.startTime, end: newData.endTime ?? oldBlock.endTime }),
-      url: eventId ? `/events/${eventId}` : '/calendar',
+      body: `${name} · ${newData.startTime ?? oldBlock.startTime}–${newData.endTime ?? oldBlock.endTime}`,
+      // Un task libero porta dritti alla settimana giusta in Assegna
+      // personale (vedi il ?mode=assign&date= letto in Calendar.jsx),
+      // invece del generico "/calendar" che lasciava poi da cercare
+      // l'attività a mano.
+      url: eventId ? `/events/${eventId}` : `/calendar?mode=assign&date=${date}`,
     }
     if (eventId) notifyTeamPush({ ...payload, audience: { type: 'event', eventId } })
     else {

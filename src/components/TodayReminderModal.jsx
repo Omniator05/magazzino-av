@@ -21,7 +21,16 @@ export default function TodayReminderModal({ events, today, navigate }) {
 
   const effectiveEndDate = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
   const todayEvents = events.filter(e => e.type !== 'installation' && e.date <= today && effectiveEndDate(e) >= today)
-  const todayRents = events.filter(e => e.type === 'installation' && e.date === today)
+  // Non solo "inizia oggi": un'installazione lunga più giorni resta rilevante
+  // anche il giorno di fine/smontaggio, che può cadere ben dopo e.date (e le
+  // fasi montaggio/smontaggio sono campi a parte, possono non coincidere né
+  // con date né con dateEnd) — altrimenti uno smontaggio di oggi sparisce dal
+  // promemoria se l'installazione è iniziata un giorno diverso da oggi.
+  const todayRents = events.filter(e => {
+    if (e.type !== 'installation') return false
+    const phases = e.phases || {}
+    return e.date === today || effectiveEndDate(e) === today || phases.montaggio === today || phases.smontaggio === today
+  })
 
   useEffect(() => {
     if (events.length === 0) return // dati non ancora arrivati — niente da valutare
@@ -86,18 +95,29 @@ export default function TodayReminderModal({ events, today, navigate }) {
         {todayRents.length > 0 && (
           <div style={{ textAlign:'left' }}>
             <p style={{ ...sectionLabel, color:'#5b4fcf' }}>{t('todayReminder.rents', { count: todayRents.length })}</p>
-            {todayRents.map(inst => (
-              <button type="button" key={inst.id} className="btn-no-anim" onClick={() => openEvent(inst.id)}
-                aria-label={t('events.openEventAria', { name: inst.name })} style={rowStyle}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
-                    <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{inst.name}</p>
-                    <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+            {todayRents.map(inst => {
+              // Quale "oggi" è, per questa installazione: utile soprattutto
+              // quando dura più giorni e oggi non è il giorno di inizio.
+              const phases = inst.phases || {}
+              const phaseLabel = phases.smontaggio === today ? t('calendar.legendDisassembly')
+                : phases.montaggio === today ? t('calendar.legendAssembly')
+                : null
+              return (
+                <button type="button" key={inst.id} className="btn-no-anim" onClick={() => openEvent(inst.id)}
+                  aria-label={t('events.openEventAria', { name: inst.name })} style={rowStyle}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0, flexWrap:'wrap' }}>
+                      <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{inst.name}</p>
+                      <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+                      {phaseLabel && (
+                        <span style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0 }}>{phaseLabel}</span>
+                      )}
+                    </div>
+                    {inst.location && <p style={{ fontSize:11.5, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:3 }}><Pin size={11} /> {inst.location}</p>}
                   </div>
-                  {inst.location && <p style={{ fontSize:11.5, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:3 }}><Pin size={11} /> {inst.location}</p>}
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         )}
 

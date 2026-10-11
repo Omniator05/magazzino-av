@@ -140,7 +140,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
       // aggiunto un nuovo evento, non serve saperlo per ciascuna data futura.
       notifyTeamPush({
         title: t('calendar.pushNewEventTitle'),
-        body: t('calendar.pushNewEventBody', { name: base.name, date: formatDate(form.date + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language) }),
+        body: base.name,
         url: `/events/${ref.id}`,
         audience: { type: 'admins' },
       })

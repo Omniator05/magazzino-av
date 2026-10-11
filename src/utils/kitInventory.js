@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore'
 import { db } from '../firebase'
 import { deleteEventFromGoogle } from './googleCalendar'
 
@@ -42,6 +42,28 @@ export const syncKitAwareInventory = async ({ catalogItemId, isBundle, category,
     await updateDoc(ref, { availableQty: Math.max(0, Math.min(maxAvail, (data.availableQty || 0) + delta)) })
   } catch (e) {
     console.error('syncKitAwareInventory failed', e)
+  }
+}
+
+// Consumabile rientrato "vuoto" (non intero — vedi askConsumableIntact in
+// WorkerScanner.jsx): a differenza di un oggetto perso/dimenticato (che
+// resta semplicemente "fuori" nella disponibilità, in attesa che qualcuno
+// lo ritrovi), un consumabile consumato è sparito per sempre. availableQty
+// era già stata scalata al carico (syncKitAwareInventory sign:-1) e non va
+// toccata di nuovo qui: serve solo abbassare il TOTALE di magazzino della
+// stessa quantità, altrimenti quei pezzi resterebbero "fuori" in eterno
+// invece di essere semplicemente finiti. sign:-1 scala il totale (consumato),
+// sign:1 lo ripristina (es. annullando un rientro segnato per errore).
+export const writeOffConsumable = async ({ catalogItemId, qty, sign = -1 }) => {
+  if (!catalogItemId) return
+  try {
+    const ref = doc(db, 'items', catalogItemId)
+    const snap = await getDoc(ref)
+    if (!snap.exists()) return
+    const data = snap.data()
+    await updateDoc(ref, { totalQty: Math.max(0, (data.totalQty || 0) + sign * (qty || 1)) })
+  } catch (e) {
+    console.error('writeOffConsumable failed', e)
   }
 }
 
@@ -159,15 +181,35 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
 // logica che prima viveva duplicata fra Events.jsx (lista admin) e
 // EventDetail.jsx (pagina del singolo evento, ora raggiungibile anche dai
 // magazzinieri). Un solo posto da cui tenerla corretta.
-export const closeInstallationEvent = async (eventId, items) => {
+export const closeInstallationEvent = async (eventId, fallbackItems) => {
+  const eventRef = doc(db, 'events', eventId)
+  // Transazione invece di scrivere direttamente lo snapshot `items` passato
+  // dal chiamante (che può essere stantio — un worker potrebbe star
+  // scansionando in quel momento): legge l'array AGGIORNATO da Firestore
+  // appena prima di scrivere, così non si rischia di sovrascrivere un
+  // rientro appena registrato altrove.
+  let stillOut = []
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(eventRef)
+    const items = snap.exists() ? (snap.data().items || []) : (fallbackItems || [])
+    stillOut = items.filter(item => item.loaded && !item.returned)
+    // Chiudere il rent/install segna TUTTO come rientrato — altrimenti le
+    // righe restano "caricate, non rientrate" per sempre: sembrerebbero
+    // ancora fuori anche dopo, con la giacenza già ripristinata sotto.
+    const stillOutIds = new Set(stillOut.map(i => i.id))
+    const updatedItems = items.map(i => stillOutIds.has(i.id) ? { ...i, returned: true, pronto: true } : i)
+    tx.update(eventRef, { items: updatedItems, archived: true })
+  })
   // Stessa restituzione del rientro normale: usa l'oggetto di catalogo vero
   // (itemRef || id — le righe di liste diverse/duplicate hanno un id proprio)
-  // e riallinea anche i componenti se la riga è un kit.
-  await Promise.all((items || [])
-    .filter(item => item.loaded && !item.returned && !item.isExtra)
+  // e riallinea anche i componenti se la riga è un kit. Gli "Extra" restano
+  // esclusi dalla giacenza (come nel rientro singolo) — sono comunque già
+  // stati segnati rientrati sopra, semplicemente senza una giacenza di
+  // catalogo da ripristinare.
+  await Promise.all(stillOut
+    .filter(item => !item.isExtra)
     .map(item => syncKitAwareInventory({
       catalogItemId: item.itemRef || item.id, isBundle: item.isBundle, category: item.category,
       qty: item.qty, sign: 1,
     })))
-  await updateDoc(doc(db, 'events', eventId), { archived: true })
 }

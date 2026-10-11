@@ -14,7 +14,7 @@ import { logItemActivity } from '../utils/itemActivity'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow, isScanCandidate } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
-import { syncKitAwareInventory, closeInstallationEvent } from '../utils/kitInventory'
+import { syncKitAwareInventory, writeOffConsumable, closeInstallationEvent } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import { todayStr } from '../utils/workHours'
 
@@ -290,7 +290,12 @@ export default function WorkerScanner() {
           setListChangedMsg(t('workerScanner.listChangedToast'))
           setTimeout(() => setListChangedMsg(''), 5000)
         }
-      }
+      },
+      // Solo un banner "bonus" — se per qualche motivo l'accesso viene
+      // negato (es. teamId non ancora risolto davvero, cambio di squadra)
+      // non deve comparire in console come errore non gestito: il peggio
+      // che succede è che manca il banner, non si rompe la pagina.
+      () => {}
     )
   }, [teamId, id, t])
 
@@ -381,7 +386,9 @@ export default function WorkerScanner() {
             const result = { action: 'marked_missing', item: localItem || foundItem }
             setLastScan(result)
             setScanToast({ ...result, ts: Date.now() })
-            setTimeout(() => setScanToast(null), 3000)
+            // Più tempo se compare il badge "Nella lista: X" (ora toccabile):
+            // 3s basta per leggere, non per leggere E toccare un bottone.
+            setTimeout(() => setScanToast(null), isInOtherList(result.item) ? 6000 : 3000)
           } catch (e) {
             setSaveError(t('workerScanner.saveErrorMessage'))
           } finally {
@@ -534,7 +541,9 @@ export default function WorkerScanner() {
     else { vibrate([60, 40, 120]); playSound('success') }
     setLastScan(outcome)
     setScanToast({ ...outcome, ts: Date.now() })
-    setTimeout(() => setScanToast(null), outcome.action === 'wrong_instance' ? 4000 : 3000)
+    // Più tempo se compare il badge "Nella lista: X" (ora toccabile): serve
+    // il tempo di leggerlo E toccarlo, non solo di leggerlo.
+    setTimeout(() => setScanToast(null), isInOtherList(outcome.item) ? 6000 : outcome.action === 'wrong_instance' ? 4000 : 3000)
 
     if (outcome.action === 'loaded' || (outcome.action === 'returned' && intact)) {
       // foundItem.id è già l'oggetto vero di magazzino (trovato per codice
@@ -548,6 +557,13 @@ export default function WorkerScanner() {
         catalogItemId: foundItem.id, isBundle: outcome.item.isBundle, category: outcome.item.category,
         qty: outcome.action === 'loaded' ? outcome.item.qty : totalQty, sign: outcome.action === 'loaded' ? -1 : 1,
       })
+    } else if (outcome.action === 'returned' && !intact && outcome.item.category === 'Consumabili') {
+      // "Vuoto" al popup: consumato per sempre, va tolto dal totale di
+      // magazzino — non solo lasciato "fuori" in disponibilità (già scalata
+      // al carico), altrimenti quei pezzi risulterebbero fuori in eterno.
+      const returnedRows = outcome.items || [outcome.item]
+      const totalQty = returnedRows.reduce((s, r) => s + (r.qty || 1), 0)
+      await writeOffConsumable({ catalogItemId: foundItem.id, qty: totalQty })
     }
 
     // Cronologia — solo sui completamenti veri (pronto/loaded/returned), non
@@ -672,6 +688,12 @@ export default function WorkerScanner() {
   const activeList = mode === 'return' && activeListId === ALL_LISTS_ID
     ? ALL_LISTS_ID
     : (eventLists.some(l => l.id === activeListId) ? activeListId : MAIN_LIST_ID)
+  // Stessa condizione del badge "Nella lista: X" nel popup post-scansione —
+  // estratta qui perché serve anche per decidere quanto tenerlo aperto (più
+  // tempo per leggerlo e toccarlo) e, ora, dove porta il tap.
+  const isInOtherList = item => multiList && item && (
+    activeList === ALL_LISTS_ID ? rowListId(item) !== MAIN_LIST_ID : rowListId(item) !== activeList
+  )
   const items = multiList
     ? (activeList === ALL_LISTS_ID ? allEventItems : allEventItems.filter(i => rowListId(i) === activeList))
     : allEventItems
@@ -1055,10 +1077,17 @@ export default function WorkerScanner() {
                   esiste un "mismatch" — mostra comunque la lista di provenienza,
                   ma solo per gli oggetti fuori dalla principale, altrimenti
                   comparirebbe su quasi ogni scansione senza dire nulla di utile. */}
-              {multiList && scanToast.item && (
-                activeList === ALL_LISTS_ID ? rowListId(scanToast.item) !== MAIN_LIST_ID : rowListId(scanToast.item) !== activeList
-              ) && (
-                <p style={{ color:'var(--text2)', fontSize:13, fontWeight:700, marginTop:6 }}>{t('workerScanner.inOtherList', { name: listLabel(eventLists.find(l => l.id === rowListId(scanToast.item))) })}</p>
+              {isInOtherList(scanToast.item) && (
+                // Toccabile: passa subito a quella lista invece di doverla
+                // cercare a mano — il popup ha pointerEvents:none (riga
+                // ~1036), va riattivato qui sul singolo bottone.
+                <button
+                  onClick={() => { setActiveListId(rowListId(scanToast.item)); setScanToast(null) }}
+                  aria-label={t('workerScanner.goToListAria', { name: listLabel(eventLists.find(l => l.id === rowListId(scanToast.item))) })}
+                  style={{ pointerEvents:'auto', background:'transparent', border:'none', padding:0, marginTop:6, color:'var(--blue)', fontSize:13, fontWeight:700, textDecoration:'underline', cursor:'pointer' }}
+                >
+                  {t('workerScanner.inOtherList', { name: listLabel(eventLists.find(l => l.id === rowListId(scanToast.item))) })} →
+                </button>
               )}
               {scanToast.location && (
                 <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:12, background:'rgba(79,195,247,0.12)', border:'1px solid rgba(79,195,247,0.3)', borderRadius:8, padding:'6px 16px' }}>
@@ -1612,6 +1641,14 @@ export default function WorkerScanner() {
                           catalogItemId: itm.itemRef || itemId, isBundle: itm.isBundle, category: itm.category,
                           qty: itm.qty, sign: newReturned ? 1 : -1,
                         })
+                      } else if (itm.category === 'Consumabili') {
+                        // Consumato per sempre (sia dal popup "Vuoto" sia da un
+                        // forceOut su un consumabile): va tolto dal totale di
+                        // magazzino, altrimenti resta "fuori" in eterno invece
+                        // di essere semplicemente finito. Annullare il rientro
+                        // di un consumabile segnato così lo ripristina (sign:1).
+                        if (newReturned) await writeOffConsumable({ catalogItemId: itm.itemRef || itemId, qty: itm.qty })
+                        else if (wasConsumed) await writeOffConsumable({ catalogItemId: itm.itemRef || itemId, qty: itm.qty, sign: 1 })
                       }
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,

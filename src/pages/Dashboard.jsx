@@ -202,7 +202,44 @@ export default function Dashboard({ toggleTheme, theme }) {
   const totalBroken  = brokenItems.reduce((sum, i) => sum + (i.brokenQty || 0), 0)
   const reorderItems = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock)
   const openTasks    = tasks.filter(t => !t.done)
-  const upcoming     = events.filter(e => e.date >= today).slice(0, 3)
+  // Un rent/install non ha bisogno di personale ogni giorno finché dura —
+  // solo a inizio, fine, e alle fasi montaggio/smontaggio (che possono
+  // cadere su date ancora diverse). Un evento normale invece resta
+  // rilevante per TUTTA la sua durata, perché lì serve personale ogni
+  // giorno. Senza questa distinzione un rent lungo settimane resterebbe
+  // "in evidenza" ogni singolo giorno intermedio, senza nulla da fare.
+  // dateEnd <= today (non solo ===): un rent scaduto e non ancora chiuso
+  // (archived) deve restare visibile qui finché non lo si chiude — è
+  // proprio il momento in cui serve notarlo di più, non quello in cui deve
+  // sparire. Si ferma solo quando closeInstallationEvent lo archivia.
+  // Un rent di un giorno solo lascia la casella "data fine" vuota (solo
+  // "data inizio" compilata) — senza questo fallback a `e.date`, `e.dateEnd`
+  // vuoto rendeva `e.dateEnd && ...` sempre falso e un rent di un giorno
+  // scaduto non risultava MAI scaduto, qualunque sia la data.
+  const effectiveEnd = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
+  const rentNeedsAttention = e => {
+    if (e.archived) return false
+    const phases = e.phases || {}
+    return e.date >= today || effectiveEnd(e) <= today || phases.montaggio === today || phases.smontaggio === today
+  }
+  // Scaduto per davvero (non solo "finisce oggi"): va trattato diverso da
+  // un evento di oggi qualsiasi, con un colore proprio e in testa alla
+  // lista, altrimenti si confonde con gli altri e non salta all'occhio che
+  // c'è un rent da smontare/controllare rimasto indietro.
+  const isOverdueRent = e => e.type === 'installation' && !e.archived && effectiveEnd(e) < today
+  const isRelevantToday = e => e.type === 'installation'
+    ? rentNeedsAttention(e)
+    : e.date <= today && (e.dateEnd || e.date) >= today
+  // Un rent scaduto va in testa a prescindere dalla data (è il più urgente
+  // da notare), poi tutto il resto in ordine cronologico come sempre.
+  const upcoming = events
+    .filter(e => e.type === 'installation' ? rentNeedsAttention(e) : (e.dateEnd || e.date) >= today)
+    .sort((a, b) => {
+      const overdueA = isOverdueRent(a), overdueB = isOverdueRent(b)
+      if (overdueA !== overdueB) return overdueA ? -1 : 1
+      return (a.date || '').localeCompare(b.date || '')
+    })
+    .slice(0, 3)
 
   const weekEvents = recapWeek
     ? events.filter(e => e.date && e.date <= recapWeek.sunday && (e.dateEnd || e.date) >= recapWeek.monday)
@@ -561,11 +598,18 @@ export default function Dashboard({ toggleTheme, theme }) {
         ) : (
           <>
             {upcoming.map(ev => {
-              const isToday = ev.date === today
-              const iconGradient = isToday
+              // Evento normale: oggi è dentro il suo range (serve personale
+              // ogni giorno). Rent/install: solo inizio/fine/fasi contano,
+              // tranne se è scaduto — in quel caso un colore tutto suo.
+              const isToday = isRelevantToday(ev)
+              const overdue = isOverdueRent(ev)
+              const iconGradient = overdue
+                ? 'linear-gradient(135deg,#ea580c,#f59e0b)'
+                : isToday
                 ? 'linear-gradient(135deg,#dc2626,#9333ea)'
                 : 'linear-gradient(135deg,#9ca3af,#6b7280)'
               const cardBorder = isToday ? '1.5px solid #fca5a5' : '1.5px solid var(--dash-card-border)'
+              const cardClass = overdue ? 'evt-card evt-overdue' : isToday ? 'evt-card evt-today' : 'evt-card evt-soft'
               const dateLabel = ev.date
                 ? formatDate(ev.date+'T12:00:00', {weekday:'long',day:'numeric',month:'long'}, i18n.language)
                 : ''
@@ -579,7 +623,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                   key={ev.id}
                   onClick={() => navigate(`/events/${ev.id}`)}
                   aria-label={t('events.openEventAria', { name: ev.name })}
-                  className={`btn-no-anim ${isToday ? 'evt-card evt-today' : 'evt-card evt-soft'}`}
+                  className={`btn-no-anim ${cardClass}`}
                   style={{ width:'100%', marginBottom:10, background:'var(--dash-card)', border: isToday ? '1.5px solid transparent' : cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease', textAlign:'left', font:'inherit', color:'inherit' }}
                   onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.07)' }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
@@ -605,6 +649,11 @@ export default function Dashboard({ toggleTheme, theme }) {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
                       <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{ev.name}</p>
+                      {overdue && (
+                        <span style={{ flexShrink:0, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'#ea580c', background:'rgba(234,88,12,0.12)', border:'1px solid rgba(234,88,12,0.35)', borderRadius:7, padding:'2px 7px' }}>
+                          {t('dashboard.overdueRentBadge')}
+                        </span>
+                      )}
                     </div>
                     <p style={{ fontSize:12, fontWeight:500, color:'var(--dash-muted)' }}>{dateLabel}{dateEndLabel}</p>
                     {ev.location && <p style={{ fontSize:11, color:'var(--dash-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
@@ -692,6 +741,14 @@ export default function Dashboard({ toggleTheme, theme }) {
           animation: evtSpin 10s linear infinite;
         }
         .evt-soft::after { opacity: 0.18; }
+        /* Rent scaduto e non ancora chiuso: colore proprio (arancio), mai
+           confuso col rosso/viola di "oggi" — deve saltare all'occhio che
+           è un caso diverso, non solo un altro evento di oggi. */
+        .evt-overdue::before, .evt-overdue::after {
+          background: conic-gradient(from var(--evtAngle), #ea580c, #f59e0b, #ea580c);
+          animation: evtSpin 4s linear infinite;
+        }
+        .evt-overdue::after { opacity: 0.35; }
 
         @media (prefers-reduced-motion:reduce){
           [style*="animation:dash"]{animation:none!important}

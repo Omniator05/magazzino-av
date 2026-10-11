@@ -256,6 +256,28 @@ body.select-mode .tabbar-nav {
   opacity: 0;
   pointer-events: none;
 }
+/* Comparsa della selezione (checkbox sulla riga + barra azioni in basso):
+   un pop/scivolata breve invece di un apparire di scatto — più piacevole
+   soprattutto entrando in selezione con una pressione prolungata (vedi
+   useLongPress.js), dove l'improvviso cambio di layout altrimenti si somma
+   al long-press stesso e sembra macchinoso. */
+@keyframes rc-pop-in {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.rc-select-checkbox {
+  animation: rc-pop-in 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes rc-bar-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rc-bulk-bar {
+  animation: rc-bar-in 0.22s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-select-checkbox, .rc-bulk-bar { animation: none; }
+}
 .tab-bar button {
   flex: 1;
   display: flex;

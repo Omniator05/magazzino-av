@@ -142,8 +142,8 @@ export default function WorkerInventory() {
     if (newBroken > prevBroken) {
       notifyTeamPush({
         title: t('inventory.pushBrokenTitle'),
-        body: t('inventory.pushBrokenBody', { name: item.name }),
-        url: '/inventory',
+        body: item.name,
+        url: '/inventory?filter=broken',
         audience: { type: 'admins' },
       })
     }
