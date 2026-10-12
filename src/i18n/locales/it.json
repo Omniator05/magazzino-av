@@ -236,6 +236,8 @@
     "assignNewHint": "Nessun risultato — al salvataggio \"{{name}}\" verrà aggiunto come nuovo esterno",
     "assignAddNew": "+ Aggiungi \"{{name}}\" come esterno",
     "removePersonAria": "Rimuovi {{name}}",
+    "useSharedTimeBtn": "Orario attività",
+    "useSharedTimeAria": "Usa l'orario dell'attività",
     "startLabel": "Inizio",
     "endLabel": "Fine",
     "eventLabel": "Evento collegato",

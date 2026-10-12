@@ -278,6 +278,41 @@ body.select-mode .tabbar-nav {
 @media (prefers-reduced-motion: reduce) {
   .rc-select-checkbox, .rc-bulk-bar { animation: none; }
 }
+/* Bottoni Pronto/Carico/Rientro in WorkerScanner: il tap generico di sopra
+   (scale 0.98) è troppo sottile su bottoni che cambiano colore/testo di
+   scatto al tocco — qui serve uno "schiacciato" più marcato per sentire
+   davvero il tocco prima che il contenuto cambi. */
+button.rc-action-btn:not(:disabled):active {
+  transform: scale(0.90);
+  transition: transform 0.08s ease-out;
+}
+/* Spinner discreto nell'angolo: l'azione è partita (il bottone è già
+   "fatto" in anteprima) ma la connessione del magazzino è lenta e la
+   conferma del server non è ancora arrivata. */
+@keyframes rc-btn-spin { to { transform: rotate(360deg); } }
+.rc-btn-spinner {
+  width: 9px; height: 9px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: rc-btn-spin 0.6s linear infinite;
+}
+/* L'azione è tornata indietro (non salvata): scossa + tinta rossa già
+   applicata via style inline (failPronto/failLoaded/failReturned) — qui solo
+   il movimento. Niente lampeggio se offline (vedi clearOptimistic in
+   WorkerScanner.jsx): la barra globale OfflineIndicator spiega già perché. */
+@keyframes rc-btn-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+.rc-btn-fail { animation: rc-btn-shake 0.5s cubic-bezier(0.36,0.07,0.19,0.97) both; }
+@media (prefers-reduced-motion: reduce) {
+  .rc-btn-spinner { animation: none; opacity: 1; }
+  .rc-btn-fail { animation: none; }
+}
 .tab-bar button {
   flex: 1;
   display: flex;

@@ -9,6 +9,7 @@ import { parseScannedCode } from '../utils/generateCode'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow, isScanCandidate } from '../utils/eventLists'
@@ -131,6 +132,17 @@ export default function WorkerScanner() {
   // updater di stato, che in StrictMode può essere invocato due volte.
   const pendingOverridesRef = useRef({})
   useEffect(() => { pendingOverridesRef.current = pendingOverrides }, [pendingOverrides])
+  // Online/offline "congelato" in un ref: letto da clearOptimistic, che può
+  // scattare dentro un catch asincrono dove un valore di stato chiuso nella
+  // closure sarebbe quello di quando il tap è partito, non quello attuale.
+  const isOnline = useOnlineStatus()
+  const onlineRef = useRef(isOnline)
+  useEffect(() => { onlineRef.current = isOnline }, [isOnline])
+  // Lampeggio rosso momentaneo sul bottone che ha appena fallito (vedi
+  // clearOptimistic sotto) — SOLO se online: offline la barra globale
+  // (OfflineIndicator) spiega già il motivo una volta per tutte, ripeterlo
+  // bottone per bottone ad ogni tap sarebbe ridondante e fastidioso.
+  const [failFlash, setFailFlash] = useState({})
   const setOptimistic = (itemId, fields) => {
     setPendingOverrides(prev => ({ ...prev, [itemId]: { ...prev[itemId], ...fields } }))
     const keys = Object.keys(fields)
@@ -148,15 +160,35 @@ export default function WorkerScanner() {
       setSaveError(t('workerScanner.saveErrorMessage'))
     }, 12000)
   }
-  const clearOptimistic = (itemId, keys) => setPendingOverrides(prev => {
-    if (!prev[itemId]) return prev
-    const nextItem = { ...prev[itemId] }
-    keys.forEach(k => delete nextItem[k])
-    const next = { ...prev }
-    if (Object.keys(nextItem).length === 0) delete next[itemId]
-    else next[itemId] = nextItem
-    return next
-  })
+  const clearOptimistic = (itemId, keys) => {
+    setPendingOverrides(prev => {
+      if (!prev[itemId]) return prev
+      const nextItem = { ...prev[itemId] }
+      keys.forEach(k => delete nextItem[k])
+      const next = { ...prev }
+      if (Object.keys(nextItem).length === 0) delete next[itemId]
+      else next[itemId] = nextItem
+      return next
+    })
+    // Ogni chiamata a clearOptimistic in questo file segna un rollback (la
+    // riuscita non passa mai da qui, si riconcilia da sola nell'effect sopra
+    // quando arriva il dato vero) — quindi è il punto giusto, unico, per
+    // avvisare visivamente che QUELL'azione non è andata a buon fine.
+    if (!onlineRef.current) return
+    const token = Date.now()
+    setFailFlash(prev => ({ ...prev, [itemId]: { ...prev[itemId], ...Object.fromEntries(keys.map(k => [k, token])) } }))
+    setTimeout(() => {
+      setFailFlash(prev => {
+        if (!prev[itemId]) return prev
+        const nextItem = { ...prev[itemId] }
+        keys.forEach(k => { if (nextItem[k] === token) delete nextItem[k] })
+        const next = { ...prev }
+        if (Object.keys(nextItem).length === 0) delete next[itemId]
+        else next[itemId] = nextItem
+        return next
+      })
+    }, 650)
+  }
   // Riconciliazione: appena il valore vero (dal listener Firestore) coincide
   // con quello mostrato in anteprima, la sovrascrittura sparisce — senza
   // alcun cambiamento visibile, perché il valore era già quello giusto.
@@ -425,9 +457,17 @@ export default function WorkerScanner() {
       // stesso codice una volta per lista. Un'etichetta di baule specifica
       // (unitNumber presente) resta invece puntuale: quella conferma UN
       // pezzo preciso, non va sommata alle altre righe.
+      // Kit/baule con più pezzi ma SENZA numeri assegnati (es. 5 bauli ledwall
+      // generici, nessuno rietichettato singolarmente): non c'è modo di
+      // distinguere un pezzo dall'altro, quindi non ha senso chiedere di
+      // scansionare un'etichetta specifica, MA un solo scan non deve bastare
+      // per rientrare/caricare tutti i pezzi insieme — serve uno scan per
+      // ciascuno (stesso principio dei bauli numerati, solo senza numero).
+      const isCountableKit = row => row.isBundle && (row.instanceNumbers || []).length === 0 && (row.qty || 1) > 1
+
       if (mode === 'return' && !unitNumber) {
         const returnable = eventItems.filter(row =>
-          isScanCandidate(row, foundItem.id) && row.loaded && !row.returned && (row.instanceNumbers || []).length <= 1
+          isScanCandidate(row, foundItem.id) && row.loaded && !row.returned && (row.instanceNumbers || []).length <= 1 && !isCountableKit(row)
         )
         if (returnable.length > 0) {
           tx.update(eventRef, { items: eventItems.map(i =>
@@ -455,6 +495,7 @@ export default function WorkerScanner() {
       // stata scansionata, quindi un solo scan generico continua a completare
       // tutta la riga come prima.
       const requiresEachInstance = assignedInstances.length > 1
+      const requiresCount = isCountableKit(eventItem)
 
       // Unità sbagliata: la riga ha unità specifiche assegnate (vedi
       // src/utils/kitInstances.js) e l'etichetta scansionata è quella di
@@ -504,6 +545,24 @@ export default function WorkerScanner() {
           outcome = isComplete
             ? { action: doneAction, item: eventItem, ...extra }
             : { action: 'instance_progress', item: eventItem, scannedInstance, doneCount: nowScanned.length, totalCount: assignedInstances.length, ...extra }
+          return
+        }
+        if (requiresCount && !unitNumber) {
+          const qty = eventItem.qty || 1
+          const already = eventItem.scannedCount?.[mode] || 0
+          if (already >= qty) { outcome = { action: alreadyAction, item: eventItem, ...extra }; return }
+          const nowCount = already + 1
+          const isComplete = nowCount >= qty
+          const updatedCount = { ...(eventItem.scannedCount || {}), [mode]: nowCount }
+          tx.update(eventRef, { items: eventItems.map(i => i.id === eventItem.id ? {
+            ...i, scannedCount: updatedCount, [doneFieldName]: isComplete,
+            ...(isComplete ? cascadeFor(doneFieldName) : {}),
+            ...(doneFieldName !== 'returned' ? { mancante: false } : {}),
+            ...(doneFieldName === 'returned' && isComplete ? { returnedConsumed: !intact } : {}),
+          } : i) })
+          outcome = isComplete
+            ? { action: doneAction, item: eventItem, ...extra }
+            : { action: 'instance_progress', item: eventItem, doneCount: nowCount, totalCount: qty, ...extra }
           return
         }
         tx.update(eventRef, { items: eventItems.map(i => i.id === eventItem.id ? {
@@ -1481,6 +1540,13 @@ export default function WorkerScanner() {
                     ...item,
                     _vehicleColor: vehicleColor || null,
                     _details: itemDetails[item.itemRef || item.id] || null,
+                    // Campi/azione ancora in volo verso Firestore (bottone già
+                    // "fatto" per il tocco immediato, ma non ancora confermato
+                    // dal listener) e campi appena falliti (vedi clearOptimistic):
+                    // servono al bottone per mostrare rispettivamente uno
+                    // spinner discreto o un lampeggio rosso.
+                    _pendingFields: pendingOverrides[item.id] ? Object.keys(pendingOverrides[item.id]) : null,
+                    _failFields: failFlash[item.id] ? Object.keys(failFlash[item.id]) : null,
                     // "Fatto" per la fase attualmente in vista (pronto/carico/
                     // rientro) — usato per l'opacità della riga: prima era
                     // sempre legata a `loaded`, quindi in fase di rientro ogni
@@ -1552,7 +1618,7 @@ export default function WorkerScanner() {
                             // già scansionati per questa fase — altrimenti al
                             // prossimo giro lo scanner direbbe "già caricato" su
                             // un baule mai davvero ri-scansionato in un nuovo ciclo.
-                            ...(!newLoaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] } } : {}),
+                            ...(!newLoaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] }, scannedCount: { ...(i.scannedCount || {}), load: 0 } } : {}),
                           }) })
                         })
                       } catch (e) {
@@ -1621,7 +1687,7 @@ export default function WorkerScanner() {
                             // Rientrato implica pronto E carico: serve anche a
                             // costruire correttamente la storia dei bauli in Inventory.
                             ...(newReturned ? { pronto: true, loaded: true } : {}),
-                            ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
+                            ...(!newReturned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] }, scannedCount: { ...(i.scannedCount || {}), return: 0 } } : {}),
                             // Ricordato sulla riga stessa: serve a sapere, se
                             // il rientro viene poi annullato, se la giacenza
                             // era stata davvero ripristinata (per togliergliela
@@ -1753,7 +1819,7 @@ export default function WorkerScanner() {
                           const evItems = snap.data().items || []
                           tx.update(eventRef, { items: evItems.map(i => i.id !== itemId ? i : {
                             ...i, pronto: !i.pronto,
-                            ...(i.pronto ? { scannedInstances: { ...(i.scannedInstances || {}), pronto: [] } } : {}),
+                            ...(i.pronto ? { scannedInstances: { ...(i.scannedInstances || {}), pronto: [] }, scannedCount: { ...(i.scannedCount || {}), pronto: 0 } } : {}),
                           }) })
                         })
                       } catch (e) {
@@ -2000,6 +2066,12 @@ export default function WorkerScanner() {
 }
 
 // Riga checklist con bottoni touch-friendly e note accessibili
+// Spinner discreto nell'angolo di un bottone pronto/carico/rientro: in volo
+// verso Firestore ma non ancora confermato dal listener (vedi _pendingFields).
+function BtnSpinner() {
+  return <span aria-hidden="true" className="rc-btn-spinner" style={{ position:'absolute', top:4, right:4 }} />
+}
+
 function ChecklistRow({ item, mode }) {
   const { t } = useTranslation()
   const [showInfo, setShowInfo]   = useState(false)
@@ -2073,6 +2145,17 @@ function ChecklistRow({ item, mode }) {
     if (missingFillTimer.current) { clearTimeout(missingFillTimer.current); missingFillTimer.current = null }
     if (missingTriggerTimer.current) { clearTimeout(missingTriggerTimer.current); missingTriggerTimer.current = null }
   }
+  // Spinner discreto (connessione lenta: l'azione è partita ma non ancora
+  // confermata) e lampeggio rosso (l'azione è tornata indietro: non è andata
+  // a buon fine, e si è online quindi non è semplicemente il caso offline
+  // già coperto dalla barra globale) — vedi _pendingFields/_failFields in
+  // buildItemProps più sopra.
+  const pendingPronto = !!item._pendingFields?.includes('pronto')
+  const pendingLoaded = !!item._pendingFields?.includes('loaded')
+  const pendingReturned = !!item._pendingFields?.includes('returned')
+  const failPronto = !!item._failFields?.includes('pronto')
+  const failLoaded = !!item._failFields?.includes('loaded')
+  const failReturned = !!item._failFields?.includes('returned')
   const location = item._details?.location || null
   const warehouseNotes = item._details?.notes || null
   // Un consumabile può essere tracciato in metri/rotoli invece che a pezzi
@@ -2095,10 +2178,16 @@ function ChecklistRow({ item, mode }) {
   // Quante unità (bauli) sono già state scansionate in questa fase, per far
   // vedere il progresso direttamente sul bottone Pronto/Carico — senza
   // dipendere solo dal popup che scompare dopo pochi secondi.
-  const instanceTotal = (item.instanceNumbers || []).length
-  const hasMultiInstance = instanceTotal > 1
-  const prontoScanned = (item.scannedInstances?.pronto || []).length
-  const loadScanned = (item.scannedInstances?.load || []).length
+  // Kit senza bauli numerati (es. 5 ledwall generici, nessuno rietichettato):
+  // stesso progresso "X/Y" dei bauli numerati, ma contato da scannedCount
+  // (semplice contatore) invece che da scannedInstances (numeri specifici) —
+  // vedi isCountableKit in handleScan più sopra.
+  const hasNumberedInstances = (item.instanceNumbers || []).length > 1
+  const isGenericKitCount = !hasNumberedInstances && item.isBundle && (item.qty || 1) > 1
+  const instanceTotal = hasNumberedInstances ? item.instanceNumbers.length : (isGenericKitCount ? (item.qty || 1) : 0)
+  const hasMultiInstance = hasNumberedInstances || isGenericKitCount
+  const prontoScanned = hasNumberedInstances ? (item.scannedInstances?.pronto || []).length : (item.scannedCount?.pronto || 0)
+  const loadScanned = hasNumberedInstances ? (item.scannedInstances?.load || []).length : (item.scannedCount?.load || 0)
   // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes
@@ -2193,11 +2282,12 @@ function ChecklistRow({ item, mode }) {
           ) : !item.loaded ? (
             <div style={{ display:'flex', gap:5 }}>
               <button
+                className={`rc-action-btn${failPronto ? ' rc-btn-fail' : ''}`}
                 style={{ position:'relative', overflow:'hidden', minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
-                  background: item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
-                  color: item.pronto ? '#059669' : 'var(--text3)',
-                  border: item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
+                  background: failPronto ? 'rgba(239,68,68,0.15)' : item.pronto ? 'rgba(5,150,105,0.15)' : 'var(--card2)',
+                  color: failPronto ? 'var(--red)' : item.pronto ? '#059669' : 'var(--text3)',
+                  border: failPronto ? '1.5px solid rgba(239,68,68,0.4)' : item.pronto ? '1.5px solid rgba(5,150,105,0.35)' : '1.5px solid transparent',
                   WebkitTapHighlightColor:'transparent',
                 }}
                 onClick={() => item._onTogglePronto && item._onTogglePronto(item.id)}
@@ -2205,6 +2295,7 @@ function ChecklistRow({ item, mode }) {
                 {!item.pronto && hasMultiInstance && prontoScanned > 0 && (
                   <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(5,150,105,0.22)', transform:`scaleX(${prontoScanned / instanceTotal})`, transformOrigin:'left', transition:'transform 0.3s ease' }} />
                 )}
+                {pendingPronto && <BtnSpinner />}
                 <span style={{ position:'relative' }}>
                   {item.pronto
                     ? t('eventDetail.readyDone')
@@ -2214,11 +2305,12 @@ function ChecklistRow({ item, mode }) {
                 </span>
               </button>
               <button
+                className={`rc-action-btn${failLoaded ? ' rc-btn-fail' : ''}`}
                 style={{ position:'relative', overflow:'hidden', minWidth:70, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
-                  background: 'var(--card2)',
-                  color: 'var(--text)',
-                  border: '1.5px solid var(--border)',
+                  background: failLoaded ? 'rgba(239,68,68,0.15)' : 'var(--card2)',
+                  color: failLoaded ? 'var(--red)' : 'var(--text)',
+                  border: failLoaded ? '1.5px solid rgba(239,68,68,0.4)' : '1.5px solid var(--border)',
                   WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
                 }}
                 aria-label={t('workerScanner.toLoadShort') + ' — ' + t('workerScanner.markMissingHint')}
@@ -2235,6 +2327,7 @@ function ChecklistRow({ item, mode }) {
                   <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(245,166,35,0.35)', transform:`scaleX(${loadScanned / instanceTotal})`, transformOrigin:'left', transition:'transform 0.3s ease' }} />
                 )}
                 <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(234,88,12,0.32)', transform: pressingMissing ? 'scaleX(1)' : 'scaleX(0)', transformOrigin:'left', transition: pressingMissing ? `transform ${MISSING_HOLD_MS - MISSING_FILL_DELAY_MS}ms linear` : 'transform 120ms ease-out' }} />
+                {pendingLoaded && <BtnSpinner />}
                 <span style={{ position:'relative' }}>
                   {hasMultiInstance && loadScanned > 0 ? t('workerScanner.loadProgress', { done: loadScanned, total: instanceTotal }) : t('workerScanner.toLoadShort')}
                 </span>
@@ -2242,22 +2335,26 @@ function ChecklistRow({ item, mode }) {
             </div>
           ) : (
             <button
-              style={{ minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
+              className={`rc-action-btn${failLoaded ? ' rc-btn-fail' : ''}`}
+              style={{ position:'relative', overflow:'hidden', minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
                 display:'flex', alignItems:'center', justifyContent:'center',
-                background:'rgba(245,166,35,0.18)', color:'var(--accent2)',
+                background: failLoaded ? 'rgba(239,68,68,0.15)' : 'rgba(245,166,35,0.18)',
+                color: failLoaded ? 'var(--red)' : 'var(--accent2)',
                 WebkitTapHighlightColor:'transparent',
               }}
               onClick={() => item._onToggleLoaded && item._onToggleLoaded(item.id)}
             >
+              {pendingLoaded && <BtnSpinner />}
               {t('workerScanner.loadedShort')}
             </button>
           )}
           <button
             disabled={!item.loaded}
+            className={`rc-action-btn${failReturned ? ' rc-btn-fail' : ''}`}
             style={{ position:'relative', overflow:'hidden', minWidth:80, minHeight:44, padding:'7px 10px', borderRadius:8, fontSize:12, fontWeight:700, border:'none',
               display:'flex', alignItems:'center', justifyContent:'center',
-              background: item.returned ? (isForgottenReturn ? 'rgba(255,82,82,0.15)' : 'rgba(52,211,153,0.15)') : item.loaded ? 'var(--card2)' : 'var(--bg3)',
-              color: item.returned ? (isForgottenReturn ? 'var(--red)' : 'var(--green)') : item.loaded ? 'var(--text2)' : 'var(--text3)',
+              background: failReturned ? 'rgba(239,68,68,0.15)' : item.returned ? (isForgottenReturn ? 'rgba(255,82,82,0.15)' : 'rgba(52,211,153,0.15)') : item.loaded ? 'var(--card2)' : 'var(--bg3)',
+              color: failReturned ? 'var(--red)' : item.returned ? (isForgottenReturn ? 'var(--red)' : 'var(--green)') : item.loaded ? 'var(--text2)' : 'var(--text3)',
               opacity: item.loaded ? 1 : 0.4,
               WebkitTapHighlightColor:'transparent', WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none', touchAction:'manipulation',
             }}
@@ -2274,6 +2371,7 @@ function ChecklistRow({ item, mode }) {
             {!item.returned && item.loaded && (
               <span aria-hidden="true" style={{ position:'absolute', inset:0, background:'rgba(107,114,128,0.35)', transform: pressingForceOut ? 'scaleX(1)' : 'scaleX(0)', transformOrigin:'left', transition: pressingForceOut ? `transform ${FORCE_OUT_HOLD_MS - FORCE_OUT_FILL_DELAY_MS}ms linear` : 'transform 120ms ease-out' }} />
             )}
+            {pendingReturned && <BtnSpinner />}
             <span style={{ position:'relative' }}>
               {item.returned ? (isForgottenReturn ? t('workerScanner.forgottenShort') : t('workerScanner.returnedShort')) : t('workerScanner.returnShort')}
             </span>

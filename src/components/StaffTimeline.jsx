@@ -416,7 +416,37 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     return hour >= s && hour < e
   })
 
-  const openTaskModal = (block) => setModalState({ mode: 'edit', block })
+  // group = TUTTI i blocchi dello stesso gruppo (stesso taskGroupId per un
+  // task libero, stesso eventId+data per un evento/fase) — non più un solo
+  // blocco: si modifica l'attività nel suo insieme, con tutte le persone già
+  // elencate al primo apertura invece di doverle aprire/richiudere una a una.
+  const openTaskModal = (group) => setModalState({ mode: 'edit', group })
+  // Dal gruppo arrivato sopra alle props del modal: `people` elenca ciascun
+  // membro col proprio blockId (serve a StaffTimeline per capire al
+  // salvataggio chi aggiornare) e startTime/endTime già suoi; startTime/
+  // endTime in cima al modal diventano l'inviluppo min/max del gruppo —
+  // l'"orario dell'attività" di default per chi non ha un orario diverso
+  // dagli altri, esattamente come già mostrato sulla card nella griglia
+  // (stessa riduzione min/max di dayTasks qui sopra).
+  const buildEditInitial = (group) => {
+    const first = group[0]
+    return {
+      date: first.date,
+      startTime: group.reduce((min, b) => (b.startTime < min ? b.startTime : min), first.startTime),
+      endTime: group.reduce((max, b) => (b.endTime > max ? b.endTime : max), first.endTime),
+      eventId: first.eventId || null,
+      label: first.label || '',
+      description: first.description || '',
+      people: group.map(b => ({
+        id: b.workerId || b.externalWorkerId || null,
+        kind: b.workerId ? 'worker' : 'external',
+        name: (b.workerId ? people.find(p => p.id === b.workerId)?.name : b.externalWorkerName) || t('common.noName'),
+        blockId: b.id,
+        startTime: b.startTime,
+        endTime: b.endTime,
+      })),
+    }
+  }
   const openCreateForEvent = (ev, date) => {
     const [startTime, endTime] = eventTimeForDay(ev, date)
     setModalState({ mode: 'create', date, startTime, endTime, eventId: ev.id })
@@ -530,9 +560,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setSelectedPerson(null)
   }
 
-  // payload.people è sempre un array (una persona sola in modifica, anche
-  // più d'una in creazione — vedi AssignmentBlockModal.jsx) per non dover
-  // duplicare la logica di risoluzione esterno/sync in due forme diverse.
+  // payload.people è sempre un array, in creazione come in modifica — vedi
+  // AssignmentBlockModal.jsx — per non dover duplicare la logica di
+  // risoluzione esterno/sync in due forme diverse.
   const handleSubmit = async (payload) => {
     const shared = {
       startTime: payload.startTime, endTime: payload.endTime,
@@ -565,29 +595,44 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       const taskGroupId = shared.eventId ? null : doc(collection(db, 'assignmentBlocks')).id
       for (const person of payload.people) {
         const fields = await resolvePerson(person)
-        await createAssignmentBlock({ ...shared, ...fields, taskGroupId, teamId, date: modalState.date, createdBy: user.uid }, { eventsById, allBlocks: blocks })
+        // Ogni persona può avere un orario proprio diverso da quello
+        // dell'attività (vedi AssignmentBlockModal.jsx, riga per riga nella
+        // sezione assegna) — person.startTime/endTime è sempre valorizzato
+        // da lì (uguale a quello condiviso se non personalizzato), quindi
+        // vince su shared senza bisogno di un fallback qui.
+        await createAssignmentBlock({ ...shared, ...fields, startTime: person.startTime, endTime: person.endTime, taskGroupId, teamId, date: modalState.date, createdBy: user.uid }, { eventsById, allBlocks: blocks })
       }
     } else {
-      const fields = await resolvePerson(payload.people[0])
-      await updateAssignmentBlock(modalState.block.id, modalState.block, { ...shared, ...fields }, { eventsById, allBlocks: blocks })
-      // Nome/descrizione del task vanno allineati su TUTTI i blocchi dello
-      // stesso taskGroupId (più persone, stessa commissione) — altrimenti
-      // la card continuerebbe a mostrare il vecchio nome se si fosse
-      // modificato lo slot di una persona diversa da quella "rappresentante".
-      // Stesso ripiego b.taskGroupId||b.id di itemsByDay: un task creato
-      // prima di taskGroupId non ha il campo, ma resta comunque il gruppo
-      // giusto se nel frattempo gli si è aggiunta una seconda persona.
-      if (!shared.eventId) {
-        const gid = modalState.block.taskGroupId || modalState.block.id
-        const siblings = blocks.filter(b => !b.eventId && (b.taskGroupId || b.id) === gid && b.id !== modalState.block.id)
-        await Promise.all(siblings.map(b => updateDoc(doc(db, 'assignmentBlocks', b.id), { label: shared.label, description: shared.description })))
+      // Modifica: il gruppo di partenza (modalState.group) può aggiungere o
+      // perdere persone oltre a cambiare orari — i blockId tornati nel
+      // payload (null = aggiunta ora) dicono chi aggiornare e chi creare;
+      // chi c'era nel gruppo ma non è più nel payload va cancellato. Nome/
+      // descrizione/taskGroupId sono già uguali per tutti ad ogni giro
+      // (prima venivano allineati sui "fratelli" DOPO il salvataggio di un
+      // solo blocco — qui non serve più, li scrive ogni singola chiamata).
+      const group = modalState.group
+      const taskGroupId = shared.eventId ? null : (group[0].taskGroupId || group[0].id)
+      const date = group[0].date
+      const keptBlockIds = new Set(payload.people.filter(p => p.blockId).map(p => p.blockId))
+
+      for (const person of payload.people) {
+        const fields = await resolvePerson(person)
+        const data = { ...shared, ...fields, startTime: person.startTime, endTime: person.endTime, taskGroupId, date }
+        if (person.blockId) {
+          const oldBlock = group.find(b => b.id === person.blockId)
+          await updateAssignmentBlock(person.blockId, oldBlock, data, { eventsById, allBlocks: blocks })
+        } else {
+          await createAssignmentBlock({ ...data, teamId, createdBy: user.uid }, { eventsById, allBlocks: blocks })
+        }
       }
+      const removed = group.filter(b => !keptBlockIds.has(b.id))
+      await Promise.all(removed.map(b => deleteAssignmentBlock(b, { eventsById, allBlocks: blocks })))
     }
     return true
   }
 
   const handleDelete = async () => {
-    await deleteAssignmentBlock(modalState.block, { eventsById, allBlocks: blocks })
+    await Promise.all(modalState.group.map(b => deleteAssignmentBlock(b, { eventsById, allBlocks: blocks })))
   }
 
   const handleGridClick = (e, date) => {
@@ -801,7 +846,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                         setRangeSelect(null); setHoverHour(null)
                         if (selectedPerson) { handleDropOrTap(item, selectedPerson); return }
                         if (!isTask) setSummaryTarget({ event: item.event, date })
-                        else openTaskModal(item.block)
+                        else openTaskModal(assigned)
                       }
                       return (
                         <div key={item.key}
@@ -846,7 +891,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                                       e.stopPropagation()
                                       setRangeSelect(null); setHoverHour(null)
                                       if (selectedPerson) { handleDropOrTap(item, selectedPerson); return }
-                                      openTaskModal(a)
+                                      openTaskModal(assigned)
                                     }}
                                     title={`${name} · ${a.startTime}–${a.endTime}`}
                                     style={{
@@ -913,11 +958,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
 
       {modalState && (
         <AssignmentBlockModal
-          initial={modalState.mode === 'create' ? modalState : {
-            date: modalState.block.date, startTime: modalState.block.startTime, endTime: modalState.block.endTime,
-            workerId: modalState.block.workerId, externalWorkerId: modalState.block.externalWorkerId, externalWorkerName: modalState.block.externalWorkerName,
-            eventId: modalState.block.eventId, label: modalState.block.label, description: modalState.block.description,
-          }}
+          initial={modalState.mode === 'create' ? modalState : buildEditInitial(modalState.group)}
           isEdit={modalState.mode === 'edit'}
           workers={activeWorkers}
           events={weekEvents}

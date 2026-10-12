@@ -54,8 +54,13 @@ export const moveRowToList = (row, listId, takenIds) => {
 // più le righe delle liste aggiuntive (itemRef = catalogo + listId). Restano
 // FUORI le righe duplicate "_extra_" (mancanti) e "_ret_" (rientro parziale),
 // che lo scanner non ha mai considerato: si toccano solo dai loro bottoni.
+// Nota: NON richiede più row.listId valorizzato. Una riga spostata verso la
+// lista principale da moveRowToList (sotto) perde listId ma mantiene id/itemRef
+// originali della lista secondaria — senza questo, quella riga restava
+// visibile in UI (rowListId la considera già "main") ma invisibile allo
+// scanner, che la segnalava sempre come "non in lista".
 export const isScanCandidate = (row, catalogId) =>
-  !row.isExtra && (row.id === catalogId || (!!row.listId && row.itemRef === catalogId && !/_(extra|ret)_/.test(row.id)))
+  !row.isExtra && (row.id === catalogId || (row.itemRef === catalogId && !/_(extra|ret)_/.test(row.id)))
 
 // Sceglie LA riga su cui agire per una scansione, quando lo stesso oggetto
 // compare in più liste dello stesso evento. Priorità: riga con l'unità
@@ -104,7 +109,7 @@ export const freshRowsFromEvent = (rows) => {
   })
   return list
     .filter(r => !(retRows.includes(r) && list.some(p => p.id === r.id.split('_ret_')[0])))
-    .map(({ pronto, loaded, returned, mancante, returnedConsumed, scannedInstances, ...rest }) => ({
+    .map(({ pronto, loaded, returned, mancante, returnedConsumed, scannedInstances, scannedCount, ...rest }) => ({
       ...rest, pronto: false, loaded: false, returned: false, mancante: false,
     }))
 }

@@ -54,6 +54,7 @@ import AbsenceNotifications from './components/AbsenceNotifications'
 import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
+import { maybeAutoEnablePush } from './utils/pushNotifications'
 
 // Riusato sia mentre si aspettano i dati di login sia come fallback di
 // Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
@@ -122,6 +123,25 @@ function PrivateRoutes({ toggleTheme, theme }) {
   const onScannerRoute = pathname.endsWith('/scan')
   const onSuperAdminRoute = pathname === '/super'
   const onWelcomeRoute = pathname === '/welcome'
+
+  // Notifiche "accese di default": un solo tentativo automatico per
+  // apertura dell'app (non ad ogni cambio pagina, questo componente si
+  // ri-renderizza a ogni route), appena il profilo è pronto/approvato/attivo
+  // — prima di allora (PendingApproval, ecc.) non ha senso chiedere il
+  // permesso. maybeAutoEnablePush gestisce da sola il resto (niente richiesta
+  // se già negato, già attivo, o spento a mano in passato — vedi
+  // pushNotifications.js). Deve stare PRIMA di qualunque return sotto: gli
+  // hook non possono seguire un return condizionale.
+  const pushReady = !loading && !!user && !!profile && profile.approved !== false && profile.active !== false
+  // Per uid (non un semplice booleano): se sullo stesso dispositivo/scheda si
+  // esce e si accede con un account diverso, deve poter riprovare per quello
+  // nuovo invece di restare bloccato al primo mai visto in questa sessione.
+  const pushAttemptedUidRef = useRef(null)
+  useEffect(() => {
+    if (!pushReady || pushAttemptedUidRef.current === user.uid) return
+    pushAttemptedUidRef.current = user.uid
+    maybeAutoEnablePush()
+  }, [pushReady, user])
 
   // QR di magazzino scansionato con la fotocamera normale del telefono
   // (fuori dall'app): esce subito verso il sito della squadra o quello

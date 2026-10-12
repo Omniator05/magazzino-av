@@ -32,7 +32,12 @@ function parseTypedTime(raw) {
 // dell'app. Il trigger è un vero <input>: digitare l'orario funziona sempre
 // (conferma a Invio/uscita dal campo), il pannello sotto resta disponibile
 // per chi preferisce scorrere invece di scrivere.
-export default function TimeField({ value, onChange, placeholder = 'Seleziona ora', clearable = false }) {
+// compact: niente icona, niente pannello a ghiera — solo il campo di testo
+// con lo stesso parsing di sopra (digitare "1030" o "10:30" basta). Nato per
+// gli orari per-persona dentro una riga stretta (AssignmentBlockModal), dove
+// non c'è spazio per l'icona e la ghiera è scomoda da aprire/richiudere per
+// un tocco così piccolo — qui il tocco apre direttamente la tastiera.
+export default function TimeField({ value, onChange, placeholder = 'Seleziona ora', clearable = false, compact = false }) {
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState(value || '')
   const containerRef = useRef(null)
@@ -99,7 +104,7 @@ export default function TimeField({ value, onChange, placeholder = 'Seleziona or
         className="tf-trigger"
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-          padding: '9px 12px', borderRadius: 10, background: 'var(--card2)',
+          padding: compact ? '7px 8px' : '9px 12px', borderRadius: 10, background: 'var(--card2)',
           border: `1.5px solid ${open ? 'var(--accent)' : 'var(--border)'}`,
         }}
       >
@@ -110,7 +115,7 @@ export default function TimeField({ value, onChange, placeholder = 'Seleziona or
           maxLength={5}
           className="tf-input"
           value={typed}
-          onFocus={() => setOpen(true)}
+          onFocus={() => { if (!compact) setOpen(true) }}
           onChange={e => setTyped(e.target.value)}
           onBlur={commitTyped}
           onKeyDown={e => {
@@ -123,15 +128,17 @@ export default function TimeField({ value, onChange, placeholder = 'Seleziona or
             color: value ? 'var(--text)' : 'var(--text3)', fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
           }}
         />
-        <span
-          onClick={() => { inputRef.current?.focus(); setOpen(o => !o) }}
-          style={{ color: 'var(--text2)', flexShrink: 0, display: 'flex', cursor: 'pointer' }}
-        >
-          <Clock size={15} />
-        </span>
+        {!compact && (
+          <span
+            onClick={() => { inputRef.current?.focus(); setOpen(o => !o) }}
+            style={{ color: 'var(--text2)', flexShrink: 0, display: 'flex', cursor: 'pointer' }}
+          >
+            <Clock size={15} />
+          </span>
+        )}
       </div>
 
-      {open && (
+      {open && !compact && (
         <div style={{ position: 'absolute', left: 0, top: 'calc(100% + 4px)', width: 150, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 13, padding: '9px 9px 7px', boxShadow: '0 8px 28px rgba(0,0,0,0.14)', zIndex: 100 }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <div ref={hourListRef} style={{ flex: 1, height: 168, overflowY: 'auto' }}>

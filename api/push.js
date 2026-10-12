@@ -136,23 +136,41 @@ async function runDailyReminders(res) {
       // aggiungere ">0" alla query avrebbe richiesto un indice composito da
       // creare a mano la prima volta — con un inventario di dimensioni
       // normali filtrare qui costa poco ed evita quel passaggio.
+      //
+      // "reorderNotified" evita di rimandare lo stesso avviso ogni giorno
+      // finché i pezzi non arrivano: lo stato resta "da riordinare" per
+      // giorni/settimane, ma l'admin l'ha già visto la prima volta — un
+      // oggetto entra nel digest solo quando scende sotto scorta per la
+      // PRIMA volta (flag non ancora impostato), e il flag si azzera da solo
+      // appena l'oggetto torna sopra scorta minima, pronto a riavvisare se
+      // in futuro scende di nuovo.
       const itemsSnap = await db.collection('items')
         .where('teamId', '==', teamId)
         .where('category', '==', 'Consumabili')
         .get()
-      const low = itemsSnap.docs.filter(d => {
+      const newlyLow = []
+      const backInStock = []
+      itemsSnap.docs.forEach(d => {
         const it = d.data()
-        return it.minStock > 0 && (it.availableQty ?? it.totalQty ?? 0) <= it.minStock
+        const isLow = it.minStock > 0 && (it.availableQty ?? it.totalQty ?? 0) <= it.minStock
+        if (isLow && !it.reorderNotified) newlyLow.push(d)
+        else if (!isLow && it.reorderNotified) backInStock.push(d)
       })
       let reorderSent = 0
-      if (low.length > 0) {
+      if (newlyLow.length > 0) {
         const adminIds = await resolveAudienceUserIds(db, teamId, { type: 'admins' })
         const tokenDocs = await tokensForTeam(db, teamId, adminIds)
         reorderSent = await sendToTokenDocs(admin, db, tokenDocs, {
           title: 'Scorta minima',
-          body: `${low.length} consumabil${low.length === 1 ? 'e' : 'i'}`,
+          body: `${newlyLow.length} consumabil${newlyLow.length === 1 ? 'e' : 'i'}`,
           url: '/inventory?filter=reorder',
         })
+        // Segna "avvisato" solo se qualcuno l'ha davvero ricevuto — altrimenti
+        // (nessun admin con push attivo quel giorno) resta da riprovare.
+        if (reorderSent > 0) await Promise.all(newlyLow.map(d => d.ref.update({ reorderNotified: true })))
+      }
+      if (backInStock.length > 0) {
+        await Promise.all(backInStock.map(d => d.ref.update({ reorderNotified: false })))
       }
 
       results.push({ teamId, eventsSent, reorderSent })

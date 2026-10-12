@@ -4,6 +4,13 @@ import i18n from '../i18n'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY
 const TOKEN_STORAGE_KEY = 'rc_push_token'
+// Scritta SOLO quando l'utente spegne le notifiche a mano (vedi
+// disablePushNotifications) — distingue "non ancora provato" da "le ha
+// rifiutate di proposito", altrimenti maybeAutoEnablePush sotto le
+// riaccenderebbe da sola ad ogni apertura dell'app anche per chi le ha
+// spente apposta (il permesso del browser resta "granted" anche dopo lo
+// spegnimento lato nostro: non è lui a dirci la scelta dell'utente).
+const PUSH_OPT_OUT_KEY = 'rc_push_opted_out'
 
 // Stesso pattern "fire and forget con ID token" di src/utils/googleCalendar.js
 // (authedPost) — duplicato qui apposta invece di condiviso: sono due feature
@@ -59,12 +66,17 @@ export async function enablePushNotifications() {
   if (!token) return false
   await authedPost('/api/push', { token, action: 'register' })
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  // Riaccese di proposito (toggle manuale dopo averle spente, o mai spente):
+  // in entrambi i casi l'opt-out non deve più impedire il riavvio automatico
+  // di maybeAutoEnablePush su un futuro dispositivo/reinstallo.
+  localStorage.removeItem(PUSH_OPT_OUT_KEY)
   return true
 }
 
 export async function disablePushNotifications() {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  localStorage.setItem(PUSH_OPT_OUT_KEY, '1')
   if (!token) return
   await authedPost('/api/push', { token, action: 'unregister' }).catch(() => {})
   try {
@@ -72,6 +84,27 @@ export async function disablePushNotifications() {
   } catch {
     // Il token può essere già scaduto/non registrato lato Firebase: non è un
     // problema, l'importante è che sia stato rimosso lato server sopra.
+  }
+}
+
+// Tentativo automatico, una volta per apertura dell'app (vedi App.jsx): le
+// notifiche sono "accese di default" solo nel senso che proviamo ad
+// attivarle da sole al primo accesso utile, invece di aspettare che l'utente
+// trovi il toggle in Profilo. Non insiste mai: se il permesso del browser è
+// già stato negato (richiederlo di nuovo non mostra un secondo popup, il
+// browser risponde "denied" in silenzio) o se l'utente le ha spente a mano
+// in passato (PUSH_OPT_OUT_KEY), resta spento senza ritentare ad ogni avvio.
+export async function maybeAutoEnablePush() {
+  if (isPushEnabled()) return
+  if (localStorage.getItem(PUSH_OPT_OUT_KEY)) return
+  if (typeof Notification === 'undefined' || Notification.permission === 'denied') return
+  if (!(await isPushAvailable())) return
+  try {
+    await enablePushNotifications()
+  } catch {
+    // Mai bloccante: un fallimento qui (SW non registrabile, rete assente al
+    // primo avvio...) non deve impedire l'uso del resto dell'app. L'utente
+    // può sempre riprovare dal toggle in Profilo.
   }
 }
 

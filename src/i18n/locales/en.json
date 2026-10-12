@@ -236,6 +236,8 @@
     "assignNewHint": "No match — \"{{name}}\" will be added as a new external on save",
     "assignAddNew": "+ Add \"{{name}}\" as external",
     "removePersonAria": "Remove {{name}}",
+    "useSharedTimeBtn": "Task time",
+    "useSharedTimeAria": "Use the task's time",
     "startLabel": "Start",
     "endLabel": "End",
     "eventLabel": "Linked event",

@@ -265,7 +265,7 @@ export default function EventDetail() {
         const qtyChanged = !i.isExtra && !i.returned && (i.qty || 1) !== qty
         if (qtyChanged && i.loaded) {
           unloadedRow = i
-          updated = { ...updated, loaded: false, scannedInstances: { ...(updated.scannedInstances || {}), load: [] } }
+          updated = { ...updated, loaded: false, scannedInstances: { ...(updated.scannedInstances || {}), load: [] }, scannedCount: { ...(updated.scannedCount || {}), load: 0 } }
         }
         // La quantità è cambiata mentre l'oggetto era già "pronto" (o in
         // carico): torna "da preparare" così i magazzinieri lo rivedono con
@@ -273,7 +273,7 @@ export default function EventDetail() {
         // a differenza del carico, qui non serve conferma: non tocca la
         // giacenza, è solo un flag di avanzamento.
         if (qtyChanged && i.pronto) {
-          updated = { ...updated, pronto: false, scannedInstances: { ...(updated.scannedInstances || {}), pronto: [] } }
+          updated = { ...updated, pronto: false, scannedInstances: { ...(updated.scannedInstances || {}), pronto: [] }, scannedCount: { ...(updated.scannedCount || {}), pronto: 0 } }
         }
         // Cambio lista dal modal di modifica riga
         return (listId && listId !== rowListId(i)) ? moveRowToList(updated, listId, taken) : updated
@@ -925,8 +925,8 @@ export default function EventDetail() {
       if (!bulkSelectedIds.has(i.id) || i.isExtra) return i
       return {
         ...i, ...flags,
-        ...(!flags.loaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] } } : {}),
-        ...(!flags.returned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] } } : {}),
+        ...(!flags.loaded ? { scannedInstances: { ...(i.scannedInstances || {}), load: [] }, scannedCount: { ...(i.scannedCount || {}), load: 0 } } : {}),
+        ...(!flags.returned ? { scannedInstances: { ...(i.scannedInstances || {}), return: [] }, scannedCount: { ...(i.scannedCount || {}), return: 0 } } : {}),
         ...(flags.returned ? { returnedConsumed: false } : {}),
       }
     }))
