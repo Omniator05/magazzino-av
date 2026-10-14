@@ -26,6 +26,9 @@ const messaging = firebase.messaging()
 messaging.onBackgroundMessage(payload => {
   const { title, body } = payload.notification || {}
   self.registration.showNotification(title || 'Roadcase', {
+    // Stesso tag di quello impostato dal server (api/push.js): se l'SDK ha già
+    // mostrato la notifica da sé, questa la sostituisce invece di duplicarla.
+    tag: `${title || 'Roadcase'}|${body || ''}`,
     body: body || '',
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',

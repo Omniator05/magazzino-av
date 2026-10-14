@@ -105,17 +105,23 @@ const IconPlusSm = () => (
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 )
+// Dati della dashboard tenuti in memoria fra una visita e l'altra (vedi
+// l'effetto sotto): tornando qui da un'altra pagina la schermata parte già
+// piena, invece di montarsi vuota e riempirsi a pezzi — items, eventi,
+// attività e furgoni arrivano da quattro ascolti Firestore separati, e
+// ognuno ridisegnava l'intera pagina (hero animato compreso) mentre la
+// dissolvenza di entrata era ancora in corso, con l'effetto "a scatti".
+const EMPTY_DASH = { teamId: null, items: [], events: [], tasks: [], vehicles: [], itemsLoaded: false, eventsLoaded: false }
+const dashCache = { ...EMPTY_DASH }
+const dashSignature = d => JSON.stringify([d.items, d.events, d.tasks, d.vehicles, d.itemsLoaded, d.eventsLoaded])
+
 export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
   const { profile, logout, teamId, team, showOverlay } = useAuth()
   const navigate = useNavigate()
   const [showProfile, setShowProfile] = useState(false)
-  const [items, setItems]   = useState([])
-  const [vehicles, setVehicles] = useState([])
-  const [tasks, setTasks]   = useState([])
-  const [events, setEvents] = useState([])
-  const [itemsLoaded, setItemsLoaded]   = useState(false)
-  const [eventsLoaded, setEventsLoaded] = useState(false)
+  const [dash, setDash] = useState(() => (dashCache.teamId && dashCache.teamId === teamId ? { ...dashCache } : { ...EMPTY_DASH }))
+  const { items, vehicles, tasks, events, itemsLoaded, eventsLoaded } = dash
   const [weather, setWeather] = useState(() => {
     try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
   })
@@ -129,13 +135,26 @@ export default function Dashboard({ toggleTheme, theme }) {
 
   useEffect(() => {
     if (!teamId) return
-    const u1 = onSnapshot(query(collection(db, 'items'),  where('teamId','==',teamId), orderBy('name')),  s => { setItems(s.docs.map(d => ({ id:d.id,...d.data() }))); setItemsLoaded(true) })
+    // Parte dai dati in memoria (stessa squadra) e riunisce in UN solo
+    // aggiornamento le risposte dei quattro ascolti che arrivano a ridosso
+    // l'una dell'altra; se i dati sono identici a quelli già a schermo non
+    // ridisegna nulla.
+    const buffer = dashCache.teamId === teamId ? { ...dashCache } : { ...EMPTY_DASH, teamId }
+    let timer = null
+    const flush = () => {
+      timer = null
+      Object.assign(dashCache, buffer, { teamId })
+      setDash(prev => (dashSignature(prev) === dashSignature(buffer) ? prev : { ...buffer }))
+    }
+    const push = patch => { Object.assign(buffer, patch); if (!timer) timer = setTimeout(flush, 40) }
+    const docsOf = s => s.docs.map(d => ({ id:d.id, ...d.data() }))
+    const u1 = onSnapshot(query(collection(db, 'items'),  where('teamId','==',teamId), orderBy('name')),  s => push({ items: docsOf(s), itemsLoaded: true }))
     // isDeadlineReminder: promemoria scadenze auto-generati (vedi utils/deadlines.js)
     // — compaiono solo in Calendario, mai tra i "prossimi eventi" qui.
-    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => { setEvents(s.docs.map(d => ({ id:d.id,...d.data() })).filter(e => !e.isDeadlineReminder)); setEventsLoaded(true) })
-    const u3 = onSnapshot(query(collection(db, 'tasks'),  where('teamId','==',teamId)),                   s => setTasks(s.docs.map(d => ({ id:d.id,...d.data() }))))
-    const u4 = onSnapshot(query(collection(db, 'vehicles'), where('teamId','==',teamId)),                 s => setVehicles(s.docs.map(d => ({ id:d.id,...d.data() }))))
-    return () => { u1(); u2(); u3(); u4() }
+    const u2 = onSnapshot(query(collection(db, 'events'), where('teamId','==',teamId), orderBy('date')),  s => push({ events: docsOf(s).filter(e => !e.isDeadlineReminder), eventsLoaded: true }))
+    const u3 = onSnapshot(query(collection(db, 'tasks'),  where('teamId','==',teamId)),                   s => push({ tasks: docsOf(s) }))
+    const u4 = onSnapshot(query(collection(db, 'vehicles'), where('teamId','==',teamId)),                 s => push({ vehicles: docsOf(s) }))
+    return () => { if (timer) clearTimeout(timer); u1(); u2(); u3(); u4() }
   }, [teamId])
 
   // Resoconto settimanale: solo il lunedì, una volta a settimana (per dispositivo).
@@ -190,7 +209,8 @@ export default function Dashboard({ toggleTheme, theme }) {
       .then(r => r.json())
       .then(d => {
         const w = { code: d.current.weather_code, temp: Math.round(d.current.temperature_2m) }
-        setWeather(w)
+        // Stesso valore di prima (cache): niente nuovo render della pagina.
+        setWeather(prev => (prev && prev.code === w.code && prev.temp === w.temp ? prev : w))
         localStorage.setItem('weatherCache', JSON.stringify(w))
       })
       .catch(() => {})

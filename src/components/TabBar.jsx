@@ -43,7 +43,7 @@ const WORK_HOURS_TAB = { path:'/work-hours', label:'Ore', icon:ICON_WORK_HOURS }
 // Telefono / schermi larghi (≥700px): stessa forma, scala ~1.3 su computer.
 // padX e rc sono scelti perché la tacca della prima/ultima tab non tocchi gli
 // angoli arrotondati (cx0 ≥ rc + larghezza mezza tacca).
-const PHONE = { H: 54, D: 52, ring: 5, fillet: 8, cy: 4, dip: 8, icon: 28, padX: 26, rc: 16, bottom: 12 }
+const PHONE = { H: 54, D: 52, ring: 5, fillet: 6, cy: 4, dip: 8, icon: 28, padX: 28, rc: 14, bottom: 12, slot: 46 }
 const DESKTOP = { H: 70, D: 68, ring: 6, fillet: 10, cy: 5, dip: 10, icon: 34, padX: 40, rc: 24, bottom: 22, width: 600 }
 const DURATION = 480      // ms
 const TAB_GREY = '#6b7280'
@@ -134,9 +134,28 @@ export default function TabBar() {
   }, [])
   const wide = vw >= 700
   const m = wide ? DESKTOP : PHONE
-  const barW = wide ? m.width : vw - 24
-  const { padX, rc } = m
+  const { rc } = m
   const n = tabs.length
+  // Sul telefono la larghezza NON si calcola da innerWidth (su alcuni
+  // dispositivi/PWA può essere più larga dell'area davvero visibile e la barra
+  // usciva dai bordi): la barra è ancorata con left/right a 24px dai bordi
+  // dell'area visibile, e qui si MISURA la larghezza che ne risulta.
+  const navRef = useRef(null)
+  const [measuredW, setMeasuredW] = useState(null)
+  useLayoutEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const upd = () => setMeasuredW(el.clientWidth)
+    upd()
+    const ro = new ResizeObserver(upd)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [wide])
+  const barW = measuredW || (wide ? m.width : Math.min(vw - 48, n * m.slot + 2 * m.padX))
+  // Margine interno scelto perché la tacca della prima/ultima tab non tocchi
+  // gli angoli arrotondati nemmeno sugli schermi più stretti.
+  const off = Math.sqrt((m.D / 2 + m.ring + m.fillet) ** 2 - (m.fillet - m.cy) ** 2) // mezza larghezza della tacca
+  const padX = Math.max(m.padX, (rc + off - barW / (2 * n)) / (1 - 1 / n))
   const usable = barW - padX * 2
   const slotW = usable / n
 
@@ -208,9 +227,11 @@ export default function TabBar() {
   }, [barW, n, wide])
 
   return (
-    <nav className="tabbar-nav" style={{
-      position:'fixed', zIndex:100, width: barW,
-      left:'50%', transform:'translateX(-50%)',
+    <nav ref={navRef} className="tabbar-nav" style={{
+      position:'fixed', zIndex:100,
+      // Telefono: compatta (poco spazio fra le icone), centrata, e comunque
+      // sempre dentro i margini dell'area visibile (left/right + maxWidth).
+      ...(wide ? { width: m.width, left:'50%', transform:'translateX(-50%)' } : { left:24, right:24, margin:'0 auto', maxWidth: n * m.slot + 2 * m.padX }),
       bottom: `calc(env(safe-area-inset-bottom) + ${m.bottom}px)`,
       '--ftab-icon': `${m.icon}px`,
     }}>

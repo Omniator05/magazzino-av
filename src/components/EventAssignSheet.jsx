@@ -170,7 +170,6 @@ export default function EventAssignSheet({ event, blocks, workers, unavailabilit
             activeWorkers={activeWorkers}
             externalWorkers={externalWorkers}
             unavailability={unavailability}
-            quickPeople={activeWorkers.map(w => ({ id: w.id, kind: 'worker', name: w.name || t('common.noName') }))}
             onClose={drag.close}
             onAddPerson={addPerson}
             onRemoveBlock={b => deleteAssignmentBlock(b, ctx())}

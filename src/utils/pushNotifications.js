@@ -72,6 +72,7 @@ async function attachForegroundPush() {
       const url = payload.fcmOptions?.link || payload.data?.url || '/'
       const reg = await navigator.serviceWorker.getRegistration(PUSH_SCOPE)
       reg?.showNotification(title || 'Roadcase', {
+        tag: `${title || 'Roadcase'}|${body || ''}`,
         body: body || '', icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', data: { url },
       })
     })

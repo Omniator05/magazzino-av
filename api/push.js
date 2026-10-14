@@ -52,7 +52,12 @@ async function sendToTokenDocs(admin, db, tokenDocs, { title, body, url }) {
     tokens,
     notification: { title, body },
     webpush: {
-      notification: { icon: '/pwa-192x192.png', badge: '/pwa-192x192.png' },
+      // `tag` uguale per la stessa notifica: se il dispositivo ne mostrasse due
+      // (es. quella automatica dell'SDK + quella del service worker, o due
+      // registrazioni dello stesso telefono) la seconda SOSTITUISCE la prima
+      // invece di accumularsi. La stessa formula è nel service worker e in
+      // pushNotifications.js (messaggi con l'app aperta).
+      notification: { icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', tag: `${title}|${body}` },
       fcmOptions: url ? { link: url } : undefined,
     },
   })
