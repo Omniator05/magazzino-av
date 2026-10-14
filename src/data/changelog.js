@@ -51,6 +51,30 @@ export const CHANGELOG = [
         },
       },
       {
+        kind: 'new',
+        title: { it: 'Nuova barra di navigazione e calendario da telefono rinnovato', en: 'New navigation bar and refreshed phone calendar' },
+        text: {
+          it: 'La barra in basso ora è fluttuante: la pagina attuale è un cerchio che sporge sopra la barra, le altre icone sono piccole e si ingrandiscono al passaggio del mouse. Il calendario da telefono prende lo stesso stile del desktop (griglia a tutta larghezza con righe sottili, mese al centro con "Oggi").',
+          en: 'The bottom bar is now floating: the current page is a circle popping above the bar, the other icons are small and grow on hover. The phone calendar takes the same style as desktop (full-width grid with thin lines, month in the centre with "Today").',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Assegna personale anche da telefono, dalla lista di carico', en: 'Assign staff from your phone, inside the loading list' },
+        text: {
+          it: 'Dal bottone "Assegna" di un evento, su telefono, si apre un foglio con i giorni dell\'evento e il montaggio/smontaggio: aggiungi persone con un tocco, dai a ciascuna un orario preciso e una nota su cosa deve fare.',
+          en: 'From an event\'s "Assign" button, on phone, a sheet opens with the event\'s days and setup/teardown: add people with a tap, give each one exact hours and a note on what to do.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Liste di carico: per i magazzinieri si parte da "Tutte"', en: 'Loading lists: workers start from "All"' },
+        text: {
+          it: 'Quando un evento ha più liste, il magazziniere apre sempre la vista che le raggruppa tutte; le liste singole sono solo un filtro, e si può restare su una lista già completa per controllarla.',
+          en: 'When an event has several lists, the worker always opens the view that groups them all; single lists are just a filter, and you can stay on an already completed list to check it.',
+        },
+      },
+      {
         kind: 'fix',
         title: { it: 'Popup delle assenze dopo il caricamento', en: 'Absence pop-ups after loading' },
         text: {

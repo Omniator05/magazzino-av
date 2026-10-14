@@ -261,7 +261,7 @@
     "pickWorkerPlaceholder": "Pick a staff member",
     "externalLabel": "External person",
     "assignLabel": "Assign",
-    "assignPlaceholder": "Add: search a worker or type a name…",
+    "assignPlaceholder": "Add: search or type a name…",
     "assignNewHint": "No match — \"{{name}}\" will be added as a new external on save",
     "assignAddNew": "+ Add \"{{name}}\" as external",
     "removePersonAria": "Remove {{name}}",
@@ -721,7 +721,8 @@
     "ready": "Ready",
     "readyDone": "✓ Ready",
     "loadedButton": "Loaded",
-    "returnedButton": "Returned"
+    "returnedButton": "Returned",
+    "assignSheetTitle": "Assign staff"
   },
   "eventSummary": {
     "timeLabel": "Time",
@@ -1235,7 +1236,8 @@
     "itemInfoToggle": "Item details",
     "decreaseQty": "Decrease quantity",
     "increaseQty": "Increase quantity",
-    "listChangedToast": "The loading list was updated by the admin"
+    "listChangedToast": "The loading list was updated by the admin",
+    "listDoneShowAll": "“{{from}}” done — back to “All”"
   },
   "workerInventory": {
     "scan": "📷 Scan",

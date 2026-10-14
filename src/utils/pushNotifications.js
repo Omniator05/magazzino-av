@@ -1,4 +1,4 @@
-import { getMessaging, getToken, deleteToken, isSupported } from 'firebase/messaging'
+import { getMessaging, getToken, deleteToken, isSupported, onMessage } from 'firebase/messaging'
 import app, { auth } from '../firebase'
 import i18n from '../i18n'
 
@@ -57,6 +57,49 @@ export function isPushEnabled() {
 // (non è come il routing delle fetch), quindi isolarlo così è sicuro.
 const PUSH_SCOPE = '/firebase-cloud-messaging-push-scope'
 
+// Con l'app APERTA (in primo piano) l'SDK non mostra nessuna notifica da sé e
+// il service worker non viene chiamato: il messaggio arriva solo a questo
+// callback, e senza gestirlo sembra che "non sia arrivato niente" (proprio il
+// caso di chi prova subito dal telefono con l'app aperta). Lo mostriamo noi
+// come notifica di sistema, stessa forma di quella in background.
+let foregroundAttached = false
+async function attachForegroundPush() {
+  if (foregroundAttached) return
+  foregroundAttached = true
+  try {
+    onMessage(getMessaging(app), async payload => {
+      const { title, body } = payload.notification || {}
+      const url = payload.fcmOptions?.link || payload.data?.url || '/'
+      const reg = await navigator.serviceWorker.getRegistration(PUSH_SCOPE)
+      reg?.showNotification(title || 'Roadcase', {
+        body: body || '', icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', data: { url },
+      })
+    })
+  } catch {
+    // Non bloccante: resta il comportamento di prima (notifiche solo in background).
+  }
+}
+
+// Il token FCM è del DISPOSITIVO, ma sul server il documento dice a CHI
+// appartiene. Se sullo stesso telefono si esce e si entra con un altro account
+// il token restava intestato al precedente: l'account nuovo non riceveva mai
+// niente e quello vecchio sì. Qui lo si (ri)intesta all'utente attuale.
+async function claimStoredToken() {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  if (token) await authedPost('/api/push', { token, action: 'register' })
+}
+
+// Da chiamare prima del logout: toglie il token dal server (chi esce non deve
+// più ricevere notifiche su questo telefono) e dal dispositivo — senza
+// toccare il permesso né l'opt-out, così al prossimo accesso (anche con un
+// altro account) si riattiva da solo, senza nuova richiesta.
+export async function releasePushToken() {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  if (!token) return
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
+  await authedPost('/api/push', { token, action: 'unregister' }).catch(() => {})
+}
+
 export async function enablePushNotifications() {
   const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: PUSH_SCOPE })
   const permission = await Notification.requestPermission()
@@ -66,6 +109,7 @@ export async function enablePushNotifications() {
   if (!token) return false
   await authedPost('/api/push', { token, action: 'register' })
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  attachForegroundPush()
   // Riaccese di proposito (toggle manuale dopo averle spente, o mai spente):
   // in entrambi i casi l'opt-out non deve più impedire il riavvio automatico
   // di maybeAutoEnablePush su un futuro dispositivo/reinstallo.
@@ -95,7 +139,13 @@ export async function disablePushNotifications() {
 // browser risponde "denied" in silenzio) o se l'utente le ha spente a mano
 // in passato (PUSH_OPT_OUT_KEY), resta spento senza ritentare ad ogni avvio.
 export async function maybeAutoEnablePush() {
-  if (isPushEnabled()) return
+  if (isPushEnabled()) {
+    // Già attive su questo dispositivo: si riallinea comunque a chi è
+    // collegato ora e si ascoltano i messaggi con l'app aperta.
+    claimStoredToken().catch(() => {})
+    attachForegroundPush()
+    return
+  }
   if (localStorage.getItem(PUSH_OPT_OUT_KEY)) return
   if (typeof Notification === 'undefined' || Notification.permission === 'denied') return
   if (!(await isPushAvailable())) return

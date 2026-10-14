@@ -9,6 +9,7 @@ import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
 import StaffAssignPanel from './StaffAssignPanel'
+import { DEFAULT_START, DEFAULT_END, toMin, eventTimeForDay, phaseTimeFor } from '../utils/assignmentTimes'
 import { Plus, Wrench, Search } from './Icon'
 
 const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -50,8 +51,6 @@ function itemContentHeight(personLaneCount) {
 // alla durata — per questo non ci sono più le linee verticali di guida).
 const MIN_CARD_FRAC = 0.4
 const MIN_LANES = 2
-const DEFAULT_START = '00:00'
-const DEFAULT_END = '23:59'
 
 function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -79,10 +78,6 @@ function pad(n) { return String(n).padStart(2, '0') }
 // Ora intera della griglia → "HH:00". Il bordo destro (24) non è un orario
 // valido: l'ultimo minuto utile della giornata è 23:59.
 function hourToTime(h) { return h >= 24 ? '23:59' : `${pad(h)}:00` }
-function toMin(hm) {
-  const [h, m] = hm.split(':').map(Number)
-  return h * 60 + m
-}
 // Un'attività LIBERA (task) può scavalcare la mezzanotte: se l'ora di fine è
 // uguale o precedente a quella d'inizio finisce il giorno dopo (23:00–02:00).
 // Vale solo per i task — eventi e fasi restano dentro il loro giorno.
@@ -142,34 +137,6 @@ function laneFromClientY(clientY, rect, laneTop, laneHeights) {
     if (y < laneTop[i] + laneHeights[i]) return i
   }
   return laneTop.length - 1
-}
-// Un evento compare nei giorni che tocca (anche multi-giorno, come
-// eventsByDate in Calendar.jsx): se QUEL giorno ha un orario su misura
-// (event.dayTimes, impostato toccando il titolo della card — vedi
-// dayHoursModal più sotto) usa quello; sul giorno con l'orario "proprio"
-// dell'evento (event.date, se non è "tutto il giorno") usa quello; sugli
-// altri giorni "di passaggio" occupa l'intera fascia (è comunque in corso,
-// nessun orario più preciso impostato).
-function eventTimeForDay(ev, date) {
-  const custom = ev.dayTimes?.[date]
-  if (custom?.timeStart && custom?.timeEnd) return [custom.timeStart, custom.timeEnd]
-  if (ev.date === date && ev.allDay === false && ev.timeStart && ev.timeEnd) return [ev.timeStart, ev.timeEnd]
-  return [DEFAULT_START, DEFAULT_END]
-}
-// Orario di una FASE (montaggio/smontaggio): quello impostato dal pannello
-// "Assegna personale" (event.phaseTimes), altrimenti un predefinito — il
-// giorno intero, oppure, se cade nello stesso giorno dell'evento, la parte
-// PRIMA dell'inizio (montaggio) o DOPO la fine (smontaggio) dell'evento.
-function phaseTimeFor(ev, key, date) {
-  const custom = ev.phaseTimes?.[key]
-  if (custom?.timeStart && custom?.timeEnd) return [custom.timeStart, custom.timeEnd]
-  const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
-  if (date >= ev.date && date <= end) {
-    const [es, ee] = eventTimeForDay(ev, date)
-    if (key === 'montaggio' && toMin(es) > 0) return [DEFAULT_START, es]
-    if (key === 'smontaggio' && toMin(ee) < 1439) return [ee, DEFAULT_END]
-  }
-  return [DEFAULT_START, DEFAULT_END]
 }
 // Impacchetta gli item di un giorno (eventi + fasi + task) in corsie senza
 // sovrapposizioni orarie — stesso algoritmo greedy di un day-view di

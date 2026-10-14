@@ -27,7 +27,7 @@ const rowFromBlock = b => ({ blockId: b.id, startTime: b.startTime, endTime: b.e
 // chiamante, che chiede conferma prima di scartarla cambiando card.
 export default function StaffAssignPanel({
   item, date, isNew, activeWorkers, externalWorkers, unavailability,
-  focusAddToken, draggedPerson, onDropPerson,
+  focusAddToken, draggedPerson, onDropPerson, embedded = false, quickPeople,
   onClose, onAddPerson, onRemoveBlock, onSave, onDeleteTask, onResetDayHours, onOpenEvent, onDirtyChange,
 }) {
   const { t, i18n } = useTranslation()
@@ -134,9 +134,13 @@ export default function StaffAssignPanel({
   )
 
   return (
-    <div className="rc-sidebar-swap"
-      style={{ width: 460, flexShrink: 0, alignSelf: 'flex-start', position: 'sticky', top: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: PANEL_MAX_HEIGHT, maxHeight: PANEL_MAX_HEIGHT, overflowY: 'auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+    <div className={embedded ? undefined : 'rc-sidebar-swap'}
+      style={embedded
+        ? { display: 'flex', flexDirection: 'column', gap: 14 }
+        : { width: 460, flexShrink: 0, alignSelf: 'flex-start', position: 'sticky', top: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: PANEL_MAX_HEIGHT, maxHeight: PANEL_MAX_HEIGHT, overflowY: 'auto' }}>
+      {/* Incorporato (es. foglio nella lista di carico): titolo e chiusura
+          li mette il contenitore. */}
+      {!embedded && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
           {item.type === 'event' && event.type === 'installation' && <Wrench size={15} />}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -145,7 +149,7 @@ export default function StaffAssignPanel({
         </h2>
         <button onClick={onClose} className="btn-no-anim" aria-label={t('common.close')}
           style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
-      </div>
+      </div>}
 
       <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: '#6b6b6b' }}>
         {dateLabel}
@@ -163,7 +167,7 @@ export default function StaffAssignPanel({
             <textarea id="staff-task-desc" value={description} onChange={e => setDescription(e.target.value)} placeholder={t('staffTimeline.taskDescriptionPlaceholder')} rows={2} style={{ resize: 'vertical' }} />
           </div>
         </>
-      ) : (
+      ) : embedded ? null : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {isMultiDayEvent && (
             <InfoRow icon={<Calendar size={14} />}>
@@ -235,9 +239,14 @@ export default function StaffAssignPanel({
             }}
             placeholder={t('staffTimeline.assignPlaceholder')}
           />
-          {suggestions.length > 0 && (
+          {(() => {
+            // Senza testo scritto, le persone "rapide" (se il chiamante le dà):
+            // un tap le aggiunge, utile da telefono dove scrivere è scomodo.
+            const shown = q ? suggestions : (quickPeople || []).filter(c => !isAssigned(c)).slice(0, 8)
+            if (shown.length === 0) return null
+            return (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              {suggestions.map(c => (
+              {shown.map(c => (
                 <button key={`${c.kind}-${c.id}`} type="button" className="btn-no-anim" onClick={() => add(c)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px 4px 4px', borderRadius: 20, background: '#fff', border: '1.5px solid #e0ddd6', fontSize: 12, fontWeight: 700, color: '#1a1a1a' }}>
                   <span style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, background: personColor(c.id), color: '#fff', fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(c.name)}</span>
@@ -245,7 +254,8 @@ export default function StaffAssignPanel({
                 </button>
               ))}
             </div>
-          )}
+            )
+          })()}
           {q && !exactMatch && (
             <button type="button" className="btn-no-anim" onClick={() => add({ id: null, kind: 'external', name: q })}
               style={{ display: 'block', marginTop: 8, fontSize: 12, fontWeight: 700, color: '#0066cc' }}>
@@ -305,7 +315,7 @@ export default function StaffAssignPanel({
       <div style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 4 }}>
         {isTask ? (
           <DeleteButton onClick={onDeleteTask} size={44} ariaLabel={t('staffTimeline.deleteTaskAria')} />
-        ) : (
+        ) : embedded ? null : (
           <button type="button" onClick={onOpenEvent} className="btn btn-secondary" style={{ flexShrink: 0 }}>
             <List size={16} /> {t('eventSummary.goToLoadList')}
           </button>

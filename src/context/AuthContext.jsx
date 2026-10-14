@@ -5,6 +5,7 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import i18n from '../i18n'
+import { releasePushToken } from '../utils/pushNotifications'
 
 const AuthContext = createContext(null)
 
@@ -197,8 +198,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
     sessionStorage.removeItem('__ap')
+    // Il token push del dispositivo va tolto finché si è ancora autenticati
+    // (serve il token di accesso per chiamare il server), altrimenti resta
+    // intestato a chi esce — vedi releasePushToken.
+    try { await releasePushToken() } catch {}
     return signOut(auth)
   }
 

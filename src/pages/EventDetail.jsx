@@ -27,6 +27,7 @@ import { syncKitAwareInventory, itemCommittedElsewhere, closeInstallationEvent }
 import { notifyTeamPush } from '../utils/pushNotifications'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import ListNameModal from '../components/ListNameModal'
+import EventAssignSheet from '../components/EventAssignSheet'
 import { linkedAdditionsFor } from '../utils/linkedItems'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, listRowId, moveRowToList } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
@@ -166,6 +167,7 @@ export default function EventDetail() {
   // Liste di carico multiple (vedi utils/eventLists.js): lista in cui finiscono
   // gli oggetti aggiunti dal modal, e popup nome lista (nuova/rinomina/sposta).
   const [addTargetList, setAddTargetList] = useState(MAIN_LIST_ID)
+  const [showAssignSheet, setShowAssignSheet] = useState(false) // foglio "Assegna personale" (telefono)
   const [listModal, setListModal] = useState(null) // { mode:'new'|'rename'|'moveUnloaded', listId?, name? }
   const [listMenuId, setListMenuId] = useState(null) // menu ⋯ aperto su una lista
   // Liste chiuse (solo intestazione, niente righe sotto) — comodo con tanti
@@ -1769,7 +1771,7 @@ export default function EventDetail() {
                   qui: gli orari (e gli esterni) vivono solo lì, un posto solo
                   da mantenere invece di due sistemi paralleli. */}
               <button
-                onClick={() => navigate('/calendar', { state: { assignEventId: event.id, assignDate: event.date } })}
+                onClick={() => (isMobile ? setShowAssignSheet(true) : navigate('/calendar', { state: { assignEventId: event.id, assignDate: event.date } }))}
                 style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--card2)', border:'1px dashed var(--border)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--text2)' }}
               >
                 {t('eventDetail.assign')}
@@ -2167,6 +2169,9 @@ export default function EventDetail() {
       </>}
 
       {/* Conferma: chiusura con articoli selezionati non aggiunti */}
+      {showAssignSheet && (
+        <EventAssignSheet event={event} blocks={assignmentBlocks} workers={workers} unavailability={unavailability} teamId={teamId} user={user} onClose={() => setShowAssignSheet(false)} />
+      )}
       <ListNameModal
         open={!!listModal}
         title={listModal?.mode === 'rename' ? t('eventDetail.renameListTitle') : listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedTitle') : t('eventDetail.newListTitle')}

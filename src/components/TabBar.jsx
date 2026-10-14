@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { db } from '../firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
@@ -35,6 +35,55 @@ const workerTabsBase = [
   { path:'/tasks',      label:'Task',      icon:ICON_TASK },
 ]
 const WORK_HOURS_TAB = { path:'/work-hours', label:'Ore', icon:ICON_WORK_HOURS }
+
+// ── "Lente": barra con tacca ──────────────────────────────────────────────
+// La pagina attuale è un cerchio scuro che sporge sopra il bordo della barra
+// flottante, dentro una tacca arrotondata (con raccordi morbidi); le altre
+// icone sono piccole. Misure in px.
+// Telefono / schermi larghi (≥700px): stessa forma, scala ~1.3 su computer.
+// padX e rc sono scelti perché la tacca della prima/ultima tab non tocchi gli
+// angoli arrotondati (cx0 ≥ rc + larghezza mezza tacca).
+const PHONE = { H: 54, D: 52, ring: 5, fillet: 8, cy: 4, dip: 8, icon: 28, padX: 26, rc: 16, bottom: 12 }
+const DESKTOP = { H: 70, D: 68, ring: 6, fillet: 10, cy: 5, dip: 10, icon: 34, padX: 40, rc: 24, bottom: 22, width: 600 }
+const DURATION = 480      // ms
+const TAB_GREY = '#6b7280'
+
+// Colore dell'icona: grigio → bianco man mano che il cerchio le passa sotto.
+function mixColor(k) {
+  const c = v => Math.round(107 + (255 - 107) * v)
+  const d = v => Math.round(114 + (255 - 114) * v)
+  const e = v => Math.round(128 + (255 - 128) * v)
+  return `rgb(${c(k)},${d(k)},${e(k)})`
+}
+
+// Contorno della barra: rettangolo (angoli opzionali) con una tacca circolare
+// centrata in (cx, cy) di raggio Rn nel bordo alto, raccordata con archi di
+// raggio f. Rn ≈ 0 = nessuna tacca.
+function barPath(W, H, rTop, rBot, cx, cy, Rn, f) {
+  let d = `M ${rTop},0`
+  if (Rn > 2) {
+    const k = Rn + f
+    const dyc = f - cy
+    const off = Math.sqrt(Math.max(k * k - dyc * dyc, 0))
+    const fxL = cx - off, fxR = cx + off
+    const t = Rn / k
+    const pL = { x: cx + (fxL - cx) * t, y: cy + dyc * t }
+    const pR = { x: cx + (fxR - cx) * t, y: cy + dyc * t }
+    const span = 2 * Math.atan2(Math.abs(pR.x - cx), pR.y - cy)
+    const large = span > Math.PI ? 1 : 0
+    d += ` H ${fxL} A ${f} ${f} 0 0 1 ${pL.x} ${pL.y} A ${Rn} ${Rn} 0 ${large} 0 ${pR.x} ${pR.y} A ${f} ${f} 0 0 1 ${fxR} 0`
+  }
+  d += ` H ${W - rTop}`
+  if (rTop > 0) d += ` A ${rTop} ${rTop} 0 0 1 ${W} ${rTop}`
+  d += ` V ${H - rBot}`
+  if (rBot > 0) d += ` A ${rBot} ${rBot} 0 0 1 ${W - rBot} ${H}`
+  d += ` H ${rBot}`
+  if (rBot > 0) d += ` A ${rBot} ${rBot} 0 0 1 0 ${H - rBot}`
+  d += ` V ${rTop}`
+  if (rTop > 0) d += ` A ${rTop} ${rTop} 0 0 1 ${rTop} 0`
+  return d + ' Z'
+}
+
 
 export default function TabBar() {
   const navigate = useNavigate()
@@ -73,15 +122,114 @@ export default function TabBar() {
     pathname === t.path || (t.path !== '/' && pathname.startsWith(t.path))
   )
 
+  // Sempre una barra FLOTTANTE, centrata e staccata dal fondo: sul telefono
+  // larga quasi tutto lo schermo (12px di margine per lato), su schermi larghi
+  // 460px. padX e raggio sono scelti perché la tacca della prima/ultima tab
+  // non tocchi mai gli angoli arrotondati.
+  const [vw, setVw] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const wide = vw >= 700
+  const m = wide ? DESKTOP : PHONE
+  const barW = wide ? m.width : vw - 24
+  const { padX, rc } = m
+  const n = tabs.length
+  const usable = barW - padX * 2
+  const slotW = usable / n
+
+  // Posizione ANIMATA del "cerchio": pos è un indice frazionario (0 = prima
+  // tab) e vis la sua presenza (0 = nessuna tab attiva). Tutto — il cerchio, la
+  // tacca nella barra e il sollevarsi di ogni icona — è calcolato dallo stesso
+  // pos a ogni frame, così restano sempre in sincronia (nessun CSS che
+  // scorre per conto suo): il cerchio passa sopra le icone come una lente e
+  // ognuna sale/scende a seconda di quanto ci è sotto.
+  const pathRef = useRef(null)
+  const circleRef = useRef(null)
+  const holeRef = useRef(null)
+  const iconRefs = useRef([])
+  const anim = useRef({ pos: Math.max(activeIndex, 0), vis: activeIndex >= 0 ? 1 : 0, raf: 0, ready: false })
+
+  const render = (pos, vis, dip) => {
+    const cx = padX + usable * (pos + 0.5) / n
+    const cy = m.cy + dip
+    const Rn = (m.D / 2 + m.ring) * vis
+    pathRef.current?.setAttribute('d', barPath(barW, m.H, rc, rc, cx, cy, Rn, m.fillet))
+    if (holeRef.current) { holeRef.current.setAttribute('cx', cx); holeRef.current.setAttribute('cy', cy); holeRef.current.setAttribute('r', Math.max(Rn, 0)) }
+    if (circleRef.current) {
+      circleRef.current.style.transform = `translate(${cx - m.D / 2}px, ${cy - m.D / 2}px) scale(${vis})`
+    }
+    iconRefs.current.forEach((el, i) => {
+      if (!el) return
+      const prox = Math.max(0, 1 - Math.abs(i - pos)) * vis
+      const lift = (m.H / 2 - cy) * prox
+      el.style.transform = `translateY(${-lift}px) scale(${0.74 + 0.26 * prox})`
+      el.style.color = el.dataset.shift === '1' ? 'var(--accent)' : mixColor(prox)
+    })
+  }
+
+  useLayoutEffect(() => {
+    const st = anim.current
+    cancelAnimationFrame(st.raf)
+    const toPos = activeIndex >= 0 ? activeIndex : st.pos
+    const toVis = activeIndex >= 0 ? 1 : 0
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const first = !st.ready
+    st.ready = true
+    if (first || reduce || (st.pos === toPos && st.vis === toVis)) {
+      st.pos = toPos; st.vis = toVis
+      render(st.pos, st.vis, 0)
+      return
+    }
+    const from = { pos: st.pos, vis: st.vis }
+    const moves = from.pos !== toPos && from.vis > 0.5 && toVis > 0.5
+    const t0 = performance.now()
+    const step = now => {
+      const k = Math.min((now - t0) / DURATION, 1)
+      const e = 1 - Math.pow(1 - k, 4)
+      st.pos = from.pos + (toPos - from.pos) * e
+      st.vis = from.vis + (toVis - from.vis) * e
+      // Durante lo spostamento il cerchio "si tuffa" un attimo nella barra e
+      // poi risale sul punto d'arrivo.
+      render(st.pos, st.vis, moves ? m.dip * Math.sin(Math.PI * k) : 0)
+      if (k < 1) st.raf = requestAnimationFrame(step)
+    }
+    st.raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(st.raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex])
+
+  // Cambi di larghezza/numero di tab: ridisegna ferma sulla posizione attuale.
+  useLayoutEffect(() => {
+    render(anim.current.pos, anim.current.vis, 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barW, n, wide])
+
   return (
     <nav className="tabbar-nav" style={{
-      position:'fixed', left:'50%', bottom:'calc(env(safe-area-inset-bottom) + 44px)',
-      transform:'translateX(-50%)', zIndex:100,
+      position:'fixed', zIndex:100, width: barW,
+      left:'50%', transform:'translateX(-50%)',
+      bottom: `calc(env(safe-area-inset-bottom) + ${m.bottom}px)`,
+      '--ftab-icon': `${m.icon}px`,
     }}>
-      <div className="ftabs" style={{ '--active-index': activeIndex }}>
-        {/* Glider */}
-        {activeIndex >= 0 && <span className="ftab-glider" />}
-
+      <div style={{ position:'relative', height: m.H }}>
+        <svg width={barW} height={m.H} aria-hidden="true"
+          style={{ position:'absolute', left:0, top:0, overflow:'visible', filter:'drop-shadow(0 8px 22px rgba(34,44,66,0.18))' }}>
+          <path ref={pathRef} fill="#fff" />
+          {/* Dentro la tacca la pagina sotto (testo che scorre) darebbe
+              fastidio: un disco del colore dello sfondo, limitato alla
+              fascia della barra, la nasconde — sopra il bordo il cerchio
+              resta libero, solo con la sua ombra. */}
+          <clipPath id="ftab-clip"><rect x="0" y="0" width={barW} height={m.H} /></clipPath>
+          <circle ref={holeRef} fill="#f5f5f3" clipPath="url(#ftab-clip)" />
+        </svg>
+        <span ref={circleRef} aria-hidden="true" style={{
+          position:'absolute', left:0, top:0, width: m.D, height: m.D, borderRadius:'50%', zIndex:2, pointerEvents:'none',
+          background:'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)', boxShadow:'0 6px 16px rgba(34,44,66,0.32)',
+          transformOrigin:'50% 50%', willChange:'transform',
+        }} />
         {tabs.map((t, i) => {
           const active = i === activeIndex
           const isRunningShift = t.path === '/work-hours' && hasOpenShift
@@ -89,67 +237,47 @@ export default function TabBar() {
             <button
               key={t.path}
               aria-label={t.label}
-              className="ftab-btn"
+              aria-current={active ? 'page' : undefined}
+              className="ftab-btn btn-no-anim"
               onClick={() => navigate(t.path)}
-              style={{ color: isRunningShift ? 'var(--accent)' : active ? '#fff' : 'var(--text2)' }}
+              style={{ position:'absolute', top:0, left: padX + slotW * i, width: slotW, height: m.H, zIndex:3 }}
             >
-              <span className="ftab-icon" style={{ display:'flex' }}>{t.icon}</span>
-              {t.path === '/tasks' && openTasks > 0 && (
-                <span className="ftab-badge">{openTasks}</span>
-              )}
+              <span ref={el => { iconRefs.current[i] = el }} data-shift={isRunningShift ? '1' : '0'} className="ftab-ico"
+                style={{ display:'flex', position:'relative', willChange:'transform', color: isRunningShift ? 'var(--accent)' : TAB_GREY }}>
+                <span className="ftab-ico-in">{t.icon}</span>
+                {t.path === '/tasks' && openTasks > 0 && (
+                  <span className="ftab-badge">{openTasks}</span>
+                )}
+              </span>
             </button>
           )
         })}
       </div>
 
       <style>{`
-        .ftabs {
-          --tab-w: 62px; --tab-h: 54px; --tab-pad: 8px; --tab-gap: 6px;
-          position: relative; display: flex; gap: var(--tab-gap); padding: var(--tab-pad); border-radius: 99px;
-          background: rgba(255,255,255,0.35);
-          border: 1px solid rgba(255,255,255,0.40);
-          backdrop-filter: blur(18px) saturate(180%);
-          -webkit-backdrop-filter: blur(18px) saturate(180%);
-          box-shadow: 0 1px 2px rgba(34,44,66,0.10), 0 10px 30px rgba(34,44,66,0.16);
-        }
-        .ftab-glider {
-          position: absolute; top: var(--tab-pad); left: var(--tab-pad);
-          width: var(--tab-w); height: var(--tab-h); border-radius: 99px; z-index: 1;
-          background: linear-gradient(135deg,#3b4a66 0%,#222c42 100%);
-          box-shadow: 0 4px 14px rgba(34,44,66,0.30);
-          transform: translateX(calc((var(--tab-w) + var(--tab-gap)) * var(--active-index)));
-          transition: transform 0.28s cubic-bezier(0.34,1.2,0.64,1);
-        }
         .ftab-btn {
-          position: relative; z-index: 2;
-          width: var(--tab-w); height: var(--tab-h);
           display: flex; align-items: center; justify-content: center;
           background: transparent; border: none; cursor: pointer; padding: 0;
-          border-radius: 99px; outline: none; -webkit-tap-highlight-color: transparent;
+          outline: none; -webkit-tap-highlight-color: transparent;
           -webkit-appearance: none; appearance: none;
-          transition: color 0.2s ease;
         }
         .ftab-btn:focus { outline: none; }
-        .ftab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-        /* Hover solo su dispositivi con mouse: su touch il :hover "rimane attaccato" e ruba il primo tap */
+        .ftab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 14px; }
+        /* Hover: solo l'icona si ingrandisce un po' (niente riquadro/ombra sul
+           bottone — vedi btn-no-anim). Il wrapper esterno è mosso da JS
+           (sollevamento/scala della lente), questo interno è solo hover. */
+        .ftab-ico-in { display: flex; transition: transform 0.18s ease-out; }
         @media (hover: hover) and (pointer: fine) {
-          .ftab-btn:not(:disabled):hover {
-            background: rgba(0,0,0,0.06);
-            box-shadow: none; transform: none; filter: none;
-          }
+          .ftab-btn:hover .ftab-ico-in { transform: scale(1.22); }
         }
-        .ftab-icon svg { width: 28px; height: 28px; display: block; }
+        .ftab-btn:active .ftab-ico-in { transform: scale(1.08); }
+        .ftab-ico svg { width: var(--ftab-icon, 28px); height: var(--ftab-icon, 28px); display: block; }
         .ftab-badge {
-          position: absolute; top: 4px; right: 5px;
-          background: var(--accent); color: #fff; border-radius: 11px;
-          font-size: 11px; font-weight: 800; min-width: 20px; height: 20px;
+          position: absolute; top: -5px; right: -9px;
+          background: var(--accent); color: #fff; border-radius: 10px;
+          font-size: 10.5px; font-weight: 800; min-width: 18px; height: 18px;
           display: flex; align-items: center; justify-content: center;
-          padding: 0 4px; line-height: 1;
-        }
-        @media (min-width: 700px) {
-          .ftabs { --tab-w: 72px; --tab-h: 58px; --tab-pad: 9px; --tab-gap: 7px; }
-          .ftab-icon svg { width: 30px; height: 30px; }
-          .ftab-badge { top: 5px; right: 9px; font-size: 12px; min-width: 21px; height: 21px; }
+          padding: 0 4px; line-height: 1; border: 1.5px solid #fff; box-sizing: border-box;
         }
       `}</style>
     </nav>

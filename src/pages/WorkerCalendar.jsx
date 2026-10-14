@@ -391,27 +391,37 @@ export default function WorkerCalendar() {
   return (
     <div className="page" style={{ paddingBottom:90 }}>
       <Toast message={toast} />
-      <div className="page-header">
+      <div className="page-header" style={{ background:'#fff', borderBottom:'1px solid #e0ddd6', paddingBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <h1>{t('workerCalendar.title')}</h1>
-            <p>{t('workerCalendar.assignedCount', { count: allEvents.filter(isAssignedToMe).length })}</p>
+            <h1 style={{ fontSize:26, letterSpacing:'-0.5px', color:'#1a1a1a' }}>{t('workerCalendar.title')}</h1>
+            <p style={{ color:'#9a9a9a' }}>{t('workerCalendar.assignedCount', { count: allEvents.filter(isAssignedToMe).length })}</p>
           </div>
           {!reportMode && (
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={startReportMode}
-                style={{ background:'rgba(144,144,176,0.12)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600 }}>
-                {t('calendar.reportAbsence')}
-              </button>
-              <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
-            </div>
+            <button onClick={startReportMode} className="btn-no-anim"
+              style={{ background:'#eceae6', border:'none', color:'#6b6b6b', borderRadius:10, padding:'9px 13px', fontSize:12.5, fontWeight:700 }}>
+              {t('calendar.reportAbsence')}
+            </button>
           )}
         </div>
 
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:14 }}>
-          <button onClick={goPrevMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
-          <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
-          <button onClick={goNextMonth} style={{ width:38, height:38, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
+        {/* Navigazione mese: stesso schema del calendario admin — frecce
+            leggere senza sfondo, mese al centro che al tocco riporta a oggi
+            (con "Oggi" rosso sotto quando si è sul mese corrente). */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:16 }}>
+          <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} className="btn-no-anim"
+            style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'#9a9a9a' }}>‹</button>
+          <button onClick={goToday} className="btn-no-anim rc-cal-today-btn"
+            style={{ textAlign:'center', background:'none', border:'none', padding:'2px 12px', borderRadius:9, minWidth:150 }}>
+            <div style={{ fontSize:17, fontWeight:800, whiteSpace:'nowrap', color:'#1a1a1a' }}>
+              {capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}
+            </div>
+            <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: (cursor.year === today.getFullYear() && cursor.month === today.getMonth()) ? '#e63946' : '#6b6b6b' }}>
+              {t('calendar.today')}
+            </div>
+          </button>
+          <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} className="btn-no-anim"
+            style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'#9a9a9a' }}>›</button>
         </div>
 
         {/* Banner modalità selezione assenza */}
@@ -429,15 +439,20 @@ export default function WorkerCalendar() {
         )}
       </div>
 
-      <div style={{ padding:'16px 16px 8px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:6 }}>
+      <div style={{ padding:'0 0 8px' }}>
+        {/* Griglia unita da sole righe hairline dentro un contenitore bianco —
+            stesso linguaggio del calendario admin. */}
+        <div style={{ background:'#fff', borderBottom:'1px solid #e0ddd6', overflow:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', borderBottom:'1px solid #e0ddd6' }}>
           {WEEKDAYS.map((w, i) => (
-            <div key={i} style={{ textAlign:'center', fontSize:11, fontWeight:700, color:'var(--text2)', padding:'6px 0' }}>{w}</div>
+            <div key={i} style={{ textAlign:'center', fontSize:10, fontWeight:700, color:'#9a9a9a', textTransform:'uppercase', letterSpacing:'0.2px', padding:'8px 0' }}>{w}</div>
           ))}
         </div>
 
-        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
+        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)' }}>
           {cells.map((cell, i) => {
+            const isLastCol = i % 7 === 6
+            const isLastRow = Math.floor(i / 7) === Math.ceil(cells.length / 7) - 1
             const dStr = toDateStr(cell.dateObj)
             // Un rent/install può durare mesi: ripeterlo su ogni giorno della
             // griglia lo fa sembrare "occupato" anche quando non c'è nulla da
@@ -470,12 +485,13 @@ export default function WorkerCalendar() {
               dStr >= (rangeStart <= hoverDate ? rangeStart : hoverDate) &&
               dStr <= (rangeStart <= hoverDate ? hoverDate : rangeStart)
 
-            let bg = cell.current ? 'var(--card)' : 'transparent'
-            let border = isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)'
-            if (hasMyEvent) { bg = 'rgba(216,56,63,0.12)'; border = '1.5px solid var(--accent)' }
-            if (isSelected) { bg = 'rgba(79,195,247,0.10)'; border = '1.5px solid var(--blue)' }
-            if (isInPreviewRange) { bg = 'rgba(216,56,63,0.07)'; border = '1px solid rgba(216,56,63,0.3)' }
-            if (isRangeStart) { border = '1.5px solid var(--accent)' }
+            let bg = cell.current ? '#fff' : 'transparent'
+            let ring = isToday ? 'inset 0 2px 0 #e63946' : 'none'
+            if (isToday) bg = 'rgba(230,57,70,0.045)'
+            if (hasMyEvent) bg = 'rgba(230,57,70,0.09)'
+            if (isSelected) { bg = 'rgba(0,102,204,0.08)'; ring = 'inset 0 0 0 1.5px #0066cc' }
+            if (isInPreviewRange) bg = 'rgba(216,56,63,0.06)'
+            if (isRangeStart) { bg = 'rgba(216,56,63,0.12)'; ring = 'inset 0 0 0 1.5px #e63946' }
 
             return (
               <button
@@ -484,11 +500,13 @@ export default function WorkerCalendar() {
                 onMouseEnter={() => { if (reportMode && rangeStart) setHoverDate(dStr) }}
                 style={{
                   position:'relative',
-                  minHeight:78,
-                  borderRadius:10,
-                  padding:'5px 3px 4px',
+                  minHeight:76,
+                  borderRadius:0,
+                  padding:'6px 3px 4px',
                   background: bg,
-                  border,
+                  boxShadow: ring,
+                  borderRight: isLastCol ? 'none' : '1px solid #e0ddd6',
+                  borderBottom: isLastRow ? 'none' : '1px solid #e0ddd6',
                   opacity: cell.current ? (isPast ? 0.45 : 1) : 0.3,
                   display:'flex',
                   flexDirection:'column',
@@ -575,8 +593,9 @@ export default function WorkerCalendar() {
             )
           })}
         </div>
+        </div>
 
-        <div style={{ display:'flex', gap:14, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:14, marginTop:14, padding:'0 16px', flexWrap:'wrap' }}>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--blue)', display:'inline-block' }} />
             <span style={{ fontSize:12, color:'var(--text2)' }}>{t('workerCalendar.legendCompanyEvents')}</span>
@@ -595,7 +614,7 @@ export default function WorkerCalendar() {
       {/* Pannello giorno selezionato (solo fuori da reportMode) */}
       {!reportMode && selectedDate && (
         <div style={{ padding:'8px 16px 16px' }}>
-          <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
+          <p style={{ fontSize:12.5, fontWeight:800, color:'#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:10 }}>
             {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
             {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
@@ -623,8 +642,8 @@ export default function WorkerCalendar() {
                   onClick={() => setSummaryEvent(ev)}
                   style={{
                     display:'flex', alignItems:'center', gap:12, cursor:'pointer',
-                    background: mine ? 'rgba(216,56,63,0.06)' : 'var(--card)',
-                    border: `1px solid ${mine ? 'rgba(216,56,63,0.3)' : 'var(--border)'}`, borderRadius:14,
+                    background: mine ? 'rgba(230,57,70,0.05)' : '#fff',
+                    border: `1px solid ${mine ? 'rgba(230,57,70,0.3)' : '#e0ddd6'}`, borderRadius:14,
                     padding:'13px 14px', marginBottom:8,
                   }}
                 >

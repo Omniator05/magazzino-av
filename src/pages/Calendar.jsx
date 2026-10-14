@@ -558,13 +558,13 @@ export default function Calendar() {
   return (
     <div className="page" style={{ paddingBottom:160 }}>
       <Toast message={toast} />
-      <div className="page-header" style={!isMobile ? { background:'#fff', borderBottom:'1px solid #e0ddd6', padding:'18px 32px 14px' } : undefined}>
+      <div className="page-header" style={!isMobile ? { background:'#fff', borderBottom:'1px solid #e0ddd6', padding:'18px 32px 14px' } : { background:'#fff', borderBottom:'1px solid #e0ddd6', paddingBottom:14 }}>
         {isMobile ? (
           <>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <h1>{t('calendar.title')}</h1>
-                <p>{t('calendar.totalEvents', { count: events.length })}</p>
+                <h1 style={{ fontSize:26, letterSpacing:'-0.5px', color:'#1a1a1a' }}>{t('calendar.title')}</h1>
+                <p style={{ color:'#9a9a9a' }}>{t('calendar.totalEvents', { count: events.length })}</p>
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 {/* Il flusso "tocca primo/ultimo giorno" dipende dalla griglia
@@ -574,27 +574,35 @@ export default function Calendar() {
                     nel bottone "+ Aggiungi assenza" della colonna laterale. */}
                 {mode === 'grid' && (
                   <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
-                    aria-pressed={reportMode}
+                    aria-pressed={reportMode} className="btn-no-anim"
                     style={{
-                      background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
-                      border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
-                      color: reportMode ? 'var(--accent)' : 'var(--text2)',
-                      borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
+                      background: reportMode ? 'rgba(230,57,70,0.12)' : '#eceae6',
+                      color: reportMode ? '#e63946' : '#6b6b6b',
+                      border:'none', borderRadius:10, padding:'9px 13px', fontSize:12.5, fontWeight:700,
                     }}>
                     {t('calendar.reportAbsence')}
                   </button>
                 )}
-                <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
               </div>
             </div>
 
             {/* Navigazione mese sulla propria riga — tabs assenti (niente
                 Assegna personale su schermi stretti). */}
             {mode === 'grid' && (
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
-              <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
-              <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
-              <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:16 }}>
+              <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} className="btn-no-anim"
+                style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'#9a9a9a' }}>‹</button>
+              <button onClick={goToday} className="btn-no-anim rc-cal-today-btn"
+                style={{ textAlign:'center', background:'none', border:'none', padding:'2px 12px', borderRadius:9, minWidth:150 }}>
+                <div style={{ fontSize:17, fontWeight:800, whiteSpace:'nowrap', color:'#1a1a1a' }}>
+                  {capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}
+                </div>
+                <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: isCurrentMonth ? '#e63946' : '#6b6b6b' }}>
+                  {t('calendar.today')}
+                </div>
+              </button>
+              <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} className="btn-no-anim"
+                style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'#9a9a9a' }}>›</button>
             </div>
             )}
           </>
@@ -635,7 +643,7 @@ export default function Calendar() {
       </div>
 
       {mode === 'grid' && (
-      <div style={{ padding: isMobile ? '0 16px 16px' : '0 0 16px 16px', display: isMobile ? 'block' : 'flex', gap: isMobile ? 0 : 16, alignItems: isMobile ? undefined : 'stretch' }}>
+      <div style={{ padding: isMobile ? '0 0 16px' : '0 0 16px 16px', display: isMobile ? 'block' : 'flex', gap: isMobile ? 0 : 16, alignItems: isMobile ? undefined : 'stretch' }}>
       <div style={{ flex: isMobile ? undefined : 1, minWidth: 0 }}>
         {/* Navigazione mese — dentro la colonna griglia (non più una riga a
             parte sopra tutta la pagina): così la colonna laterale bianca
@@ -710,15 +718,19 @@ export default function Calendar() {
             non più tante tessere arrotondate staccate da uno spazio; su
             mobile restano le tessere di sempre (più leggibili su schermi
             stretti, tocco più preciso). */}
-        <div style={!isMobile ? { background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, overflow:'hidden' } : undefined}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom: isMobile ? 6 : 0, borderBottom: isMobile ? undefined : '1px solid #e0ddd6' }}>
+        <div style={isMobile
+          // Telefono: a tutta larghezza, senza margini né angoli — la linea sotto
+          // l'intestazione fa da bordo in alto, qui solo quello in basso.
+          ? { background:'#fff', borderBottom:'1px solid #e0ddd6', overflow:'hidden' }
+          : { background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, overflow:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', borderBottom:'1px solid #e0ddd6' }}>
           {WEEKDAYS.map((w, i) => (
-            <div key={i} style={{ textAlign:'center', fontSize: isMobile ? 11 : 11.5, fontWeight:700, color: isMobile ? 'var(--text2)' : '#9a9a9a', textTransform: isMobile ? undefined : 'uppercase', letterSpacing: isMobile ? undefined : '0.4px', padding: isMobile ? '6px 0' : '9px 0' }}>{w}</div>
+            <div key={i} style={{ textAlign:'center', fontSize: isMobile ? 10 : 11.5, fontWeight:700, color:'#9a9a9a', textTransform:'uppercase', letterSpacing: isMobile ? '0.2px' : '0.4px', padding: isMobile ? '8px 0' : '9px 0' }}>{w}</div>
           ))}
         </div>
 
         {/* Griglia mese — puntini colorati, tap per selezionare il giorno; swipe orizzontale per cambiare mese */}
-        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap: isMobile ? 4 : 0 }}>
+        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)' }}>
           {cells.map((cell, i) => {
             const isLastCol = i % 7 === 6
             const isLastRow = Math.floor(i / 7) === Math.ceil(cells.length / 7) - 1
@@ -750,29 +762,16 @@ export default function Calendar() {
                 key={i}
                 onClick={() => handleDayTap(dStr)}
                 onMouseEnter={() => { if (reportMode && rangeStart) setHoverDate(dStr) }}
-                style={isMobile ? {
+                style={{
+                  // Griglia unita da sole righe hairline (destra/basso; l'alto e
+                  // la sinistra li dà il contenitore o la cella precedente),
+                  // oggi con un filo rosso in alto, giorno selezionato con un
+                  // anello blu — stesso linguaggio di desktop, celle più
+                  // compatte sul telefono.
                   position:'relative',
-                  minHeight:78,
-                  borderRadius:10,
-                  padding:'5px 3px 4px',
-                  background: isSelected ? 'rgba(216,56,63,0.10)' : isRangeStart ? 'rgba(216,56,63,0.12)' : isInPreviewRange ? 'rgba(216,56,63,0.07)' : cell.current ? 'var(--card)' : 'transparent',
-                  border: isSelected ? '1.5px solid var(--accent)' : isRangeStart ? '1.5px solid var(--accent)' : isInPreviewRange ? '1px solid rgba(216,56,63,0.3)' : isToday ? '1.5px solid rgba(216,56,63,0.4)' : '1px solid var(--border)',
-                  opacity: cell.current ? (isPast ? 0.5 : 1) : 0.3,
-                  display:'flex',
-                  flexDirection:'column',
-                  alignItems:'center',
-                  gap:2,
-                  overflow:'hidden',
-                  cursor:'pointer',
-                  transition:'background 0.1s ease, border-color 0.1s ease',
-                } : {
-                  // Desktop: niente più tessere staccate — solo righe hairline
-                  // (destra/basso, l'alto/sinistra li dà già il contenitore o
-                  // la cella precedente) e celle più grandi, come nel mockup.
-                  position:'relative',
-                  minHeight:118,
+                  minHeight: isMobile ? 76 : 118,
                   borderRadius:0,
-                  padding:'8px 6px 6px',
+                  padding: isMobile ? '6px 3px 4px' : '8px 6px 6px',
                   borderRight: isLastCol ? 'none' : '1px solid #e0ddd6',
                   borderBottom: isLastRow ? 'none' : '1px solid #e0ddd6',
                   background: isSelected ? 'rgba(0,102,204,0.08)' : isRangeStart ? 'rgba(216,56,63,0.12)' : isInPreviewRange ? 'rgba(216,56,63,0.06)' : isToday ? 'rgba(230,57,70,0.045)' : cell.current ? '#fff' : 'transparent',
@@ -781,14 +780,14 @@ export default function Calendar() {
                   display:'flex',
                   flexDirection:'column',
                   alignItems:'center',
-                  gap:3,
+                  gap: isMobile ? 2 : 3,
                   overflow:'hidden',
                   cursor:'pointer',
                   transition:'background 0.1s ease, box-shadow 0.1s ease',
                 }}
               >
                 <span style={{
-                  fontSize:14, fontWeight: isToday ? 800 : 600,
+                  fontSize: isMobile ? 13 : 14, fontWeight: isToday ? 800 : 600,
                   color: isToday ? 'var(--accent)' : (cell.current ? 'var(--text)' : 'var(--text3)'),
                 }}>
                   {cell.day}
@@ -907,7 +906,7 @@ export default function Calendar() {
         </div>
 
         {/* Legenda */}
-        <div style={{ display:'flex', gap:12, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:12, marginTop:14, padding: isMobile ? '0 16px' : '0 0 0 4px', flexWrap:'wrap' }}>
           {isWorker && (
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
               <span style={{ width:8, height:8, borderRadius:'50%', background:'var(--accent)', display:'inline-block' }} />
@@ -961,7 +960,7 @@ export default function Calendar() {
         const isSelectedDayPast = selectedDate < todayStr
         return (
         <div style={{ padding:'0 16px 24px' }}>
-          <p style={{ fontSize:13, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>
+          <p style={{ fontSize:12.5, fontWeight:800, color:'#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:10 }}>
             {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
             {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
@@ -1010,7 +1009,7 @@ export default function Calendar() {
                   return (
                     <div key={`tk${task.id}`}
                       onClick={() => setSummaryTask(task)}
-                      style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
+                      style={{ background:'#fff', border:`1px solid ${borderColor === 'var(--border)' ? '#e0ddd6' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
                     >
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
                       <div style={{ flex:1, minWidth:0 }}>
@@ -1038,7 +1037,7 @@ export default function Calendar() {
                 // disallineati.
                 if (ev.isDeadlineReminder) {
                   return (
-                    <div key={ev.id} style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12 }}>
+                    <div key={ev.id} style={{ background:'#fff', border:`1px solid ${borderColor === 'var(--border)' ? '#e0ddd6' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12 }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
                       <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
@@ -1050,7 +1049,7 @@ export default function Calendar() {
                 return (
                   <div key={ev.id}
                     onClick={() => setSummaryEvent(ev)}
-                    style={{ background:'var(--card)', border:`1px solid ${borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
+                    style={{ background:'#fff', border:`1px solid ${borderColor === 'var(--border)' ? '#e0ddd6' : borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
                   >
                     <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />

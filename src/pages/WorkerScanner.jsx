@@ -103,7 +103,10 @@ export default function WorkerScanner() {
   // fatto). Ora si deriva da dati condivisi (Firestore), uguale per tutti.
   const [mode, setMode] = useState('pronto') // 'pronto' | 'load' | 'return'
   // Lista di carico su cui si sta lavorando (liste multiple, vedi utils/eventLists.js).
-  const [activeListId, setActiveListId] = useState(MAIN_LIST_ID)
+  // Si apre SEMPRE sulla vista unita di tutte le liste (ALL_LISTS_ID): le liste
+  // singole sono solo un filtro facoltativo. Così nessuno scansiona per
+  // sbaglio "sulla lista sbagliata" senza accorgersene.
+  const [activeListId, setActiveListId] = useState(ALL_LISTS_ID)
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   // Avviso "lista X completata, passo a Y" (vedi effetto più sotto) — solo
@@ -727,8 +730,8 @@ export default function WorkerScanner() {
   // Liste di carico multiple: `items` è SOLO la lista attiva, così contatori,
   // checklist, fasi e popup di completamento valgono per lista senza
   // toccare il resto del file. Con una sola lista coincide con tutto l'evento.
-  // In fase Scarico è anche ammessa ALL_LISTS_ID ("Tutte"): items torna a
-  // essere l'intero evento come nel caso non-multiList, ma i bottoni lista
+  // In tutte le fasi è ammessa ALL_LISTS_ID ("Tutte", la vista di partenza):
+  // items è l'intero evento come nel caso non-multiList, e i bottoni lista
   // restano visibili sotto come filtro facoltativo verso una singola lista.
   const eventLists = getEventLists(event)
   // La principale "eliminata" (vedi EventDetail.jsx, deleteList) resta
@@ -744,7 +747,9 @@ export default function WorkerScanner() {
   // sotto, dichiarato prima del return anticipato — non solo nel JSX finale).
   const listLabel = l => l?.name || (l?.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed'))
   const multiList = hasMultipleLists(event)
-  const activeList = mode === 'return' && activeListId === ALL_LISTS_ID
+  const activeList = !multiList
+    ? MAIN_LIST_ID
+    : activeListId === ALL_LISTS_ID
     ? ALL_LISTS_ID
     : (eventLists.some(l => l.id === activeListId) ? activeListId : MAIN_LIST_ID)
   // Stessa condizione del badge "Nella lista: X" nel popup post-scansione —
@@ -796,27 +801,23 @@ export default function WorkerScanner() {
     else if (allTotal > 0 && allPrepared === allTotal) setMode('load')
   }, [event, items, id, allTotal, allLoaded, allPrepared])
 
-  // Entrando in Scarico si parte sempre dalla vista unita di tutte le liste
-  // (vedi ALL_LISTS_ID sopra) — è lì che serve, per scansionare senza dover
-  // sapere da quale lista arriva ogni oggetto. Uscendo da Scarico quella
-  // scelta non ha più senso per Pronto/Carico, si torna alla principale.
+  // Filtro su una lista singola completato (pronto o carico) ma l'evento non
+  // lo è ancora (altre liste rimangono da fare): torna da solo alla vista
+  // unita "Tutte", con un avviso — altrimenti il magazziniere resta fermo su
+  // una lista finita senza accorgersi che ce n'è un'altra da fare. Da "Tutte"
+  // non scatta mai (lì il completamento è quello dell'intero evento).
+  // Scatta SOLO nel momento in cui la lista diventa completa mentre ci si sta
+  // lavorando — entrare di proposito in una lista già completa (per
+  // controllarla) non deve rimbalzare indietro: quando si cambia lista o fase
+  // lo stato "completa" viene solo registrato, senza agire.
+  const activeListDoneRef = useRef({ list: null, mode: null, done: false })
   useEffect(() => {
-    if (mode === 'return') { if (multiList) setActiveListId(ALL_LISTS_ID) }
-    else if (activeListId === ALL_LISTS_ID) setActiveListId(MAIN_LIST_ID)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode])
-
-  // Lista attiva completata (pronto o carico) ma l'evento non lo è ancora
-  // (altre liste rimangono da fare): passa da sola alla prossima lista non
-  // ancora completa, con un avviso — altrimenti il magazziniere resta fermo
-  // su una lista finita senza accorgersi che ce n'è un'altra da fare. Scarico
-  // non rientra qui: lì le liste sono già riunite di default (vedi sopra).
-  const activeListDoneRef = useRef(false)
-  useEffect(() => {
-    if (!multiList || (mode !== 'pronto' && mode !== 'load')) { activeListDoneRef.current = false; return }
+    if (!multiList || activeList === ALL_LISTS_ID || (mode !== 'pronto' && mode !== 'load')) { activeListDoneRef.current = { list: null, mode: null, done: false }; return }
     const field = mode === 'pronto' ? 'pronto' : 'loaded'
     const doneNow = total > 0 && (mode === 'pronto' ? prepared : loaded) === total
-    if (doneNow && !activeListDoneRef.current) {
+    const prev = activeListDoneRef.current
+    const justSwitched = prev.list !== activeList || prev.mode !== mode
+    if (doneNow && !prev.done && !justSwitched) {
       const fromList = eventLists.find(l => l.id === activeList)
       const next = eventLists.find(l => {
         if (l.id === activeList) return false
@@ -824,13 +825,13 @@ export default function WorkerScanner() {
         return rows.length > 0 && rows.some(r => !r[field])
       })
       if (next) {
-        setActiveListId(next.id)
+        setActiveListId(ALL_LISTS_ID)
         setItemListSearch('')
-        setListSwitchMsg(t('workerScanner.listSwitchedTo', { from: listLabel(fromList), to: listLabel(next) }))
+        setListSwitchMsg(t('workerScanner.listDoneShowAll', { from: listLabel(fromList) }))
         setTimeout(() => setListSwitchMsg(''), 3200)
       }
     }
-    activeListDoneRef.current = doneNow
+    activeListDoneRef.current = { list: activeList, mode, done: doneNow }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prepared, loaded, total, mode, multiList, activeList])
 
@@ -1304,16 +1305,16 @@ export default function WorkerScanner() {
           )}
         </div>
         {event.location && <p style={{ color:'var(--text2)', fontSize:13, marginTop:2 }}>📍 {event.location}</p>}
-        {/* Selettore lista di carico — solo se l'evento ne ha più di una.
-            Pronto/Carico: contatori, checklist e scansioni valgono per la
-            lista scelta (una scansione di un oggetto che sta in un'altra
-            lista lo dice esplicitamente). Scarico: parte già su "Tutte" (vista
-            unita di tutte le liste, ALL_LISTS_ID) — la sera si scarica tutto
-            insieme senza attenzione a quale lista appartenga; i bottoni lista
-            restano comunque cliccabili per filtrare su una sola, se serve. */}
+        {/* Selettore lista di carico — solo se l'evento ne ha più di una. Si
+            parte SEMPRE da "Tutte" (vista unita di tutte le liste,
+            ALL_LISTS_ID), in ogni fase: contatori, checklist e scansioni
+            valgono per l'intero evento, senza dover sapere da quale lista
+            arriva ogni oggetto. I bottoni lista sono un filtro facoltativo
+            per guardarne una sola; una scansione di un oggetto di un'altra
+            lista lo dice esplicitamente. */}
         {multiList && (
           <div role="tablist" aria-label={t('workerScanner.listSelectorAria')} style={{ display:'flex', gap:6, overflowX:'auto', marginTop:10, paddingBottom:2, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
-            {mode === 'return' && (() => {
+            {(() => {
               const rows = allEventItems.filter(i => !i.mancante)
               const doneCount = rows.filter(i => i[doneField]).length
               const isActive = activeList === ALL_LISTS_ID

@@ -261,7 +261,7 @@
     "pickWorkerPlaceholder": "Scegli un magazziniere",
     "externalLabel": "Persona esterna",
     "assignLabel": "Assegna",
-    "assignPlaceholder": "Aggiungi: cerca un magazziniere o scrivi un nome…",
+    "assignPlaceholder": "Aggiungi: cerca o scrivi un nome…",
     "assignNewHint": "Nessun risultato — al salvataggio \"{{name}}\" verrà aggiunto come nuovo esterno",
     "assignAddNew": "+ Aggiungi \"{{name}}\" come esterno",
     "removePersonAria": "Rimuovi {{name}}",
@@ -721,7 +721,8 @@
     "ready": "Pronto",
     "readyDone": "✓ Pronto",
     "loadedButton": "Caricato",
-    "returnedButton": "Rientrato"
+    "returnedButton": "Rientrato",
+    "assignSheetTitle": "Assegna personale"
   },
   "eventSummary": {
     "timeLabel": "Orario",
@@ -1235,7 +1236,8 @@
     "itemInfoToggle": "Dettagli oggetto",
     "decreaseQty": "Diminuisci quantità",
     "increaseQty": "Aumenta quantità",
-    "listChangedToast": "La lista è stata aggiornata dall'admin"
+    "listChangedToast": "La lista è stata aggiornata dall'admin",
+    "listDoneShowAll": "«{{from}}» completata — torno a «Tutte»"
   },
   "workerInventory": {
     "scan": "📷 Scansiona",
