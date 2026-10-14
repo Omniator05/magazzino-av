@@ -30,7 +30,11 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
   }
   const phasesToday = Object.entries(event.phases || {})
     .filter(([key, pdate]) => pdate === summaryDate && PHASE_META[key])
-    .map(([key]) => PHASE_META[key])
+    .map(([key]) => {
+      // Orario della fase (impostato da "Assegna personale"), se c'è.
+      const pt = event.phaseTimes?.[key]
+      return { ...PHASE_META[key], time: pt?.timeStart && pt?.timeEnd ? `${pt.timeStart}–${pt.timeEnd}` : null }
+    })
   // Il tag "Evento" (oltre a quelli di fase) ha senso solo se l'evento vero
   // e proprio ricade DAVVERO su questo giorno — altrimenti (es. il montaggio
   // è il giorno prima dell'evento) qui c'è solo la fase, non l'evento.
@@ -57,8 +61,10 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
   const peopleFromBlocks = dateBlocks.map(b => {
     const name = b.workerId ? workers.find(w => w.id === b.workerId)?.name : b.externalWorkerName
     if (!name) return null
-    const isFullSpan = eventOwnRange && b.startTime === eventOwnRange[0] && b.endTime === eventOwnRange[1]
-    return { key: b.id, name, hours: isFullSpan ? null : `${b.startTime}–${b.endTime}` }
+    const isFullSpan = !b.phase && eventOwnRange && b.startTime === eventOwnRange[0] && b.endTime === eventOwnRange[1]
+    // Una persona di montaggio/smontaggio mostra sempre il suo orario e la
+    // fase: non è "l'orario dell'evento", è un altro turno.
+    return { key: b.id, name, hours: isFullSpan ? null : `${b.startTime}–${b.endTime}`, phase: b.phase ? PHASE_META[b.phase] : null, note: b.note || '' }
   }).filter(Boolean)
   // Assegnazioni "semplici" (vecchio sistema, solo assignedWorkers, nessun
   // orario proprio) — un worker già coperto da un blocco per questo giorno
@@ -110,7 +116,7 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
             )}
             {phasesToday.map(p => (
               <span key={p.label} style={{ display:'inline-flex', alignItems:'center', gap:5, background:p.color+'18', color:p.color, border:`1px solid ${p.color}44`, borderRadius:8, padding:'4px 10px', fontSize:11, fontWeight:800 }}>
-                <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}
+                <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}{p.time && <span style={{ fontWeight:700, fontVariantNumeric:'tabular-nums' }}>&nbsp;· {p.time}</span>}
               </span>
             ))}
           </div>
@@ -138,11 +144,15 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
           {assignedPeople.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
           ) : (
-            <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {assignedPeople.map(p => (
-                <span key={p.key} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--blue)' }}>
-                  <User size={11} /> {p.name}{p.hours && <span style={{ fontWeight:600, opacity:0.8 }}>&nbsp;· {p.hours}</span>}
-                </span>
+                <div key={p.key}>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(79,195,247,0.10)', border:'1px solid rgba(79,195,247,0.25)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--blue)' }}>
+                    <User size={11} /> {p.name}{p.hours && <span style={{ fontWeight:600, opacity:0.8 }}>&nbsp;· {p.hours}</span>}
+                  </span>
+                  {p.phase && <span style={{ marginLeft:6, color:p.phase.color, background:p.phase.color+'18', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:800 }}>{p.phase.label}</span>}
+                  {p.note && <p style={{ margin:'4px 0 0 4px', fontSize:12.5, color:'var(--text2)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{p.note}</p>}
+                </div>
               ))}
             </div>
           )}

@@ -6,6 +6,61 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-14',
+    date: '2026-10-14',
+    title: { it: 'Nuova "Assegna personale", colonna laterale nel Calendario e sezione "Oggi"', en: 'New "Assign staff", Calendar side column and a "Today" section' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: '"Assegna personale" completamente rifatta', en: '"Assign staff" completely redesigned' },
+        text: {
+          it: 'Card bianche che fluttuano su una griglia pulita, giornata intera 00:00–23:59, ricerca del personale con le 5 persone più usate sempre a portata di mano e una barra più ordinata. Trascina una persona su una card per assegnarla, oppure tocca la card: si apre una colonna con i dettagli, il personale assegnato, l\'orario preciso di ciascuno e una nota su cosa deve fare. Le attività libere si creano toccando due celle e possono anche scavalcare la mezzanotte (es. 23:00–02:00). La pagina non scorre più: è la griglia a scorrere, con le intestazioni dei giorni ferme in alto.',
+          en: 'White cards floating on a clean grid, the whole day 00:00–23:59, staff search with your 5 most-used people always at hand and a tidier bar. Drag a person onto a card to assign them, or tap the card: a side column opens with the details, the assigned staff, each person\'s exact hours and a note on what they have to do. Free tasks are created by tapping two cells and can even go past midnight (e.g. 23:00–02:00). The page no longer scrolls: the grid does, with the day headers pinned at the top.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Montaggi e smontaggi con orari propri', en: 'Setup and teardown with their own hours' },
+        text: {
+          it: 'Ogni montaggio e smontaggio ha la sua card, con orario e persone indipendenti dall\'evento (di default il montaggio finisce quando inizia l\'evento e lo smontaggio parte quando finisce). L\'orario si cambia dalla colonna laterale e compare anche in calendario e al magazziniere.',
+          en: 'Every setup and teardown has its own card, with hours and people independent from the event (by default setup ends when the event starts and teardown begins when it ends). The time is changed from the side column and also shows up in the calendar and to the warehouse worker.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Calendario: colonna laterale e niente più modal', en: 'Calendar: side column, no more pop-ups' },
+        text: {
+          it: 'Su computer il giorno selezionato si legge in una colonna a destra: da lì si crea un evento al volo, si modifica o si elimina un evento senza aprire finestre, e si segnala un\'assenza (con l\'orario, se parziale). Nuova rubrica dei referenti: il nome, il telefono e l\'email di chi ricorre spesso (es. il referente di una fiera) si propongono da soli la volta dopo. La ricerca eventi mostra prima i futuri e poi i passati, e nel giorno selezionato ora si vedono anche montaggi e smontaggi.',
+          en: 'On desktop the selected day is read in a column on the right: from there you create an event on the fly, edit or delete one without opening windows, and report an absence (with the time, if partial). New contacts directory: the name, phone and email of recurring contacts (e.g. a trade fair\'s organizer) are suggested next time. Event search lists upcoming events first and past ones after, and the selected day now also shows setups and teardowns.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Per i magazzinieri: sezione "Oggi" e le proprie attività', en: 'For warehouse workers: "Today" section and their own tasks' },
+        text: {
+          it: 'In home, in cima, la sezione "Oggi" raccoglie gli eventi di oggi e i montaggi/smontaggi di oggi — anche se l\'evento è la settimana dopo — con la data in blu per il montaggio e arancione per lo smontaggio, così si vede subito che la lista di carico è da preparare. Nel calendario si vedono le attività assegnate con il proprio orario e la propria nota.',
+          en: 'On the home page, at the top, a "Today" section gathers today\'s events and today\'s setups/teardowns — even if the event itself is the following week — with the date in blue for setup and orange for teardown, so it\'s clear the loading list needs preparing. The calendar shows assigned tasks with your own hours and note.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Notifiche più utili e meno rumorose', en: 'More useful, quieter notifications' },
+        text: {
+          it: 'Chi viene assegnato a un\'attività, a un montaggio o a uno smontaggio riceve una notifica con giorno e orario, e se l\'orario cambia viene avvisata solo la persona interessata. Quando una lista di carico viene modificata arriva una sola notifica invece di una per oggetto.',
+          en: 'Anyone assigned to a task, setup or teardown gets a notification with the day and time, and if the time changes only the person concerned is notified. When a loading list is edited you get a single notification instead of one per item.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Popup delle assenze dopo il caricamento', en: 'Absence pop-ups after loading' },
+        text: {
+          it: 'L\'avviso che un magazziniere ha segnalato o modificato un\'assenza compariva sopra l\'animazione di avvio: ora esce solo quando il caricamento è finito.',
+          en: 'The notice that a worker reported or changed an absence used to appear on top of the startup animation: it now shows only once loading has finished.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-10-06',
     date: '2026-10-06',
     title: { it: 'Selezione multipla ridisegnata, assenze a ore e orari su misura per gli eventi lunghi', en: 'Redesigned multi-select, hourly absences and custom hours for multi-day events' },

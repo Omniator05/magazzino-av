@@ -20,7 +20,10 @@ export default function TodayReminderModal({ events, today, navigate }) {
   useModalScrollLock(open)
 
   const effectiveEndDate = e => e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date
-  const todayEvents = events.filter(e => e.type !== 'installation' && e.date <= today && effectiveEndDate(e) >= today)
+  // Anche un evento di un altro giorno ma con montaggio/smontaggio OGGI: è
+  // oggi che la sua lista di carico va preparata per andare a montare.
+  const todayEvents = events.filter(e => e.type !== 'installation' && ((e.date <= today && effectiveEndDate(e) >= today)
+    || e.phases?.montaggio === today || e.phases?.smontaggio === today))
   // Non solo "inizia oggi": un'installazione lunga più giorni resta rilevante
   // anche il giorno di fine/smontaggio, che può cadere ben dopo e.date (e le
   // fasi montaggio/smontaggio sono campi a parte, possono non coincidere né

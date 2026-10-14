@@ -32,6 +32,12 @@ import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, li
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import JSZip from 'jszip'
 
+// Ultima notifica "lista aggiornata" inviata, per evento (vedi
+// notifyListChanged in EventDetail) — in memoria: dopo un ricaricamento della
+// pagina si riparte da zero, nel peggiore dei casi una notifica in più.
+const lastListNotifyAt = new Map()
+const LIST_NOTIFY_COOLDOWN_MS = 5 * 60 * 1000
+
 // Passata questa finestra di grazia dalla data dell'evento, i contenuti caricati
 // dall'organizzatore vengono eliminati da Storage per non far crescere lo spazio occupato.
 // A differenza della grafica "Next" di Brasserie (pulita lato organizzatore), qui il controllo
@@ -200,7 +206,15 @@ export default function EventDetail() {
   // chiesto esplicitamente (qualunque modifica a una riga, non solo a carico
   // iniziato), quindi non ha lo stesso filtro — manda sempre, mirata a admin
   // + magazzinieri assegnati a questo evento (mai tutta la squadra).
+  // Una sola notifica per evento ogni LIST_NOTIFY_COOLDOWN_MS: modificare
+  // dieci oggetti di fila (o aggiungerne tanti uno alla volta) non deve
+  // riempire il telefono di dieci push identiche — la prima basta a dire
+  // "la lista è cambiata, dai un'occhiata", le successive nella stessa
+  // finestra vengono assorbite (stessa regola per il banner nello scanner).
   const notifyListChanged = () => {
+    const now = Date.now()
+    if (now - (lastListNotifyAt.get(eventId) || 0) < LIST_NOTIFY_COOLDOWN_MS) return
+    lastListNotifyAt.set(eventId, now)
     if (eventItems.some(i => i.loaded && !i.returned)) {
       addDoc(collection(db, 'notifications'), {
         teamId, type: 'list_changed', eventId,
@@ -1691,7 +1705,7 @@ export default function EventDetail() {
               )}
               {/* Orari su misura per singoli giorni (impostati da "Assegna
                   personale" su un evento multi-giorno, vedi
-                  StaffTimeline.jsx/EventDayHoursModal.jsx) — un evento di
+                  StaffTimeline.jsx/StaffAssignPanel.jsx) — un evento di
                   più giorni non ha un unico orario valido per tutti, qui si
                   vede a colpo d'occhio quali giorni ne hanno uno diverso. */}
               {event.dayTimes && Object.keys(event.dayTimes).length > 0 && (

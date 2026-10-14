@@ -64,6 +64,10 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
 
   const prevMonth = () => setView(v => v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 })
   const nextMonth = () => setView(v => v.month === 11 ? { year: v.year + 1, month: 0 } : { ...v, month: v.month + 1 })
+  // Scatto diretto di un anno — senza, programmare per il prossimo anno
+  // significa spingere "mese successivo" fino a 12 volte di fila.
+  const prevYear = () => setView(v => ({ ...v, year: v.year - 1 }))
+  const nextYear = () => setView(v => ({ ...v, year: v.year + 1 }))
 
   const pick = (d) => {
     const ymd = toYMD(view.year, view.month, d)
@@ -107,10 +111,18 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
 
       {open && (
         <div style={{ position: 'absolute', ...(popupAbove ? { bottom: 'calc(100% + 4px)' } : { top: 'calc(100% + 4px)' }), width: 210, ...(popupLeft != null ? { left: popupLeft } : { right: 0 }), background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 13, padding: '9px 9px 7px', boxShadow: '0 8px 28px rgba(0,0,0,0.14)', zIndex: 100 }}>
+          {/* Scatto diretto di un anno, sopra la navigazione mese — utile
+              per programmare lontano nel futuro senza spingere "mese
+              successivo" fino a 12 volte. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 4 }}>
+            <button type="button" className="df-nav-btn" onClick={prevYear} aria-label="Anno precedente" style={{ width: 22, height: 18, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>«</button>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)' }}>{view.year}</span>
+            <button type="button" className="df-nav-btn" onClick={nextYear} aria-label="Anno successivo" style={{ width: 22, height: 18, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>»</button>
+          </div>
           {/* Navigazione mese */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <button type="button" className="df-nav-btn" onClick={prevMonth} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>‹</button>
-            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{MONTHS[view.month]} {view.year}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{MONTHS[view.month]}</span>
             <button type="button" className="df-nav-btn" onClick={nextMonth} style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>›</button>
           </div>
 

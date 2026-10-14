@@ -9,9 +9,13 @@ import { formatDate } from '../utils/formatDate'
 import { generateDates } from '../utils/recurrence'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyTeamPush } from '../utils/pushNotifications'
+import { rememberEventManager } from '../utils/eventManagers'
 import DateField from './DateField'
 import DateRangeField from './DateRangeField'
+import MultiDateField from './MultiDateField'
+import CollapsibleFormSection from './CollapsibleFormSection'
 import TimeField from './TimeField'
+import EventManagerField from './EventManagerField'
 
 const IconCalendarSm = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -38,7 +42,7 @@ const IconRepeat = () => (
 const blankForm = (initialDate) => ({
   name:'', date: initialDate || new Date().toISOString().split('T')[0], dateEnd:'',
   allDay:true, timeStart:'', timeEnd:'',
-  location:'', notes:'', recurrence:'never', endDate:'', type:'event', phases:{},
+  location:'', notes:'', recurrence:'never', endDate:'', customDates:[], type:'event', phases:{},
   quoteRef:'', managerName:'', managerPhone:'', managerEmail:'',
 })
 
@@ -70,13 +74,6 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
   const { user, teamId } = useAuth()
   const today = new Date().toISOString().split('T')[0]
 
-  const RECURRENCE_OPTIONS = [
-    { value:'never',   label:t('events.recurrenceNever') },
-    { value:'daily',   label:t('events.recurrenceDaily') },
-    { value:'weekly',  label:t('events.recurrenceWeekly') },
-    { value:'monthly', label:t('events.recurrenceMonthly') },
-    { value:'yearly',  label:t('events.recurrenceYearly') },
-  ]
   const PHASE_CONFIG = [
     { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
     { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
@@ -85,6 +82,16 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
   const [form, setForm] = useState(() => blankForm(initialDate))
   const [saving, setSaving] = useState(false)
+  // Un rent/install è già un intervallo continuo (date/dateEnd): "ogni
+  // settimana" o "ogni mese" sopra un intervallo che è già un periodo non ha
+  // senso (ripeterebbe l'intero periodo, non singoli giorni). "Personalizzato"
+  // invece sì — è l'esatto scenario di un noleggio richiesto per giorni
+  // sparsi nel mese, SENZA un pattern regolare da esprimere con dateEnd.
+  const RECURRENCE_OPTIONS = (form.type === 'installation' ? ['never', 'custom'] : ['never', 'daily', 'weekly', 'monthly', 'yearly', 'custom'])
+    .map(value => ({ value, label:t(`events.recurrence${value[0].toUpperCase()}${value.slice(1)}`) }))
+  // Chiusa di default: qui il form parte sempre vuoto (creazione), quindi
+  // non c'è mai nulla da mostrare subito — si apre solo se serve davvero.
+  const [extraInfoOpen, setExtraInfoOpen] = useState(false)
   // Liste di carico aggiuntive portate da un evento d'archivio usato come template
   const [pendingLists, setPendingLists] = useState({ lists: [], mainListName: '' })
   // Di norma un flusso con lista già pronta (template) non offre il toggle
@@ -93,6 +100,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
 
   useEffect(() => {
     if (!open) return
+    setExtraInfoOpen(false)
     if (skipChoice && typeof skipChoice === 'object') {
       setForm({ ...blankForm(initialDate), name: skipChoice.name || '' })
       setPendingTemplateItems(skipChoice.items || [])
@@ -107,8 +115,14 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const futureDates = form.recurrence !== 'never' && form.date && form.endDate
-    ? generateDates(form.date, form.recurrence, form.endDate) : []
+  // "Personalizzato" non segue una regola (ogni N giorni/settimane/mesi):
+  // le date arrivano già scelte una per una da MultiDateField, non vanno
+  // generate — bastano quelle (meno l'eventuale doppione della data
+  // principale, già esclusa lì all'origine).
+  const futureDates = form.recurrence === 'custom'
+    ? (form.customDates || [])
+    : (form.recurrence !== 'never' && form.date && form.endDate
+      ? generateDates(form.date, form.recurrence, form.endDate) : [])
 
   const saveEvent = async () => {
     if (!form.name.trim() || !form.date) return
@@ -135,6 +149,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
       }
       const ref = await addDoc(collection(db, 'events'), { ...base, date: form.date })
       pushEventToGoogle(ref.id)
+      if (base.eventManager.name) rememberEventManager(teamId, user.uid, base.eventManager).catch(() => {})
       // Solo admin, solo una volta (anche se ricorrente — un digest per ogni
       // occorrenza sarebbe rumore): gli altri admin sanno che è stato
       // aggiunto un nuovo evento, non serve saperlo per ciascuna data futura.
@@ -177,7 +192,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
                     border: 'none', transition:'all 0.15s',
                   }}><IconCalendarSm /> {t('events.typeEvent')}</button>
                 <button
-                  onClick={() => setForm(f => ({...f, type:'installation', recurrence:'never', endDate:''}))}
+                  onClick={() => setForm(f => ({...f, type:'installation', recurrence:'never', endDate:'', customDates:[]}))}
                   aria-pressed={form.type === 'installation'}
                   style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                     background: form.type === 'installation' ? '#ede9fe' : 'transparent',
@@ -240,45 +255,49 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
                 </div>
               )}
             </div>
+            <div className="form-group">
+              <label htmlFor="cef-recurrence" style={{ display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.repeatLabel')}</label>
+              <select id="cef-recurrence" value={form.recurrence} onChange={e => setForm({...form, recurrence:e.target.value, endDate:'', customDates:[]})}>
+                {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            {form.recurrence === 'custom' ? (
+              <div className="form-group">
+                <label>{t('events.customDatesLabel')}</label>
+                <MultiDateField dates={form.customDates} anchorDate={form.date}
+                  onChange={v => setForm({...form, customDates:v})} />
+              </div>
+            ) : form.recurrence !== 'never' && (
+              <div className="form-group">
+                <label>{t('events.repeatEndLabel')}</label>
+                <DateField value={form.endDate} min={form.date || today}
+                  onChange={v => setForm({...form, endDate:v})} />
+              </div>
+            )}
+            {futureDates.length > 0 && (
+              <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 14px', marginBottom:16 }}>
+                <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.totalEventsCount', { count: futureDates.length + 1 })}</p>
+                <p style={{ color:'var(--text2)', fontSize:12, marginTop:3 }}>
+                  {t('workerCalendar.dateRange', {
+                    start: formatDate([form.date, ...futureDates].sort().at(0)+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language),
+                    end: formatDate([form.date, ...futureDates].sort().at(-1)+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language),
+                  })}
+                </p>
+              </div>
+            )}
             {form.type !== 'installation' && (
-              <>
-                <div className="form-group">
-                  <label htmlFor="cef-recurrence" style={{ display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.repeatLabel')}</label>
-                  <select id="cef-recurrence" value={form.recurrence} onChange={e => setForm({...form, recurrence:e.target.value, endDate:''})}>
-                    {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                {form.recurrence !== 'never' && (
-                  <div className="form-group">
-                    <label>{t('events.repeatEndLabel')}</label>
-                    <DateField value={form.endDate} min={form.date || today}
-                      onChange={v => setForm({...form, endDate:v})} />
-                  </div>
-                )}
-                {futureDates.length > 0 && (
-                  <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'10px 14px', marginBottom:16 }}>
-                    <p style={{ color:'var(--blue)', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}><IconRepeat /> {t('events.totalEventsCount', { count: futureDates.length + 1 })}</p>
-                    <p style={{ color:'var(--text2)', fontSize:12, marginTop:3 }}>
-                      {t('workerCalendar.dateRange', {
-                        start: formatDate(form.date+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language),
-                        end: formatDate(futureDates.at(-1)+'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language),
-                      })}
-                    </p>
-                  </div>
-                )}
-                <div className="form-group">
-                  <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')}</label>
-                  {PHASE_CONFIG.map(p => (
-                    <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
-                      <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <DateField value={form.phases?.[p.key] || ''} clearable placeholder="—"
-                          onChange={v => setForm(f => { const ph = {...(f.phases||{})}; if (v) ph[p.key] = v; else delete ph[p.key]; return {...f, phases:ph} })} />
-                      </div>
+              <div className="form-group">
+                <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')}</label>
+                {PHASE_CONFIG.map(p => (
+                  <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
+                    <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <DateField value={form.phases?.[p.key] || ''} clearable placeholder="—"
+                        onChange={v => setForm(f => { const ph = {...(f.phases||{})}; if (v) ph[p.key] = v; else delete ph[p.key]; return {...f, phases:ph} })} />
                     </div>
-                  ))}
-                </div>
-              </>
+                  </div>
+                ))}
+              </div>
             )}
             <div className="form-group">
               <label htmlFor="cef-location">{t('calendar.locationLabel')}</label>
@@ -288,18 +307,18 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
               <label htmlFor="cef-notes">{t('calendar.notesLabel')}</label>
               <textarea id="cef-notes" value={form.notes} onChange={e => setForm({...form, notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
             </div>
-            <div className="form-group">
-              <label htmlFor="cef-quote">{t('events.quoteRefLabel')}</label>
-              <input id="cef-quote" value={form.quoteRef} onChange={e => setForm({...form, quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cef-manager-name">{t('events.eventManagerLabel')}</label>
-              <input id="cef-manager-name" value={form.managerName} onChange={e => setForm({...form, managerName:e.target.value})} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
-              <div style={{ display:'flex', gap:8 }}>
-                <input value={form.managerPhone} onChange={e => setForm({...form, managerPhone:e.target.value})} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
-                <input value={form.managerEmail} onChange={e => setForm({...form, managerEmail:e.target.value})} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+            <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={extraInfoOpen} onToggle={() => setExtraInfoOpen(o => !o)}
+              hasValue={!!(form.quoteRef.trim() || form.managerName.trim())}>
+              <div className="form-group">
+                <label htmlFor="cef-quote">{t('events.quoteRefLabel')}</label>
+                <input id="cef-quote" value={form.quoteRef} onChange={e => setForm({...form, quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
               </div>
-            </div>
+              <div className="form-group">
+                <label>{t('events.eventManagerLabel')}</label>
+                <EventManagerField teamId={teamId} name={form.managerName} phone={form.managerPhone} email={form.managerEmail}
+                  onChange={v => setForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
+              </div>
+            </CollapsibleFormSection>
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? t('common.saving')

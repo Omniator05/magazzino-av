@@ -5,7 +5,7 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
-import { Pin, User, List, Wrench, Check } from '../components/Icon'
+import { Pin, User, List, Wrench, Check, Search } from '../components/Icon'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
@@ -14,11 +14,14 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import TimeField from '../components/TimeField'
+import CollapsibleFormSection from '../components/CollapsibleFormSection'
 import StaffTimeline from '../components/StaffTimeline'
 import EventSummaryModal from '../components/EventSummaryModal'
 import TaskSummaryModal from '../components/TaskSummaryModal'
 import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
-import { notifyEventTimeChangedIfNeeded } from '../utils/pushNotifications'
+import { notifyEventTimeChangedIfNeeded, notifyTeamPush } from '../utils/pushNotifications'
+import { rememberEventManager } from '../utils/eventManagers'
+import EventManagerField from '../components/EventManagerField'
 import { formatDate, capitalize } from '../utils/formatDate'
 import CreateEventFlow from '../components/CreateEventFlow'
 import Toast from '../components/Toast'
@@ -26,6 +29,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { awaitIfOnline } from '../utils/offlineSave'
 import SegmentedControl from '../components/SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
+import CalendarSidePanel from '../components/CalendarSidePanel'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -85,6 +89,14 @@ export default function Calendar() {
   const [workers, setWorkers] = useState([])
   const [assignmentBlocks, setAssignmentBlocks] = useState([])
   const [selectedDate, setSelectedDate] = useState(todayStr)
+  // Barra di ricerca eventi in header (solo desktop) — trova per nome,
+  // cliccare un risultato salta al mese/giorno giusto nella griglia.
+  const [eventSearch, setEventSearch] = useState('')
+  const [eventSearchOpen, setEventSearchOpen] = useState(false)
+  // Creazione rapida dal "+" (solo desktop) — trasforma la colonna laterale
+  // in un form invece di aprire il modal, vedi CalendarSidePanel. Prima
+  // versione sperimentale: si chiude da sola se si lascia la griglia.
+  const [sidebarCreating, setSidebarCreating] = useState(false)
 
   // Modalità "Assegna personale" — timeline settimanale (StaffTimeline.jsx),
   // alternativa alla griglia mensile. Pensata quasi esclusivamente per
@@ -100,6 +112,7 @@ export default function Calendar() {
   })
   const isMobile = useIsMobile()
   useEffect(() => { if (isMobile && mode === 'assign') setMode('grid') }, [isMobile, mode])
+  useEffect(() => { if (mode !== 'grid' || isMobile) { setSidebarCreating(false); setEditingEvent(null) } }, [mode, isMobile])
   useEffect(() => { try { sessionStorage.setItem('calendar_mode', mode) } catch {} }, [mode])
 
   // Arrivo come scorciatoia dal bottone "Assegna" nella lista di carico
@@ -130,6 +143,9 @@ export default function Calendar() {
   }, [navState, locSearch])
   const [editingEvent, setEditingEvent] = useState(null)
   const [editForm, setEditForm] = useState({})
+  // Aperta di default solo se l'evento in modifica ha già un valore qui
+  // dentro (vedi openEdit sotto) — altrimenti resta chiusa come in creazione.
+  const [extraInfoOpen, setExtraInfoOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   // Flusso unico di creazione evento, condiviso con Events.jsx — vedi
   // src/components/CreateEventFlow.jsx.
@@ -211,14 +227,26 @@ export default function Calendar() {
           ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
         }), isOnline)
         // Nuova assenza segnalata da un worker (non dall'admin stesso): avvisa
-        // l'admin al prossimo accesso, vedi AbsenceNotifications.jsx.
+        // l'admin al prossimo accesso (badge in-app, vedi
+        // AbsenceNotifications.jsx) E subito via push — prima arrivava SOLO
+        // al prossimo accesso/email, niente di immediato.
         if (!isAdmin) {
+          const workerName = profile?.name || profile?.username || t('common.noName')
           await awaitIfOnline(addDoc(collection(db, 'notifications'), {
             teamId, type: 'absence',
-            workerName: profile?.name || profile?.username || t('common.noName'),
+            workerName,
             startDate: data.startDate, endDate: data.endDate, reason: data.reason,
             seenBy: [], createdAt: serverTimestamp(),
           }), isOnline)
+          const dateLabel = data.startDate === data.endDate
+            ? formatDate(data.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)
+            : `${formatDate(data.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(data.endDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}`
+          notifyTeamPush({
+            title: t('calendar.pushNewAbsenceTitle'),
+            body: `${workerName} · ${dateLabel}`,
+            url: '/calendar',
+            audience: { type: 'admins' },
+          })
           // Email best-effort, solo se online — offline non c'è comunque rete
           // per inviarla, e aspettare getIdToken()/fetch senza connessione
           // bloccherebbe la chiusura del modal. L'admin la vede in app al
@@ -273,6 +301,7 @@ export default function Calendar() {
         },
       }
       await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), updated), isOnline)
+      if (updated.eventManager.name) rememberEventManager(teamId, user.uid, updated.eventManager).catch(() => {})
       notifyEventTimeChangedIfNeeded(editingEvent.id, editingEvent, updated)
       if (!isOnline) showToast(t('common.savedOfflineToast'))
       setEditingEvent(null)
@@ -281,14 +310,22 @@ export default function Calendar() {
 
   const deleteEvent = async (e, ev) => {
     e.stopPropagation()
-    if (!(await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('calendar.confirmDeleteEventMessage', { name: ev.name }), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))) return
+    if (!(await confirm({ title: t('calendar.confirmDeleteEventTitle'), message: t('calendar.confirmDeleteEventMessage', { name: ev.name }), confirmLabel: t('calendar.confirmDeleteEventLabel'), danger: true }))) return false
     await deleteEventWithInventoryCheck({ event: ev, confirm, t })
+    return true
   }
 
   const editDrag = useModalDrag(() => setEditingEvent(null), undefined, saveEdit, !!editingEvent)
   const absenceDrag = useModalDrag(closeAbsenceModal, undefined, addAbsence, showAbsenceModal)
 
-  useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate)
+  // Oltre ai modal, blocca lo scroll della PAGINA anche nella griglia
+  // desktop: header+nav+griglia+legenda devono stare tutti in un colpo
+  // d'occhio, la colonna laterale scorre per conto suo (vedi il suo
+  // max-height in CalendarSidePanel). Un'unica chiamata che somma tutte le
+  // ragioni per bloccare — due istanze separate dell'hook si pesterebbero i
+  // piedi sullo stesso body.style quando una si chiude mentre l'altra è
+  // ancora attiva (es. chiudere un modal mentre si è ancora sulla griglia).
+  useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate || (!isMobile && (mode === 'grid' || mode === 'assign')))
 
   const removeAbsence = async (id) => {
     if (!(await confirm({ title: t('calendar.confirmRemoveAbsenceTitle'), message: t('calendar.confirmRemoveAbsenceMessage'), confirmLabel: t('calendar.confirmRemoveAbsenceLabel'), danger: true }))) return
@@ -309,6 +346,7 @@ export default function Calendar() {
       location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
       quoteRef: ev.quoteRef||'', managerName: ev.eventManager?.name||'', managerPhone: ev.eventManager?.phone||'', managerEmail: ev.eventManager?.email||'',
     })
+    setExtraInfoOpen(!!(ev.quoteRef || ev.eventManager?.name))
   }
 
   useEffect(() => {
@@ -391,6 +429,27 @@ export default function Calendar() {
   const eventRank = e => e.isDeadlineReminder ? 4 : e.type === 'installation' ? 3 : 0
   Object.values(eventsByDate).forEach(list => list.sort((a, b) => eventRank(a) - eventRank(b)))
 
+  // Futuri (oggi compreso) prima, dal più vicino — poi i passati, dal più
+  // recente: aprendo la ricerca si cerca quasi sempre un evento che deve
+  // ancora succedere, i vecchi servono solo di tanto in tanto come storico.
+  // Una riga più spessa separa i due gruppi nel dropdown (eventSearchSplit),
+  // solo quando compaiono entrambi.
+  const eventSearchMatches = eventSearch.trim().length < 2 ? [] : events
+    .filter(e => e.date && !e.isDeadlineReminder && e.name?.toLowerCase().includes(eventSearch.trim().toLowerCase()))
+  const eventSearchFuture = eventSearchMatches.filter(e => e.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date))
+  const eventSearchPast = eventSearchMatches.filter(e => e.date < todayStr).sort((a, b) => b.date.localeCompare(a.date))
+  const eventSearchResults = [...eventSearchFuture, ...eventSearchPast].slice(0, 8)
+  const eventSearchSplit = Math.min(eventSearchFuture.length, eventSearchResults.length)
+
+  const goToSearchResult = ev => {
+    const d = new Date(ev.date + 'T12:00:00')
+    setCursor({ year: d.getFullYear(), month: d.getMonth() })
+    setSelectedDate(ev.date)
+    setMode('grid')
+    setEventSearch('')
+    setEventSearchOpen(false)
+  }
+
   // Indice fasi: data → array di { event, key, color, label }
   const PHASE_META = {
     montaggio:  { color:'#2563eb', label:t('calendar.legendAssembly') },
@@ -452,6 +511,7 @@ export default function Calendar() {
   const goNextMonth = () => setCursor(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 })
   const goToday = () => { setCursor({ year: today.getFullYear(), month: today.getMonth() }); setSelectedDate(todayStr) }
   const swipeMonth = useSwipeMonth(goPrevMonth, goNextMonth)
+  const isCurrentMonth = cursor.year === today.getFullYear() && cursor.month === today.getMonth()
 
   const absencesOnDate = (dStr) => unavailability
     .filter(u => dStr >= u.startDate && dStr <= u.endDate)
@@ -476,6 +536,20 @@ export default function Calendar() {
     (selectedPhaseGroups[p.event.id] ||= { event: p.event, phases: [] }).phases.push(p)
   })
   const selectedPhaseEvents = Object.values(selectedPhaseGroups)
+  // Per la colonna laterale desktop: OGNI fase del giorno ha la sua card
+  // (anche nello stesso giorno dell'evento), con l'orario impostato da
+  // "Assegna personale" e le persone assegnate a quella fase. Le assegnazioni
+  // senza campo `phase` (precedenti) su un giorno senza l'evento restano
+  // della fase — stessa regola di StaffTimeline.
+  const selectedDayPhases = selectedPhases.map(p => {
+    const eventOnDay = (eventsByDate[selectedDate] || []).some(e => e.id === p.event.id)
+    const pt = p.event.phaseTimes?.[p.key]
+    return {
+      event: p.event, key: p.key, label: p.label, color: p.color,
+      time: pt?.timeStart && pt?.timeEnd ? `${pt.timeStart}–${pt.timeEnd}` : null,
+      assigned: assignmentBlocks.filter(b => b.eventId === p.event.id && b.date === selectedDate && (b.phase === p.key || (!b.phase && !eventOnDay))),
+    }
+  })
   const selectedTasks = selectedDate ? (tasksByDate[selectedDate] || []) : []
   const selectedAbsences = selectedDate ? absencesOnDate(selectedDate) : []
   const selectedGoogleEvents = selectedDate ? (googleEventsByDate[selectedDate] || []) : []
@@ -484,55 +558,73 @@ export default function Calendar() {
   return (
     <div className="page" style={{ paddingBottom:160 }}>
       <Toast message={toast} />
-      <div className="page-header">
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div>
-            <h1>{t('calendar.title')}</h1>
-            <p>{t('calendar.totalEvents', { count: events.length })}</p>
-          </div>
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            {/* Il flusso "tocca primo/ultimo giorno" dipende dalla griglia
-                mensile: in "Assegna personale" non c'è nulla su cui toccare,
-                quindi il bottone resterebbe acceso senza poter funzionare. */}
+      <div className="page-header" style={!isMobile ? { background:'#fff', borderBottom:'1px solid #e0ddd6', padding:'18px 32px 14px' } : undefined}>
+        {isMobile ? (
+          <>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <h1>{t('calendar.title')}</h1>
+                <p>{t('calendar.totalEvents', { count: events.length })}</p>
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                {/* Il flusso "tocca primo/ultimo giorno" dipende dalla griglia
+                    mensile: in "Assegna personale" non c'è nulla su cui
+                    toccare, quindi il bottone resterebbe acceso senza poter
+                    funzionare. Solo mobile: su desktop la stessa azione vive
+                    nel bottone "+ Aggiungi assenza" della colonna laterale. */}
+                {mode === 'grid' && (
+                  <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
+                    aria-pressed={reportMode}
+                    style={{
+                      background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
+                      border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
+                      color: reportMode ? 'var(--accent)' : 'var(--text2)',
+                      borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
+                    }}>
+                    {t('calendar.reportAbsence')}
+                  </button>
+                )}
+                <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
+              </div>
+            </div>
+
+            {/* Navigazione mese sulla propria riga — tabs assenti (niente
+                Assegna personale su schermi stretti). */}
             {mode === 'grid' && (
-              <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
-                aria-pressed={reportMode}
-                style={{
-                  background: reportMode ? 'rgba(216,56,63,0.12)' : 'rgba(144,144,176,0.12)',
-                  border: `1px solid ${reportMode ? 'rgba(216,56,63,0.4)' : 'var(--border)'}`,
-                  color: reportMode ? 'var(--accent)' : 'var(--text2)',
-                  borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:600,
-                }}>
-                {t('calendar.reportAbsence')}
-              </button>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
+              <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
+              <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
+              <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
+            </div>
             )}
-            <button onClick={goToday} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('calendar.today')}</button>
+          </>
+        ) : (
+          /* Desktop: tutto in un'unica riga — titolo, data/"Oggi" (solo in
+             griglia) a sinistra, tab Calendario/Assegna SEMPRE centrati
+             (posizione assoluta: restano centrati anche quando a sinistra
+             non c'è nulla, cioè in "Assegna personale"). Niente più "Segna
+             assenza" qui: la stessa azione vive nel bottone "+ Aggiungi
+             assenza" della colonna laterale (CalendarSidePanel). Niente più
+             vista settimanale (tolta: restava solo il mese). */
+          <div style={{ position:'relative', display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', minHeight:28 }}>
+            <h1 style={{ margin:0, fontSize:24, fontWeight:800, letterSpacing:'-0.5px' }}>{t('calendar.title')}</h1>
+
+            <div style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%, -50%)', display:'flex', gap:4, background:'#eceae6', borderRadius:10, padding:3, width:'fit-content' }}>
+              <button onClick={() => setMode('grid')} aria-pressed={mode === 'grid'} className="btn-no-anim" style={{ padding:'6px 16px', borderRadius:8, fontSize:12.5, fontWeight:700, background: mode === 'grid' ? '#e63946' : 'transparent', color: mode === 'grid' ? '#fff' : '#6b6b6b' }}>
+                {t('calendar.viewGrid')}
+              </button>
+              <button onClick={() => { if (reportMode) cancelReportMode(); setMode('assign') }} aria-pressed={mode === 'assign'} className="btn-no-anim" style={{ padding:'6px 16px', borderRadius:8, fontSize:12.5, fontWeight:700, background: mode === 'assign' ? '#e63946' : 'transparent', color: mode === 'assign' ? '#fff' : '#6b6b6b' }}>
+                {t('calendar.viewAssign')}
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Toggle griglia / assegna personale — solo desktop, la timeline
-            settimanale non è pensata per schermi stretti (vedi isMobile sopra) */}
-        {!isMobile && (
-        <div style={{ display:'flex', gap:3, marginTop:22, background:'var(--card2)', borderRadius:10, padding:3, width:'fit-content', margin:'22px auto 0' }}>
-          <button onClick={() => setMode('grid')} aria-pressed={mode === 'grid'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'grid' ? 'var(--accent)' : 'transparent', color: mode === 'grid' ? 'white' : 'var(--text2)' }}>
-            {t('calendar.viewGrid')}
-          </button>
-          <button onClick={() => { if (reportMode) cancelReportMode(); setMode('assign') }} aria-pressed={mode === 'assign'} style={{ padding:'6px 16px', borderRadius:8, fontSize:12, fontWeight:700, background: mode === 'assign' ? 'var(--accent)' : 'transparent', color: mode === 'assign' ? 'white' : 'var(--text2)' }}>
-            {t('calendar.viewAssign')}
-          </button>
-        </div>
         )}
 
-        {/* Navigazione mese — solo in griglia, la timeline settimanale ha la propria */}
-        {mode === 'grid' && (
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:22 }}>
-          <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>‹</button>
-          <h2 style={{ fontSize:17, fontWeight:800 }}>{capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}</h2>
-          <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} style={{ width:44, height:44, borderRadius:10, background:'var(--card2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, color:'var(--text)' }}>›</button>
-        </div>
-        )}
-
-        {mode === 'grid' && reportMode && (
+        {/* Su desktop lo stesso avviso vive dentro la colonna laterale
+            (CalendarSidePanel), che si trasforma mostrando anche i campi
+            da compilare subito dopo — niente più banner qui + modal
+            separato. Su mobile, senza colonna, resta questo banner. */}
+        {mode === 'grid' && reportMode && isMobile && (
           <div style={{ marginTop:14, background:'rgba(216,56,63,0.08)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:12, padding:'12px 14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
             <p style={{ fontSize:13, color:'var(--accent)', fontWeight:600, lineHeight:1.4 }}>
               {!rangeStart ? t('calendar.tapFirstDay') : t('calendar.tapLastDay')}
@@ -543,17 +635,93 @@ export default function Calendar() {
       </div>
 
       {mode === 'grid' && (
-      <div style={{ padding:'0 16px 16px' }}>
+      <div style={{ padding: isMobile ? '0 16px 16px' : '0 0 16px 16px', display: isMobile ? 'block' : 'flex', gap: isMobile ? 0 : 16, alignItems: isMobile ? undefined : 'stretch' }}>
+      <div style={{ flex: isMobile ? undefined : 1, minWidth: 0 }}>
+        {/* Navigazione mese — dentro la colonna griglia (non più una riga a
+            parte sopra tutta la pagina): così la colonna laterale bianca
+            parte subito sotto l'header, senza il grigio dello sfondo pagina
+            che prima comparse dietro a questa riga. Centrata sulla sola
+            colonna griglia (è nello stesso contenitore flex:1 della
+            griglia). Frecce leggere, senza sfondo. */}
+        {!isMobile && (
+          <div style={{ position:'relative', display:'flex', justifyContent:'center', padding:'20px 0 10px', minHeight:36 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:2 }}>
+              <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} className="btn-no-anim"
+                style={{ width:22, height:22, borderRadius:6, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:'#9a9a9a' }}>‹</button>
+              <button onClick={goToday} className="btn-no-anim rc-cal-today-btn"
+                style={{ textAlign:'center', background:'none', border:'none', padding:'2px 10px', borderRadius:9 }}>
+                <div style={{ fontSize:15, fontWeight:800, whiteSpace:'nowrap', color:'#1a1a1a' }}>
+                  {capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}
+                </div>
+                <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: isCurrentMonth ? '#e63946' : '#6b6b6b' }}>
+                  {t('calendar.today')}
+                </div>
+              </button>
+              <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} className="btn-no-anim"
+                style={{ width:22, height:22, borderRadius:6, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:'#9a9a9a' }}>›</button>
+            </div>
+
+            {/* Ricerca evento — ancorata all'angolo in alto a destra della
+                colonna griglia, larga quanto il dropdown dei risultati (280).
+                onMouseDown invece di onClick sulle righe del dropdown, così
+                scatta prima del blur dell'input che altrimenti lo chiuderebbe. */}
+            <div style={{ position:'absolute', right:0, top:'50%', transform:'translateY(-50%)', width:280, isolation:'isolate', zIndex:50 }}>
+              <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
+                <span style={{ position:'absolute', left:10, display:'flex', color:'#9a9a9a', pointerEvents:'none' }}><Search size={15} /></span>
+                <input
+                  value={eventSearch}
+                  onChange={e => { setEventSearch(e.target.value); setEventSearchOpen(true) }}
+                  onFocus={() => setEventSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setEventSearchOpen(false), 150)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setEventSearch(''); setEventSearchOpen(false); e.target.blur() } }}
+                  placeholder={t('calendar.searchPlaceholder')}
+                  style={{ width:'100%', background:'#eceae6', border:'none', borderRadius:10, padding:'8px 10px 8px 32px', fontSize:12.5, color:'#1a1a1a' }}
+                />
+              </div>
+              {eventSearchOpen && eventSearch.trim().length >= 2 && (
+                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, width:280, background:'#fff', opacity:1, border:'1px solid #e0ddd6', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.22)', overflow:'hidden' }}>
+                  {eventSearchResults.length === 0 ? (
+                    <div style={{ padding:'12px 14px', fontSize:12.5, color:'#9a9a9a', background:'#fff' }}>{t('calendar.searchNoResults')}</div>
+                  ) : eventSearchResults.map((ev, i) => (
+                    <div key={ev.id}>
+                      {i === eventSearchSplit && i > 0 && i < eventSearchResults.length && (
+                        <div style={{ padding:'5px 14px', background:'#f4f4f2', borderTop:'2px solid #e0ddd6', borderBottom:'1px solid #e0ddd6', fontSize:10, fontWeight:800, color:'#9a9a9a', textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                          {t('calendar.searchPastSection')}
+                        </div>
+                      )}
+                      <button onMouseDown={() => goToSearchResult(ev)} className="btn-no-anim"
+                        style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', background:'#fff', borderBottom: i === eventSearchResults.length - 1 ? 'none' : '1px solid #f0efec' }}>
+                        <div style={{ fontSize:12.5, fontWeight:700, color:'#1a1a1a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</div>
+                        <div style={{ fontSize:11, color:'#9a9a9a', marginTop:2 }}>
+                          {capitalize(formatDate(ev.date + 'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language))}
+                        </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Header giorni settimana */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:6 }}>
+        {/* Su desktop le celle sono unite in un'unica griglia dentro un
+            contenitore con bordo — separate SOLO da righe (come il mockup),
+            non più tante tessere arrotondate staccate da uno spazio; su
+            mobile restano le tessere di sempre (più leggibili su schermi
+            stretti, tocco più preciso). */}
+        <div style={!isMobile ? { background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, overflow:'hidden' } : undefined}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom: isMobile ? 6 : 0, borderBottom: isMobile ? undefined : '1px solid #e0ddd6' }}>
           {WEEKDAYS.map((w, i) => (
-            <div key={i} style={{ textAlign:'center', fontSize:11, fontWeight:700, color:'var(--text2)', padding:'6px 0' }}>{w}</div>
+            <div key={i} style={{ textAlign:'center', fontSize: isMobile ? 11 : 11.5, fontWeight:700, color: isMobile ? 'var(--text2)' : '#9a9a9a', textTransform: isMobile ? undefined : 'uppercase', letterSpacing: isMobile ? undefined : '0.4px', padding: isMobile ? '6px 0' : '9px 0' }}>{w}</div>
           ))}
         </div>
 
         {/* Griglia mese — puntini colorati, tap per selezionare il giorno; swipe orizzontale per cambiare mese */}
-        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
+        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap: isMobile ? 4 : 0 }}>
           {cells.map((cell, i) => {
+            const isLastCol = i % 7 === 6
+            const isLastRow = Math.floor(i / 7) === Math.ceil(cells.length / 7) - 1
             const dStr = toDateStr(cell.dateObj)
             // Un rent/install può durare mesi: ripeterlo su ogni giorno della
             // griglia mensile lo fa sembrare "occupato" anche nei giorni in
@@ -582,7 +750,7 @@ export default function Calendar() {
                 key={i}
                 onClick={() => handleDayTap(dStr)}
                 onMouseEnter={() => { if (reportMode && rangeStart) setHoverDate(dStr) }}
-                style={{
+                style={isMobile ? {
                   position:'relative',
                   minHeight:78,
                   borderRadius:10,
@@ -597,6 +765,26 @@ export default function Calendar() {
                   overflow:'hidden',
                   cursor:'pointer',
                   transition:'background 0.1s ease, border-color 0.1s ease',
+                } : {
+                  // Desktop: niente più tessere staccate — solo righe hairline
+                  // (destra/basso, l'alto/sinistra li dà già il contenitore o
+                  // la cella precedente) e celle più grandi, come nel mockup.
+                  position:'relative',
+                  minHeight:118,
+                  borderRadius:0,
+                  padding:'8px 6px 6px',
+                  borderRight: isLastCol ? 'none' : '1px solid #e0ddd6',
+                  borderBottom: isLastRow ? 'none' : '1px solid #e0ddd6',
+                  background: isSelected ? 'rgba(0,102,204,0.08)' : isRangeStart ? 'rgba(216,56,63,0.12)' : isInPreviewRange ? 'rgba(216,56,63,0.06)' : isToday ? 'rgba(230,57,70,0.045)' : cell.current ? '#fff' : 'transparent',
+                  boxShadow: isSelected ? 'inset 0 0 0 1.5px #0066cc' : isToday ? 'inset 0 2px 0 #e63946' : 'none',
+                  opacity: cell.current ? (isPast ? 0.5 : 1) : 0.3,
+                  display:'flex',
+                  flexDirection:'column',
+                  alignItems:'center',
+                  gap:3,
+                  overflow:'hidden',
+                  cursor:'pointer',
+                  transition:'background 0.1s ease, box-shadow 0.1s ease',
                 }}
               >
                 <span style={{
@@ -716,6 +904,7 @@ export default function Calendar() {
             )
           })}
         </div>
+        </div>
 
         {/* Legenda */}
         <div style={{ display:'flex', gap:12, marginTop:14, paddingLeft:4, flexWrap:'wrap' }}>
@@ -743,10 +932,32 @@ export default function Calendar() {
           </div>
         </div>
       </div>
+      {/* Colonna laterale desktop — sostituisce il vecchio pannello sotto la
+          griglia + il collassabile "Le mie assenze" (visibili ancora SOLO
+          su mobile, vedi sotto). */}
+      {!isMobile && (
+        <CalendarSidePanel
+          absencesOnDate={absencesOnDate} workers={workers} teamId={teamId}
+          todayStr={todayStr} selectedDate={selectedDate} selectedDayEvents={selectedEvents} selectedDayPhases={selectedDayPhases} selectedDayTasks={selectedTasks}
+          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} onEditEvent={(e, ev) => openEdit(e, ev)}
+          onAddAbsence={() => { if (reportMode) { cancelReportMode() } else { setSidebarCreating(false); setEditingEvent(null); startReportMode() } }}
+          creating={sidebarCreating} onCancelCreate={() => setSidebarCreating(false)}
+          onEventCreated={() => setSidebarCreating(false)}
+          reportMode={reportMode} rangeStart={rangeStart} onCancelReportMode={cancelReportMode}
+          absenceFormOpen={showAbsenceModal} absenceForm={absenceForm} setAbsenceForm={setAbsenceForm}
+          onSubmitAbsence={addAbsence} savingAbsence={savingAbsence} editingAbsenceId={editingAbsenceId}
+          onCloseAbsenceForm={closeAbsenceModal}
+          editingEvent={editingEvent} editForm={editForm} setEditForm={setEditForm}
+          onSaveEdit={saveEdit} saving={saving} onCancelEdit={() => setEditingEvent(null)}
+          onDeleteEvent={async e => { if (await deleteEvent(e, editingEvent)) setEditingEvent(null) }}
+        />
+      )}
+      </div>
       )}
 
-      {/* Pannello giorno selezionato — qui il testo è leggibile per intero */}
-      {mode === 'grid' && selectedDate && (() => {
+      {/* Pannello giorno selezionato (solo mobile — su desktop la colonna
+          laterale qui sopra lo sostituisce) — qui il testo è leggibile per intero */}
+      {mode === 'grid' && isMobile && selectedDate && (() => {
         const isSelectedDayPast = selectedDate < todayStr
         return (
         <div style={{ padding:'0 16px 24px' }}>
@@ -997,10 +1208,14 @@ export default function Calendar() {
         <StaffTimeline teamId={teamId} events={events} workers={workers} unavailability={unavailability} user={user} focusAssign={focusAssign} onFocusAssignConsumed={() => setFocusAssign(null)} />
       )}
 
-      {/* FAB nuovo evento — solo in vista griglia, in "Assegna personale" lascia spazio alla lista */}
-      {mode === 'grid' && (
+      {/* FAB nuovo evento — solo in vista griglia, in "Assegna personale" lascia spazio alla lista.
+          Su desktop trasforma la colonna laterale in un form invece di aprire
+          il modal (sperimentale, vedi CalendarSidePanel); su mobile resta il
+          modal di sempre, la colonna non esiste lì. Nascosto mentre il form è
+          già aperto, per non doverci rinavigare sopra. */}
+      {mode === 'grid' && !sidebarCreating && (
       <button
-        onClick={() => setShowCreate(true)}
+        onClick={() => { if (isMobile) { setShowCreate(true) } else { if (reportMode) cancelReportMode(); if (showAbsenceModal) closeAbsenceModal(); setEditingEvent(null); setSidebarCreating(true) } }}
         style={{
           position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
@@ -1016,8 +1231,9 @@ export default function Calendar() {
       </button>
       )}
 
-      {/* Modal segnala assenza */}
-      {showAbsenceModal && (
+      {/* Modal segnala assenza — SOLO mobile: su desktop lo stesso form vive
+          dentro CalendarSidePanel (niente colonna lì, vedi sopra). */}
+      {showAbsenceModal && isMobile && (
         <div className={`modal-overlay${absenceDrag.closing ? ' closing' : ''}`} onClick={absenceDrag.onOverlayClick}>
           <div className={`modal${absenceDrag.jiggling ? ' modal-jiggle' : ''}${absenceDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...absenceDrag.props}>
             <button className="close-btn" onClick={absenceDrag.close} aria-label={t("common.close")}>✕</button>
@@ -1099,8 +1315,9 @@ export default function Calendar() {
         <TaskSummaryModal block={summaryTask} workers={workers} onClose={() => setSummaryTask(null)} />
       )}
 
-      {/* Modal modifica evento */}
-      {editingEvent && (
+      {/* Modal modifica evento — SOLO mobile: su desktop lo stesso form vive
+          dentro CalendarSidePanel (niente più modal per il Calendario lì). */}
+      {editingEvent && isMobile && (
         <div className={`modal-overlay${editDrag.closing ? ' closing' : ''}`} onClick={editDrag.onOverlayClick}>
           <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}${editDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...editDrag.props}>
             <button className="close-btn" onClick={editDrag.close} aria-label={t("common.close")}>✕</button>
@@ -1163,18 +1380,18 @@ export default function Calendar() {
               <label htmlFor="cal-edit-notes">{t('calendar.notesLabel')}</label>
               <textarea id="cal-edit-notes" value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
             </div>
-            <div className="form-group">
-              <label htmlFor="cal-edit-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input id="cal-edit-quote" value={editForm.quoteRef||''} onChange={e => setEditForm(f => ({...f, quoteRef:e.target.value}))} placeholder={t('events.quoteRefPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cal-edit-manager-name">{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input id="cal-edit-manager-name" value={editForm.managerName||''} onChange={e => setEditForm(f => ({...f, managerName:e.target.value}))} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
-              <div style={{ display:'flex', gap:8 }}>
-                <input value={editForm.managerPhone||''} onChange={e => setEditForm(f => ({...f, managerPhone:e.target.value}))} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
-                <input value={editForm.managerEmail||''} onChange={e => setEditForm(f => ({...f, managerEmail:e.target.value}))} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+            <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={extraInfoOpen} onToggle={() => setExtraInfoOpen(o => !o)}
+              hasValue={!!((editForm.quoteRef||'').trim() || (editForm.managerName||'').trim())}>
+              <div className="form-group">
+                <label htmlFor="cal-edit-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+                <input id="cal-edit-quote" value={editForm.quoteRef||''} onChange={e => setEditForm(f => ({...f, quoteRef:e.target.value}))} placeholder={t('events.quoteRefPlaceholder')} />
               </div>
-            </div>
+              <div className="form-group">
+                <label>{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+                <EventManagerField teamId={teamId} name={editForm.managerName || ''} phone={editForm.managerPhone || ''} email={editForm.managerEmail || ''}
+                  onChange={v => setEditForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
+              </div>
+            </CollapsibleFormSection>
             <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !editForm.name?.trim() || !editForm.date}>
               {saving ? t('common.saving') : t('calendar.saveChanges')}

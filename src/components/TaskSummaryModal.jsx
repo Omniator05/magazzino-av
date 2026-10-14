@@ -57,6 +57,11 @@ export default function TaskSummaryModal({ block, workers, onClose }) {
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
           )}
         </Row>
+        {block.note && (
+          <Row icon={<FileText size={15} />} label={t('staffTimeline.personNoteLabel')}>
+            <p style={{ fontSize:14, color:'var(--text)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.note}</p>
+          </Row>
+        )}
         {block.description && (
           <Row icon={<FileText size={15} />} label={t('staffTimeline.taskDescriptionLabel')}>
             <p style={{ fontSize:14, color:'var(--text)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.description}</p>

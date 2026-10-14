@@ -34,7 +34,7 @@ function parseTypedTime(raw) {
 // per chi preferisce scorrere invece di scrivere.
 // compact: niente icona, niente pannello a ghiera — solo il campo di testo
 // con lo stesso parsing di sopra (digitare "1030" o "10:30" basta). Nato per
-// gli orari per-persona dentro una riga stretta (AssignmentBlockModal), dove
+// gli orari per-persona dentro una riga stretta (StaffAssignPanel), dove
 // non c'è spazio per l'icona e la ghiera è scomoda da aprire/richiudere per
 // un tocco così piccolo — qui il tocco apre direttamente la tastiera.
 export default function TimeField({ value, onChange, placeholder = 'Seleziona ora', clearable = false, compact = false }) {

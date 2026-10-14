@@ -5,6 +5,7 @@ import { collection, onSnapshot, query, where, doc, updateDoc, arrayUnion } from
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useAppReady } from '../hooks/useAppReady'
 import { formatDate } from '../utils/formatDate'
 import { User } from './Icon'
 
@@ -25,7 +26,9 @@ export default function AbsenceNotifications() {
   const navigate = useNavigate()
   const [pending, setPending] = useState([])
   const [closing, setClosing] = useState(false)
-  useModalScrollLock(pending.length > 0)
+  // Il popup esce solo a caricamento finito (vedi useAppReady).
+  const ready = useAppReady()
+  useModalScrollLock(ready && pending.length > 0)
 
   useEffect(() => {
     if (!isAdmin || !teamId || !user) return
@@ -57,14 +60,14 @@ export default function AbsenceNotifications() {
   }
 
   useEffect(() => {
-    if (pending.length === 0) return
+    if (!ready || pending.length === 0) return
     const onKey = e => { if (e.key === 'Escape') close(false) }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending.length])
+  }, [pending.length, ready])
 
-  if (pending.length === 0) return null
+  if (!ready || pending.length === 0) return null
 
   return (
     <div

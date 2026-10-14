@@ -132,6 +132,21 @@ export default function WorkerHome() {
     return items.some(i => i.returned) && !items.some(i => i.loaded && !i.returned)
   }
 
+  // Sezione "Oggi": gli eventi di oggi (anche quelli cominciati prima e
+  // ancora in corso; un rent solo se parte oggi) e le fasi di
+  // montaggio/smontaggio con data di OGGI — queste anche se l'evento vero è
+  // la settimana dopo (o già passato): è proprio quel giorno che la lista di
+  // carico va preparata/caricata per andare a montare. Chi è già in "Da
+  // scaricare" ha la sua sezione (lì basta il badge della fase). Quello che
+  // entra qui non si ripete nelle altre sezioni.
+  const daScaricareIds = new Set(daScaricare.map(e => e.id))
+  const happeningToday = e => (e.type !== 'installation' && e.date <= today && effectiveEndDate(e) >= today && !isWrappedToday(e))
+    || (e.type === 'installation' && e.date === today)
+  const todayList = events.filter(e => !e.archived && !daScaricareIds.has(e.id) && (happeningToday(e) || phaseKeysToday(e, today).length > 0))
+    .sort((a, b) => (happeningToday(b) ? 1 : 0) - (happeningToday(a) ? 1 : 0))
+  const todayIds = new Set(todayList.map(e => e.id))
+  const recurringShown = pinnedRecurring.filter(e => !todayIds.has(e.id))
+
   // Rent/Install (ex "installazioni") vanno in una sezione propria — restano
   // aperte anche a lungo, non hanno senso mescolate agli eventi "normali"
   // nei Prossimi, stessa separazione già usata in Events.jsx (lato admin).
@@ -140,10 +155,10 @@ export default function WorkerHome() {
   // attivo, quindi il semplice ordine per data non basta a farlo notare.
   const installations = events
     // Uno scaduto è già in "Da scaricare" sopra — non va ripetuto anche qui.
-    .filter(e => e.type === 'installation' && !e.archived && !(e.dateEnd && e.dateEnd < today))
+    .filter(e => e.type === 'installation' && !e.archived && !(e.dateEnd && e.dateEnd < today) && !todayIds.has(e.id))
     .sort((a, b) => (a.date === today) === (b.date === today) ? 0 : a.date === today ? -1 : 1)
   const singleEvents = events.filter(e => !e.seriesId && e.type !== 'installation')
-  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e))
+  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e) && !todayIds.has(e.id))
   const visibleSingle = upcomingSingle.slice(0, visibleCount)
   const hiddenCount = upcomingSingle.length - visibleSingle.length
 
@@ -396,13 +411,25 @@ export default function WorkerHome() {
           </div>
         )}
 
+        {/* OGGI — eventi di oggi e montaggi/smontaggi di oggi (anche di
+            eventi in un altro giorno): stessa evidenza rossa. */}
+        {todayList.length > 0 && (
+          <div id="sec-today" style={{ margin:'0 0 8px', scrollMarginTop:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 16px 8px' }}>
+              <p style={{ color:'var(--accent)', fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('workerHome.todoToday')}</p>
+              <div style={{ flex:1, height:1, background:'rgba(230,57,70,0.25)' }} />
+            </div>
+            {todayList.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} forceState={happeningToday(ev) ? 'today' : 'phaseToday'} loadListsOn={loadListsOn} />)}
+          </div>
+        )}
+
         {/* "Niente da mostrare" va giudicato sulle sezioni che contano
             davvero (da scaricare/ricorrenti/prossimi/rent-install), non su
             events.length: una squadra con solo eventi passati o archiviati
             in events.length avrebbe superato questo controllo restando
             comunque a schermo vuoto, senza nessun placeholder — pagina
             "morta" senza motivo (stesso bug già corretto in Events.jsx). */}
-        {(!loadListsOn || daScaricare.length === 0) && pinnedRecurring.length === 0 && upcomingSingle.length === 0 && installations.length === 0 ? (
+        {(!loadListsOn || daScaricare.length === 0) && todayList.length === 0 && recurringShown.length === 0 && upcomingSingle.length === 0 && installations.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={46} /></p>
             <h3>{t('workerHome.emptyTitle')}</h3>
@@ -412,15 +439,15 @@ export default function WorkerHome() {
         ) : (
           <>
             {/* Ricorrenti — collassabile, come in Events.jsx */}
-            {pinnedRecurring.length > 0 && (
+            {recurringShown.length > 0 && (
               <div id="sec-ricorrenti" style={{ marginBottom:4, scrollMarginTop:16 }}>
                 <button onClick={() => toggle('recurring')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'var(--blue)', display:'flex', transition:'transform 0.2s', transform: openSections.recurring ? 'rotate(90deg)' : 'rotate(0deg)' }}><ChevronRight size={16} /></span>
                   <span className="section-label" style={{ color:'var(--blue)', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em', display:'inline-flex', alignItems:'center', gap:6 }}><Recurring size={13} /> {t('workerHome.recurring')}</span>
-                  <span style={{ background:'rgba(79,195,247,0.15)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>{pinnedRecurring.length}</span>
+                  <span style={{ background:'rgba(79,195,247,0.15)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--blue)' }}>{recurringShown.length}</span>
                 </button>
-                {openSections.recurring && pinnedRecurring.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} loadListsOn={loadListsOn} />)}
+                {openSections.recurring && recurringShown.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} loadListsOn={loadListsOn} />)}
               </div>
             )}
 
@@ -478,14 +505,25 @@ export default function WorkerHome() {
   )
 }
 
+// Chiavi delle fasi (montaggio/smontaggio) di un evento che cadono oggi.
+function phaseKeysToday(ev, today) {
+  return Object.entries(ev.phases || {}).filter(([k, d]) => d === today && (k === 'montaggio' || k === 'smontaggio')).map(([k]) => k)
+}
+const PHASE_COLORS = { montaggio: '#2563eb', smontaggio: '#ea580c' }
+
 function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
   const { t, i18n } = useTranslation()
+  const phasesToday = phaseKeysToday(ev, today)
+  const isPhaseToday = forceState === 'phaseToday'
   const items    = ev.items || []
   const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
   const returned = loadListsOn ? items.filter(i => i.returned).length : 0
   const total    = loadListsOn ? items.length : 0
-  const isToday  = ev.date === today
+  const isToday  = ev.date === today || isPhaseToday || forceState === 'today'
   const daScaricare = loadListsOn && forceState === 'daScaricare'
+  // Nella sezione "Da fare oggi" l'icona mostra OGGI (il giorno in cui c'è
+  // da fare qualcosa), non la data dell'evento — quella sta nel sottotitolo.
+  const iconDate = isPhaseToday ? today : ev.date
   // Assegnato personalmente (assignedWorkers) — dimensione indipendente
   // dalla fase/urgenza sopra: un bordo/badge a parte invece di toccare
   // iconGradient, che già comunica a colpo d'occhio lo stato del carico.
@@ -509,8 +547,14 @@ function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
   // qualunque evento — deve poter spiccare col rosso "urgente" anche lì
   // dentro, non restare per sempre violetto uguale a tutti gli altri nella
   // sezione Rent/Install (dove altrimenti si perde facilmente di vista).
+  // Card di sola fase (montaggio/smontaggio di oggi, evento in un altro
+  // giorno): data blu/arancione come i colori delle fasi, per distinguerla da
+  // un evento vero di oggi (rosso).
+  const phaseColor = isPhaseToday ? PHASE_COLORS[phasesToday[0]] : null
   const iconGradient = daScaricare
     ? '#fb8500'
+    : phaseColor
+    ? phaseColor
     : isToday
     ? '#e63946'
     : ev.type === 'installation'
@@ -519,22 +563,22 @@ function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
     ? '#e63946'
     : '#a8dadc'
 
-  const cardBorder = daScaricare ? 'rgba(234,88,12,0.4)' : isToday ? 'rgba(220,38,38,0.4)' : isMine ? 'rgba(230,57,70,0.4)' : 'var(--border)'
+  const cardBorder = daScaricare ? 'rgba(234,88,12,0.4)' : phaseColor ? `${phaseColor}66` : isToday ? 'rgba(220,38,38,0.4)' : isMine ? 'rgba(230,57,70,0.4)' : 'var(--border)'
   const dateStr = ev.date ? formatDate(ev.date+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
 
   return (
     <div onClick={() => navigate(`/events/${ev.id}`)}
-      className={isToday ? 'evt-card evt-today' : isMine ? 'evt-card evt-mine' : 'evt-card evt-soft'}
-      style={{ margin:'0 16px 10px', background:'var(--card)', border: (isToday || isMine) ? '1.5px solid transparent' : `1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
+      className={phaseColor ? 'evt-card evt-soft' : isToday ? 'evt-card evt-today' : isMine ? 'evt-card evt-mine' : 'evt-card evt-soft'}
+      style={{ margin:'0 16px 10px', background:'var(--card)', border: (!phaseColor && (isToday || isMine)) ? '1.5px solid transparent' : `1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', transition:'transform 0.18s ease,box-shadow 0.18s ease' }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.08)' }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.06)' }}
     >
       {/* Icona gradiente con data */}
       <div style={{ position:'relative', width:50, height:50, flexShrink:0 }}>
         <div style={{ width:50, height:50, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
-          <span style={{ fontSize:18, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>
+          <span style={{ fontSize:18, fontWeight:800 }}>{iconDate ? new Date(iconDate+'T12:00:00').getDate() : '?'}</span>
           <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
-            {ev.date ? formatDate(ev.date+'T12:00:00', {month:'short'}, i18n.language) : ''}
+            {iconDate ? formatDate(iconDate+'T12:00:00', {month:'short'}, i18n.language) : ''}
           </span>
         </div>
         {ev.seriesId && (
@@ -553,7 +597,23 @@ function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
             {ev.name}
           </p>
         </div>
+        {phasesToday.length > 0 && (
+          <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:4 }}>
+            {phasesToday.map(k => {
+              const pt = ev.phaseTimes?.[k]
+              const color = PHASE_COLORS[k]
+              return (
+                <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5, background:`${color}18`, color, border:`1px solid ${color}44`, borderRadius:8, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
+                  <span style={{ width:6, height:6, borderRadius:'50%', background:color }} />
+                  {t('workerHome.phaseTodayBadge', { phase: t(k === 'montaggio' ? 'calendar.legendAssembly' : 'calendar.legendDisassembly') })}
+                  {pt?.timeStart && pt?.timeEnd && <span style={{ fontWeight:700, fontVariantNumeric:'tabular-nums' }}>· {pt.timeStart}–{pt.timeEnd}</span>}
+                </span>
+              )
+            })}
+          </div>
+        )}
         <p style={{ fontSize:12, fontWeight:600, color:'var(--text2)' }}>
+          {isPhaseToday && <span style={{ fontWeight:700 }}>{t('workerHome.eventOn')} </span>}
           {ev.date ? formatDate(ev.date+'T12:00:00', {weekday:'long', day:'numeric', month:'long'}, i18n.language) : ''}
           {ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + formatDate(ev.dateEnd+'T12:00:00', {day:'numeric', month:'long'}, i18n.language) : ''}
         </p>

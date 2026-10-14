@@ -11,10 +11,13 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import TimeField from '../components/TimeField'
+import CollapsibleFormSection from '../components/CollapsibleFormSection'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyEventTimeChangedIfNeeded } from '../utils/pushNotifications'
+import { rememberEventManager } from '../utils/eventManagers'
+import EventManagerField from '../components/EventManagerField'
 import { db } from '../firebase'
 import { collection, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
@@ -275,7 +278,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
 
 export default function Events() {
   const { t, i18n } = useTranslation()
-  const { team, teamId } = useAuth()
+  const { team, teamId, user } = useAuth()
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const PHASE_CONFIG = [
@@ -298,6 +301,9 @@ export default function Events() {
   const [editing, setEditing]     = useState(null)
   const [saving, setSaving]       = useState(false)
   const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', allDay:true, timeStart:'', timeEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
+  // Aperta di default solo se l'evento in modifica ha già un valore qui
+  // dentro (vedi openEdit sotto) — altrimenti resta chiusa come in creazione.
+  const [extraInfoOpen, setExtraInfoOpen] = useState(false)
   // Flusso unico di creazione evento (Calendar.jsx monta lo stesso componente):
   // vedi src/components/CreateEventFlow.jsx.
   const [createFlowOpen, setCreateFlowOpen] = useState(false)
@@ -444,6 +450,7 @@ export default function Events() {
       location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{},
       quoteRef: event.quoteRef||'', managerName: event.eventManager?.name||'', managerPhone: event.eventManager?.phone||'', managerEmail: event.eventManager?.email||'',
     })
+    setExtraInfoOpen(!!(event.quoteRef || event.eventManager?.name))
     setShowModal(true)
   }
 
@@ -466,6 +473,7 @@ export default function Events() {
       }
       await updateDoc(doc(db, 'events', editing.id), updated)
       pushEventToGoogle(editing.id)
+      if (updated.eventManager.name) rememberEventManager(teamId, user.uid, updated.eventManager).catch(() => {})
       notifyEventTimeChangedIfNeeded(editing.id, editing, updated)
       setShowModal(false)
       setEditing(null)
@@ -734,18 +742,18 @@ export default function Events() {
               <label htmlFor="ev-notes">{t('calendar.notesLabel')}</label>
               <textarea id="ev-notes" value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
             </div>
-            <div className="form-group">
-              <label htmlFor="ev-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input id="ev-quote" value={form.quoteRef} onChange={e => setForm({...form,quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="ev-manager-name">{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <input id="ev-manager-name" value={form.managerName} onChange={e => setForm({...form,managerName:e.target.value})} placeholder={t('events.eventManagerNamePlaceholder')} style={{ marginBottom:8 }} />
-              <div style={{ display:'flex', gap:8 }}>
-                <input value={form.managerPhone} onChange={e => setForm({...form,managerPhone:e.target.value})} placeholder={t('events.eventManagerPhonePlaceholder')} type="tel" style={{ flex:1 }} />
-                <input value={form.managerEmail} onChange={e => setForm({...form,managerEmail:e.target.value})} placeholder={t('events.eventManagerEmailPlaceholder')} type="email" style={{ flex:1 }} />
+            <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={extraInfoOpen} onToggle={() => setExtraInfoOpen(o => !o)}
+              hasValue={!!(form.quoteRef.trim() || form.managerName.trim())}>
+              <div className="form-group">
+                <label htmlFor="ev-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+                <input id="ev-quote" value={form.quoteRef} onChange={e => setForm({...form,quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
               </div>
-            </div>
+              <div className="form-group">
+                <label>{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
+                <EventManagerField teamId={teamId} name={form.managerName} phone={form.managerPhone} email={form.managerEmail}
+                  onChange={v => setForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
+              </div>
+            </CollapsibleFormSection>
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? t('common.saving') : t('calendar.saveChanges')}

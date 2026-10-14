@@ -103,21 +103,6 @@ button.chip-no-press:not(:disabled):active {
 }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* Navigazione settimana in StaffTimeline (Assegna personale): l'ombra
-   fluttuante di default non si legge su sfondi pieni o assenti — qui una
-   tinta di sfondo più marcata sostituisce ombra/brightness generici. Lo
-   sfondo di base è inline (background: var(--card2)/none), quindi qui serve
-   !important per vincere la specificità dell'inline style — stesso pattern
-   già usato in TimeField.jsx per .tf-input:focus. */
-button.staff-nav-btn:hover,
-button.staff-nav-btn:not(:disabled):active {
-  filter: none;
-  box-shadow: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  button.staff-nav-btn:hover { background: var(--card3) !important; }
-}
-button.staff-nav-btn:not(:disabled):active { background: var(--card3) !important; transform: scale(0.96); }
 button.staff-nav-today:hover,
 button.staff-nav-today:not(:disabled):active {
   filter: none;
@@ -132,6 +117,80 @@ button.staff-nav-today:not(:disabled):active {
 }
 button.staff-nav-today:not(:disabled):active { background: var(--card2) !important; }
 button.staff-nav-today:not(:disabled):active .staff-nav-today-label { color: var(--accent) !important; }
+
+/* Stesso "Oggi" (grigio/rosso all'hover) nell'header del Calendario — vedi
+   staff-nav-today sopra, stessa identica logica applicata alla navigazione
+   mese/settimana della pagina invece che a quella di StaffTimeline. */
+button.rc-cal-today-btn:hover,
+button.rc-cal-today-btn:not(:disabled):active {
+  filter: none;
+  box-shadow: none;
+  transform: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.rc-cal-today-btn:hover { background: var(--card2) !important; }
+  button.rc-cal-today-btn:hover .rc-cal-today-label { color: var(--accent) !important; }
+}
+button.rc-cal-today-btn:not(:disabled):active { background: var(--card2) !important; }
+button.rc-cal-today-btn:not(:disabled):active .rc-cal-today-label { color: var(--accent) !important; }
+
+/* Pallini iniziali degli assegnati nella colonna laterale del Calendario
+   (CalendarSidePanel): al passaggio del mouse si ingrandiscono un po' e
+   mostrano nome completo + orario in un tooltip sopra — l'orario è quello
+   dell'evento (l'assegnazione non ha ancora un orario per-persona). */
+.rc-cal-avatar {
+  transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s ease;
+}
+.rc-cal-avatar-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  opacity: 0;
+  pointer-events: none;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 30;
+}
+.rc-cal-avatar-tooltip strong { display: block; font-size: 11.5px; font-weight: 700; }
+.rc-cal-avatar-tooltip span { display: block; color: #c9c9c9; font-size: 10px; margin-top: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .rc-cal-avatar:hover {
+    transform: scale(1.15) translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    z-index: 5;
+  }
+  .rc-cal-avatar:hover .rc-cal-avatar-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Trasformazione della colonna laterale del Calendario (CalendarSidePanel)
+   fra la vista normale e il form di creazione rapida — uno "swoop" verso
+   sinistra (entra scivolando da destra) invece di uno scatto secco,
+   rigiocato ogni volta grazie alla key diversa sui due rami (vedi
+   CalendarSidePanel.jsx). */
+@keyframes rc-sidebar-swap {
+  from { opacity: 0; transform: translateX(36px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.rc-sidebar-swap { animation: rc-sidebar-swap 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Ingresso di una vista intera (es. "Assegna personale" quando ci si passa dal
+   Calendario): dissolvenza con una risalita di pochi pixel. `backwards`, non
+   `both`: a fine animazione non resta nessun transform sull'elemento (un
+   transform residuo farebbe da "contenitore" per eventuali figli fixed). */
+@keyframes rc-view-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.rc-view-in { animation: rc-view-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+@media (prefers-reduced-motion: reduce) { .rc-view-in { animation: none; } }
 
 /* Titolo di una lista di carico (EventDetail.jsx): tap-tap per
    collassarla/espanderla. Stesso motivo di staff-nav-today sopra — è un

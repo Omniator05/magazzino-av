@@ -13,8 +13,10 @@ import DateField from '../components/DateField'
 import TimeField from '../components/TimeField'
 import Toast from '../components/Toast'
 import EventSummaryModal from '../components/EventSummaryModal'
+import TaskSummaryModal from '../components/TaskSummaryModal'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { awaitIfOnline } from '../utils/offlineSave'
+import { notifyTeamPush } from '../utils/pushNotifications'
 import SegmentedControl from '../components/SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
 
@@ -76,6 +78,7 @@ export default function WorkerCalendar() {
   const [workers, setWorkers] = useState([])
   const [assignmentBlocks, setAssignmentBlocks] = useState([])
   const [summaryEvent, setSummaryEvent] = useState(null)
+  const [summaryTask, setSummaryTask] = useState(null)
 
   // Flusso "Segnala assenza"
   const [reportMode, setReportMode] = useState(false)
@@ -184,6 +187,24 @@ export default function WorkerCalendar() {
     return items
   }
 
+  // Attività libere (assegnate da "Assegna personale", senza evento) che
+  // riguardano ME in un giorno, con il MIO orario e la MIA nota: un cambio di
+  // orario fatto dall'admin si vede qui subito. Una che scavalca la
+  // mezzanotte (fine ≤ inizio) compare anche il giorno dopo, come "continua".
+  const myTasksOn = (dStr) => {
+    const out = []
+    assignmentBlocks.forEach(b => {
+      if (b.eventId || b.workerId !== user?.uid) return
+      if (b.date === dStr) out.push({ block: b, cont: false })
+      else if (b.endTime <= b.startTime && toDateStr(new Date(new Date(b.date + 'T12:00:00').getTime() + 86400000)) === dStr) out.push({ block: b, cont: true })
+    })
+    return out.sort((a, b) => (a.cont ? '00:00' : a.block.startTime).localeCompare(b.cont ? '00:00' : b.block.startTime))
+  }
+  const openMyTask = (b) => setSummaryTask({
+    ...b,
+    assigned: assignmentBlocks.filter(x => !x.eventId && (x.taskGroupId || x.id) === (b.taskGroupId || b.id)),
+  })
+
   // Eventi Google Calendar che toccano un giorno (multi-giorno se dateEnd è impostata)
   const dayGoogleEvents = (dStr) => googleEvents.filter(e => {
     if (!e.date) return false
@@ -254,15 +275,25 @@ export default function WorkerCalendar() {
         await awaitIfOnline(addDoc(collection(db, 'unavailability'), {
           ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
         }), isOnline)
-        // Avvisa l'admin (badge in-app + email best-effort) — stesso
-        // meccanismo di Calendar.jsx (lì serve solo quando è un worker a
-        // segnalare, qui siamo sempre un worker).
+        // Avvisa l'admin (badge in-app + push immediata + email best-effort)
+        // — stesso meccanismo di Calendar.jsx (lì serve solo quando è un
+        // worker a segnalare, qui siamo sempre un worker).
+        const workerName = profile?.name || profile?.username || t('common.noName')
         await awaitIfOnline(addDoc(collection(db, 'notifications'), {
           teamId, type: 'absence',
-          workerName: profile?.name || profile?.username || t('common.noName'),
+          workerName,
           startDate: data.startDate, endDate: data.endDate, reason: data.reason,
           seenBy: [], createdAt: serverTimestamp(),
         }), isOnline)
+        const dateLabel = data.startDate === data.endDate
+          ? formatDate(data.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)
+          : `${formatDate(data.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(data.endDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}`
+        notifyTeamPush({
+          title: t('calendar.pushNewAbsenceTitle'),
+          body: `${workerName} · ${dateLabel}`,
+          url: '/calendar',
+          audience: { type: 'admins' },
+        })
         // Email best-effort, solo se online — offline non c'è comunque
         // rete per inviarla, e aspettare getIdToken()/fetch senza
         // connessione bloccherebbe la chiusura del modal. L'admin la vede
@@ -354,6 +385,7 @@ export default function WorkerCalendar() {
     return [...m.values()].sort((a, b) => rank(a) - rank(b))
   })()
   const selectedGoogleEvents = selectedDate ? dayGoogleEvents(selectedDate) : []
+  const selectedMyTasks = selectedDate ? myTasksOn(selectedDate) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
   return (
@@ -425,7 +457,8 @@ export default function WorkerCalendar() {
             const dayEventsOnly = itemsRaw.filter(it => !it.phaseLabel)
             const items = itemsRaw
             const googleItems = dayGoogleEvents(dStr)
-            const hasMyEvent = items.some(it => it.assigned && !it.event.isDeadlineReminder)
+            const myTasks = myTasksOn(dStr)
+            const hasMyEvent = items.some(it => it.assigned && !it.event.isDeadlineReminder) || myTasks.length > 0
             const unavail = isUnavailable(dStr)
             const isToday = dStr === todayStr
             const isPast = dStr < todayStr
@@ -521,6 +554,16 @@ export default function WorkerCalendar() {
                     </div>
                   )
                 })()}
+                {myTasks.length > 0 && (
+                  <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>
+                    {myTasks.slice(0, 1).map(({ block: b }) => (
+                      <span key={b.id} style={{ display:'flex', alignItems:'center', fontSize:9.5, fontWeight:700, lineHeight:1.35, padding:'1.5px 4px', borderRadius:4, maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', background: isPast ? 'var(--text2)' : 'var(--accent)', color:'#fff' }}>
+                        {b.label || t('staffTimeline.untitledTask')}
+                      </span>
+                    ))}
+                    {myTasks.length > 1 && <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{myTasks.length - 1}</span>}
+                  </div>
+                )}
                 {unavail && (
                   <div style={{
                     position:'absolute', inset:0,
@@ -556,7 +599,7 @@ export default function WorkerCalendar() {
             {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
             {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
-          {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 ? (
+          {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 && selectedMyTasks.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
             selectedEvents.map(({ event: ev, assigned: mine, phases, coincides }) => {
@@ -619,8 +662,27 @@ export default function WorkerCalendar() {
               )
             })
           )}
-          {selectedGoogleEvents.length > 0 && (
+          {selectedMyTasks.length > 0 && (
             <div style={{ marginTop: selectedEvents.length > 0 ? 14 : 0 }}>
+              <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('workerCalendar.myTasks')}</p>
+              {selectedMyTasks.map(({ block: b, cont }) => (
+                <div key={`${b.id}-${cont ? 'c' : 'o'}`} onClick={() => openMyTask(b)}
+                  style={{ display:'flex', alignItems:'center', gap:12, cursor:'pointer', background:'rgba(216,56,63,0.06)', border:'1px solid rgba(216,56,63,0.3)', borderRadius:14, padding:'13px 14px', marginBottom:8 }}>
+                  <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background:'var(--accent)' }} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.label || t('staffTimeline.untitledTask')}</p>
+                    <p style={{ fontSize:12, fontWeight:600, color:'var(--text2)', marginTop:1, fontVariantNumeric:'tabular-nums' }}>
+                      {cont ? `${t('workerCalendar.taskContinues')} · 00:00–${b.endTime}` : `${b.startTime}–${b.endTime}`}
+                    </p>
+                    {b.note && <p style={{ fontSize:12, color:'var(--text2)', marginTop:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.note}</p>}
+                  </div>
+                  <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {selectedGoogleEvents.length > 0 && (
+            <div style={{ marginTop: (selectedEvents.length > 0 || selectedMyTasks.length > 0) ? 14 : 0 }}>
               <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('calendar.fromGoogleCalendar')}</p>
               {selectedGoogleEvents.map(ev => (
                 <div key={ev.id} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(66,133,244,0.06)', border:'1px solid rgba(66,133,244,0.22)', borderRadius:14, padding:'12px 14px', marginBottom:8 }}>
@@ -681,6 +743,7 @@ export default function WorkerCalendar() {
         </div>
       )}
 
+      {summaryTask && <TaskSummaryModal block={summaryTask} workers={workers} onClose={() => setSummaryTask(null)} />}
       {summaryEvent && (
         <EventSummaryModal event={summaryEvent} date={selectedDate} blocks={assignmentBlocks} workers={workers} onClose={() => setSummaryEvent(null)} />
       )}

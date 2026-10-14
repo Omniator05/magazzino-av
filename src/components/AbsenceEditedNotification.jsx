@@ -5,6 +5,7 @@ import { collection, onSnapshot, query, where, doc, updateDoc, arrayUnion } from
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useAppReady } from '../hooks/useAppReady'
 import { formatDate } from '../utils/formatDate'
 import { Calendar as CalendarIcon } from './Icon'
 
@@ -23,7 +24,9 @@ export default function AbsenceEditedNotification() {
   const navigate = useNavigate()
   const [pending, setPending] = useState([])
   const [closing, setClosing] = useState(false)
-  useModalScrollLock(pending.length > 0)
+  // Il popup esce solo a caricamento finito (vedi useAppReady).
+  const ready = useAppReady()
+  useModalScrollLock(ready && pending.length > 0)
 
   // Query già ristretta a workerId === proprio uid: vale sia per un worker
   // sia per un admin che ha segnalato una propria assenza poi modificata da
@@ -58,14 +61,14 @@ export default function AbsenceEditedNotification() {
   }
 
   useEffect(() => {
-    if (pending.length === 0) return
+    if (!ready || pending.length === 0) return
     const onKey = e => { if (e.key === 'Escape') close(false) }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending.length])
+  }, [pending.length, ready])
 
-  if (pending.length === 0) return null
+  if (!ready || pending.length === 0) return null
 
   return (
     <div
