@@ -229,7 +229,14 @@
     "confirmRemoveAbsenceLabel": "Remove",
     "thisWorker": "This staff member",
     "pushNewEventTitle": "New event",
-    "pushNewAbsenceTitle": "New absence reported"
+    "pushNewAbsenceTitle": "New absence reported",
+    "whenLabel": "When",
+    "endPlaceholder": "End",
+    "untilDate": "until {{date}}",
+    "nDates_one": "{{count}} date",
+    "nDates_other": "{{count}} dates",
+    "singleDay": "Single day",
+    "absenceWhoLabel": "For"
   },
   "staffTimeline": {
     "prevWeekAria": "Previous week",
@@ -309,7 +316,10 @@
     "linkedListSearch": "Search an event…",
     "linkedListNoResults": "No event found",
     "linkedListWhich": "Which list",
-    "newTaskGhost": "New task"
+    "newTaskGhost": "New task",
+    "createToggle": "Create task",
+    "createToggleHint": "Click an empty spot to create. Esc or right-click to exit.",
+    "createExit": "Esc to exit"
   },
   "inventory": {
     "title": "Warehouse",

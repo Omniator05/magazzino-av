@@ -23,27 +23,22 @@ const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => 
 const TIMELINE_START_HOUR = 0
 const TIMELINE_END_HOUR = 24
 const TIMELINE_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR
-// Ogni item è UNA card: titolo, orario e — sotto — una riga per CORSIA di
-// persone assegnate, con una barra colorata posizionata/larga secondo le SUE
-// ore dentro la durata dell'attività: è il punto centrale di questa vista,
-// vedere a colpo d'occhio se qualcuno è occupato o libero, non solo che è
-// stato assegnato. Le corsie (lanes) hanno quindi altezza variabile,
-// calcolata una volta per tutta la settimana (la corsia N è alta quanto il
-// suo occupante più "pieno" in uno qualsiasi dei giorni) così le colonne
-// restano allineate fra loro.
+// Ogni item è UNA card, sempre della stessa altezza: titolo, orario e — sotto —
+// una riga di avatar con le iniziali delle persone assegnate (con "+N" se
+// sono tante). Prima ogni persona aveva la sua barra colorata e le card
+// crescevano in altezza in modo diverso l'una dall'altra, togliendo ordine
+// alla griglia; le ore precise di ognuno restano nella colonna laterale e un
+// puntino arancione sull'avatar segnala chi ha un orario diverso da quello
+// della card.
 const CARD_PAD = 8
 const TITLE_ROW_H = 24
 const SUBTITLE_ROW_H = 13
-const PERSON_ROW_H = 22
+const AVATAR_ROW_H = 22
+const AVATAR_SIZE = 22
 const ROW_GAP = 5
 const ITEM_MARGIN = 6 // sopra e sotto ogni card, dentro la propria corsia
-const EMPTY_ITEM_H = CARD_PAD * 2 + TITLE_ROW_H + ROW_GAP + SUBTITLE_ROW_H
-// L'altezza dipende da quante RIGHE di persone servono, non da quante
-// persone sono assegnate — chi non si sovrappone in orario sta affiancato
-// sulla stessa riga (vedi buildBars).
-function itemContentHeight(personLaneCount) {
-  return EMPTY_ITEM_H + (personLaneCount > 0 ? personLaneCount * (PERSON_ROW_H + ROW_GAP) : 0)
-}
+const EMPTY_ITEM_H = CARD_PAD * 2 + TITLE_ROW_H + ROW_GAP + SUBTITLE_ROW_H + ROW_GAP + AVATAR_ROW_H
+const MAX_AVATARS = 4
 // Larghezza minima di una card, come frazione della colonna del giorno:
 // un'attività di un'ora sarebbe larga pochi pixel e illeggibile, così ogni
 // card ha comunque una dimensione "di default" (la posizione resta quella
@@ -127,17 +122,6 @@ function hourSlotFromClientX(clientX, rect) {
   const frac = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 0.999)
   return Math.floor(frac * TIMELINE_HOURS)
 }
-// Corsia (riga) dalla posizione Y del click dentro la colonna del giorno —
-// la selezione resta sempre dentro la riga su cui si è cliccato la prima
-// volta, invece di coprire in altezza anche le corsie con altri eventi.
-// Le corsie hanno altezza variabile (laneHeights/laneTop), non più uniforme.
-function laneFromClientY(clientY, rect, laneTop, laneHeights) {
-  const y = clientY - rect.top
-  for (let i = 0; i < laneTop.length; i++) {
-    if (y < laneTop[i] + laneHeights[i]) return i
-  }
-  return laneTop.length - 1
-}
 // Impacchetta gli item di un giorno (eventi + fasi + task) in corsie senza
 // sovrapposizioni orarie — stesso algoritmo greedy di un day-view di
 // calendario: un nuovo item va nella prima corsia già libera a quell'ora,
@@ -176,8 +160,8 @@ function packLanes(items) {
 // stessi minuti riportati dentro la sola giornata della colonna.
 function finishItem(item, { winStart, winEnd, geoStartMin, geoEndMin, anchor }) {
   const g = cardGeometry(geoStartMin, geoEndMin)
-  const { bars, laneCount } = buildBars(item.assigned, anchor, winStart, winEnd)
-  return { ...item, sortStart: geoStartMin, geoLeft: g.left, geoWidth: g.width, geoRight: g.right, bars, personLaneCount: laneCount, contentHeight: itemContentHeight(laneCount) }
+  const { bars } = buildBars(item.assigned, anchor, winStart, winEnd)
+  return { ...item, sortStart: geoStartMin, geoLeft: g.left, geoWidth: g.width, geoRight: g.right, bars, contentHeight: EMPTY_ITEM_H }
 }
 
 // Immagine di drag personalizzata: il drag-image nativo del browser a volte
@@ -248,6 +232,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const filterRowRef = useRef(null)
   const [gridMaxH, setGridMaxH] = useState(null)
   const measureGridRef = useRef(null)
+  // Modalità creazione: spenta all'apertura della pagina. Si accende col pulsante
+  // "Crea attività" sopra la griglia o con il primo clic su uno spazio libero (che
+  // crea subito l'attività); da lì l'anteprima segue il mouse. Esc o tasto destro
+  // sulla griglia la spengono.
+  const [createOn, setCreateOn] = useState(false)
   const [hoverCell, setHoverCell] = useState(null) // {date, hour, lane, occupied} — cella libera sotto il mouse: mostra l'anteprima della nuova attività
   const [dragOverKey, setDragOverKey] = useState(null) // item.key sotto il drag di una persona
   // Filtro attività — eventi, rent/install e fasi montaggio-smontaggio sono
@@ -504,13 +493,16 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
 
   const totalGridHeight = laneHeights.reduce((a, b) => a + b, 0)
 
-  // Un'ora è "occupata" in quella corsia se una card (evento/fase/task) la
-  // coperta già — serve a bloccare la selezione a celle nel piccolo margine
-  // sopra/sotto una card esistente, che altrimenti sembra libero ma non lo è.
-  const laneHourOccupied = (date, lane, hour) => itemsByDay[date].some(it => {
-    if (dayLaneInfo[date].laneOf[it.key] !== lane) return false
-    return it.geoLeft < (hour + 1) / TIMELINE_HOURS && it.geoRight > hour / TIMELINE_HOURS
-  })
+  // Dove finirà una nuova attività di un'ora che parte a quell'ora: si rifà
+  // l'impacchettamento in corsie del giorno con l'attività in più e si legge
+  // la corsia che le tocca (può essere sopra una card che parte dopo: quella
+  // scenderà di una riga alla creazione). L'anteprima è sempre mostrata,
+  // sopra le altre card, così si capisce sempre che si è in creazione.
+  const previewLane = (date, hour) => {
+    const g = cardGeometry(hour * 60, (hour + 1) * 60)
+    const { laneOf } = packLanes([...itemsByDay[date], { key: '__preview__', rank: 2, sortStart: hour * 60, geoLeft: g.left, geoRight: g.right }])
+    return Math.min(laneOf.__preview__, laneTop.length - 1)
+  }
 
   // Card aperta nella colonna laterale, ricavata ad ogni render dagli item
   // della settimana (non salvata): se la card sparisce (cancellata, o si
@@ -577,6 +569,21 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   }
   const closePanel = () => requestPanel(null)
 
+  // Esc esce dalla modalità creazione (se non c'è una colonna aperta — quella
+  // ha il suo Esc qui sotto — né si sta scrivendo in un campo).
+  useEffect(() => {
+    if (panel || !createOn) return
+    const onKey = e => {
+      if (e.key !== 'Escape') return
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      setCreateOn(false)
+      setHoverCell(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [panel, createOn])
+
   // Esc chiude la colonna (se non si sta scrivendo in un campo né a metà di
   // una selezione a celle, che ha già il suo Esc).
   useEffect(() => {
@@ -624,8 +631,12 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // target lato Calendar.jsx così non si riapre da solo a ogni re-render.
   useEffect(() => {
     if (!focusAssign) return
-    setWeekStart(startOfWeek(new Date(focusAssign.date + 'T12:00:00')))
     const ev = events.find(e => e.id === focusAssign.eventId)
+    // Arrivando da un'altra pagina gli eventi possono non essere ancora
+    // caricati: aspettarli, invece di consumare il target a vuoto (la colonna
+    // dell'evento non si apriva e si finiva sulla timeline "nuda").
+    if (focusAssign.eventId && !ev && events.length === 0) return
+    setWeekStart(startOfWeek(new Date(focusAssign.date + 'T12:00:00')))
     if (ev) {
       const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
       const covers = focusAssign.date >= ev.date && focusAssign.date <= end
@@ -634,7 +645,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     }
     onFocusAssignConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusAssign])
+  }, [focusAssign, events])
 
   const confirmAvailability = async (person, date, eventName) => {
     if (person.kind !== 'worker' || !isWorkerUnavailable(person.id, { date, dateEnd: date }, unavailability)) return true
@@ -787,10 +798,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // mezzanotte) si cambiano dalla colonna.
   const handleGridClick = (e, date) => {
     if (selectedPerson || e.target !== e.currentTarget) return
+    setCreateOn(true)
     const rect = e.currentTarget.getBoundingClientRect()
     const hour = hourSlotFromClientX(e.clientX, rect)
-    const lane = laneFromClientY(e.clientY, rect, laneTop, laneHeights)
-    if (laneHourOccupied(date, lane, hour)) return
     setHoverCell(null)
     createTaskAndOpen(date, hourToTime(TIMELINE_START_HOUR + hour), hourToTime(TIMELINE_START_HOUR + hour + 1))
   }
@@ -918,7 +928,12 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           vista "Calendario" (frecce leggere senza sfondo, "Oggi" sotto la
           data che diventa rosso solo sulla settimana corrente). Subito
           sopra alla griglia che controlla. */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginBottom: 14 }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginBottom: 14 }}>
+        <button type="button" className="btn-no-anim" onClick={() => { setCreateOn(v => !v); setHoverCell(null) }} aria-pressed={createOn} title={t('staffTimeline.createToggleHint')}
+          style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', padding: '6px 13px', borderRadius: 20, fontSize: 12, fontWeight: 800,
+            border: `1.5px solid ${createOn ? '#e63946' : '#e0ddd6'}`, background: createOn ? 'rgba(230,57,70,0.1)' : '#fff', color: createOn ? '#e63946' : '#9a9a9a' }}>
+          {createOn ? t('staffTimeline.createExit') : `+ ${t('staffTimeline.createToggle')}`}
+        </button>
         <button onClick={() => setWeekStart(w => addDays(w, -7))} aria-label={t('staffTimeline.prevWeekAria')} className="btn-no-anim"
           style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', color: '#9a9a9a', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
         <button className="btn-no-anim staff-nav-today" onClick={() => setWeekStart(startOfWeek(new Date()))} style={{ textAlign: 'center', background: 'none', border: 'none', padding: '2px 10px', borderRadius: 9 }}>
@@ -940,7 +955,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
               const { laneOf } = dayLaneInfo[date]
               // Anteprima della nuova attività: una card chiara che segue il mouse
               // sulle celle libere di questa colonna.
-              const ghost = !selectedPerson && hoverCell?.date === date && !hoverCell.occupied ? hoverCell : null
+              const ghost = createOn && !selectedPerson && hoverCell?.date === date && !hoverCell.occupied ? hoverCell : null
               const ghostGeo = ghost ? cardGeometry(ghost.hour * 60, (ghost.hour + 1) * 60) : null
               return (
                 <div key={date} style={{ flex: '1 1 0', minWidth: 'min(90vw, 230px)', borderRight: '1px solid #e0ddd6' }}>
@@ -952,17 +967,18 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                   <div
                     onClick={e => handleGridClick(e, date)}
                     onMouseMove={e => {
-                      if (e.target !== e.currentTarget) return
+                      if (!createOn || e.target !== e.currentTarget) return
                       const rect = e.currentTarget.getBoundingClientRect()
                       const hour = hourSlotFromClientX(e.clientX, rect)
-                      const lane = laneFromClientY(e.clientY, rect, laneTop, laneHeights)
-                      setHoverCell(prev => (prev && prev.date === date && prev.hour === hour && prev.lane === lane ? prev : { date, hour, lane, occupied: laneHourOccupied(date, lane, hour) }))
+                      const lane = previewLane(date, hour)
+                      setHoverCell(prev => (prev && prev.date === date && prev.hour === hour && prev.lane === lane ? prev : { date, hour, lane, occupied: false }))
                     }}
                     onMouseLeave={() => setHoverCell(null)}
+                    onContextMenu={e => { if (createOn && e.target === e.currentTarget) { e.preventDefault(); setCreateOn(false); setHoverCell(null) } }}
                     style={{
                       position: 'relative', height: totalGridHeight,
                       backgroundColor: isToday ? 'rgba(230,57,70,0.045)' : 'transparent', 
-                      cursor: selectedPerson ? 'default' : (ghost ? 'pointer' : 'default'),
+                      cursor: !createOn || selectedPerson ? 'default' : (ghost ? 'pointer' : 'default'),
                     }}
                   >
                     {/* Striscia "ora attuale", solo sulla colonna di oggi — vedi
@@ -977,7 +993,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                     {ghost && (
                       <div aria-hidden="true" style={{
                         position: 'absolute', top: laneTop[ghost.lane] + ITEM_MARGIN, height: EMPTY_ITEM_H, left: `${ghostGeo.left * 100}%`, width: `${ghostGeo.width * 100}%`,
-                        background: 'rgba(255,255,255,0.78)', border: '1.5px solid #dcd9d2', borderRadius: 10, boxShadow: '4px 2px 10px -2px rgba(0,0,0,0.08)',
+                        background: 'rgba(255,255,255,0.94)', border: '1.5px dashed #b5b2ab', borderRadius: 10, boxShadow: '4px 2px 14px -2px rgba(0,0,0,0.16)', zIndex: 4,
                         pointerEvents: 'none', padding: `${CARD_PAD}px 10px`, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: ROW_GAP,
                       }}>
                         <span style={{ fontSize: 11, fontWeight: 800, color: '#9a9a9a', height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, whiteSpace: 'nowrap' }}>+ {t('staffTimeline.newTaskGhost')}</span>
@@ -1027,33 +1043,41 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                           <span style={{ fontSize: 9.5, fontWeight: 600, color: '#9a9a9a', height: SUBTITLE_ROW_H, lineHeight: `${SUBTITLE_ROW_H}px`, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                             {timeLabel}
                           </span>
-                          {/* Una riga per CORSIA, non per persona — chi non si sovrappone
-                              in orario (es. due metà giornata) condivide la stessa riga,
-                              affiancato invece che impilato (vedi buildBars). La barra
-                              colorata è posizionata/larga secondo le SUE ore relative
-                              alla durata dell'attività: si vede subito chi è occupato e
-                              quando. Tap apre la colonna laterale con orari e note. */}
-                          {Array.from({ length: item.personLaneCount }).map((_, laneIdx) => (
-                            <div key={laneIdx} style={{ position: 'relative', height: PERSON_ROW_H, flexShrink: 0 }}>
-                              {item.bars.filter(bar => bar.lane === laneIdx).map(({ a, left, width }) => {
-                                const name = (a.workerId ? people.find(p => p.id === a.workerId)?.name : a.externalWorkerName) || '?'
-                                const personId = a.workerId || a.externalWorkerId
-                                return (
-                                  <div key={a.id}
-                                    title={`${name} · ${a.startTime}–${a.endTime}`}
-                                    style={{
-                                      position: 'absolute', top: 0, height: PERSON_ROW_H, left: `${left * 100}%`, width: `${width * 100}%`, minWidth: PERSON_ROW_H,
-                                      background: isPast ? '#9a9a9a' : personColor(personId), borderRadius: 11, padding: '0 8px 0 3px',
-                                      display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-start', overflow: 'hidden', boxSizing: 'border-box',
-                                    }}
-                                  >
-                                    <span style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, background: 'rgba(255,255,255,0.3)', color: '#fff', fontSize: 7.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(name)}</span>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          ))}
+                          {/* Persone assegnate: avatar sovrapposti, sempre su UNA riga così
+                              tutte le card hanno la stessa altezza. Con una sola persona
+                              compare anche il nome. Puntino arancione = orario diverso da
+                              quello della card (dettaglio nella colonna laterale). */}
+                          <div style={{ display: 'flex', alignItems: 'center', height: AVATAR_ROW_H, flexShrink: 0, minWidth: 0 }}>
+                            {(() => {
+                              const people_ = item.bars
+                              const shownBars = people_.length > MAX_AVATARS ? people_.slice(0, MAX_AVATARS - 1) : people_
+                              const extra = people_.length - shownBars.length
+                              const nameOf = a => (a.workerId ? people.find(p => p.id === a.workerId)?.name : a.externalWorkerName) || '?'
+                              return (
+                                <>
+                                  {shownBars.map(({ a, left, width }, i) => {
+                                    const name = nameOf(a)
+                                    const personId = a.workerId || a.externalWorkerId
+                                    const differs = left > 0.005 || width < 0.995
+                                    return (
+                                      <span key={a.id} title={`${name} · ${a.startTime}–${a.endTime}`}
+                                        style={{ position: 'relative', width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: '50%', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, background: isPast ? '#9a9a9a' : personColor(personId), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px #fff', zIndex: shownBars.length - i }}>
+                                        {initials(name)}
+                                        {differs && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#ea580c', boxShadow: '0 0 0 1.5px #fff' }} />}
+                                      </span>
+                                    )
+                                  })}
+                                  {extra > 0 && (
+                                    <span title={people_.slice(shownBars.length).map(b => nameOf(b.a)).join(', ')}
+                                      style={{ marginLeft: -6, height: AVATAR_SIZE, minWidth: AVATAR_SIZE, padding: '0 6px', boxSizing: 'border-box', borderRadius: AVATAR_SIZE / 2, flexShrink: 0, background: '#eceae6', color: '#6b6b6b', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px #fff' }}>+{extra}</span>
+                                  )}
+                                  {people_.length === 1 && (
+                                    <span style={{ marginLeft: 7, minWidth: 0, fontSize: 10.5, fontWeight: 700, color: isPast ? '#9a9a9a' : '#6b6b6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(people_[0].a)}</span>
+                                  )}
+                                </>
+                              )
+                            })()}
+                          </div>
                         </div>
                       )
                     })}

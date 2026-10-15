@@ -229,7 +229,14 @@
     "confirmRemoveAbsenceLabel": "Rimuovi",
     "thisWorker": "Questo worker",
     "pushNewEventTitle": "Nuovo evento",
-    "pushNewAbsenceTitle": "Nuova assenza segnalata"
+    "pushNewAbsenceTitle": "Nuova assenza segnalata",
+    "whenLabel": "Quando",
+    "endPlaceholder": "Fine",
+    "untilDate": "fino al {{date}}",
+    "nDates_one": "{{count}} data",
+    "nDates_other": "{{count}} date",
+    "singleDay": "Solo un giorno",
+    "absenceWhoLabel": "Per chi"
   },
   "staffTimeline": {
     "prevWeekAria": "Settimana precedente",
@@ -309,7 +316,10 @@
     "linkedListSearch": "Cerca un evento…",
     "linkedListNoResults": "Nessun evento trovato",
     "linkedListWhich": "Quale lista",
-    "newTaskGhost": "Nuova attività"
+    "newTaskGhost": "Nuova attività",
+    "createToggle": "Crea attività",
+    "createToggleHint": "Clic su uno spazio libero per creare. Esc o tasto destro per uscire.",
+    "createExit": "Esc per uscire"
   },
   "inventory": {
     "title": "Magazzino",

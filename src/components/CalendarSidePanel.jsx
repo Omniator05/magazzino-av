@@ -9,15 +9,15 @@ import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { generateDates } from '../utils/recurrence'
 import { rememberEventManager } from '../utils/eventManagers'
-import { Warn, Phone, Mail, Check } from './Icon'
+import { Warn, Phone, Mail, Check, ChevronRight } from './Icon'
 import TimeField from './TimeField'
 import DateField from './DateField'
-import MultiDateField from './MultiDateField'
-import CollapsibleFormSection from './CollapsibleFormSection'
+import EventFormFields, { Switch, fieldLabel } from './EventFormFields'
+import DateRangeField from './DateRangeField'
 import Picker from './Picker'
+import { TaskSummaryBody } from './TaskSummaryModal'
 import SegmentedControl from './SegmentedControl'
-import { absenceTypeOptions } from './AbsenceTypeBadge'
-import EventManagerField from './EventManagerField'
+import AbsenceTypeBadge, { absenceTypeOptions } from './AbsenceTypeBadge'
 import DeleteButton from './DeleteButton'
 
 const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -31,10 +31,6 @@ const blankQuickForm = (initialDate) => ({
   location: '', notes: '',
   quoteRef: '', managerName: '', managerPhone: '', managerEmail: '',
 })
-const PHASE_CONFIG = [
-  { key: 'montaggio', labelKey: 'calendar.legendAssembly', color: '#2563eb', bg: '#dbeafe' },
-  { key: 'smontaggio', labelKey: 'calendar.legendDisassembly', color: '#ea580c', bg: '#ffedd5' },
-]
 // Il bordo del header desktop (vedi Calendar.jsx) è alto circa 76px — la
 // colonna non deve mai superare "viewport meno header", altrimenti
 // allungherebbe la pagina intera invece di scorrere al suo interno.
@@ -48,29 +44,23 @@ const SIDEBAR_MAX_HEIGHT = 'calc(100vh - 76px)'
 // raggiungibile comunque dopo creando l'evento e aprendolo).
 export default function CalendarSidePanel({
   absencesOnDate, todayStr, selectedDate, selectedDayEvents, selectedDayPhases = [], selectedDayTasks, user, isWorker, workers, teamId,
-  onOpenTask, onAddAbsence, onEditEvent, creating, onCancelCreate, onEventCreated,
+  onOpenTask, taskDetail, onCloseTask, onAddAbsence, onEditEvent, creating, onCancelCreate, onEventCreated,
   reportMode, rangeStart, onCancelReportMode,
-  absenceFormOpen, absenceForm, setAbsenceForm, onSubmitAbsence, savingAbsence, editingAbsenceId, onCloseAbsenceForm,
+  absenceFormOpen, absenceForm, setAbsenceForm, onSubmitAbsence, savingAbsence, editingAbsenceId, onCloseAbsenceForm, isAdmin, onEditAbsence, onDeleteAbsence,
   editingEvent, editForm, setEditForm, onSaveEdit, saving, onCancelEdit, onDeleteEvent,
 }) {
   const { t, i18n } = useTranslation()
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T12:00:00') : null
   const dayAbsences = selectedDate ? absencesOnDate(selectedDate) : []
 
-  const [editExtraOpen, setEditExtraOpen] = useState(false)
-  useEffect(() => { if (editingEvent) setEditExtraOpen(!!((editForm.quoteRef || '').trim() || (editForm.managerName || '').trim())) }, [editingEvent]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const [quickForm, setQuickForm] = useState(() => blankQuickForm(selectedDate))
   const [savingQuick, setSavingQuick] = useState(false)
-  const [quickExtraOpen, setQuickExtraOpen] = useState(false)
   // Si ripopola solo quando SI APRE (creating passa a true), non a ogni
   // cambio di selectedDate — altrimenti riscrivere la data mentre il form è
   // aperto verrebbe ignorato appena si cambia giorno sulla griglia sotto.
-  useEffect(() => { if (creating) { setQuickForm(blankQuickForm(selectedDate)); setQuickExtraOpen(false) } }, [creating]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (creating) { setQuickForm(blankQuickForm(selectedDate)) } }, [creating]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = new Date().toISOString().split('T')[0]
-  const quickRecurrenceOptions = (quickForm.type === 'installation' ? ['never', 'custom'] : ['never', 'daily', 'weekly', 'monthly', 'yearly', 'custom'])
-    .map(value => ({ value, label: t(`events.recurrence${value[0].toUpperCase()}${value.slice(1)}`) }))
   const quickFutureDates = quickForm.recurrence === 'custom'
     ? (quickForm.customDates || [])
     : (quickForm.recurrence !== 'never' && quickForm.date && quickForm.endDate
@@ -108,151 +98,21 @@ export default function CalendarSidePanel({
 
   if (creating) {
     return (
-      <div key="create" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div key="create" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px 12px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{t('calendar.quickCreateTitle')}</h2>
           <button onClick={onCancelCreate} className="btn-no-anim" aria-label={t('common.cancel')}
             style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
-
-        <div style={{ display: 'flex', gap: 8, background: '#eceae6', borderRadius: 12, padding: 4 }}>
-          <button type="button" onClick={() => setQuickForm(f => ({ ...f, type: 'event' }))} aria-pressed={quickForm.type !== 'installation'}
-            style={{ flex: 1, padding: 8, borderRadius: 9, fontWeight: 700, fontSize: 12.5,
-              background: quickForm.type !== 'installation' ? '#fff' : 'transparent',
-              color: quickForm.type !== 'installation' ? '#1a1a1a' : '#6b6b6b', border: 'none' }}>
-            {t('events.typeEvent')}
-          </button>
-          <button type="button" onClick={() => setQuickForm(f => ({ ...f, type: 'installation', recurrence: 'never', endDate: '', customDates: [] }))} aria-pressed={quickForm.type === 'installation'}
-            style={{ flex: 1, padding: 8, borderRadius: 9, fontWeight: 700, fontSize: 12.5,
-              background: quickForm.type === 'installation' ? '#ede9fe' : 'transparent',
-              color: quickForm.type === 'installation' ? '#5b4fcf' : '#6b6b6b', border: 'none' }}>
-            {t('events.typeInstallation')}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <EventFormFields form={quickForm} setForm={setQuickForm} idp="cal-quick" teamId={teamId} showType showRecurrence autoFocusName today={today} futureDates={quickFutureDates} />
+        </div>
+        <div className="rc-side-footer">
+          <button onClick={saveQuickEvent} className="btn btn-primary btn-full" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+            disabled={savingQuick || !quickForm.name.trim() || !quickForm.date}>
+            {savingQuick ? t('common.saving') : quickFutureDates.length > 0 ? t('events.createMultiple', { count: quickFutureDates.length + 1 }) : <><Check size={16} /> {t('calendar.createEvent')}</>}
           </button>
         </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-quick-name">{t('calendar.eventNameLabel')}</label>
-          <input id="cal-quick-name" value={quickForm.name} onChange={e => setQuickForm(f => ({ ...f, name: e.target.value }))} placeholder={t('calendar.eventNamePlaceholder')} autoFocus />
-        </div>
-
-        {/* Inizio/fine evento sulla stessa riga — il nostro DateField
-            invece del calendario nativo del browser, coerente col resto
-            dell'app. Parte già sul giorno selezionato in griglia, ma resta
-            modificabile; il doppio "«»" sopra il mese nel popup (vedi
-            DateField.jsx) salta di un anno intero in un tap, per non dover
-            spingere "mese successivo" dodici volte programmando lontano. */}
-        <div className="form-group" style={{ margin: 0 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <label htmlFor="cal-quick-date">{t('calendar.eventStartLabel')}</label>
-              <DateField value={quickForm.date}
-                onChange={v => setQuickForm(f => ({ ...f, date: v, dateEnd: f.dateEnd && f.dateEnd < v ? '' : f.dateEnd }))} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <label htmlFor="cal-quick-dateend">{t('calendar.eventEndLabel')}</label>
-              <DateField value={quickForm.dateEnd} min={quickForm.date} clearable placeholder="—"
-                onChange={v => setQuickForm(f => ({ ...f, dateEnd: v }))} />
-            </div>
-          </div>
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={{ marginBottom: 0 }}>{t('calendar.scheduleLabel')}</label>
-            <button type="button" onClick={() => setQuickForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={quickForm.allDay}
-              style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 20,
-                background: quickForm.allDay ? 'var(--accent)' : '#eceae6', color: quickForm.allDay ? '#fff' : '#6b6b6b',
-                border: 'none', fontSize: 12.5, fontWeight: 700 }}>
-              {quickForm.allDay && <Check size={13} />} {t('events.allDayLabel')}
-            </button>
-          </div>
-          {!quickForm.allDay && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <label htmlFor="cal-quick-time-start" style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeStartLabel')}</label>
-                <TimeField value={quickForm.timeStart} onChange={v => setQuickForm(f => ({ ...f, timeStart: v }))} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <label htmlFor="cal-quick-time-end" style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeEndLabel')}</label>
-                <TimeField value={quickForm.timeEnd} onChange={v => setQuickForm(f => ({ ...f, timeEnd: v }))} clearable />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-quick-recurrence">{t('events.repeatLabel')}</label>
-          <Picker value={quickForm.recurrence} options={quickRecurrenceOptions} ariaLabel={t('events.repeatLabel')}
-            onChange={v => setQuickForm(f => ({ ...f, recurrence: v, endDate: '', customDates: [] }))} />
-        </div>
-
-        {quickForm.recurrence === 'custom' ? (
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>{t('events.customDatesLabel')}</label>
-            <MultiDateField dates={quickForm.customDates} anchorDate={quickForm.date} onChange={v => setQuickForm(f => ({ ...f, customDates: v }))} />
-          </div>
-        ) : quickForm.recurrence !== 'never' && (
-          <div className="form-group" style={{ margin: 0 }}>
-            <label htmlFor="cal-quick-repeatend">{t('events.repeatEndLabel')}</label>
-            <DateField value={quickForm.endDate} min={quickForm.date || today}
-              onChange={v => setQuickForm(f => ({ ...f, endDate: v }))} />
-          </div>
-        )}
-
-        {quickFutureDates.length > 0 && (
-          <div style={{ background: 'rgba(79,195,247,0.08)', border: '1px solid rgba(79,195,247,0.2)', borderRadius: 8, padding: '10px 14px' }}>
-            <p style={{ color: 'var(--blue)', fontSize: 13, fontWeight: 700 }}>{t('events.totalEventsCount', { count: quickFutureDates.length + 1 })}</p>
-            <p style={{ color: '#6b6b6b', fontSize: 12, marginTop: 3 }}>
-              {t('workerCalendar.dateRange', {
-                start: formatDate([quickForm.date, ...quickFutureDates].sort().at(0) + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }, i18n.language),
-                end: formatDate([quickForm.date, ...quickFutureDates].sort().at(-1) + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }, i18n.language),
-              })}
-            </p>
-          </div>
-        )}
-
-        {quickForm.type !== 'installation' && (
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ marginBottom: 8, display: 'block' }}>{t('events.phasesEventLabel')}</label>
-            {PHASE_CONFIG.map(p => (
-              <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
-                <span style={{ background: p.bg, color: p.color, borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 800, minWidth: 82, textAlign: 'center', flexShrink: 0 }}>{t(p.labelKey)}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <DateField value={quickForm.phases?.[p.key] || ''} clearable placeholder="—"
-                    onChange={v => setQuickForm(f => { const ph = { ...(f.phases || {}) }; if (v) ph[p.key] = v; else delete ph[p.key]; return { ...f, phases: ph } })} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-quick-location">{t('calendar.locationLabel')}</label>
-          <input id="cal-quick-location" value={quickForm.location} onChange={e => setQuickForm(f => ({ ...f, location: e.target.value }))} placeholder={t('calendar.locationPlaceholder')} />
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-quick-notes">{t('calendar.notesLabel')}</label>
-          <textarea id="cal-quick-notes" value={quickForm.notes} onChange={e => setQuickForm(f => ({ ...f, notes: e.target.value }))} placeholder={t('events.notesPlaceholder')} rows={2} />
-        </div>
-
-        <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={quickExtraOpen} onToggle={() => setQuickExtraOpen(o => !o)}
-          hasValue={!!(quickForm.quoteRef.trim() || quickForm.managerName.trim())}>
-          <div className="form-group">
-            <label htmlFor="cal-quick-quote">{t('events.quoteRefLabel')}</label>
-            <input id="cal-quick-quote" value={quickForm.quoteRef} onChange={e => setQuickForm(f => ({ ...f, quoteRef: e.target.value }))} placeholder={t('events.quoteRefPlaceholder')} />
-          </div>
-          <div className="form-group">
-            <label>{t('events.eventManagerLabel')}</label>
-            <EventManagerField teamId={teamId} name={quickForm.managerName} phone={quickForm.managerPhone} email={quickForm.managerEmail}
-              onChange={v => setQuickForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
-          </div>
-        </CollapsibleFormSection>
-
-        <button onClick={saveQuickEvent} className="btn btn-primary btn-full" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
-          disabled={savingQuick || !quickForm.name.trim() || !quickForm.date}>
-          {savingQuick ? t('common.saving') : quickFutureDates.length > 0 ? t('events.createMultiple', { count: quickFutureDates.length + 1 }) : <><Check size={16} /> {t('calendar.createEvent')}</>}
-        </button>
       </div>
     )
   }
@@ -264,7 +124,7 @@ export default function CalendarSidePanel({
   // precompilate.
   if (reportMode) {
     return (
-      <div key="absence-pick" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
+      <div key="absence-pick" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: SIDEBAR_MAX_HEIGHT, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{t('calendar.absenceModalTitle')}</h2>
           <button onClick={onCancelReportMode} className="btn-no-anim" aria-label={t('common.cancel')}
@@ -285,65 +145,76 @@ export default function CalendarSidePanel({
   // (ancora usato così com'era su mobile, dove non c'è questa colonna).
   if (absenceFormOpen) {
     const singleDay = !absenceForm.endDate || absenceForm.endDate === absenceForm.startDate
+    const personOptions = workers.map(w => ({ value: w.id, label: w.name }))
     return (
-      <div key="absence-form" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div key="absence-form" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px 12px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{editingAbsenceId ? t('calendar.absenceModalEditTitle') : t('calendar.absenceModalTitle')}</h2>
           <button onClick={onCloseAbsenceForm} className="btn-no-anim" aria-label={t('common.cancel')}
             style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
 
-        <div className="form-group" style={{ margin: 0 }}>
-          <label>{t('calendar.firstDay')}</label>
-          <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, startDate: v, endDate: f.endDate < v ? v : f.endDate }))} />
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label>{t('calendar.lastDay')} <span style={{ color: '#9a9a9a', fontWeight: 400, fontSize: 12 }}>{t('calendar.lastDayHint')}</span></label>
-          <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder={t('calendar.singleDayPlaceholder')} onChange={v => setAbsenceForm(f => ({ ...f, endDate: v }))} />
-        </div>
-
-        {/* Solo per un giorno solo — "qualche ora" su più giorni non ha
-            senso con un unico orario (stesso vincolo di addAbsence). */}
-        {singleDay && (
-          <div className="form-group" style={{ margin: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ marginBottom: 0 }}>{t('calendar.absenceHoursLabel')}</label>
-              <button type="button" onClick={() => setAbsenceForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={absenceForm.allDay}
-                style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 20,
-                  background: absenceForm.allDay ? 'var(--accent)' : '#eceae6', color: absenceForm.allDay ? '#fff' : '#6b6b6b',
-                  border: 'none', fontSize: 12.5, fontWeight: 700 }}>
-                {t('events.allDayLabel')}
-              </button>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Solo l'admin: per chi si registra l'assenza (di default se stesso). */}
+          {isAdmin && (
+            <div>
+              <span style={fieldLabel}>{t('calendar.absenceWhoLabel')}</span>
+              <Picker value={absenceForm.workerId || user?.uid} options={personOptions} ariaLabel={t('calendar.absenceWhoLabel')} searchable
+                searchPlaceholder={t('staffTimeline.searchPlaceholder')}
+                onChange={v => setAbsenceForm(f => ({ ...f, workerId: v }))} />
             </div>
-            {!absenceForm.allDay && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          )}
+
+          <div>
+            <span style={fieldLabel}>{t('calendar.absenceTypeLabel')}</span>
+            <SegmentedControl options={absenceTypeOptions(t)} value={absenceForm.type} onChange={v => setAbsenceForm(f => ({ ...f, type: v }))} />
+          </div>
+
+          <div>
+            <span style={fieldLabel}>{t('calendar.whenLabel')}</span>
+            <div style={{ border: '1px solid #e0ddd6', borderRadius: 14, background: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <label style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeStartLabel')}</label>
-                  <TimeField value={absenceForm.startTime} onChange={v => setAbsenceForm(f => ({ ...f, startTime: v }))} />
+                  <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, startDate: v, endDate: f.endDate < v ? '' : f.endDate }))} />
                 </div>
+                <span aria-hidden="true" style={{ color: '#9a9a9a', fontWeight: 700 }}>→</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <label style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeEndLabel')}</label>
-                  <TimeField value={absenceForm.endTime} onChange={v => setAbsenceForm(f => ({ ...f, endTime: v }))} clearable />
+                  <DateRangeField endOnly start={absenceForm.startDate} end={absenceForm.endDate || absenceForm.startDate} placeholder={t('calendar.endPlaceholder')} singleDayLabel={t('calendar.singleDay')}
+                    onChange={(st, en) => setAbsenceForm(f => ({ ...f, endDate: en === st ? '' : en }))} />
                 </div>
               </div>
-            )}
+              {/* Le ore hanno senso solo su un giorno solo — "qualche ora" su più
+                  giorni non avrebbe un unico orario (stesso vincolo di addAbsence). */}
+              {singleDay && (
+                <div style={{ borderTop: '1px solid #eceae6', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a', flex: absenceForm.allDay !== false ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
+                  {absenceForm.allDay === false && (
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}><TimeField value={absenceForm.startTime} onChange={v => setAbsenceForm(f => ({ ...f, startTime: v }))} compact /></div>
+                      <span aria-hidden="true" style={{ color: '#9a9a9a' }}>–</span>
+                      <div style={{ flex: 1, minWidth: 0 }}><TimeField value={absenceForm.endTime} onChange={v => setAbsenceForm(f => ({ ...f, endTime: v }))} clearable compact /></div>
+                    </div>
+                  )}
+                  <Switch on={absenceForm.allDay !== false} label={t('events.allDayLabel')}
+                    onChange={v => setAbsenceForm(f => ({ ...f, allDay: v, ...(!v && !f.startTime && !f.endTime ? { startTime: '09:00', endTime: '18:00' } : {}) }))} />
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        <div className="form-group" style={{ margin: 0 }}>
-          <label>{t('calendar.absenceTypeLabel')}</label>
-          <SegmentedControl options={absenceTypeOptions(t)} value={absenceForm.type} onChange={v => setAbsenceForm(f => ({ ...f, type: v }))} />
+          <div>
+            <label htmlFor="cal-absence-reason" style={fieldLabel}>{t('calendar.reason')} <span style={{ color: '#9a9a9a', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>{t('common.optional')}</span></label>
+            <input id="cal-absence-reason" value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({ ...f, reason: e.target.value }))} placeholder={t('calendar.reasonPlaceholder')} />
+          </div>
         </div>
 
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-absence-reason">{t('calendar.reason')} <span style={{ color: '#9a9a9a', fontWeight: 400, fontSize: 12 }}>{t('common.optional')}</span></label>
-          <input id="cal-absence-reason" value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({ ...f, reason: e.target.value }))} placeholder={t('calendar.reasonPlaceholder')} />
+        <div className="rc-side-footer" style={{ display: 'flex', gap: 8 }}>
+          {editingAbsenceId && <DeleteButton onDelete={onDeleteAbsence} size={48} ariaLabel={t('calendar.confirmRemoveAbsenceLabel')} />}
+          <button onClick={onSubmitAbsence} className="btn btn-primary" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+            disabled={savingAbsence || !absenceForm.startDate}>
+            {savingAbsence ? t('common.saving') : <><Check size={16} /> {editingAbsenceId ? t('common.save') : t('calendar.confirmAbsence')}</>}
+          </button>
         </div>
-
-        <button onClick={onSubmitAbsence} className="btn btn-primary btn-full" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
-          disabled={savingAbsence || !absenceForm.startDate}>
-          {savingAbsence ? t('common.saving') : <><Check size={16} /> {editingAbsenceId ? t('common.save') : t('calendar.confirmAbsence')}</>}
-        </button>
       </div>
     )
   }
@@ -355,87 +226,16 @@ export default function CalendarSidePanel({
   // tipo/ricorrenza (resta solo nel flusso di creazione).
   if (editingEvent) {
     return (
-      <div key="edit-event" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div key="edit-event" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px 12px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{t('calendar.editEventTitle')}</h2>
           <button onClick={onCancelEdit} className="btn-no-anim" aria-label={t('common.cancel')}
             style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-edit-name">{t('calendar.eventNameLabel')}</label>
-          <input id="cal-edit-name" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder={t('calendar.eventNamePlaceholder')} />
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={today} />
         </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label>{t('calendar.startDateLabel')}</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <DateField value={editForm.date} onChange={v => setEditForm(f => ({ ...f, date: v }))} />
-            </div>
-            <button type="button" onClick={() => setEditForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={editForm.allDay}
-              style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 20,
-                background: editForm.allDay ? 'var(--accent)' : '#eceae6', color: editForm.allDay ? '#fff' : '#6b6b6b',
-                border: 'none', fontSize: 12.5, fontWeight: 700 }}>
-              {editForm.allDay && <Check size={13} />} {t('events.allDayLabel')}
-            </button>
-          </div>
-          {!editForm.allDay && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <label htmlFor="cal-edit-time-start" style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeStartLabel')}</label>
-                <TimeField value={editForm.timeStart} onChange={v => setEditForm(f => ({ ...f, timeStart: v }))} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <label htmlFor="cal-edit-time-end" style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('events.timeEndLabel')}</label>
-                <TimeField value={editForm.timeEnd} onChange={v => setEditForm(f => ({ ...f, timeEnd: v }))} clearable />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label>{t('calendar.endDateLabel')} <span style={{ color: '#9a9a9a', fontWeight: 400, fontSize: 12 }}>{t('common.optional')}</span></label>
-          <DateField value={editForm.dateEnd || ''} min={editForm.date} clearable placeholder={t('common.noneOption')} onChange={v => setEditForm(f => ({ ...f, dateEnd: v }))} />
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label style={{ marginBottom: 8, display: 'block' }}>{t('calendar.phasesLabel')}</label>
-          {PHASE_CONFIG.map(p => (
-            <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
-              <span style={{ background: p.bg, color: p.color, borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 800, minWidth: 82, textAlign: 'center', flexShrink: 0 }}>{t(p.labelKey)}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <DateField value={editForm.phases?.[p.key] || ''} clearable placeholder="—"
-                  onChange={v => setEditForm(f => { const ph = { ...(f.phases || {}) }; if (v) ph[p.key] = v; else delete ph[p.key]; return { ...f, phases: ph } })} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-edit-location">{t('calendar.locationLabel')}</label>
-          <input id="cal-edit-location" value={editForm.location || ''} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} placeholder={t('calendar.locationPlaceholder')} />
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label htmlFor="cal-edit-notes">{t('calendar.notesLabel')}</label>
-          <textarea id="cal-edit-notes" value={editForm.notes || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
-        </div>
-
-        <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={editExtraOpen} onToggle={() => setEditExtraOpen(o => !o)}
-          hasValue={!!((editForm.quoteRef || '').trim() || (editForm.managerName || '').trim())}>
-          <div className="form-group">
-            <label htmlFor="cal-edit-quote">{t('events.quoteRefLabel')} <span style={{ color: '#9a9a9a', fontWeight: 400, fontSize: 12 }}>{t('common.optional')}</span></label>
-            <input id="cal-edit-quote" value={editForm.quoteRef || ''} onChange={e => setEditForm(f => ({ ...f, quoteRef: e.target.value }))} placeholder={t('events.quoteRefPlaceholder')} />
-          </div>
-          <div className="form-group">
-            <label>{t('events.eventManagerLabel')} <span style={{ color: '#9a9a9a', fontWeight: 400, fontSize: 12 }}>{t('common.optional')}</span></label>
-            <EventManagerField teamId={teamId} name={editForm.managerName || ''} phone={editForm.managerPhone || ''} email={editForm.managerEmail || ''}
-              onChange={v => setEditForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
-          </div>
-        </CollapsibleFormSection>
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <div className="rc-side-footer" style={{ display: 'flex', gap: 8 }}>
           <DeleteButton onClick={onDeleteEvent} size={44} ariaLabel={t('events.deleteEventAria')} />
           <button onClick={onSaveEdit} className="btn btn-primary" style={{ flex: 1 }}
             disabled={saving || !editForm.name?.trim() || !editForm.date}>
@@ -446,8 +246,24 @@ export default function CalendarSidePanel({
     )
   }
 
+  // Dettaglio di un'attività (al posto del modal): stessa colonna, con ✕ per tornare al giorno.
+  if (taskDetail) {
+    return (
+      <div key={`task-${taskDetail.id}`} className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '20px 28px 8px', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.3px', overflowWrap: 'anywhere' }}>{taskDetail.label || t('staffTimeline.untitledTask')}</h2>
+          <button onClick={onCloseTask} className="btn-no-anim" aria-label={t('common.close')}
+            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 24px' }}>
+          <TaskSummaryBody block={taskDetail} workers={workers} />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div key="browse" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 18, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
+    <div key="browse" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 18, minHeight: SIDEBAR_MAX_HEIGHT, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
 
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -458,21 +274,31 @@ export default function CalendarSidePanel({
           <p style={{ fontSize: 12, color: '#9a9a9a' }}>{t('calendar.weekAbsencesEmpty')}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {dayAbsences.map(a => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1px solid #e0ddd6', borderRadius: 12, padding: '9px 11px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.workerName}</div>
-                  <div style={{ fontSize: 11, color: '#6b6b6b', marginTop: 1 }}>
-                    {a.startDate === a.endDate
-                      ? formatDate(a.startDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)
-                      : `${formatDate(a.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(a.endDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}`}
-                    {a.allDay === false && (a.startTime || a.endTime) && (
-                      <span style={{ fontWeight: 700, color: '#1a1a1a' }}> · {a.startTime || '?'}–{a.endTime || '?'}</span>
-                    )}
+            {dayAbsences.map(a => {
+              const canEdit = isAdmin || a.workerId === user?.uid
+              const Wrapper = canEdit ? 'button' : 'div'
+              return (
+                <Wrapper key={a.id} {...(canEdit ? { type: 'button', onClick: () => onEditAbsence(a), 'aria-label': t('common.edit') + ' · ' + a.workerName, className: 'btn-no-anim' } : {})}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', background: 'var(--bg)', border: '1px solid #e0ddd6', borderRadius: 12, padding: '9px 11px', cursor: canEdit ? 'pointer' : 'default' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.workerName}</span>
+                      <AbsenceTypeBadge type={a.type} />
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6b6b6b', marginTop: 2 }}>
+                      {a.startDate === a.endDate
+                        ? formatDate(a.startDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)
+                        : `${formatDate(a.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(a.endDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}`}
+                      {a.allDay === false && (a.startTime || a.endTime) && (
+                        <span style={{ fontWeight: 700, color: '#1a1a1a' }}> · {a.startTime || '?'}–{a.endTime || '?'}</span>
+                      )}
+                      {a.reason ? <span> · {a.reason}</span> : null}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                  {canEdit && <span style={{ color: '#9a9a9a', display: 'flex', flexShrink: 0 }}><ChevronRight size={16} /></span>}
+                </Wrapper>
+              )
+            })}
           </div>
         )}
         <button onClick={onAddAbsence} className="btn-no-anim"

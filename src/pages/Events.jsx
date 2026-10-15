@@ -9,15 +9,12 @@ import { Pin, Dot } from '../components/Icon'
 import { EventListSkeleton } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
-import DateField from '../components/DateField'
-import TimeField from '../components/TimeField'
-import CollapsibleFormSection from '../components/CollapsibleFormSection'
+import EventFormFields from '../components/EventFormFields'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import FabButton from '../components/FabButton'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyEventTimeChangedIfNeeded } from '../utils/pushNotifications'
 import { rememberEventManager } from '../utils/eventManagers'
-import EventManagerField from '../components/EventManagerField'
 import { db } from '../firebase'
 import { collection, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
@@ -28,18 +25,6 @@ import CreateEventFlow from '../components/CreateEventFlow'
 const EVENT_CAP = 5
 
 /* ── Inline SVG icons (coerenti con Dashboard.jsx, no emoji) ──────────────── */
-// Stessa coppia di icone del selettore tipo in CreateEventFlow.jsx — qui
-// serve di nuovo per lo stesso selettore, riproposto anche in modifica.
-const IconCalendarSm = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-)
-const IconWrenchSm = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-  </svg>
-)
 const IconChevronSection = ({ open }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
     style={{ transition:'transform 0.2s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
@@ -329,7 +314,6 @@ export default function Events() {
   const [form, setForm]           = useState({ name:'', date:new Date().toISOString().split('T')[0], dateEnd:'', allDay:true, timeStart:'', timeEnd:'', location:'', notes:'', type:'event', phases:{}, quoteRef:'', managerName:'', managerPhone:'', managerEmail:'' })
   // Aperta di default solo se l'evento in modifica ha già un valore qui
   // dentro (vedi openEdit sotto) — altrimenti resta chiusa come in creazione.
-  const [extraInfoOpen, setExtraInfoOpen] = useState(false)
   // Flusso unico di creazione evento (Calendar.jsx monta lo stesso componente):
   // vedi src/components/CreateEventFlow.jsx.
   const [createFlowOpen, setCreateFlowOpen] = useState(false)
@@ -495,7 +479,6 @@ export default function Events() {
       location:event.location||'', notes:event.notes||'', type: event.type||'event', phases: event.phases||{},
       quoteRef: event.quoteRef||'', managerName: event.eventManager?.name||'', managerPhone: event.eventManager?.phone||'', managerEmail: event.eventManager?.email||'',
     })
-    setExtraInfoOpen(!!(event.quoteRef || event.eventManager?.name))
     setShowModal(true)
   }
 
@@ -715,102 +698,13 @@ export default function Events() {
           <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
             <button className="close-btn" onClick={eventDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.editEventTitle')}</h2>
-            {!editing?.seriesId && (
-              <div style={{ display:'flex', gap:8, marginBottom:16, background:'var(--card2)', borderRadius:12, padding:4 }}>
-                <button
-                  onClick={() => setForm(f => ({...f, type:'event'}))}
-                  aria-pressed={form.type !== 'installation'}
-                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                    background: form.type !== 'installation' ? 'var(--card)' : 'transparent',
-                    color: form.type !== 'installation' ? 'var(--text)' : 'var(--text2)',
-                    boxShadow: form.type !== 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-                    border: 'none', transition:'all 0.15s',
-                  }}><IconCalendarSm /> {t('events.typeEvent')}</button>
-                <button
-                  onClick={() => setForm(f => ({...f, type:'installation'}))}
-                  aria-pressed={form.type === 'installation'}
-                  style={{ flex:1, padding:'9px', borderRadius:9, fontWeight:700, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                    background: form.type === 'installation' ? '#ede9fe' : 'transparent',
-                    color: form.type === 'installation' ? '#5b4fcf' : 'var(--text2)',
-                    boxShadow: form.type === 'installation' ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-                    border: form.type === 'installation' ? '1px solid #ddd6fe' : '1px solid transparent',
-                    transition:'all 0.15s',
-                  }}><IconWrenchSm /> {t('events.typeInstallation')}</button>
-              </div>
-            )}
-            <div className="form-group">
-              <label htmlFor="ev-name">{t('calendar.eventNameLabel')}</label>
-              <input id="ev-name" value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('calendar.eventNamePlaceholder')} />
+            {/* Stessi campi della colonna del Calendario (EventFormFields). Il tipo
+                (evento/rent-install) si può cambiare solo se non è un'occorrenza
+                ricorrente. */}
+            <div className="rc-ev-form" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <EventFormFields form={form} setForm={setForm} idp="ev" teamId={teamId} today={today} showType={!editing?.seriesId} useRange />
             </div>
-            <div className="form-group">
-              <label>{t('calendar.startDateLabel')}</label>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <DateField value={form.date} onChange={v => setForm({...form,date:v})} />
-                </div>
-                <button type="button" onClick={() => setForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={form.allDay}
-                  style={{
-                    flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
-                    background: form.allDay ? 'var(--accent)' : 'var(--card2)',
-                    color: form.allDay ? '#fff' : 'var(--text2)',
-                    border: `1px solid ${form.allDay ? 'var(--accent)' : 'var(--border)'}`,
-                    fontSize:13, fontWeight:700, whiteSpace:'nowrap',
-                  }}>
-                  {form.allDay && <IconCheckSm />} {t('events.allDayLabel')}
-                </button>
-              </div>
-              {!form.allDay && (
-                <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <label htmlFor="ev-time-start" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
-                    <TimeField value={form.timeStart} onChange={v => setForm(f => ({ ...f, timeStart:v }))} />
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <label htmlFor="ev-time-end" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
-                    <TimeField value={form.timeEnd} onChange={v => setForm(f => ({ ...f, timeEnd:v }))} clearable />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.endDateLabel')} {form.type === 'installation' ? <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintInstallation')}</span> : <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('events.endDateHintEvent')}</span>}</label>
-              <DateField value={form.dateEnd} min={form.date} clearable onChange={v => setForm({...form, dateEnd:v})} placeholder={t('common.noneOption')} />
-            </div>
-            {form.type !== 'installation' && (
-              <div className="form-group">
-                <label style={{ marginBottom:8, display:'block' }}>{t('events.phasesEventLabel')}</label>
-                {PHASE_CONFIG.map(p => (
-                  <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
-                    <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <DateField value={form.phases?.[p.key]||''} clearable placeholder="—"
-                        onChange={v => setForm(f => { const ph={...(f.phases||{})}; if (v) ph[p.key]=v; else delete ph[p.key]; return {...f, phases:ph} })} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="form-group">
-              <label htmlFor="ev-location">{t('calendar.locationLabel')}</label>
-              <input id="ev-location" value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('calendar.locationPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="ev-notes">{t('calendar.notesLabel')}</label>
-              <textarea id="ev-notes" value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder={t('events.notesPlaceholder')} rows={2} />
-            </div>
-            <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={extraInfoOpen} onToggle={() => setExtraInfoOpen(o => !o)}
-              hasValue={!!(form.quoteRef.trim() || form.managerName.trim())}>
-              <div className="form-group">
-                <label htmlFor="ev-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-                <input id="ev-quote" value={form.quoteRef} onChange={e => setForm({...form,quoteRef:e.target.value})} placeholder={t('events.quoteRefPlaceholder')} />
-              </div>
-              <div className="form-group">
-                <label>{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-                <EventManagerField teamId={teamId} name={form.managerName} phone={form.managerPhone} email={form.managerEmail}
-                  onChange={v => setForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
-              </div>
-            </CollapsibleFormSection>
-            <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+            <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:20 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? t('common.saving') : t('calendar.saveChanges')}
             </button>

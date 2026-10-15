@@ -14,14 +14,13 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateField from '../components/DateField'
 import TimeField from '../components/TimeField'
-import CollapsibleFormSection from '../components/CollapsibleFormSection'
+import EventFormFields from '../components/EventFormFields'
 import StaffTimeline from '../components/StaffTimeline'
 import EventSummaryModal from '../components/EventSummaryModal'
 import TaskSummaryModal from '../components/TaskSummaryModal'
 import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
 import { notifyEventTimeChangedIfNeeded, notifyTeamPush } from '../utils/pushNotifications'
 import { rememberEventManager } from '../utils/eventManagers'
-import EventManagerField from '../components/EventManagerField'
 import { formatDate, capitalize } from '../utils/formatDate'
 import CreateEventFlow from '../components/CreateEventFlow'
 import Toast from '../components/Toast'
@@ -145,7 +144,6 @@ export default function Calendar() {
   const [editForm, setEditForm] = useState({})
   // Aperta di default solo se l'evento in modifica ha già un valore qui
   // dentro (vedi openEdit sotto) — altrimenti resta chiusa come in creazione.
-  const [extraInfoOpen, setExtraInfoOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   // Flusso unico di creazione evento, condiviso con Events.jsx — vedi
   // src/components/CreateEventFlow.jsx.
@@ -158,7 +156,7 @@ export default function Calendar() {
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
-  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'', type:'ferie', allDay:true, startTime:'', endTime:'' })
+  const [absenceForm, setAbsenceForm] = useState({ startDate:'', endDate:'', reason:'', type:'ferie', allDay:true, startTime:'', endTime:'', workerId:'' })
   const [savingAbsence, setSavingAbsence] = useState(false)
   // null = si sta creando una nuova assenza, altrimenti id di quella in modifica
   const [editingAbsenceId, setEditingAbsenceId] = useState(null)
@@ -170,6 +168,8 @@ export default function Calendar() {
 
   // Selezione assenza tap-sul-calendario
   const [reportMode, setReportMode] = useState(false)
+  // Il dettaglio attività in colonna (desktop) sparisce cambiando giorno o aprendo un altro form.
+  useEffect(() => { setSummaryTask(null) }, [selectedDate, sidebarCreating, editingEvent, reportMode, mode])
   const [rangeStart, setRangeStart] = useState(null)
   const [hoverDate, setHoverDate] = useState(null) // anteprima range stile "booking" al passaggio del mouse
 
@@ -183,7 +183,7 @@ export default function Calendar() {
       } else {
         const start = dStr <= rangeStart ? dStr : rangeStart
         const end = dStr <= rangeStart ? rangeStart : dStr
-        setAbsenceForm({ startDate: start, endDate: end, reason: '', type: 'ferie', allDay:true, startTime:'', endTime:'' })
+        setAbsenceForm({ startDate: start, endDate: end, reason: '', type: 'ferie', allDay:true, startTime:'', endTime:'', workerId:'' })
         setEditingAbsenceId(null)
         setShowAbsenceModal(true)
         setReportMode(false)
@@ -215,6 +215,8 @@ export default function Calendar() {
         allDay,
         startTime: allDay ? null : (absenceForm.startTime || null),
         endTime: allDay ? null : (absenceForm.endTime || null),
+        // L'admin può registrare/spostare un'assenza per conto di un'altra persona.
+        ...(isAdmin && absenceForm.workerId ? { workerId: absenceForm.workerId } : {}),
       }
       if (editingAbsenceId) {
         // Modifica: workerId/teamId/createdAt dell'originale restano invariati.
@@ -224,7 +226,7 @@ export default function Calendar() {
         await awaitIfOnline(updateDoc(doc(db, 'unavailability', editingAbsenceId), data), isOnline)
       } else {
         await awaitIfOnline(addDoc(collection(db, 'unavailability'), {
-          ...data, workerId: user.uid, teamId, createdAt: serverTimestamp(),
+          ...data, workerId: (isAdmin && absenceForm.workerId) || user.uid, teamId, createdAt: serverTimestamp(),
         }), isOnline)
         // Nuova assenza segnalata da un worker (non dall'admin stesso): avvisa
         // l'admin al prossimo accesso (badge in-app, vedi
@@ -268,14 +270,14 @@ export default function Calendar() {
         }
       }
       if (!isOnline) showToast(t('common.savedOfflineToast'))
-      setAbsenceForm({ startDate:'', endDate:'', reason:'', type:'ferie', allDay:true, startTime:'', endTime:'' })
+      setAbsenceForm({ startDate:'', endDate:'', reason:'', type:'ferie', allDay:true, startTime:'', endTime:'', workerId:'' })
       setEditingAbsenceId(null)
       setShowAbsenceModal(false)
     } finally { setSavingAbsence(false) }
   }
 
   const openEditAbsence = (a) => {
-    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '', type: a.type || 'altro', allDay: a.allDay !== false, startTime: a.startTime || '', endTime: a.endTime || '' })
+    setAbsenceForm({ startDate: a.startDate, endDate: a.endDate, reason: a.reason || '', type: a.type || 'altro', allDay: a.allDay !== false, startTime: a.startTime || '', endTime: a.endTime || '', workerId: a.workerId || '' })
     setEditingAbsenceId(a.id)
     setShowAbsenceModal(true)
   }
@@ -328,14 +330,10 @@ export default function Calendar() {
   useModalScrollLock(!!editingEvent || showAbsenceModal || showCreate || (!isMobile && (mode === 'grid' || mode === 'assign')))
 
   const removeAbsence = async (id) => {
-    if (!(await confirm({ title: t('calendar.confirmRemoveAbsenceTitle'), message: t('calendar.confirmRemoveAbsenceMessage'), confirmLabel: t('calendar.confirmRemoveAbsenceLabel'), danger: true }))) return
+    if (!(await confirm({ title: t('calendar.confirmRemoveAbsenceTitle'), message: t('calendar.confirmRemoveAbsenceMessage'), confirmLabel: t('calendar.confirmRemoveAbsenceLabel'), danger: true }))) return false
     await deleteDoc(doc(db, 'unavailability', id))
+    return true
   }
-
-  const PHASE_FORM_CONFIG = [
-    { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
-    { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
-  ]
 
   const openEdit = (e, ev) => {
     e.stopPropagation()
@@ -346,7 +344,6 @@ export default function Calendar() {
       location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
       quoteRef: ev.quoteRef||'', managerName: ev.eventManager?.name||'', managerPhone: ev.eventManager?.phone||'', managerEmail: ev.eventManager?.email||'',
     })
-    setExtraInfoOpen(!!(ev.quoteRef || ev.eventManager?.name))
   }
 
   useEffect(() => {
@@ -940,7 +937,7 @@ export default function Calendar() {
         <CalendarSidePanel
           absencesOnDate={absencesOnDate} workers={workers} teamId={teamId}
           todayStr={todayStr} selectedDate={selectedDate} selectedDayEvents={selectedEvents} selectedDayPhases={selectedDayPhases} selectedDayTasks={selectedTasks}
-          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} onEditEvent={(e, ev) => openEdit(e, ev)}
+          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} taskDetail={!isMobile ? summaryTask : null} onCloseTask={() => setSummaryTask(null)} onEditEvent={(e, ev) => openEdit(e, ev)}
           onAddAbsence={() => { if (reportMode) { cancelReportMode() } else { setSidebarCreating(false); setEditingEvent(null); startReportMode() } }}
           creating={sidebarCreating} onCancelCreate={() => setSidebarCreating(false)}
           onEventCreated={() => setSidebarCreating(false)}
@@ -948,6 +945,8 @@ export default function Calendar() {
           absenceFormOpen={showAbsenceModal} absenceForm={absenceForm} setAbsenceForm={setAbsenceForm}
           onSubmitAbsence={addAbsence} savingAbsence={savingAbsence} editingAbsenceId={editingAbsenceId}
           onCloseAbsenceForm={closeAbsenceModal}
+          isAdmin={isAdmin} onEditAbsence={openEditAbsence}
+          onDeleteAbsence={async () => { if (await removeAbsence(editingAbsenceId)) { closeAbsenceModal(); return true } return false }}
           editingEvent={editingEvent} editForm={editForm} setEditForm={setEditForm}
           onSaveEdit={saveEdit} saving={saving} onCancelEdit={() => setEditingEvent(null)}
           onDeleteEvent={async e => { if (await deleteEvent(e, editingEvent)) setEditingEvent(null) }}
@@ -1312,7 +1311,7 @@ export default function Calendar() {
       )}
 
       {/* Stesso riepilogo per i task liberi — niente shortcut lista di carico */}
-      {summaryTask && (
+      {summaryTask && isMobile && (
         <TaskSummaryModal block={summaryTask} workers={workers} onClose={() => setSummaryTask(null)} />
       )}
 
@@ -1323,77 +1322,11 @@ export default function Calendar() {
           <div className={`modal${editDrag.jiggling ? ' modal-jiggle' : ''}${editDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...editDrag.props}>
             <button className="close-btn" onClick={editDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('calendar.editEventTitle')}</h2>
-            <div className="form-group">
-              <label htmlFor="cal-edit-name">{t('calendar.eventNameLabel')}</label>
-              <input id="cal-edit-name" value={editForm.name} onChange={e => setEditForm(f => ({...f, name:e.target.value}))} placeholder={t('calendar.eventNamePlaceholder')} />
+            {/* Stessi campi della colonna desktop (EventFormFields). */}
+            <div className="rc-ev-form" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={todayStr} useRange />
             </div>
-            <div className="form-group">
-              <label>{t('calendar.startDateLabel')}</label>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <DateField value={editForm.date} onChange={v => setEditForm(f => ({...f, date:v}))} />
-                </div>
-                <button type="button" onClick={() => setEditForm(f => ({ ...f, allDay: !f.allDay }))} aria-pressed={editForm.allDay}
-                  style={{
-                    flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:20,
-                    background: editForm.allDay ? 'var(--accent)' : 'var(--card2)',
-                    color: editForm.allDay ? '#fff' : 'var(--text2)',
-                    border: `1px solid ${editForm.allDay ? 'var(--accent)' : 'var(--border)'}`,
-                    fontSize:13, fontWeight:700, whiteSpace:'nowrap',
-                  }}>
-                  {editForm.allDay && <Check size={12} />} {t('events.allDayLabel')}
-                </button>
-              </div>
-              {!editForm.allDay && (
-                <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <label htmlFor="cal-edit-time-start" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeStartLabel')}</label>
-                    <TimeField value={editForm.timeStart} onChange={v => setEditForm(f => ({ ...f, timeStart:v }))} />
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <label htmlFor="cal-edit-time-end" style={{ fontSize:11, color:'var(--text2)', fontWeight:700, display:'block', marginBottom:4 }}>{t('events.timeEndLabel')}</label>
-                    <TimeField value={editForm.timeEnd} onChange={v => setEditForm(f => ({ ...f, timeEnd:v }))} clearable />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.endDateLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-              <DateField value={editForm.dateEnd||''} min={editForm.date} clearable placeholder={t('common.noneOption')} onChange={v => setEditForm(f => ({...f, dateEnd:v}))} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.phasesLabel')}</label>
-              {PHASE_FORM_CONFIG.map(p => (
-                <div key={p.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:7 }}>
-                  <span style={{ background:p.bg, color:p.color, borderRadius:6, padding:'3px 9px', fontSize:11, fontWeight:800, minWidth:82, textAlign:'center', flexShrink:0 }}>{p.label}</span>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <DateField value={editForm.phases?.[p.key]||''} clearable placeholder="—"
-                      onChange={v => setEditForm(f => { const ph={...(f.phases||{})}; if (v) ph[p.key]=v; else delete ph[p.key]; return {...f, phases:ph} })} />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="form-group">
-              <label htmlFor="cal-edit-location">{t('calendar.locationLabel')}</label>
-              <input id="cal-edit-location" value={editForm.location||''} onChange={e => setEditForm(f => ({...f, location:e.target.value}))} placeholder={t('calendar.locationPlaceholder')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="cal-edit-notes">{t('calendar.notesLabel')}</label>
-              <textarea id="cal-edit-notes" value={editForm.notes||''} onChange={e => setEditForm(f => ({...f, notes:e.target.value}))} rows={2} />
-            </div>
-            <CollapsibleFormSection label={t('events.extraDetailsLabel')} open={extraInfoOpen} onToggle={() => setExtraInfoOpen(o => !o)}
-              hasValue={!!((editForm.quoteRef||'').trim() || (editForm.managerName||'').trim())}>
-              <div className="form-group">
-                <label htmlFor="cal-edit-quote">{t('events.quoteRefLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-                <input id="cal-edit-quote" value={editForm.quoteRef||''} onChange={e => setEditForm(f => ({...f, quoteRef:e.target.value}))} placeholder={t('events.quoteRefPlaceholder')} />
-              </div>
-              <div className="form-group">
-                <label>{t('events.eventManagerLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('common.optional')}</span></label>
-                <EventManagerField teamId={teamId} name={editForm.managerName || ''} phone={editForm.managerPhone || ''} email={editForm.managerEmail || ''}
-                  onChange={v => setEditForm(f => ({ ...f, managerName: v.name, managerPhone: v.phone, managerEmail: v.email }))} />
-              </div>
-            </CollapsibleFormSection>
-            <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:8 }}
+            <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:20 }}
               disabled={saving || !editForm.name?.trim() || !editForm.date}>
               {saving ? t('common.saving') : t('calendar.saveChanges')}
             </button>

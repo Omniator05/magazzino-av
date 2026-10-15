@@ -1258,3 +1258,16 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
 }
 .rc-aside-slide.open { width: 460px; }
 @media (prefers-reduced-motion: reduce) { .rc-aside-slide { transition: none; } }
+
+/* Form evento nella colonna laterale del Calendario: campi bianchi con bordo
+   sottile (invece del grigio), stesso linguaggio delle card. I selettori
+   [data-theme="light"] battono le regole globali degli input. */
+[data-theme="light"] .rc-ev-form input:not([type="checkbox"]):not(.tf-input),
+[data-theme="light"] .rc-ev-form textarea { background: #fff; border: 1px solid #e0ddd6; border-radius: 10px; font-size: 14px; padding: 10px 12px; }
+[data-theme="light"] .rc-ev-form input:not([type="checkbox"]):focus,
+[data-theme="light"] .rc-ev-form textarea:focus { border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+.rc-ev-form .df-trigger, .rc-ev-form .tf-trigger { background: #fff !important; }
+/* Pulsanti fissi in fondo alla colonna. Sotto ~1520px di larghezza la tab bar
+   fluttuante (600px al centro) arriva fino alla colonna: più spazio sotto. */
+.rc-side-footer { flex-shrink: 0; padding: 14px 28px 22px; border-top: 1px solid #e0ddd6; background: #fff; }
+@media (max-width: 1520px) { .rc-side-footer { padding-bottom: 104px; } }

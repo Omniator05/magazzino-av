@@ -29,7 +29,13 @@ const fmtFull = ymd => new Date(ymd + 'T12:00:00').toLocaleDateString('it-IT', {
 // tap successivo su un giorno diverso = estende l'intervallo fino a lì, con
 // le date intermedie leggermente colorate; tap successivo ancora riparte da
 // zero con un nuovo giorno singolo.
-export default function DateRangeField({ start, end, onChange, min, placeholder = 'Seleziona periodo' }) {
+// endOnly: campo solo per la DATA DI FINE di un periodo con inizio già scelto
+// (`start`, non modificabile da qui): il calendario si apre con l'inizio già
+// selezionato, i giorni prima dell'inizio non sono scelgibili e muovendo il
+// mouse si vede l'intervallo estendersi (anteprima "booking"). Un tocco sul
+// giorno d'inizio = giorno singolo (`singleDayLabel` lo fa anche da bottone).
+export default function DateRangeField({ start, end, onChange, min: minProp, placeholder = 'Seleziona periodo', endOnly = false, singleDayLabel = 'Solo un giorno' }) {
+  const min = endOnly ? start : minProp
   const [open, setOpen] = useState(false)
   const [selecting, setSelecting] = useState(false) // true = primo giorno già scelto, in attesa del secondo tap
   const [hoverDate, setHoverDate] = useState(null)
@@ -69,7 +75,7 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
   const openPopup = () => {
     const initDate = start ? new Date(start + 'T12:00:00') : new Date()
     setView({ year: initDate.getFullYear(), month: initDate.getMonth() })
-    setSelecting(false)
+    setSelecting(endOnly)
     setHoverDate(null)
     setOpen(o => !o)
   }
@@ -79,6 +85,12 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
 
   const tapDay = (ymd) => {
     if (min && ymd < min) return
+    if (endOnly) {
+      onChange(start, ymd)
+      setHoverDate(null)
+      setOpen(false)
+      return
+    }
     if (!selecting) {
       onChange(ymd, ymd)
       setSelecting(true)
@@ -98,11 +110,13 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
 
   // Estremi da evidenziare: durante la selezione (secondo tap non ancora
   // dato) l'anteprima segue il giorno sotto al mouse, come in Calendar.jsx.
-  const previewEnd = selecting ? (hoverDate || start) : end
+  const previewEnd = selecting ? (hoverDate || (endOnly ? (end || start) : start)) : end
   const lo = start && previewEnd ? (start <= previewEnd ? start : previewEnd) : start
   const hi = start && previewEnd ? (start <= previewEnd ? previewEnd : start) : start
 
-  const label = start
+  const label = endOnly
+    ? (end && end !== start ? fmtFull(end) : placeholder)
+    : start
     ? (!end || start === end ? fmtFull(start) : `${fmtShort(start)} – ${fmtFull(end)}`)
     : placeholder
 
@@ -185,13 +199,16 @@ export default function DateRangeField({ start, end, onChange, min, placeholder 
             <button
               type="button"
               className="drf-nav-btn"
-              onClick={() => { if (!(min && today < min)) { onChange(today, today); setSelecting(false); setHoverDate(null); setOpen(false) } }}
-              disabled={min && today < min}
-              style={{ flex: 1, padding: '6px', borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 12, fontWeight: 700, opacity: (min && today < min) ? 0.4 : 1 }}
+              onClick={() => {
+                if (endOnly) { onChange(start, start); setHoverDate(null); setOpen(false); return }
+                if (!(min && today < min)) { onChange(today, today); setSelecting(false); setHoverDate(null); setOpen(false) }
+              }}
+              disabled={!endOnly && min && today < min}
+              style={{ flex: 1, padding: '6px', borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 12, fontWeight: 700, opacity: (!endOnly && min && today < min) ? 0.4 : 1 }}
             >
-              Oggi
+              {endOnly ? singleDayLabel : 'Oggi'}
             </button>
-            {selecting && (
+            {selecting && !endOnly && (
               <button
                 type="button"
                 className="drf-nav-btn"
