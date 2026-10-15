@@ -119,8 +119,8 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
       {hasManager && (
         <Row icon={<User size={15} />} label={t('eventSummary.managerLabel')}>
           {manager.name && <p style={valueStyle}>{manager.name}</p>}
-          {manager.phone && <p style={{ margin: '3px 0 0', fontSize: 13, color: '#6b6b6b', display: 'flex', alignItems: 'center', gap: 5 }}><Phone size={12} /> {manager.phone}</p>}
-          {manager.email && <p style={{ margin: '3px 0 0', fontSize: 13, color: '#6b6b6b', display: 'flex', alignItems: 'center', gap: 5 }}><Mail size={12} /> {manager.email}</p>}
+          {manager.phone && <p style={{ margin: '3px 0 0', fontSize: 13 }}><a href={`tel:${manager.phone.replace(/\s+/g, '')}`} style={{ color: '#1a1a1a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><Phone size={12} /> {manager.phone}</a></p>}
+          {manager.email && <p style={{ margin: '3px 0 0', fontSize: 13 }}><a href={`mailto:${manager.email}`} style={{ color: '#1a1a1a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><Mail size={12} /> {manager.email}</a></p>}
         </Row>
       )}
       {people.length > 0 && (

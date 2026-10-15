@@ -91,7 +91,11 @@ export default function StaffAssignPanel({
   const setShared = (field, value) => {
     const prevValue = field === 'startTime' ? startTime : endTime
     if (field === 'startTime') setStartTime(value); else setEndTime(value)
-    setRows(prev => prev.map(r => (r[field] === prevValue ? { ...r, [field]: value } : r)))
+    // Cambiando l'orario generale lo seguono tutte le persone che avevano quello
+    // di prima, oppure ancora l'orario "tutto il giorno" di partenza (00:00 / 23:59)
+    // che non è una scelta di nessuno.
+    const legacy = field === 'startTime' ? '00:00' : '23:59'
+    setRows(prev => prev.map(r => (r[field] === prevValue || r[field] === legacy ? { ...r, [field]: value } : r)))
   }
   const updateRow = (blockId, patch) => setRows(prev => prev.map(r => (r.blockId === blockId ? { ...r, ...patch } : r)))
 
@@ -105,7 +109,9 @@ export default function StaffAssignPanel({
   const exactMatch = candidates.find(c => c.name.toLowerCase() === q.toLowerCase())
 
   const add = async person => {
-    await onAddPerson(person)
+    // La persona nasce con l'orario generale che si vede ORA nel campo (anche se non
+    // ancora salvato), non con quello vecchio della card.
+    await onAddPerson(person, { startTime, endTime })
     setQuery('')
   }
 

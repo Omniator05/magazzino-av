@@ -543,7 +543,7 @@ export default function WorkerCalendar() {
                   const rowText = it => {
                     if (!it.phaseLabel) return it.event.name
                     const coincides = dayEventsOnly.some(e => e.event.id === it.event.id)
-                    return coincides ? it.phaseLabel : it.event.name
+                    return coincides ? it.phaseLabel : `${it.phaseLabel} · ${it.event.name}`
                   }
                   return (
                     <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>

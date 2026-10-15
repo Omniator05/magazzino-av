@@ -94,7 +94,7 @@ export default function EventAssignSheet({ event, blocks, workers, unavailabilit
     externalWorkerName: p.kind === 'external' ? p.name : null,
   })
 
-  const addPerson = async person => {
+  const addPerson = async (person, times) => {
     let p = person
     if (p.kind === 'external' && !p.id) {
       const id = await getOrCreateExternalWorker(teamId, p.name, user.uid, externalWorkers)
@@ -111,7 +111,7 @@ export default function EventAssignSheet({ event, blocks, workers, unavailabilit
       if (!ok) return
     }
     await createAssignmentBlock({
-      teamId, date: item.date, startTime: item.startTime, endTime: item.endTime, ...personFields(p),
+      teamId, date: item.date, startTime: times?.startTime || item.startTime, endTime: times?.endTime || item.endTime, ...personFields(p),
       eventId: event.id, label: '', ...(item.type === 'phase' ? { phase: item.phaseKey } : {}), createdBy: user.uid,
     }, ctx())
   }

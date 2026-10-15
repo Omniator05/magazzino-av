@@ -100,7 +100,13 @@ export async function updateAssignmentBlock(id, oldBlock, newData, { eventsById,
   // Se cambia worker o evento collegato vanno ricalcolati sia il legame
   // vecchio che quello nuovo (potrebbero essere persone/eventi diversi).
   await syncEventAssignment(eventsById, after, oldBlock.workerId, oldBlock.eventId, { notify: !merged.phase })
-  await syncEventAssignment(eventsById, after, newData.workerId ?? oldBlock.workerId, newData.eventId ?? oldBlock.eventId, { notify: !merged.phase })
+  // Stessa coppia persona/evento di prima: già sincronizzata sopra, rifarlo
+  // manderebbe due volte "Evento assegnato".
+  const newWorker = newData.workerId ?? oldBlock.workerId
+  const newEvent = newData.eventId ?? oldBlock.eventId
+  if (newWorker !== oldBlock.workerId || newEvent !== oldBlock.eventId) {
+    await syncEventAssignment(eventsById, after, newWorker, newEvent, { notify: !merged.phase })
+  }
 
   // Una persona che entra in un blocco "vuoto" (task creato prima, poi
   // assegnato) è una nuova assegnazione; altrimenti, se cambia l'orario, si

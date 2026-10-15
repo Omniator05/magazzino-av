@@ -68,11 +68,13 @@ async function attachForegroundPush() {
   foregroundAttached = true
   try {
     onMessage(getMessaging(app), async payload => {
-      const { title, body } = payload.notification || {}
-      const url = payload.fcmOptions?.link || payload.data?.url || '/'
+      const d = payload.data || {}
+      const title = d.title || payload.notification?.title
+      const body = d.body || payload.notification?.body
+      const url = d.url || payload.fcmOptions?.link || '/'
       const reg = await navigator.serviceWorker.getRegistration(PUSH_SCOPE)
       reg?.showNotification(title || 'Roadcase', {
-        tag: `${title || 'Roadcase'}|${body || ''}`,
+        tag: d.tag || `${title || 'Roadcase'}|${body || ''}`,
         body: body || '', icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', data: { url },
       })
     })

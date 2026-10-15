@@ -23,16 +23,19 @@ const messaging = firebase.messaging()
 
 // Solo messaggi arrivati ad app chiusa/in background — in primo piano ci
 // pensa già il banner in-app di WorkerScanner, non serve duplicare l'avviso.
+// I messaggi sono SOLO "data" (vedi api/push.js): l'SDK non mostra niente da
+// sé, la notifica la mostra questo handler una volta sola. (`payload.notification`
+// resta come ripiego per messaggi vecchi ancora in viaggio.)
 messaging.onBackgroundMessage(payload => {
-  const { title, body } = payload.notification || {}
+  const d = payload.data || {}
+  const title = d.title || payload.notification?.title
+  const body = d.body || payload.notification?.body
   self.registration.showNotification(title || 'Roadcase', {
-    // Stesso tag di quello impostato dal server (api/push.js): se l'SDK ha già
-    // mostrato la notifica da sé, questa la sostituisce invece di duplicarla.
-    tag: `${title || 'Roadcase'}|${body || ''}`,
+    tag: d.tag || `${title || 'Roadcase'}|${body || ''}`,
     body: body || '',
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
-    data: { url: payload.fcmOptions?.link || payload.data?.url || '/' },
+    data: { url: d.url || payload.fcmOptions?.link || '/' },
   })
 })
 

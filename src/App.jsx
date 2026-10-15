@@ -212,7 +212,9 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AnimatedPage>
-        {!onScannerRoute && <TabBar />}
+        {/* Lo scanner del magazziniere (/events/:id) è a tutto schermo: c'è già il
+            bottone indietro, la tab bar distrae e ruba spazio. */}
+        {!onScannerRoute && !/^\/events\/[^/]+$/.test(pathname) && <TabBar />}
       </>
     )
   }

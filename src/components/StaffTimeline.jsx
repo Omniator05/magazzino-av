@@ -661,14 +661,16 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // togglePersonOnItem). Su un EVENTO/FASE eredita l'orario della card; su
   // un TASK, se esiste ancora il blocco "vuoto" di partenza lo riempie
   // invece di crearne un secondo.
-  const addPersonToItem = async (item, person) => {
+  const addPersonToItem = async (item, person, times) => {
+    const st = times?.startTime || item.startTime
+    const et = times?.endTime || item.endTime
     const eventName = item.type === 'task' ? (item.block.label || '') : item.event.name
     if (!(await confirmAvailability(person, item.date, eventName))) return
     if (item.type === 'task') {
       const placeholder = item.group.find(b => !b.workerId && !b.externalWorkerId)
-      if (placeholder) { await updateAssignmentBlock(placeholder.id, placeholder, { ...personFields(person), taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId }, blocksCtx()); return }
+      if (placeholder) { await updateAssignmentBlock(placeholder.id, placeholder, { ...personFields(person), startTime: st, endTime: et, taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId }, blocksCtx()); return }
       await createAssignmentBlock({
-        teamId, date: item.date, startTime: item.startTime, endTime: item.endTime,
+        teamId, date: item.date, startTime: st, endTime: et,
         ...personFields(person),
         eventId: null, taskGroupId: item.taskGroupId, label: item.block.label || '', description: item.block.description || '',
         taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId, createdBy: user.uid,
@@ -676,7 +678,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       return
     }
     await createAssignmentBlock({
-      teamId, date: item.date, startTime: item.startTime, endTime: item.endTime,
+      teamId, date: item.date, startTime: st, endTime: et,
       ...personFields(person),
       eventId: item.event.id, label: '', ...(item.type === 'phase' ? { phase: item.phaseKey } : {}), createdBy: user.uid,
     }, blocksCtx())
@@ -719,7 +721,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
 
   // Aggiunta dalla colonna (campo di ricerca): un nome nuovo diventa un
   // esterno salvato in anagrafica e riusabile.
-  const addFromPanel = async (person) => {
+  const addFromPanel = async (person, times) => {
     if (!panelItem) return
     let resolved = person
     if (person.kind === 'external' && !person.id) {
@@ -728,7 +730,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       setShownExternalIds(ids => (ids.includes(id) ? ids : [...ids, id]))
       resolved = { ...person, id }
     }
-    await addPersonToItem(panelItem, resolved)
+    await addPersonToItem(panelItem, resolved, times)
   }
 
   // Salva la bozza della colonna: orari/note di ogni persona + (per un task)

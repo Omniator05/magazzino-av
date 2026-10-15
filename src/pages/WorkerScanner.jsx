@@ -1008,7 +1008,7 @@ export default function WorkerScanner() {
   const srOnlyStyle = { position:'absolute', width:1, height:1, padding:0, margin:-1, overflow:'hidden', whiteSpace:'nowrap', border:0, clip:'rect(0,0,0,0)' }
 
   return (
-    <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column', paddingBottom:140 }}>
+    <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column', paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 48px)' }}>
 
       {saveError && (
         <div role="alert" style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:999, background:'rgba(40,16,20,0.97)', border:'1.5px solid var(--red)', borderRadius:14, padding:'12px 18px', maxWidth:'90vw', boxShadow:'0 8px 32px rgba(0,0,0,0.35)', display:'flex', alignItems:'center', gap:10 }}>

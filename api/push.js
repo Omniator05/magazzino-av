@@ -48,18 +48,17 @@ async function tokensForTeam(db, teamId, userIds) {
 async function sendToTokenDocs(admin, db, tokenDocs, { title, body, url }) {
   if (tokenDocs.length === 0) return 0
   const tokens = tokenDocs.map(d => d.id)
+  // Messaggio SOLO "data" (niente campo `notification`): con `notification` l'SDK
+  // di Firebase mostra da sé una notifica automatica E poi richiama il nostro
+  // onBackgroundMessage, che ne mostrava una seconda — due notifiche per ogni
+  // evento (anche con lo stesso `tag`, l'automatica non lo porta). Senza
+  // `notification` la mostra una volta sola il nostro service worker (app
+  // chiusa) o l'handler in primo piano (app aperta). Il `tag` uguale fa sì che
+  // due registrazioni dello stesso dispositivo non si accumulino.
   const resp = await admin.messaging().sendEachForMulticast({
     tokens,
-    notification: { title, body },
-    webpush: {
-      // `tag` uguale per la stessa notifica: se il dispositivo ne mostrasse due
-      // (es. quella automatica dell'SDK + quella del service worker, o due
-      // registrazioni dello stesso telefono) la seconda SOSTITUISCE la prima
-      // invece di accumularsi. La stessa formula è nel service worker e in
-      // pushNotifications.js (messaggi con l'app aperta).
-      notification: { icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', tag: `${title}|${body}` },
-      fcmOptions: url ? { link: url } : undefined,
-    },
+    data: { title: String(title), body: String(body), url: url || '/', tag: `${title}|${body}` },
+    webpush: { headers: { Urgency: 'high' } },
   })
   const deletions = []
   resp.responses.forEach((r, i) => {

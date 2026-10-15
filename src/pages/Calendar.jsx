@@ -849,10 +849,10 @@ export default function Calendar() {
                     .filter(group => !mergedEventIds.has(group[0].event.id))
                     .map(group => {
                       if (group.length > 1) {
-                        return { key: `${group[0].event.id}-phases`, name: group[0].event.name, rank: 1, split: group.map(p => p.color) }
+                        return { key: `${group[0].event.id}-phases`, name: `${group.map(p => p.label).join('/')} · ${group[0].event.name}`, rank: 1, split: group.map(p => p.color) }
                       }
                       const p = group[0]
-                      return { key: `${p.event.id}-${p.key}`, name: p.event.name, rank: 1, color: p.color }
+                      return { key: `${p.event.id}-${p.key}`, name: `${p.label} · ${p.event.name}`, rank: 1, color: p.color }
                     })
                   // Ordine di priorità fisso: evento vero > fase (montaggio/
                   // smontaggio) > task libero > rent/install > promemoria
