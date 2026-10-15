@@ -624,7 +624,7 @@ export default function Inventory() {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <div className="page-header rc-page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>{t('inventory.title')}</h1><p>{t('inventory.itemsCount', { count: items.length })}</p></div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -634,8 +634,8 @@ export default function Inventory() {
                 onClick={() => setShowActionsMenu(v => !v)}
                 aria-label={t('inventory.actionsMenuAria')}
                 aria-expanded={showActionsMenu}
-                className="btn btn-secondary"
-                style={{ padding:'10px 13px', fontSize:18, lineHeight:1 }}
+                className="rc-pill-btn"
+                style={{ padding:'9px 14px', fontSize:18, lineHeight:1 }}
               >⋯</button>
               {showActionsMenu && (
                 <>
@@ -646,8 +646,8 @@ export default function Inventory() {
                   />
                   <div style={{
                     position:'absolute', top:'calc(100% + 6px)', right:0, zIndex:100,
-                    background:'var(--card)', border:'1px solid var(--border)',
-                    borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
+                    background:'#fff', border:'1px solid #e0ddd6',
+                    borderRadius:14, boxShadow:'0 12px 32px rgba(0,0,0,0.20)',
                     minWidth:190, overflow:'hidden',
                   }}>
                     <button
@@ -678,7 +678,7 @@ export default function Inventory() {
 
       <FabButton onClick={() => setShowAddMenu(true)} ariaLabel={t('inventory.addButton')} />
 
-      <div className="search-bar" style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
+      <div className="search-bar rc-inv-search" style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
         <div style={{ flex:1, minWidth:0 }}>
           <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} />
@@ -700,8 +700,8 @@ export default function Inventory() {
               setShowFilterMenu(v => !v)
             }}
             aria-label={t('inventory.filterButtonLabel')}
-            className="btn btn-secondary"
-            style={{ position:'relative', width:44, height:44, padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+            className="rc-pill-btn"
+            style={{ position:'relative', width:42, height:42, padding:0, flexShrink:0 }}
           >
             <Filter size={17} />
             {advancedFiltersActive && (
@@ -723,8 +723,8 @@ export default function Inventory() {
                 <div onClick={() => setShowFilterMenu(false)} style={{ position:'fixed', inset:0, zIndex:99 }} />
                 <div style={{
                   position:'fixed', top:filterMenuPos.top, right:filterMenuPos.right, zIndex:100,
-                  background:'var(--card)', border:'1px solid var(--border)', borderRadius:12,
-                  boxShadow:'0 8px 24px rgba(0,0,0,0.18)', width:250, padding:14,
+                  background:'#fff', border:'1px solid #e0ddd6', borderRadius:14,
+                  boxShadow:'0 12px 32px rgba(0,0,0,0.20)', width:250, padding:14,
                   maxHeight:'70vh', overflowY:'auto',
                   opacity: filterMenuEntered ? 1 : 0,
                   transition:'opacity 150ms ease',
@@ -856,7 +856,7 @@ export default function Inventory() {
       </div>
 
       {/* Filtri rapidi - scrollabili orizzontalmente */}
-      <div style={{ overflowX:'auto', background:'var(--bg2)', borderBottom:'1px solid var(--border)', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+      <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
         <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
           { key:'all',    label:t('inventory.filterAll'), count: items.length },
@@ -867,14 +867,14 @@ export default function Inventory() {
           <button key={f.key} onClick={() => setActiveFilter(f.key)} aria-pressed={activeFilter === f.key}
             style={{
               padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
-              background: activeFilter === f.key ? (f.bg || 'var(--accent)') : 'var(--card2)',
-              color: activeFilter === f.key ? (f.color || '#fff') : 'var(--text2)',
-              border: `1px solid ${activeFilter === f.key ? (f.border || 'var(--accent)') : 'var(--border)'}`,
+              background: activeFilter === f.key ? (f.bg || '#e63946') : '#eceae6',
+              color: activeFilter === f.key ? (f.color || '#fff') : '#6b6b6b',
+              border: `1px solid ${activeFilter === f.key ? (f.border || '#e63946') : 'transparent'}`,
               display:'flex', alignItems:'center', gap:5,
             }}>
             {f.label}
             {f.count > 0 && (
-              <span style={{ background: activeFilter === f.key ? 'rgba(0,0,0,0.15)' : 'var(--card3)', borderRadius:10, padding:'1px 6px', fontSize:11 }}>
+              <span style={{ background: activeFilter === f.key ? 'rgba(0,0,0,0.12)' : '#e0ddd6', borderRadius:10, padding:'1px 6px', fontSize:11 }}>
                 {f.count}
               </span>
             )}
@@ -884,7 +884,7 @@ export default function Inventory() {
       </div>
 
       {(advancedFiltersActive ? sortedFlat.length === 0 : filtered.length === 0)
-        ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
+        ? <div className="rc-inv-card" style={{ background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
             <div className="empty-state">
               <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p>
               {/* Solo se il magazzino è VERAMENTE vuoto — non quando questo
@@ -894,7 +894,7 @@ export default function Inventory() {
             </div>
           </div>
         : advancedFiltersActive
-        ? <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
+        ? <div className="rc-inv-card" style={{ background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
             {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={activeFilter === 'out' ? getOutEventNames(item) : null} />)}
           </div>
         : groupedFiltered.map(({ cat, catItems, isForgottenGroup, needsAttention }) => {
@@ -905,14 +905,14 @@ export default function Inventory() {
             const defaultOpen = isForgottenGroup || needsAttention || narrowed
             const open = manualCollapse[cat] != null ? !manualCollapse[cat] : defaultOpen
             return (
-              <div key={cat} style={{ background:'var(--card)', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid var(--border)', borderRadius:'var(--radius)', margin:'12px 16px 0', overflow:'hidden' }}>
+              <div key={cat} className="rc-inv-card" style={{ background:'#fff', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid #e0ddd6', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
                 {/* Intestazione categoria (o gruppo "dimenticati", sempre in cima) —
                     cliccabile per aprire/chiudere, non solo decorativa. */}
                 <button type="button" className="btn-no-anim" onClick={() => setManualCollapse(c => ({ ...c, [cat]: open }))}
                   aria-expanded={open}
-                  style={{ width:'100%', padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : 'var(--bg2)', borderBottom: open ? `1px solid ${isForgottenGroup ? 'rgba(245,166,35,0.3)' : 'var(--border)'}` : 'none', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
+                  style={{ width:'100%', padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : '#faf9f7', borderBottom: open ? `1px solid ${isForgottenGroup ? 'rgba(245,166,35,0.3)' : '#e0ddd6'}` : 'none', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
                   {isForgottenGroup && <span style={{ color:'var(--accent2)', display:'flex' }}><Warn size={14} /></span>}
-                  <span style={{ fontWeight:700, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
+                  <span style={{ fontWeight:800, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : '#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
                   {!isForgottenGroup && needsAttention && (
                     <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent2)', flexShrink:0 }} />
                   )}
@@ -937,18 +937,24 @@ export default function Inventory() {
         const detailsOpen = modalSectionToggle.details === true
         const deadlinesOpen = modalSectionToggle.deadlines === true
         const linkedOpen = modalSectionToggle.linked === true
-        const sectionHeader = (key, label, open, count) => (
-          <button type="button" className="btn-no-anim" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
-            aria-expanded={open}
-            style={{ width:'100%', padding:'4px 0 10px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
-            <span style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>{label}</span>
-            {count > 0 && <span style={{ fontSize:12, color:'var(--text2)', fontWeight:600 }}>· {count}</span>}
-            <span style={{ marginLeft:'auto', color:'var(--text3)', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
-          </button>
+        // Sezioni a scomparsa come schede arrotondate (stesso linguaggio della
+        // colonna del Calendario): intestazione sempre visibile, contenuto
+        // dentro la scheda quando è aperta.
+        const section = (key, label, open, count, body) => (
+          <div style={{ border:'1px solid #e0ddd6', borderRadius:14, background:'#faf9f6', overflow:'hidden' }}>
+            <button type="button" className="btn-no-anim" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
+              aria-expanded={open}
+              style={{ width:'100%', padding:'13px 14px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left', borderBottom: open ? '1px solid #e0ddd6' : 'none' }}>
+              <span style={{ fontSize:12.5, fontWeight:800, color:'#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</span>
+              {count > 0 && <span style={{ fontSize:11, fontWeight:800, color:'#6b6b6b', background:'#eceae6', borderRadius:20, padding:'1px 8px' }}>{count}</span>}
+              <span style={{ marginLeft:'auto', color:'#9a9a9a', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
+            </button>
+            {open && <div style={{ padding:'14px 14px 2px' }}>{body}</div>}
+          </div>
         )
         return (
         <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
-          <div className={`modal${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
+          <div className={`modal rc-sheet${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
             <button className="close-btn" onClick={myDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
 
@@ -974,10 +980,10 @@ export default function Inventory() {
                       <button key={u} type="button" onClick={() => setForm({...form, consumableUnit:u})}
                         aria-pressed={form.consumableUnit === u}
                         style={{
-                          flex:1, padding:'10px 8px', borderRadius:8, fontSize:13, fontWeight:700,
-                          background: form.consumableUnit === u ? 'var(--accent)' : 'var(--card2)',
-                          color: form.consumableUnit === u ? '#fff' : 'var(--text2)',
-                          border: `1px solid ${form.consumableUnit === u ? 'var(--accent)' : 'var(--border)'}`,
+                          flex:1, padding:'10px 8px', borderRadius:10, fontSize:13, fontWeight:700,
+                          background: form.consumableUnit === u ? '#e63946' : '#eceae6',
+                          color: form.consumableUnit === u ? '#fff' : '#6b6b6b',
+                          border:'none',
                         }}>
                         {t(`inventory.consumableUnit_${u}`)}
                       </button>
@@ -991,35 +997,19 @@ export default function Inventory() {
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <button onClick={() => setForm({...form, qty:Math.max(1,form.qty-1)})} aria-label={t('eventDetail.decreaseQtyAria')}
-                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                    <input type="number" min="1" value={form.qty}
-                      onChange={e => setForm({...form, qty:Math.max(1,parseInt(e.target.value)||1)})}
-                      onFocus={e => e.target.select()}
-                      style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
-                    <button onClick={() => setForm({...form, qty:form.qty+1})} aria-label={t('eventDetail.increaseQtyAria')}
-                      style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                  </div>
+                  <Stepper value={form.qty} min={1} onChange={qty => setForm({...form, qty, brokenQty: Math.min(form.brokenQty, qty)})}
+                    decAria={t('eventDetail.decreaseQtyAria')} incAria={t('eventDetail.increaseQtyAria')} />
                 </div>
                 <div className="form-group">
-                  <label style={{ color: form.brokenQty > 0 ? 'var(--red)' : undefined }}>
+                  <label style={{ color: form.brokenQty > 0 ? '#e63946' : undefined }}>
                     {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
                   </label>
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <button onClick={() => setForm({...form, brokenQty:Math.max(0,form.brokenQty-1)})} aria-label={t('inventory.decreaseBrokenAria')}
-                      style={{ width:44, height:44, borderRadius:8, background: form.brokenQty > 0 ? 'rgba(248,113,113,0.15)' : 'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
-                    <input type="number" min="0" max={form.qty} value={form.brokenQty}
-                      onChange={e => setForm({...form, brokenQty:Math.min(form.qty,Math.max(0,parseInt(e.target.value)||0))})}
-                      onFocus={e => e.target.select()}
-                      style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1, color: form.brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }} />
-                    <button onClick={() => setForm({...form, brokenQty:Math.min(form.qty,form.brokenQty+1)})} aria-label={t('inventory.increaseBrokenAria')}
-                      style={{ width:44, height:44, borderRadius:8, background:'rgba(248,113,113,0.15)', border:'1px solid var(--border)', color:'var(--red)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                  </div>
+                  <Stepper tone="red" value={form.brokenQty} min={0} max={form.qty} onChange={brokenQty => setForm({...form, brokenQty})}
+                    decAria={t('inventory.decreaseBrokenAria')} incAria={t('inventory.increaseBrokenAria')} />
                 </div>
               </div>
               {form.brokenQty > 0 && (
-                <div style={{ background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:8, padding:'8px 12px', marginBottom:4, fontSize:13, color:'var(--red)', display:'flex', alignItems:'center', gap:6 }}>
+                <div style={{ background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', borderRadius:10, padding:'9px 12px', marginBottom:12, fontSize:13, fontWeight:600, color:'#e63946', display:'flex', alignItems:'center', gap:6 }}>
                   <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
                 </div>
               )}
@@ -1029,31 +1019,16 @@ export default function Inventory() {
               {form.category === 'Consumabili' && (
                 <div className="form-group">
                   <label>{t('inventory.minStockLabel')}</label>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
-                      <button onClick={() => setForm({...form, minStock:Math.max(0,(form.minStock||0)-1)})} aria-label={t('inventory.decreaseMinStockAria')}
-                        style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                      <input type="number" min="0" value={form.minStock||0}
-                        onChange={e => setForm({...form, minStock:Math.max(0,parseInt(e.target.value)||0)})}
-                        onFocus={e => e.target.select()}
-                        style={{ textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 4px', flex:1 }} />
-                      <button onClick={() => setForm({...form, minStock:(form.minStock||0)+1})} aria-label={t('inventory.increaseMinStockAria')}
-                        style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                    </div>
-                  </div>
-                  {(form.minStock||0) > 0 && <p style={{ color:'var(--text2)', fontSize:12, marginTop:6 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
+                  <Stepper value={form.minStock || 0} min={0} onChange={minStock => setForm({...form, minStock})}
+                    decAria={t('inventory.decreaseMinStockAria')} incAria={t('inventory.increaseMinStockAria')} />
+                  {(form.minStock||0) > 0 && <p style={{ color:'#6b6b6b', fontSize:12, marginTop:8 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
                 </div>
               )}
             </div>
 
-            <div style={{ height:1, background:'var(--border)', margin:'20px 0' }} />
-
-            <div style={{ height:1, background:'var(--border)', margin:'14px 0 4px' }} />
-
-            <div>
-              {sectionHeader('details', t('inventory.detailsPageTitle'), detailsOpen, detailsFilledCount)}
-              {detailsOpen && (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:4 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:8 }}>
+              {section('details', t('inventory.detailsPageTitle'), detailsOpen, detailsFilledCount, (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                   <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.peakPowerLabel')}</label><input type="text" inputMode="numeric" value={form.peakPowerW} onChange={e => setForm({...form,peakPowerW:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.peakPowerPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.loadCapacityLabel')}</label><input type="text" inputMode="decimal" value={form.loadCapacityKg} onChange={e => setForm({...form,loadCapacityKg:e.target.value})} placeholder={t('inventory.loadCapacityPlaceholder')} /></div>
@@ -1062,27 +1037,19 @@ export default function Inventory() {
                   <div className="form-group"><label>{t('inventory.lengthLabel')}</label><input type="text" inputMode="decimal" value={form.lengthM} onChange={e => setForm({...form,lengthM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.heightLabel')}</label><input type="text" inputMode="decimal" value={form.heightM} onChange={e => setForm({...form,heightM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
                 </div>
-              )}
-            </div>
-
-            <div style={{ height:1, background:'var(--border)', margin:'4px 0' }} />
-
-            <div>
-              {sectionHeader('deadlines', t('deadlines.sectionLabel'), deadlinesOpen, deadlinesCount)}
-              {deadlinesOpen && <DeadlinesField value={form.deadlines} onChange={deadlines => setForm({...form, deadlines})} />}
-            </div>
-
-            <div style={{ height:1, background:'var(--border)', margin:'4px 0' }} />
-
-            <div>
-              {sectionHeader('linked', t('inventory.linkedPageTitle'), linkedOpen, linkedCount)}
-              {linkedOpen && (
-                <LinkedItemsEditor
-                  items={items} selfId={selected?.id}
-                  value={form.linkedItems} onChange={links => setForm({...form, linkedItems:links})}
-                  search={linkedSearch} onSearchChange={setLinkedSearch}
-                />
-              )}
+              ))}
+              {section('deadlines', t('deadlines.sectionLabel'), deadlinesOpen, deadlinesCount, (
+                <div style={{ paddingBottom:12 }}><DeadlinesField value={form.deadlines} onChange={deadlines => setForm({...form, deadlines})} /></div>
+              ))}
+              {section('linked', t('inventory.linkedPageTitle'), linkedOpen, linkedCount, (
+                <div style={{ paddingBottom:14 }}>
+                  <LinkedItemsEditor
+                    items={items} selfId={selected?.id}
+                    value={form.linkedItems} onChange={links => setForm({...form, linkedItems:links})}
+                    search={linkedSearch} onSearchChange={setLinkedSearch}
+                  />
+                </div>
+              ))}
             </div>
 
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
@@ -1111,7 +1078,7 @@ export default function Inventory() {
         let r = 0
         return (
         <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
-          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
+          <div className={`modal rc-sheet${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
             <button className="close-btn" onClick={detailDrag.close} aria-label={t("common.close")}>✕</button>
 
             {/* ── Titolo documento ── */}
@@ -1121,7 +1088,7 @@ export default function Inventory() {
             </div>
 
             {/* ── Scheda: una riga per campo, come un documento ── */}
-            <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden', marginBottom:14 }}>
+            <div style={{ background:'#faf9f6', border:'1px solid #e0ddd6', borderRadius:16, overflow:'hidden', marginBottom:14 }}>
               {(showDetail.brand || showDetail.model) && (
                 <div style={row(r++)}>
                   <span style={rowLabel}>{t('inventory.brandModelLabel')}</span>
@@ -1245,7 +1212,7 @@ export default function Inventory() {
                   await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
                   setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
                 }}
-                style={{ width:'100%', marginBottom:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'#fff', border:'1px solid #e0ddd6', color:'#1a1a1a', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               >
                 <Wrench size={15} /> {t('inventory.repairOneButton')}
               </button>
@@ -1258,12 +1225,12 @@ export default function Inventory() {
                   await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
                   setShowDetail(d => ({ ...d, availableQty: newAvailable }))
                 }}
-                style={{ width:'100%', marginBottom:10, background:'rgba(47,107,203,0.10)', border:'1px solid rgba(47,107,203,0.3)', color:'var(--blue)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}
+                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'#fff', border:'1px solid #e0ddd6', color:'#1a1a1a', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14 }}
               >
                 {t('inventory.restoreStock', { count: outCount })}
               </button>
             )}
-            {showDetail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:14, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{showDetail.notes}</p>}
+            {showDetail.notes && <p style={{ color:'#6b6b6b', fontSize:13, marginBottom:14, padding:'10px 12px', background:'#faf9f7', border:'1px solid #e0ddd6', borderRadius:10 }}>{showDetail.notes}</p>}
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <button
@@ -1458,7 +1425,7 @@ export default function Inventory() {
       {/* Menu scelta: Oggetto o Kit */}
       {showAddMenu && (
         <div className={`modal-overlay${addMenuDrag.closing ? ' closing' : ''}`} onClick={addMenuDrag.onOverlayClick}>
-          <div className={`modal${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
+          <div className={`modal rc-sheet${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
             <button className="close-btn" onClick={addMenuDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{t('inventory.addMenuTitle')}</h2>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
@@ -1483,7 +1450,7 @@ export default function Inventory() {
       {/* ── Kit Edit Modal ─────────────────────── */}
       {showKitEditModal && editingKit && (
         <div className={`modal-overlay${kitEditDrag.closing ? ' closing' : ''}`} onClick={kitEditDrag.onOverlayClick}>
-          <div className={`modal${kitEditDrag.jiggling ? ' modal-jiggle' : ''}${kitEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
+          <div className={`modal rc-sheet${kitEditDrag.jiggling ? ' modal-jiggle' : ''}${kitEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={kitEditDrag.close} aria-label={t("common.close")}>✕</button>
               <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.editKitTitle')}</h2>
@@ -1636,7 +1603,7 @@ export default function Inventory() {
 
       {showKitModal && (
         <div className={`modal-overlay${kitDrag.closing ? ' closing' : ''}`} onClick={kitDrag.onOverlayClick}>
-          <div className={`modal${kitDrag.jiggling ? ' modal-jiggle' : ''}${kitDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
+          <div className={`modal rc-sheet${kitDrag.jiggling ? ' modal-jiggle' : ''}${kitDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
             <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={kitDrag.close} aria-label={t("common.close")}>✕</button>
               <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.newKitTitle')}</h2>
@@ -1740,6 +1707,29 @@ export default function Inventory() {
 // Riga oggetto — estratta per essere riusata sia nella vista raggruppata per
 // categoria (default) sia nella lista piatta ordinata (quando un filtro
 // avanzato è attivo), senza duplicare tutto il markup nei due rami.
+// Contatore − / valore / + in un'unica pillola grigia (stesso linguaggio dei
+// controlli del Calendario): pulsanti bianchi arrotondati, numero al centro.
+// tone="red" per i pezzi rotti (si tinge di rosso quando > 0).
+function Stepper({ value, onChange, min = 0, max, tone, decAria, incAria }) {
+  const clamp = v => Math.min(max ?? Infinity, Math.max(min, v))
+  const red = tone === 'red' && value > 0
+  const btn = {
+    width:40, height:40, borderRadius:9, background:'#fff', color: tone === 'red' ? '#e63946' : '#1a1a1a',
+    fontSize:19, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+    boxShadow:'0 1px 2px rgba(0,0,0,0.08)',
+  }
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:4, background: red ? 'rgba(230,57,70,0.10)' : '#e8e5df', borderRadius:12, padding:3 }}>
+      <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value - 1))} aria-label={decAria} style={btn}>−</button>
+      <input type="number" min={min} max={max} value={value}
+        onChange={e => onChange(clamp(parseInt(e.target.value, 10) || min))}
+        onFocus={e => e.target.select()}
+        style={{ flex:1, minWidth:0, textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 2px', border:'none', background:'transparent', boxShadow:'none', color: red ? '#e63946' : '#1a1a1a' }} />
+      <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value + 1))} aria-label={incAria} style={btn}>+</button>
+    </div>
+  )
+}
+
 function ItemRow({ item, onOpen, t, outEvents }) {
   return (
     <button type="button" className="item-row btn-no-anim" onClick={() => onOpen(item)} aria-label={t('inventory.openItemAria', { name: item.name })}>

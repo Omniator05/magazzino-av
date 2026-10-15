@@ -696,7 +696,8 @@ button.rc-action-btn:not(:disabled):active {
 }
 .qty-ctrl span { min-width: 28px; text-align: center; font-weight: 700; font-size: 16px; }
 /* Quantità digitabile a mano (invece di spingere +/- decine di volte) */
-.qty-ctrl input[type=number] {
+.qty-ctrl input[type=number],
+.qty-ctrl input[type=text] {
   width: 40px; min-width: 40px; text-align: center; font-weight: 700; font-size: 16px;
   padding: 4px 2px; border-radius: 6px;
 }
@@ -1211,3 +1212,49 @@ button.rc-action-btn:not(:disabled):active {
 .kit-components-panel .kit-comp-row:nth-child(7) { transition-delay: 0.08s; }
 .kit-components-panel .kit-comp-row:nth-child(8) { transition-delay: 0.04s; }
 .kit-comp-row:last-child { border-bottom: none; }
+/* ── Restyling "Magazzino" — stesso linguaggio del nuovo Calendario ───────────
+   Superfici bianche, righe sottili #e0ddd6, pillole #eceae6, testo #1a1a1a,
+   accento #e63946. Classi aggiunte SOLO dalla pagina Magazzino (Inventory.jsx
+   e LinkedItemsEditor.jsx): il resto dell'app non cambia. I selettori
+   [data-theme="light"] servono a battere le regole globali di input/modal. */
+.rc-page-header { background: #fff; border-bottom: 1px solid #e0ddd6; padding: 56px 20px 14px; }
+.rc-page-header h1 { font-size: 26px; letter-spacing: -0.5px; color: #1a1a1a; }
+.rc-page-header p { color: #9a9a9a; }
+@media (min-width: 768px) {
+  .rc-page-header { padding: 18px 32px 14px; }
+  .rc-page-header h1 { font-size: 24px; }
+}
+button.rc-pill-btn {
+  background: #eceae6; color: #6b6b6b; border: none; border-radius: 10px;
+  font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: none; box-shadow: none; transform: none; background: #e3e0da; }
+[data-theme="light"] .search-bar.rc-inv-search { background: rgba(245,245,243,0.92); border-bottom: none; }
+[data-theme="light"] .rc-inv-search input { background: #eceae6; border: 1px solid transparent; border-radius: 10px; font-size: 14px; }
+[data-theme="light"] .rc-inv-search input:focus { background: #fff; border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+.rc-inv-card .item-row { border-bottom-color: #eceae6; padding: 13px 16px; }
+.rc-inv-card .item-row:active { background: #faf9f7; }
+.rc-inv-card .item-icon { background: #eceae6; border-radius: 12px; }
+
+/* Fogli (modal) del Magazzino */
+[data-theme="light"] .modal.rc-sheet { background: #f4f3ef; border-top: none; border-radius: 24px 24px 0 0; padding: 8px 22px 40px; }
+.modal.rc-sheet::before { background: #d9d6cf; margin: 10px auto 16px; }
+.modal.rc-sheet h2 { font-size: 18px; font-weight: 800; margin-bottom: 18px; color: #1a1a1a; padding-right: 44px; }
+.modal.rc-sheet .close-btn { top: 20px; right: 20px; width: 30px; height: 30px; border-radius: 10px; background: #e8e5df; color: #6b6b6b; font-size: 15px; }
+.rc-sheet .form-group label { font-size: 11px; font-weight: 800; letter-spacing: 0.4px; color: #6b6b6b; margin-bottom: 6px; }
+[data-theme="light"] .rc-sheet input,
+[data-theme="light"] .rc-sheet textarea,
+[data-theme="light"] .rc-sheet select { background: #fbfaf8; border: 1px solid #e0ddd6; border-radius: 10px; padding: 11px 13px; font-size: 14.5px; }
+[data-theme="light"] .rc-sheet input:focus,
+[data-theme="light"] .rc-sheet textarea:focus,
+[data-theme="light"] .rc-sheet select:focus { background: #fff; border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+
+/* Colonna laterale dell'Archivio (desktop): larga 0 finché non c'è una
+   selezione, poi si apre da destra verso sinistra spingendo la lista. Il
+   contenuto interno ha larghezza fissa, quindi non si riflette mentre scorre. */
+.rc-aside-slide {
+  width: 0; flex-shrink: 0; overflow: hidden; position: sticky; top: 0; align-self: flex-start;
+  transition: width 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rc-aside-slide.open { width: 460px; }
+@media (prefers-reduced-motion: reduce) { .rc-aside-slide { transition: none; } }

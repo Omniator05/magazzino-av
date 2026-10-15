@@ -1,12 +1,22 @@
 import { useTranslation } from 'react-i18next'
 import { Plus } from './Icon'
 
-const stepBtn = { width:34, height:34, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }
-
 // Editor degli oggetti collegati (vedi utils/linkedItems.js): per ognuno una
 // quantità e la modalità "a ogni oggetto aggiunto" / "una sola volta".
-// value = [{ itemId, qty, mode }]. Usato nella pagina "Oggetti collegati" del
-// modal oggetto e nei modal kit.
+// value = [{ itemId, qty, mode }]. Usato nella sezione "Oggetti collegati" del
+// foglio oggetto e nei fogli kit.
+//
+// Ogni oggetto è una scheda su TRE righe fisse (nome + rimuovi / quantità /
+// modalità a tutta larghezza) invece di una riga che andava a capo in modo
+// diverso a seconda della larghezza dello schermo (la causa dell'aspetto
+// "rotto" su telefono: quantità e selettore si sovrapponevano o si
+// stringevano). Stesso linguaggio del Calendario: bianco, righe #e0ddd6,
+// pillole #eceae6, accento #e63946.
+const stepBtn = {
+  width:34, height:34, borderRadius:9, background:'#fff', color:'#1a1a1a', fontSize:18, fontWeight:700,
+  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:'0 1px 2px rgba(0,0,0,0.08)',
+}
+
 export default function LinkedItemsEditor({ items, selfId, value, onChange, search, onSearchChange }) {
   const { t } = useTranslation()
   const update = (itemId, patch) => onChange(value.map(l => l.itemId === itemId ? { ...l, ...patch } : l))
@@ -14,53 +24,63 @@ export default function LinkedItemsEditor({ items, selfId, value, onChange, sear
   return (
     <div>
       {value.length > 0 && (
-        <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:12 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:14 }}>
           {value.map(l => {
             const li = items.find(i => i.id === l.itemId)
             if (!li) return null
             return (
-              <div key={l.itemId} style={{ background:'var(--card2)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 12px' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                  <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:700, overflowWrap:'break-word' }}>{li.name}</span>
-                  <button type="button"
+              <div key={l.itemId} style={{ background:'#f4f3ef', border:'1px solid #e0ddd6', borderRadius:12, padding:'12px 12px 12px 14px' }}>
+                {/* Riga 1: nome + scollega */}
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:800, color:'#1a1a1a', overflowWrap:'anywhere' }}>{li.name}</span>
+                  <button type="button" className="btn-no-anim"
                     onClick={() => onChange(value.filter(x => x.itemId !== l.itemId))}
                     aria-label={t('inventory.removeLinkedItemAria', { name: li.name })}
-                    style={{ width:28, height:28, borderRadius:'50%', background:'var(--border)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}
+                    style={{ width:28, height:28, borderRadius:8, background:'#e8e5df', color:'#6b6b6b', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, flexShrink:0 }}
                   >✕</button>
                 </div>
-                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                    <button type="button" onClick={() => update(l.itemId, { qty: Math.max(1, l.qty - 1) })} aria-label={t('eventDetail.decreaseQtyAria')} style={stepBtn}>−</button>
+
+                {/* Riga 2: quantità */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:10 }}>
+                  <span style={{ fontSize:11, fontWeight:800, color:'#6b6b6b', textTransform:'uppercase', letterSpacing:'0.4px', flexShrink:0 }}>{t('inventory.linkedQtyLabel')}</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:3, background:'#e8e5df', borderRadius:11, padding:3, marginLeft:'auto' }}>
+                    <button type="button" className="btn-no-anim" onClick={() => update(l.itemId, { qty: Math.max(1, l.qty - 1) })} aria-label={t('eventDetail.decreaseQtyAria')} style={stepBtn}>−</button>
                     <input
                       type="number" min="1" value={l.qty}
                       aria-label={t('inventory.linkedQtyAria', { name: li.name })}
                       onChange={e => update(l.itemId, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                       onFocus={e => e.target.select()}
-                      style={{ width:52, textAlign:'center', fontWeight:800, fontSize:15, padding:'6px 4px' }}
+                      style={{ width:46, textAlign:'center', fontWeight:800, fontSize:15, padding:'4px 2px', border:'none', background:'transparent', boxShadow:'none', color:'#1a1a1a' }}
                     />
-                    <button type="button" onClick={() => update(l.itemId, { qty: l.qty + 1 })} aria-label={t('eventDetail.increaseQtyAria')} style={stepBtn}>+</button>
-                  </div>
-                  <div role="group" aria-label={t('inventory.linkedModeAria', { name: li.name })} style={{ display:'flex', flex:1, minWidth:190, background:'var(--card3)', borderRadius:10, padding:3, gap:3 }}>
-                    {['perUnit', 'once'].map(mode => (
-                      <button key={mode} type="button"
-                        onClick={() => update(l.itemId, { mode })}
-                        aria-pressed={l.mode === mode}
-                        className="btn-no-anim"
-                        style={{
-                          flex:1, padding:'7px 6px', borderRadius:8, fontSize:12, fontWeight:700,
-                          background: l.mode === mode ? 'var(--card)' : 'transparent',
-                          color: l.mode === mode ? 'var(--text)' : 'var(--text2)',
-                          boxShadow: l.mode === mode ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
-                        }}
-                      >{t(mode === 'perUnit' ? 'inventory.linkModePerUnit' : 'inventory.linkModeOnce')}</button>
-                    ))}
+                    <button type="button" className="btn-no-anim" onClick={() => update(l.itemId, { qty: l.qty + 1 })} aria-label={t('eventDetail.increaseQtyAria')} style={stepBtn}>+</button>
                   </div>
                 </div>
+
+                {/* Riga 3: modalità, a tutta larghezza, con una riga che la spiega */}
+                <div role="group" aria-label={t('inventory.linkedModeAria', { name: li.name })} style={{ display:'flex', background:'#e8e5df', borderRadius:11, padding:3, gap:3, marginTop:10 }}>
+                  {['perUnit', 'once'].map(mode => (
+                    <button key={mode} type="button"
+                      onClick={() => update(l.itemId, { mode })}
+                      aria-pressed={l.mode === mode}
+                      className="btn-no-anim"
+                      style={{
+                        flex:1, padding:'8px 6px', borderRadius:9, fontSize:12.5, fontWeight:800,
+                        background: l.mode === mode ? '#fff' : 'transparent',
+                        color: l.mode === mode ? '#1a1a1a' : '#6b6b6b',
+                        boxShadow: l.mode === mode ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+                      }}
+                    >{t(mode === 'perUnit' ? 'inventory.linkModePerUnit' : 'inventory.linkModeOnce')}</button>
+                  ))}
+                </div>
+                <p style={{ margin:'7px 2px 0', fontSize:11.5, color:'#9a9a9a', lineHeight:1.4 }}>
+                  {t(l.mode === 'once' ? 'inventory.linkModeOnceHint' : 'inventory.linkModePerUnitHint')}
+                </p>
               </div>
             )
           })}
         </div>
       )}
+
       <input
         value={search}
         onChange={e => onSearchChange(e.target.value)}
@@ -74,16 +94,16 @@ export default function LinkedItemsEditor({ items, selfId, value, onChange, sear
           i.name.toLowerCase().includes(search.trim().toLowerCase())
         ).slice(0, 8)
         return (
-          <div style={{ marginTop:6, maxHeight:170, overflowY:'auto', border:'1px solid var(--border)', borderRadius:10 }}>
+          <div style={{ marginTop:8, maxHeight:190, overflowY:'auto', border:'1px solid #e0ddd6', borderRadius:12, background:'#fbfaf8' }}>
             {results.length === 0 ? (
-              <p style={{ padding:'9px 12px', fontSize:12.5, color:'var(--text3)', fontStyle:'italic' }}>{t('inventory.linkedItemsNoResults')}</p>
+              <p style={{ padding:'11px 14px', margin:0, fontSize:12.5, color:'#9a9a9a', fontStyle:'italic' }}>{t('inventory.linkedItemsNoResults')}</p>
             ) : results.map((i, idx) => (
-              <button key={i.id} type="button"
+              <button key={i.id} type="button" className="btn-no-anim"
                 onClick={() => { onChange([...value, { itemId: i.id, qty: 1, mode: 'perUnit' }]); onSearchChange('') }}
-                style={{ display:'flex', width:'100%', alignItems:'center', justifyContent:'space-between', gap:8, padding:'9px 12px', background:'transparent', borderBottom: idx < results.length-1 ? '1px solid var(--border)' : 'none', fontSize:13, fontWeight:600, textAlign:'left', color:'var(--text)' }}
+                style={{ display:'flex', width:'100%', alignItems:'center', justifyContent:'space-between', gap:8, padding:'11px 14px', background:'transparent', borderBottom: idx < results.length - 1 ? '1px solid #eceae6' : 'none', fontSize:13.5, fontWeight:700, textAlign:'left', color:'#1a1a1a' }}
               >
                 <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i.name}</span>
-                <span style={{ color:'var(--accent)', flexShrink:0, display:'flex' }}><Plus size={14} /></span>
+                <span style={{ color:'#e63946', flexShrink:0, display:'flex' }}><Plus size={15} /></span>
               </button>
             ))}
           </div>

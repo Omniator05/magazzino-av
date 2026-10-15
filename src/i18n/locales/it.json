@@ -303,7 +303,13 @@
     "endsNextDay": "Finisce il giorno dopo",
     "pushTaskAssignedTitle": "Attività assegnata",
     "pushPhaseAssignedTitle": "{{phase}} assegnato",
-    "personNoteLabel": "Cosa devi fare"
+    "personNoteLabel": "Cosa devi fare",
+    "linkedListLabel": "Lista di carico collegata",
+    "noLinkedList": "Nessuna lista",
+    "linkedListSearch": "Cerca un evento…",
+    "linkedListNoResults": "Nessun evento trovato",
+    "linkedListWhich": "Quale lista",
+    "newTaskGhost": "Nuova attività"
   },
   "inventory": {
     "title": "Magazzino",
@@ -532,7 +538,10 @@
       "yes": "Sì",
       "no": "No"
     },
-    "pushBrokenTitle": "Oggetto rotto"
+    "pushBrokenTitle": "Oggetto rotto",
+    "linkedQtyLabel": "Quantità",
+    "linkModePerUnitHint": "Per ogni pezzo aggiunto alla lista (10 pedane × 4 gambe = 40).",
+    "linkModeOnceHint": "Si aggiunge una volta sola per evento, qualunque sia il numero di pezzi."
   },
   "eventDetail": {
     "loading": "Caricamento...",
@@ -542,7 +551,7 @@
     "phoneFieldLabel": "Tel",
     "emailFieldLabel": "Email",
     "pdf": "PDF",
-    "startLoading": "Inizia a caricare",
+    "startLoading": "Carica",
     "createdFromTemplate": "📋 Creato da template — ricordati di aggiornare la data tramite il tasto ✏️ nella pagina eventi.",
     "assign": "+ Assegna",
     "preparedStat": "Pronto",
@@ -722,7 +731,10 @@
     "readyDone": "✓ Pronto",
     "loadedButton": "Caricato",
     "returnedButton": "Rientrato",
-    "assignSheetTitle": "Assegna personale"
+    "assignSheetTitle": "Assegna personale",
+    "selectAllListAria": "Seleziona tutti gli oggetti di {{name}}",
+    "externalShort": "Esterno",
+    "qtyInputAria": "Quantità (puoi scrivere ad esempio 6x5)"
   },
   "eventSummary": {
     "timeLabel": "Orario",
@@ -1237,7 +1249,9 @@
     "decreaseQty": "Diminuisci quantità",
     "increaseQty": "Aumenta quantità",
     "listChangedToast": "La lista è stata aggiornata dall'admin",
-    "listDoneShowAll": "«{{from}}» completata — torno a «Tutte»"
+    "listDoneShowAll": "«{{from}}» completata — torno a «Tutte»",
+    "noteLabelEvent": "Nota",
+    "noteLabelWarehouse": "Nota magazzino"
   },
   "workerInventory": {
     "scan": "📷 Scansiona",
@@ -1300,7 +1314,9 @@
     "phaseDone": "Tutto rientrato",
     "todoToday": "Oggi",
     "phaseTodayBadge": "{{phase}} oggi",
-    "eventOn": "Evento:"
+    "eventOn": "Evento:",
+    "taskTag": "Attività",
+    "openLinkedList": "Apri la lista di carico"
   },
   "tasks": {
     "title": "Task",
@@ -1413,8 +1429,8 @@
   },
   "archive": {
     "title": "Archivio eventi",
-    "subtitle_one": "{{count}} evento · premi \"Usa template\" per riutilizzare una lista",
-    "subtitle_other": "{{count}} eventi · premi \"Usa template\" per riutilizzare una lista",
+    "subtitle_one": "{{count}} evento",
+    "subtitle_other": "{{count}} eventi",
     "searchPlaceholder": "Cerca per nome o location...",
     "loadingArchive": "Caricamento archivio...",
     "noResults": "Nessun risultato",
@@ -1435,7 +1451,15 @@
     "loadingMore": "⏳ Caricamento...",
     "confirmDeleteTitle": "Elimina dall'archivio",
     "confirmDeleteMessage": "Eliminare \"{{name}}\" dall'archivio?\nQuesta azione è irreversibile.",
-    "confirmDeleteLabel": "Elimina"
+    "confirmDeleteLabel": "Elimina",
+    "noItems": "Nessun oggetto in lista",
+    "notReturned": "non rientrato",
+    "openEventAria": "Mostra la lista di {{name}}",
+    "useTemplateAction": "Usa lista",
+    "deleteAction": "Elimina",
+    "phasesLabel": "Montaggio / smontaggio",
+    "vehiclesLabel": "Furgoni",
+    "selectHint": "Tocca un evento per vedere i dettagli e la lista di carico"
   },
   "scanner": {
     "title": "Scanner QR/Barcode",

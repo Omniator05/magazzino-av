@@ -303,7 +303,13 @@
     "endsNextDay": "Ends the next day",
     "pushTaskAssignedTitle": "Task assigned",
     "pushPhaseAssignedTitle": "{{phase}} assigned",
-    "personNoteLabel": "What to do"
+    "personNoteLabel": "What to do",
+    "linkedListLabel": "Linked loading list",
+    "noLinkedList": "No list",
+    "linkedListSearch": "Search an event…",
+    "linkedListNoResults": "No event found",
+    "linkedListWhich": "Which list",
+    "newTaskGhost": "New task"
   },
   "inventory": {
     "title": "Warehouse",
@@ -532,7 +538,10 @@
       "yes": "Yes",
       "no": "No"
     },
-    "pushBrokenTitle": "Item broken"
+    "pushBrokenTitle": "Item broken",
+    "linkedQtyLabel": "Quantity",
+    "linkModePerUnitHint": "For every piece added to the list (10 platforms × 4 legs = 40).",
+    "linkModeOnceHint": "Added once per event, whatever the number of pieces."
   },
   "eventDetail": {
     "loading": "Loading...",
@@ -542,7 +551,7 @@
     "phoneFieldLabel": "Phone",
     "emailFieldLabel": "Email",
     "pdf": "PDF",
-    "startLoading": "Start loading",
+    "startLoading": "Load",
     "createdFromTemplate": "📋 Created from template — remember to update the date using the ✏️ button on the events page.",
     "assign": "+ Assign",
     "preparedStat": "Ready",
@@ -722,7 +731,10 @@
     "readyDone": "✓ Ready",
     "loadedButton": "Loaded",
     "returnedButton": "Returned",
-    "assignSheetTitle": "Assign staff"
+    "assignSheetTitle": "Assign staff",
+    "selectAllListAria": "Select all items in {{name}}",
+    "externalShort": "External",
+    "qtyInputAria": "Quantity (you can type e.g. 6x5)"
   },
   "eventSummary": {
     "timeLabel": "Time",
@@ -1237,7 +1249,9 @@
     "decreaseQty": "Decrease quantity",
     "increaseQty": "Increase quantity",
     "listChangedToast": "The loading list was updated by the admin",
-    "listDoneShowAll": "“{{from}}” done — back to “All”"
+    "listDoneShowAll": "“{{from}}” done — back to “All”",
+    "noteLabelEvent": "Note",
+    "noteLabelWarehouse": "Warehouse note"
   },
   "workerInventory": {
     "scan": "📷 Scan",
@@ -1300,7 +1314,9 @@
     "phaseDone": "Everything returned",
     "todoToday": "Today",
     "phaseTodayBadge": "{{phase}} today",
-    "eventOn": "Event:"
+    "eventOn": "Event:",
+    "taskTag": "Task",
+    "openLinkedList": "Open the loading list"
   },
   "tasks": {
     "title": "Tasks",
@@ -1413,8 +1429,8 @@
   },
   "archive": {
     "title": "Event archive",
-    "subtitle_one": "{{count}} event · press \"Use template\" to reuse a list",
-    "subtitle_other": "{{count}} events · press \"Use template\" to reuse a list",
+    "subtitle_one": "{{count}} event",
+    "subtitle_other": "{{count}} events",
     "searchPlaceholder": "Search by name or location...",
     "loadingArchive": "Loading archive...",
     "noResults": "No results",
@@ -1435,7 +1451,15 @@
     "loadingMore": "⏳ Loading...",
     "confirmDeleteTitle": "Delete from archive",
     "confirmDeleteMessage": "Delete \"{{name}}\" from the archive?\nThis action cannot be undone.",
-    "confirmDeleteLabel": "Delete"
+    "confirmDeleteLabel": "Delete",
+    "noItems": "No items in the list",
+    "notReturned": "not returned",
+    "openEventAria": "Show the list for {{name}}",
+    "useTemplateAction": "Use list",
+    "deleteAction": "Delete",
+    "phasesLabel": "Setup / teardown",
+    "vehiclesLabel": "Vehicles",
+    "selectHint": "Tap an event to see its details and load list"
   },
   "scanner": {
     "title": "QR/Barcode Scanner",

@@ -2,6 +2,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useLongPress } from '../hooks/useLongPress'
 import SaveButton from '../components/SaveButton'
+import PendingButton from '../components/PendingButton'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -11,7 +12,7 @@ import { db } from '../firebase'
 import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, getDoc, runTransaction, increment, addDoc, serverTimestamp } from 'firebase/firestore'
 import { deleteEventContentFile } from '../utils/eventOrganizerStorage'
 import { toggleWorkerAssignment, isWorkerUnavailable, vehicleConflictEvent, externalVehicleConflictEvent } from '../utils/workerAssignment'
-import { deleteAssignmentBlock } from '../utils/assignmentBlocks'
+import { deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalVehicles, getOrCreateExternalVehicle } from '../utils/externalVehicles'
 import QuickExternalPopup from '../components/QuickExternalPopup'
 import { ensureInstanceList, reconcileInstanceNumbers } from '../utils/kitInstances'
@@ -232,7 +233,9 @@ export default function EventDetail() {
     })
   }
   const [editItem, setEditItem] = useState(null)
-  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances, listId }) => {
+  // keepOpen: il modal lo chiude il chiamante (SaveButton mostra prima la spunta);
+  // ritorna true solo se ha scritto, false se l'utente ha rifiutato la conferma.
+  const saveItemEdit = async ({ id, qty, eventNote, mancante, isBundle, isExtra, itemRef, instanceNumbers, hadInstances, listId }, { keepOpen = false } = {}) => {
     // L'assegnazione a unità specifiche (kit o oggetto singolo) resta solo se
     // l'admin ne ha scelta almeno una — altrimenti basta modificare la
     // quantità di un oggetto qualsiasi (es. un'americana, dove non importa
@@ -269,7 +272,7 @@ export default function EventDetail() {
         message: t('eventDetail.qtyChangeUnloadMessage', { name: localRow.name, from: localRow.qty || 1, to: qty }),
         confirmLabel: t('eventDetail.qtyChangeUnloadLabel'),
       })
-      if (!ok) return
+      if (!ok) return false
     }
     let unloadedRow = null
     await updateEventItems(current => {
@@ -322,7 +325,8 @@ export default function EventDetail() {
         listId: editItem?.listId, action: mancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
       })
     }
-    setEditItem(null)
+    if (!keepOpen) setEditItem(null)
+    return true
   }
   const itemEditDrag = useModalDrag(() => setEditItem(null), undefined, () => editItem && saveItemEdit(editItem))
   const [workers, setWorkers] = useState([])
@@ -1177,7 +1181,7 @@ export default function EventDetail() {
   const removeFromEvent = async itemId => {
     const item = eventItems.find(i => i.id === itemId)
     if (item.loaded && !item.returned) {
-      if (!(await confirm({ title: t('eventDetail.confirmStillOutTitle'), message: t('eventDetail.confirmStillOutMessage'), confirmLabel: t('eventDetail.confirmStillOutLabel'), danger: true }))) return
+      if (!(await confirm({ title: t('eventDetail.confirmStillOutTitle'), message: t('eventDetail.confirmStillOutMessage'), confirmLabel: t('eventDetail.confirmStillOutLabel'), danger: true }))) return false
       // Ripristina disponibilità — anche dei componenti se è un kit, che
       // hanno una giacenza propria indipendente dal kit nel suo insieme.
       await syncKitAwareInventory({
@@ -1192,6 +1196,7 @@ export default function EventDetail() {
       listId: rowListId(item), action: 'removed', profile, userId: user?.uid,
     })
     notifyListChanged()
+    return true
   }
 
   // Un articolo già nella lista di destinazione non si può riaggiungere (in
@@ -1507,6 +1512,31 @@ export default function EventDetail() {
     return (
       <div key={l.id} style={{ margin:'16px 16px 0' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+          {/* Selezione multipla: casella accanto al nome della lista per
+              selezionare/deselezionare in un tocco tutti gli oggetti (visibili)
+              di questa lista. Stessa casella delle righe; "–" se solo alcuni. */}
+          {selectMode && rows.length > 0 && (() => {
+            const ids = rows.map(i => i.id)
+            const selCount = ids.filter(id => bulkSelectedIds.has(id)).length
+            const allSel = selCount === ids.length
+            return (
+              <button type="button" className="rc-select-checkbox btn-no-anim" role="checkbox" aria-checked={allSel ? true : selCount > 0 ? 'mixed' : false}
+                aria-label={t('eventDetail.selectAllListAria', { name: listLabel(l) })}
+                onClick={() => setBulkSelectedIds(prev => {
+                  const next = new Set(prev)
+                  if (allSel) ids.forEach(id => next.delete(id)); else ids.forEach(id => next.add(id))
+                  return next
+                })}
+                style={{
+                  width:22, height:22, borderRadius:6, flexShrink:0, position:'relative', zIndex:20, padding:0,
+                  border: `2px solid ${selCount > 0 ? 'var(--accent)' : 'var(--border)'}`,
+                  background: selCount > 0 ? 'var(--accent)' : 'transparent',
+                  display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:14, fontWeight:900, lineHeight:1,
+                }}>
+                {allSel ? '✓' : selCount > 0 ? '–' : ''}
+              </button>
+            )
+          })()}
           {/* Titolo+conteggio tap-tap: apre/chiude il blocco sotto, invece
               di un bottoncino freccia a parte — tocco più comodo, e lascia
               "+"/"⋯" liberi come bottoni separati. zIndex sopra il velo
@@ -1660,19 +1690,19 @@ export default function EventDetail() {
           <button onClick={() => setSaveError('')} aria-label={t('common.close')} style={{ background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:16, fontWeight:700, flexShrink:0, padding:'0 2px' }}>✕</button>
         </div>
       )}
-      <div style={{ background:'var(--bg2)', padding:'52px 20px 16px', borderBottom:'1px solid var(--border)' }}>
+      <div className="rc-page-header" style={{ padding:'52px 20px 16px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-          <button onClick={() => navigate(-1)} style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14 }}>← {t('common.back')}</button>
+          <button onClick={() => navigate(-1)} className="rc-pill-btn" style={{ padding:'9px 14px', fontSize:13 }}>← {t('common.back')}</button>
           {loadListsOn && (
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={exportPDF}
-                style={{ background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.2)', color:'var(--accent)', borderRadius:10, padding:'8px 12px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+              <button onClick={exportPDF} className="rc-pill-btn"
+                style={{ padding:'9px 13px', fontSize:13, gap:5 }}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                 {t('eventDetail.pdf')}
               </button>
             <button
               onClick={() => navigate(`/events/${id}/scan`)}
-              style={{ background:'linear-gradient(135deg,rgba(79,195,247,0.2),rgba(79,195,247,0.08))', border:'1px solid rgba(79,195,247,0.35)', color:'var(--blue)', borderRadius:10, padding:'8px 14px', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}
+              className="btn-no-anim" style={{ background:'#e63946', border:'none', color:'#fff', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:800, display:'flex', alignItems:'center', gap:6 }}
             >
               <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M1 1h4v4H1zm14 0h4v4h-4zM1 15h4v4H1zM5 5h2V1h2v4h2V1h2v4h2V1h4v4h-2v2h2v2h-4V9h-2v4h2v2h-2v2h-2v-2H9v4H7v-4H5V9H3V7H1V5h2V3h2v2zm4 4H7V7h2v2zm8 8h-2v2h2v-2zm2-2h2v2h-2v-2zm2-2h-2v-2h2v2zm-4 0h-2v-2h2v2z"/></svg>
               {t('eventDetail.startLoading')}
@@ -1685,7 +1715,7 @@ export default function EventDetail() {
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10 }}>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
-              <h1 style={{ fontSize:22, fontWeight:800 }}>{event.name}</h1>
+              <h1 style={{ fontSize:24, fontWeight:800 }}>{event.name}</h1>
               {event.type === 'installation' && (
                 <span style={{ background:'rgba(90,82,201,0.15)', color:'#7c6fcd', border:'1px solid rgba(90,82,201,0.3)', borderRadius:8, padding:'2px 10px', fontSize:11, fontWeight:800, flexShrink:0 }}>INSTALLAZIONE</span>
               )}
@@ -1748,31 +1778,26 @@ export default function EventDetail() {
                 della timeline "Assegna personale" (con orario, se diverso da
                 quello dell'intero evento), vedi assignedPeople sopra. */}
             <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:8 }}>
+              {/* Persone assegnate: cerchietti con le iniziali (anello rosso se
+                  assente quel giorno), nome e orario al passaggio del mouse. Si
+                  gestiscono da "Assegna". */}
               {assignedPeople.map(p => {
                 const unavail = p.kind === 'worker' ? isWorkerUnavailable(p.id, event, unavailability) : false
+                const ini = (p.name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
                 return (
-                  <span key={p.key} style={{ display:'inline-flex', alignItems:'center', gap:5, background: unavail ? 'rgba(216,56,63,0.12)' : 'rgba(79,195,247,0.12)', border: `1px solid ${unavail ? 'rgba(216,56,63,0.35)' : 'rgba(79,195,247,0.3)'}`, borderRadius:20, padding:'3px 6px 3px 10px', fontSize:12, fontWeight:700, color: unavail ? 'var(--red)' : 'var(--blue)' }}>
-                    {unavail ? '⚠️' : '👷'} {p.name}{p.hours && <span style={{ opacity:0.75, fontWeight:600 }}>&nbsp;· {p.hours}</span>}
-                    <button onClick={() => unassignPerson(p)} aria-label={t('eventDetail.unassignWorkerAria', { name: p.name })} style={{ width:16, height:16, borderRadius:'50%', background: unavail ? 'rgba(216,56,63,0.2)' : 'rgba(79,195,247,0.25)', color: unavail ? 'var(--red)' : 'var(--blue)', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                  <span key={p.key} title={`${p.name}${p.hours ? ` · ${p.hours}` : ''}`}
+                    style={{ width:28, height:28, borderRadius:'50%', background: personColor(p.id || p.name), color:'#fff', fontSize:10.5, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow: unavail ? '0 0 0 2px #fff, 0 0 0 4px #e63946' : 'none' }}>
+                    {ini}
                   </span>
                 )
               })}
-              {/* "+ Nuova lista" (verde) prima, poi "+ Assegna" — stessa pillola */}
-              {loadListsOn && (
-                <button
-                  onClick={() => setListModal({ mode:'new', name:'' })}
-                  style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(26,158,92,0.10)', border:'1px dashed rgba(26,158,92,0.5)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--green)' }}
-                >
-                  + {t('eventDetail.newList')}
-                </button>
-              )}
               {/* Scorciatoia alla timeline "Assegna personale" (Calendar.jsx),
                   già pronta su questo evento — niente più un modal proprio
                   qui: gli orari (e gli esterni) vivono solo lì, un posto solo
                   da mantenere invece di due sistemi paralleli. */}
               <button
                 onClick={() => (isMobile ? setShowAssignSheet(true) : navigate('/calendar', { state: { assignEventId: event.id, assignDate: event.date } }))}
-                style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--card2)', border:'1px dashed var(--border)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--text2)' }}
+                className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eceae6', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'#6b6b6b' }}
               >
                 {t('eventDetail.assign')}
               </button>
@@ -1785,9 +1810,9 @@ export default function EventDetail() {
               aria-pressed={showEventNotes}
               style={{
                 flexShrink:0, width:30, height:30, borderRadius:'50%', marginTop:4,
-                background: showEventNotes ? 'var(--blue)' : 'rgba(79,195,247,0.15)',
-                border:'1px solid rgba(79,195,247,0.35)',
-                color: showEventNotes ? 'white' : 'var(--blue)',
+                background: showEventNotes ? '#1a1a1a' : '#eceae6',
+                border:'none',
+                color: showEventNotes ? 'white' : '#6b6b6b',
                 fontWeight:900, fontSize:14,
                 display:'flex', alignItems:'center', justifyContent:'center',
               }}
@@ -1945,6 +1970,10 @@ export default function EventDetail() {
           color: active ? '#fff' : danger ? 'var(--red)' : 'var(--text2)',
           border: `1px solid ${active ? 'var(--accent)' : danger ? 'rgba(220,38,38,0.25)' : 'var(--border)'}`,
         })
+        // Chip del pannello furgoni (computer): stessa forma dei bottoni stato,
+        // un tap sceglie E applica a tutti i selezionati.
+        const bulkBigBtn = { flex:'1 1 120px', minHeight:52, padding:'12px 16px', borderRadius:14, fontSize:15, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center' }
+        const vehicleChipStyle = { ...bulkBigBtn, flex:'0 1 auto', whiteSpace:'nowrap', background:'var(--card2)', color:'var(--text)', border:'1px solid var(--border)' }
         // Chip delle azioni — stessa fila su telefono e computer, solo la
         // cornice che la contiene cambia posizione (vedi sotto). "Elimina"
         // chiede conferma da sé (confirm()), non serve un pannello; "Nuova
@@ -1958,7 +1987,7 @@ export default function EventDetail() {
             )}
             <button onClick={() => setListModal({ mode:'moveSelected', name:'' })} style={chipStyle(false)}>{t('eventDetail.moveToListNew')}</button>
             <button onClick={() => setBulkAction(a => a === 'status' ? null : 'status')} aria-pressed={bulkAction === 'status'} style={chipStyle(bulkAction === 'status')}>{t('eventDetail.bulkStatusAction')}</button>
-            <button onClick={applyBulkDelete} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</button>
+            <PendingButton onClick={applyBulkDelete} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
           </div>
         )
         // Select "sposta in lista esistente" — unico tra i pannelli ancora
@@ -1974,9 +2003,9 @@ export default function EventDetail() {
               <option value="">{t('eventDetail.chooseTargetList')}</option>
               {eventLists.map(l => <option key={l.id} value={l.id}>{listLabel(l)}</option>)}
             </select>
-            <button onClick={applyBulkMove} disabled={!bulkMoveListId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: bulkMoveListId ? 1 : 0.5 }}>
+            <PendingButton onClick={applyBulkMove} disabled={!bulkMoveListId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: bulkMoveListId ? 1 : 0.5 }}>
               {t('eventDetail.apply')}
-            </button>
+            </PendingButton>
           </div>
         )
         // Pannello completo per il computer: select furgone inline (niente
@@ -1984,47 +2013,42 @@ export default function EventDetail() {
         const actionPanel = bulkAction && (
           <div>
             {bulkAction === 'vehicle' && (
-              <div style={{ display:'flex', gap:8 }}>
-                <select
-                  value={bulkVehicleId}
-                  onChange={e => {
-                    if (e.target.value === '__new_external__') { setPendingExternalVehicleFor('bulk'); return }
-                    setBulkVehicleId(e.target.value)
-                  }}
-                  style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
-                >
-                  <option value="">{t('eventDetail.chooseVehicle')}</option>
-                  {vehicles.filter(v => v.active !== false).map(v => {
-                    const conflict = vehicleConflictEvent(v.id, event, otherEvents)
-                    return (
-                      <option key={v.id} value={`v:${v.id}`}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
-                    )
-                  })}
-                  {externalVehicles.length > 0 && (
-                    <optgroup label={t('eventDetail.externalVehiclesGroup')}>
-                      {externalVehicles.map(v => {
-                        const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
-                        return (
-                          <option key={v.id} value={`e:${v.id}`}>🚐 {v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
-                        )
-                      })}
-                    </optgroup>
-                  )}
-                  <option value="__new_external__">{t('eventDetail.addExternalVehicle')}</option>
-                  <option value="__none__">{t('eventDetail.noVehicleRemove')}</option>
-                </select>
-                <button onClick={applyBulkVehicle} disabled={!bulkVehicleId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: bulkVehicleId ? 1 : 0.5 }}>
-                  {t('eventDetail.apply')}
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                {vehicles.filter(v => v.active !== false).map(v => {
+                  const conflict = vehicleConflictEvent(v.id, event, otherEvents)
+                  return (
+                    <PendingButton key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)} style={vehicleChipStyle}>
+                      {v.emoji ? v.emoji + ' ' : ''}{v.name}
+                      {conflict && <span style={{ fontWeight:600, fontSize:11.5, color:'#ea580c', marginLeft:6 }}>{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
+                    </PendingButton>
+                  )
+                })}
+                {externalVehicles.map(v => {
+                  const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
+                  return (
+                    <PendingButton key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)} style={vehicleChipStyle}>
+                      🚐 {v.name}
+                      {conflict && <span style={{ fontWeight:600, fontSize:11.5, color:'#ea580c', marginLeft:6 }}>{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
+                    </PendingButton>
+                  )
+                })}
+                <button onClick={() => setPendingExternalVehicleFor('bulk')}
+                  style={{ ...vehicleChipStyle, background:'transparent', border:'1.5px dashed var(--accent)', color:'var(--accent)' }}>
+                  + {t('eventDetail.externalShort')}
                 </button>
+                <PendingButton onClick={() => applyBulkVehicle('__none__')}
+                  style={{ ...vehicleChipStyle, background:'transparent', color:'var(--text2)' }}>
+                  {t('eventDetail.noVehicleRemove')}
+                </PendingButton>
               </div>
             )}
             {bulkAction === 'moveExisting' && moveExistingPanel}
             {bulkAction === 'status' && (
-              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                <button onClick={() => applyBulkStatus('pending')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.statusPending')}</button>
-                <button onClick={() => applyBulkStatus('pronto')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.statusActionReady')}</button>
-                <button onClick={() => applyBulkStatus('loaded')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.loadedButton')}</button>
-                <button onClick={() => applyBulkStatus('returned')} className="btn btn-secondary" style={{ padding:'8px 14px', fontSize:13 }}>{t('eventDetail.returnedButton')}</button>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                <PendingButton onClick={() => applyBulkStatus('pending')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.statusPending')}</PendingButton>
+                <PendingButton onClick={() => applyBulkStatus('pronto')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.statusActionReady')}</PendingButton>
+                <PendingButton onClick={() => applyBulkStatus('loaded')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.loadedButton')}</PendingButton>
+                <PendingButton onClick={() => applyBulkStatus('returned')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.returnedButton')}</PendingButton>
               </div>
             )}
           </div>
@@ -2040,7 +2064,7 @@ export default function EventDetail() {
         // bianco — ogni voce si allarga solo quanto serve al suo testo.
         // Riusata anche per i 4 bottoni stato su telefono (sempre in
         // verticale lì, mai affiancati come sul computer).
-        const menuRowStyle = { display:'flex', alignItems:'center', whiteSpace:'nowrap', padding:'11px 16px', borderRadius:20, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, fontWeight:700, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }
+        const menuRowStyle = { display:'flex', alignItems:'center', whiteSpace:'nowrap', minHeight:48, padding:'13px 20px', borderRadius:24, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:15, fontWeight:700, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }
         // Elenco verticale delle azioni diverse da "Elimina" (che resta
         // sempre a vista sulla barra) — una voce per azione, si chiude da
         // sola non appena ne scegli una. Allineate a destra, niente pannello
@@ -2065,10 +2089,10 @@ export default function EventDetail() {
           </div>
         ) : bulkAction === 'status' ? (
           <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
-            <button onClick={() => applyBulkStatus('pending')} style={menuRowStyle}>{t('eventDetail.statusPending')}</button>
-            <button onClick={() => applyBulkStatus('pronto')} style={menuRowStyle}>{t('eventDetail.statusActionReady')}</button>
-            <button onClick={() => applyBulkStatus('loaded')} style={menuRowStyle}>{t('eventDetail.loadedButton')}</button>
-            <button onClick={() => applyBulkStatus('returned')} style={menuRowStyle}>{t('eventDetail.returnedButton')}</button>
+            <PendingButton onClick={() => applyBulkStatus('pending')} style={menuRowStyle}>{t('eventDetail.statusPending')}</PendingButton>
+            <PendingButton onClick={() => applyBulkStatus('pronto')} style={menuRowStyle}>{t('eventDetail.statusActionReady')}</PendingButton>
+            <PendingButton onClick={() => applyBulkStatus('loaded')} style={menuRowStyle}>{t('eventDetail.loadedButton')}</PendingButton>
+            <PendingButton onClick={() => applyBulkStatus('returned')} style={menuRowStyle}>{t('eventDetail.returnedButton')}</PendingButton>
           </div>
         ) : null
         return (
@@ -2129,7 +2153,7 @@ export default function EventDetail() {
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
                     <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'7px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)', whiteSpace:'nowrap' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <button onClick={applyBulkDelete} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</button>
+                      <PendingButton onClick={applyBulkDelete} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
                       <button onClick={toggleMobileMore} aria-expanded={mobileMoreOpen || !!bulkAction}
                         style={{ ...chipStyle(mobileMoreOpen || !!bulkAction), padding:'8px 16px', fontSize:18, lineHeight:1, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>⋯</button>
                     </div>
@@ -2146,6 +2170,18 @@ export default function EventDetail() {
           menu (rinomina, sposta i non caricati, elimina se vuota) anche con
           la sola principale, non solo da quando ce ne sono altre. */}
       {visibleLists.map(renderListBlock)}
+
+      {/* Nuova lista: subito sotto le liste esistenti (era tra le persone
+          assegnate nell'intestazione, dove non c'entrava nulla). Sfuma
+          durante la selezione multipla, come il resto delle aggiunte. */}
+      {loadListsOn && (
+        <div style={{ margin:'12px 16px 0', opacity: selectMode ? 0 : 1, pointerEvents: selectMode ? 'none' : 'auto', transition:'opacity 0.2s ease' }}>
+          <button type="button" className="btn-no-anim" onClick={() => setListModal({ mode:'new', name:'' })}
+            style={{ width:'100%', padding:'11px 14px', borderRadius:14, background:'transparent', border:'1.5px dashed #d6d3cb', color:'#6b6b6b', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            + {t('eventDetail.newList')}
+          </button>
+        </div>
+      )}
 
       {/* FAB aggiungi articoli — sfuma via durante la selezione multipla,
           stesso trattamento della tab bar (niente da aggiungere mentre si
@@ -2182,9 +2218,9 @@ export default function EventDetail() {
         cancelLabel={t('common.cancel')}
         onCancel={() => setListModal(null)}
         onConfirm={name => {
-          if (listModal.mode === 'rename') renameList(listModal.listId, name)
-          else if (listModal.mode === 'moveSelected') createListAndMoveSelected(name)
-          else createList(name, listModal.mode === 'moveUnloaded' ? listModal.listId : null)
+          if (listModal.mode === 'rename') return renameList(listModal.listId, name)
+          if (listModal.mode === 'moveSelected') return createListAndMoveSelected(name)
+          return createList(name, listModal.mode === 'moveUnloaded' ? listModal.listId : null)
         }}
       />
 
@@ -2210,31 +2246,31 @@ export default function EventDetail() {
               {vehicles.filter(v => v.active !== false).map(v => {
                 const conflict = vehicleConflictEvent(v.id, event, otherEvents)
                 return (
-                  <button key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)}
+                  <PendingButton key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)}
                     style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15 }}>
                     {v.emoji ? v.emoji + ' ' : ''}{v.name}
                     {conflict && <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>&nbsp;{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
-                  </button>
+                  </PendingButton>
                 )
               })}
               {externalVehicles.map(v => {
                 const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
                 return (
-                  <button key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)}
+                  <PendingButton key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)}
                     style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15 }}>
                     🚐 {v.name}
                     {conflict && <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>&nbsp;{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
-                  </button>
+                  </PendingButton>
                 )
               })}
               <button onClick={() => { setShowBulkVehiclePicker(false); setPendingExternalVehicleFor('bulk') }}
                 style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px dashed var(--border)', textAlign:'left', fontWeight:700, fontSize:15, color:'var(--accent)' }}>
                 {t('eventDetail.addExternalVehicle')}
               </button>
-              <button onClick={() => applyBulkVehicle('__none__')}
+              <PendingButton onClick={() => applyBulkVehicle('__none__')}
                 style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'transparent', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15, color:'var(--text2)' }}>
                 {t('eventDetail.noVehicleRemove')}
-              </button>
+              </PendingButton>
             </div>
           </div>
         </div>
@@ -2309,7 +2345,7 @@ export default function EventDetail() {
                     <button
                       className="btn-no-anim"
                       onClick={() => setListModal({ mode:'new', name:'' })}
-                      style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(26,158,92,0.10)', border:'1px dashed rgba(26,158,92,0.5)', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, color:'var(--green)' }}
+                      className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eceae6', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'#6b6b6b' }}
                     >
                       + {t('eventDetail.newList')}
                     </button>
@@ -2441,8 +2477,8 @@ export default function EventDetail() {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <button onClick={() => setExtraForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} aria-label={t('eventDetail.decreaseQtyAria')}
                   style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                <input id="ed-extra-qty" type="number" min="1" value={extraForm.qty}
-                  onChange={e => setExtraForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))}
+                <QtyInput id="ed-extra-qty" value={extraForm.qty} max={9999} aria-label={t('eventDetail.qtyInputAria')}
+                  onChange={q => setExtraForm(f => ({...f, qty:q}))}
                   style={{ textAlign:'center', fontWeight:800, fontSize:16, width:60, padding:'6px 4px' }} />
                 <button onClick={() => setExtraForm(f => ({...f, qty:f.qty+1}))} aria-label={t('eventDetail.increaseQtyAria')}
                   style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
@@ -2520,13 +2556,10 @@ export default function EventDetail() {
                       onClick={() => setEditItem(ei => ({ ...ei, qty: Math.max(1, ei.qty - 1) }))}
                       aria-label={t('eventDetail.decreaseQtyAria')}
                       style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:22, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>−</button>
-                    <input type="number" min="1" max={maxQty} value={editItem.qty}
-                      onFocus={e => e.target.select()}
-                      onChange={e => {
-                        const q = Math.min(maxQty, Math.max(1, parseInt(e.target.value) || 1))
-                        setEditItem(ei => ({ ...ei, qty: q }))
-                      }}
-                      style={{ flex:1, textAlign:'center', fontWeight:800, fontSize:24, color:'var(--text)', padding:'8px 4px' }} />
+                    <QtyInput value={editItem.qty} max={maxQty} aria-label={t('eventDetail.qtyInputAria')}
+                      onChange={q => setEditItem(ei => ({ ...ei, qty: q }))}
+                      wrapStyle={{ flex:1, minWidth:0 }}
+                      style={{ width:'100%', textAlign:'center', fontWeight:800, fontSize:24, color:'var(--text)', padding:'8px 4px' }} />
                     <button
                       onClick={() => setEditItem(ei => ({ ...ei, qty: Math.min(maxQty, ei.qty + 1) }))}
                       aria-label={t('eventDetail.increaseQtyAria')}
@@ -2672,18 +2705,20 @@ export default function EventDetail() {
               </span>
             </button>
 
-            <button
-              onClick={() => saveItemEdit(editItem)}
+            <SaveButton
+              onSave={() => saveItemEdit(editItem, { keepOpen: true })}
+              onDone={itemEditDrag.close}
+              onError={itemEditDrag.triggerJiggle}
               className="btn btn-primary btn-full"
               style={{ marginTop:8 }}>
               {t('eventDetail.save')}
-            </button>
+            </SaveButton>
 
-            <button
-              onClick={async () => { setEditItem(null); await removeFromEvent(editItem.id) }}
+            <PendingButton
+              onClick={async () => { if (await removeFromEvent(editItem.id) !== false) setEditItem(null) }}
               style={{ width:'100%', marginTop:10, padding:'12px', borderRadius:10, background:'rgba(248,113,113,0.10)', border:'1px solid rgba(248,113,113,0.25)', color:'var(--red)', fontWeight:700, fontSize:14 }}>
               {t('eventDetail.removeFromList')}
-            </button>
+            </PendingButton>
 
             {/* Cronologia — chi ha aggiunto/caricato/segnato mancante questo
                 oggetto, letta da itemActivity (vedi src/utils/itemActivity.js). */}
@@ -2763,6 +2798,58 @@ function DismissibleSuggestion({ item, children, onDismiss }) {
   )
 }
 
+// Quantità digitabile, con un calcolo "nascosto": scrivendo "6x5" (anche "6×5",
+// "6*5" o più fattori, "2x3x4") la quantità diventa il prodotto — comodo per
+// cavi, americane e simili contati a gruppi. Si vede il risultato appena si
+// esce dal campo, si preme Invio o si scrive "=". Mentre si scrive il testo
+// resta quello digitato (altrimenti "6x" non si potrebbe nemmeno completare).
+// Tastiera di testo (non numerica): su telefono la "x" non esiste in quella
+// numerica.
+const QTY_EXPR = /^\s*\d+(\s*[x×*]\s*\d+)+\s*$/i
+// Prodotto grezzo se `text` è un calcolo completo ("6x5"), altrimenti null.
+function qtyProduct(text) {
+  const expr = text.replace(/=\s*$/, '')
+  if (!QTY_EXPR.test(expr)) return null
+  return expr.split(/[x×*]/i).reduce((acc, n) => acc * (parseInt(n, 10) || 0), 1)
+}
+function parseQty(text, max) {
+  const cap = Math.max(1, Math.min(max, 9999))
+  const product = qtyProduct(text)
+  if (product !== null) return Math.min(cap, Math.max(1, product))
+  const n = parseInt(text, 10)
+  return Math.min(cap, Math.max(1, Number.isNaN(n) ? 1 : n))
+}
+// `wrapStyle`: stile del contenitore (serve a `flex:1` quando il campo deve
+// allargarsi). Mentre c'è un calcolo completo in corso, un'etichetta "= 30"
+// sopra il campo mostra già il risultato (con "max" se è stato limitato).
+function QtyInput({ value, max, onChange, wrapStyle, ...rest }) {
+  const [text, setText] = useState(null) // null = non in modifica, mostra `value`
+  const commit = () => { if (text !== null) { onChange(parseQty(text, max)); setText(null) } }
+  const product = text !== null ? qtyProduct(text) : null
+  const preview = product !== null ? parseQty(text, max) : null
+  return (
+    <span style={{ position:'relative', display:'inline-flex', ...wrapStyle }}>
+      <input type="text" inputMode="text" autoComplete="off" enterKeyHint="done" placeholder="6x5" {...rest}
+        value={text ?? String(value)}
+        onFocus={e => { setText(value === 1 ? '' : String(value)); e.target.select() }}
+        onChange={e => {
+          const raw = e.target.value.replace(/[^0-9x×*=\s]/gi, '')
+          if (raw.endsWith('=')) { onChange(parseQty(raw, max)); setText(null); return }
+          setText(raw)
+          // Numero semplice o calcolo già completo: aggiorna subito la quantità
+          if (!/[x×*]\s*$/i.test(raw) && raw.trim()) onChange(parseQty(raw, max))
+        }}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(); e.target.blur() } }} />
+      {preview !== null && (
+        <span aria-live="polite" style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', marginBottom:6, padding:'3px 9px', borderRadius:10, background:'#1a1a1a', color:'#fff', fontSize:12, fontWeight:800, whiteSpace:'nowrap', pointerEvents:'none', zIndex:5 }}>
+          = {preview}{product > preview ? ' (max)' : ''}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
   const { t } = useTranslation()
   const [qty, setQty] = useState(cartQty || 1)
@@ -2814,13 +2901,8 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
       <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
         <div className="qty-ctrl">
           <button onClick={() => { const q = Math.max(1, qty-1); setQty(q); if (inCart) onAdd(item, q) }}>−</button>
-          <input type="number" min="1" max={Math.max(1, max)} value={qty}
-            onFocus={e => e.target.select()}
-            onChange={e => {
-              const q = Math.min(Math.max(1, max), Math.max(1, parseInt(e.target.value) || 1))
-              setQty(q)
-              if (inCart) onAdd(item, q)
-            }} />
+          <QtyInput value={qty} max={max} aria-label={t('eventDetail.qtyInputAria')}
+            onChange={q => { setQty(q); if (inCart) onAdd(item, q) }} />
           <button onClick={() => { const q = Math.min(Math.max(1, max), qty+1); setQty(q); if (inCart) onAdd(item, q) }}>+</button>
         </div>
         <button
@@ -2865,11 +2947,6 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
     : item.pronto
     ? { label: t('eventDetail.readyDone'), bg:'rgba(5,150,105,0.15)', color:'#059669' }
     : { label: t('eventDetail.statusPending'), bg:'var(--card2)', color:'var(--text3)' }
-  // Elenco selezionabile: solo furgoni attivi, più quello attualmente
-  // assegnato anche se disattivato (per non "perdere" la selezione corrente).
-  const vehicleOptions = vehicle && vehicle.active === false
-    ? [...vehicles.filter(v => v.active !== false), vehicle]
-    : vehicles.filter(v => v.active !== false)
 
   // Unità fisiche assegnate a questa riga (kit o oggetto singolo) — lette in
   // tempo reale dal documento in magazzino, così se un baule viene segnato
@@ -2927,9 +3004,6 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
             {item.mancante && (
               <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>
             )}
-            {item.pronto && !item.loaded && (
-              <span style={{ background:'rgba(5,150,105,0.12)', color:'#059669', border:'1px solid rgba(5,150,105,0.3)', borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>✓ PRONTO</span>
-            )}
             {vehicle && (
               <span title={vehicleConflict ? t('eventDetail.vehicleBusyTooltip', { eventName: vehicleConflict.name }) : undefined} style={{ background: vehicleBusy ? 'rgba(216,56,63,0.12)' : `${vehicle.color || 'var(--blue)'}22`, color: vehicleBusy ? 'var(--red)' : (vehicle.color || 'var(--blue)'), border: `1px solid ${vehicleBusy ? 'rgba(216,56,63,0.35)' : `${vehicle.color || 'var(--blue)'}55`}`, borderRadius:6, padding:'1px 7px', fontSize:10, fontWeight:800, flexShrink:0 }}>{vehicleBusy ? '⚠️' : (vehicle.emoji || vehicle.name?.trim()?.charAt(0)?.toUpperCase() || '🚐')} {vehicle.name}</span>
             )}
@@ -2975,33 +3049,6 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
         </button>
         {!bulkMode && (
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }} onClick={e => e.stopPropagation()}>
-          <select
-            value={item.vehicleId ? `v:${item.vehicleId}` : item.externalVehicleId ? `e:${item.externalVehicleId}` : ''}
-            onChange={e => {
-              if (e.target.value === '__new_external__') { onRequestExternalVehicle(); return }
-              onSetVehicle(item.id, e.target.value)
-            }}
-            style={{ fontSize:11, fontWeight:700, borderRadius:8, padding:'4px 6px', border:'1.5px solid var(--border)', background:'var(--card2)', color: vehicle ? (vehicle.color || 'var(--text2)') : externalVehicleName ? '#7c6fcd' : 'var(--text3)', maxWidth:120 }}
-          >
-            <option value="">{t('eventDetail.vehicleSelectPlaceholder')}</option>
-            {vehicleOptions.map(v => {
-              const conflict = vehicleConflictEvent(v.id, event, otherEvents)
-              return (
-              <option key={v.id} value={`v:${v.id}`}>{v.emoji ? v.emoji + ' ' : ''}{v.name}{v.active === false ? t('eventDetail.deactivatedSuffix') : ''}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
-              )
-            })}
-            {externalVehicles.length > 0 && (
-              <optgroup label={t('eventDetail.externalVehiclesGroup')}>
-                {externalVehicles.map(v => {
-                  const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
-                  return (
-                    <option key={v.id} value={`e:${v.id}`}>🚐 {v.name}{conflict ? ` ${t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}` : ''}</option>
-                  )
-                })}
-              </optgroup>
-            )}
-            <option value="__new_external__">{t('eventDetail.addExternalVehicle')}</option>
-          </select>
           {/* Sola lettura: pronto/carico/rientro si spuntano dallo scanner
               (Avvia carico), non più da qui — avere due punti che scrivono
               lo stesso stato creava confusione senza motivo, dato che

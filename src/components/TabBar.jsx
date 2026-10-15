@@ -43,7 +43,7 @@ const WORK_HOURS_TAB = { path:'/work-hours', label:'Ore', icon:ICON_WORK_HOURS }
 // Telefono / schermi larghi (≥700px): stessa forma, scala ~1.3 su computer.
 // padX e rc sono scelti perché la tacca della prima/ultima tab non tocchi gli
 // angoli arrotondati (cx0 ≥ rc + larghezza mezza tacca).
-const PHONE = { H: 54, D: 52, ring: 5, fillet: 6, cy: 4, dip: 8, icon: 28, padX: 28, rc: 14, bottom: 12, slot: 46 }
+const PHONE = { H: 60, D: 58, ring: 5, fillet: 6, cy: 5, dip: 9, icon: 32, padX: 28, rc: 14, bottom: 28, slot: 52 }
 const DESKTOP = { H: 70, D: 68, ring: 6, fillet: 10, cy: 5, dip: 10, icon: 34, padX: 40, rc: 24, bottom: 22, width: 600 }
 const DURATION = 480      // ms
 const TAB_GREY = '#6b7280'

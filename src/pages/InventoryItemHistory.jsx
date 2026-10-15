@@ -117,7 +117,7 @@ export default function InventoryItemHistory() {
   if (itemLoaded && !item) {
     return (
       <div className="page">
-        <div className="page-header">
+        <div className="page-header rc-page-header">
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <BackHomeButton to="/inventory" />
             <h1>{t('inventory.historyItemNotFoundTitle')}</h1>
@@ -129,7 +129,7 @@ export default function InventoryItemHistory() {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <div className="page-header rc-page-header">
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <BackHomeButton to="/inventory" />
           {/* Titolo fisso, non il nome dell'oggetto — così sta sempre su una
@@ -147,7 +147,7 @@ export default function InventoryItemHistory() {
           quindi questa è la prima cosa che dice di quale oggetto si sta
           parlando — attaccato al resto, non in una card a parte. */}
       {item && (
-        <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+        <div style={{ margin:'20px 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
           <div style={{ padding:'12px 16px', display:'flex', justifyContent:'space-between', gap:14 }}>
             <span style={{ color:'var(--text2)', fontSize:13, flexShrink:0 }}>{t('inventory.nameFieldLabel')}</span>
             <span style={{ fontWeight:700, fontSize:14, textAlign:'right', minWidth:0, overflowWrap:'break-word' }}>{item.name}</span>

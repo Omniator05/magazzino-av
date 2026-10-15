@@ -5,6 +5,8 @@ import { formatDate, capitalize } from '../utils/formatDate'
 import { personColor } from '../utils/assignmentBlocks'
 import TimeField from './TimeField'
 import DeleteButton from './DeleteButton'
+import Picker from './Picker'
+import { MAIN_LIST_ID, getEventLists, hasMultipleLists } from '../utils/eventLists'
 import { Calendar, Clock, Pin, User, FileText, List, Wrench, Warn } from './Icon'
 
 const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -26,7 +28,7 @@ const rowFromBlock = b => ({ blockId: b.id, startTime: b.startTime, endTime: b.e
 // una bozza locale finché non si preme Salva — `dirty` risale al
 // chiamante, che chiede conferma prima di scartarla cambiando card.
 export default function StaffAssignPanel({
-  item, date, isNew, activeWorkers, externalWorkers, unavailability,
+  item, date, isNew, activeWorkers, externalWorkers, unavailability, events = [],
   focusAddToken, draggedPerson, onDropPerson, embedded = false, quickPeople,
   onClose, onAddPerson, onRemoveBlock, onSave, onDeleteTask, onResetDayHours, onOpenEvent, onDirtyChange,
 }) {
@@ -42,6 +44,11 @@ export default function StaffAssignPanel({
 
   const [label, setLabel] = useState(isTask ? (item.block.label || '') : '')
   const [description, setDescription] = useState(isTask ? (item.block.description || '') : '')
+  // Lista di carico collegata a un task (es. "prepara il furgone"): un evento
+  // e, se ne ha più d'una, una sua lista. Il magazziniere vede il task in
+  // "Oggi" e un tocco lo porta dritto a quella lista.
+  const [linkedEventId, setLinkedEventId] = useState(isTask ? (item.linkedEventId || '') : '')
+  const [linkedListId, setLinkedListId] = useState(isTask ? (item.linkedListId || '') : '')
   // Orario "condiviso": quello dell'attività (o, per un evento su più giorni,
   // di QUESTO giorno). Le persone che lo seguono (stesso valore) lo
   // ereditano al volo quando cambia; chi se ne è già scostato resta com'è.
@@ -75,6 +82,7 @@ export default function StaffAssignPanel({
   }
   const dirty = rows.some(rowDirty)
     || (isTask && (label !== (item.block.label || '') || description !== (item.block.description || '')
+      || linkedEventId !== (item.linkedEventId || '') || linkedListId !== (item.linkedListId || '')
       || (rows.length === 0 && (startTime !== item.startTime || endTime !== item.endTime))))
     || (hasOwnHours && (startTime !== item.startTime || endTime !== item.endTime))
   useEffect(() => { onDirtyChange?.(dirty) }, [dirty]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,7 +121,7 @@ export default function StaffAssignPanel({
     }
     setSaving(true)
     try {
-      await onSave({ label: label.trim(), description: description.trim(), startTime, endTime, rows })
+      await onSave({ label: label.trim(), description: description.trim(), startTime, endTime, rows, linkedEventId: linkedEventId || null, linkedListId: linkedEventId ? (linkedListId || null) : null })
     } catch {
       setError(t('staffTimeline.saveError'))
     } finally { setSaving(false) }
@@ -166,6 +174,33 @@ export default function StaffAssignPanel({
             <label htmlFor="staff-task-desc">{t('staffTimeline.taskDescriptionLabel')}</label>
             <textarea id="staff-task-desc" value={description} onChange={e => setDescription(e.target.value)} placeholder={t('staffTimeline.taskDescriptionPlaceholder')} rows={2} style={{ resize: 'vertical' }} />
           </div>
+          {/* Lista di carico collegata (facoltativa) */}
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0]
+            const linkable = events
+              .filter(e => e.date && !e.isDeadlineReminder && !e.archived && (e.id === linkedEventId || (e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date) >= todayStr))
+              .sort((a, b) => a.date.localeCompare(b.date))
+            const options = [
+              { value: '', label: t('staffTimeline.noLinkedList') },
+              ...linkable.map(e => ({ value: e.id, label: `${e.name} · ${formatDate(e.date + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}` })),
+            ]
+            const linkedEvent = events.find(e => e.id === linkedEventId)
+            const lists = linkedEvent && hasMultipleLists(linkedEvent) ? getEventLists(linkedEvent) : []
+            return (
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>{t('staffTimeline.linkedListLabel')}</label>
+                <Picker value={linkedEventId} onChange={v => { setLinkedEventId(v); setLinkedListId('') }} options={options}
+                  searchable searchPlaceholder={t('staffTimeline.linkedListSearch')} noResultsLabel={t('staffTimeline.linkedListNoResults')}
+                  ariaLabel={t('staffTimeline.linkedListLabel')} placeholder={t('staffTimeline.noLinkedList')} />
+                {lists.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <Picker value={linkedListId} onChange={setLinkedListId} ariaLabel={t('staffTimeline.linkedListWhich')}
+                      options={[{ value: '', label: t('workerScanner.allLists') }, ...lists.map(l => ({ value: l.id, label: l.name || (l.id === MAIN_LIST_ID ? t('eventDetail.mainListName') : t('eventDetail.listUnnamed')) }))]} />
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </>
       ) : embedded ? null : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

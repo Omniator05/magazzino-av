@@ -106,7 +106,9 @@ export default function WorkerScanner() {
   // Si apre SEMPRE sulla vista unita di tutte le liste (ALL_LISTS_ID): le liste
   // singole sono solo un filtro facoltativo. Così nessuno scansiona per
   // sbaglio "sulla lista sbagliata" senza accorgersene.
-  const [activeListId, setActiveListId] = useState(ALL_LISTS_ID)
+  // Un link può chiedere una lista precisa (?list=…, es. dal task "prepara il
+  // furgone" con lista collegata); se non c'è o non esiste, "Tutte".
+  const [activeListId, setActiveListId] = useState(() => new URLSearchParams(window.location.search).get('list') || ALL_LISTS_ID)
   const [returnShake, setReturnShake] = useState(false)
   const [phaseBlockedMsg, setPhaseBlockedMsg] = useState('')
   // Avviso "lista X completata, passo a Y" (vedi effetto più sotto) — solo
@@ -751,7 +753,7 @@ export default function WorkerScanner() {
     ? MAIN_LIST_ID
     : activeListId === ALL_LISTS_ID
     ? ALL_LISTS_ID
-    : (eventLists.some(l => l.id === activeListId) ? activeListId : MAIN_LIST_ID)
+    : (eventLists.some(l => l.id === activeListId) ? activeListId : ALL_LISTS_ID)
   // Stessa condizione del badge "Nella lista: X" nel popup post-scansione —
   // estratta qui perché serve anche per decidere quanto tenerlo aperto (più
   // tempo per leggerlo e toccarlo) e, ora, dove porta il tap.
@@ -2383,9 +2385,14 @@ function ChecklistRow({ item, mode }) {
           è fatta per la fase corrente — scompare da sola appena segnata
           pronto/carico/rientro, non serve più a quel punto. */}
       {noteVisible && (
-        <div style={{ padding:'10px 16px 10px', background: eventNote ? 'rgba(245,166,35,0.05)' : 'rgba(79,195,247,0.04)', borderBottom: showInfo ? 'none' : '1px solid var(--border)', display:'flex', gap:8 }}>
-          <span style={{ fontSize:16, flexShrink:0 }}>{eventNote ? '📝' : '💡'}</span>
-          <p style={{ color:'var(--text)', fontSize:13, lineHeight:1.6 }}>{displayNote}</p>
+        // Senza emoji la nota si riconosce da una barra colorata a sinistra
+        // (ambra = nota dell'evento, grigio-azzurro = nota del magazzino),
+        // uno sfondo più marcato e una piccola etichetta sopra al testo.
+        <div style={{ padding:'9px 16px 11px', background: eventNote ? 'rgba(245,166,35,0.13)' : 'rgba(79,195,247,0.10)', borderLeft: `3px solid ${eventNote ? '#f5a623' : '#7fb7d9'}`, borderBottom: showInfo ? 'none' : '1px solid var(--border)' }}>
+          <p style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color: eventNote ? '#b7791f' : '#4f86a8', marginBottom:2 }}>
+            {t(eventNote ? 'workerScanner.noteLabelEvent' : 'workerScanner.noteLabelWarehouse')}
+          </p>
+          <p style={{ color:'var(--text)', fontSize:13.5, fontWeight:600, lineHeight:1.5 }}>{displayNote}</p>
         </div>
       )}
       {/* Pannello contenuto kit, dietro al tasto "i" */}

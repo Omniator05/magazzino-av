@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate, capitalize } from '../utils/formatDate'
-import { Calendar, Clock, User, FileText } from './Icon'
+import { Calendar, Clock, User, FileText, List } from './Icon'
 
 // Riepilogo di un task libero creato nella timeline "Assegna personale"
 // (assignmentBlocks senza eventId) — stessa famiglia visiva di
@@ -10,6 +11,7 @@ import { Calendar, Clock, User, FileText } from './Icon'
 // ha) e niente shortcut alla lista di carico (non è un evento Roadcase).
 export default function TaskSummaryModal({ block, workers, onClose }) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const drag = useModalDrag(onClose, undefined, undefined, true)
   useModalScrollLock(true)
 
@@ -66,6 +68,12 @@ export default function TaskSummaryModal({ block, workers, onClose }) {
           <Row icon={<FileText size={15} />} label={t('staffTimeline.taskDescriptionLabel')}>
             <p style={{ fontSize:14, color:'var(--text)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.description}</p>
           </Row>
+        )}
+        {block.linkedEventId && (
+          <button type="button" onClick={() => navigate(`/events/${block.linkedEventId}${block.linkedListId ? `?list=${block.linkedListId}` : ''}`)}
+            className="btn btn-primary" style={{ width:'100%', marginTop:16, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+            <List size={16} /> {t('workerHome.openLinkedList')}
+          </button>
         )}
       </div>
     </div>

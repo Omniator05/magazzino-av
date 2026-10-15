@@ -9,7 +9,7 @@ import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
 import StaffAssignPanel from './StaffAssignPanel'
-import { DEFAULT_START, DEFAULT_END, toMin, eventTimeForDay, phaseTimeFor } from '../utils/assignmentTimes'
+import { toMin, eventTimeForDay, phaseTimeFor } from '../utils/assignmentTimes'
 import { Plus, Wrench, Search } from './Icon'
 
 const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -145,16 +145,28 @@ function laneFromClientY(clientY, rect, laneTop, laneHeights) {
 // rent > task) e solo a parità per orario, così le corsie in alto sono
 // sempre quelle "più importanti", non solo le più mattiniere.
 function packLanes(items) {
-  const sorted = [...items].sort((a, b) => (a.rank - b.rank) || (a.geoLeft - b.geoLeft))
-  const laneEnds = []
+  // Eventi, fasi e attività si dispongono per ORARIO d'inizio: il più presto in
+  // alto, poi a scendere (a parità, evento prima di fase prima di task). I
+  // rent/install (rank 3) restano sempre in fondo, sotto tutte le altre
+  // corsie. Chi non si sovrappone a un elemento già posato può stare sulla sua
+  // stessa riga, a destra.
+  const byStart = (a, b) => (a.sortStart - b.sortStart) || (a.rank - b.rank) || (a.geoLeft - b.geoLeft)
+  const regular = items.filter(i => i.rank !== 3).sort(byStart)
+  const rents = items.filter(i => i.rank === 3).sort(byStart)
   const laneOf = {}
-  sorted.forEach(it => {
-    let lane = laneEnds.findIndex(end => end <= it.geoLeft + 1e-6)
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.geoRight) }
-    else laneEnds[lane] = it.geoRight
-    laneOf[it.key] = lane
-  })
-  return { laneOf, laneCount: Math.max(laneEnds.length, MIN_LANES) }
+  const place = (list, offset) => {
+    const laneEnds = []
+    list.forEach(it => {
+      let lane = laneEnds.findIndex(end => end <= it.geoLeft + 1e-6)
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.geoRight) }
+      else laneEnds[lane] = it.geoRight
+      laneOf[it.key] = offset + lane
+    })
+    return laneEnds.length
+  }
+  const regularLanes = place(regular, 0)
+  const rentLanes = place(rents, regularLanes)
+  return { laneOf, laneCount: Math.max(regularLanes + rentLanes, MIN_LANES) }
 }
 
 // Completa un item con geometria (geoLeft/geoWidth/geoRight, frazioni della
@@ -165,7 +177,7 @@ function packLanes(items) {
 function finishItem(item, { winStart, winEnd, geoStartMin, geoEndMin, anchor }) {
   const g = cardGeometry(geoStartMin, geoEndMin)
   const { bars, laneCount } = buildBars(item.assigned, anchor, winStart, winEnd)
-  return { ...item, geoLeft: g.left, geoWidth: g.width, geoRight: g.right, bars, personLaneCount: laneCount, contentHeight: itemContentHeight(laneCount) }
+  return { ...item, sortStart: geoStartMin, geoLeft: g.left, geoWidth: g.width, geoRight: g.right, bars, personLaneCount: laneCount, contentHeight: itemContentHeight(laneCount) }
 }
 
 // Immagine di drag personalizzata: il drag-image nativo del browser a volte
@@ -228,8 +240,6 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const [panel, setPanel] = useState(null)
   const panelDirtyRef = useRef(false)
   const navigate = useNavigate()
-  const [rangeSelect, setRangeSelect] = useState(null) // {date, lane, startHour}
-  const [hoverHour, setHoverHour] = useState(null)
   // Il Calendario blocca lo scroll della pagina su desktop (vedi
   // useModalScrollLock in Calendar.jsx): la griglia si adatta allo spazio
   // rimasto sotto di sé e scorre al suo interno quando le corsie sono tante.
@@ -238,8 +248,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const filterRowRef = useRef(null)
   const [gridMaxH, setGridMaxH] = useState(null)
   const measureGridRef = useRef(null)
-  const [hoverDate, setHoverDate] = useState(null) // colonna sotto il mouse durante una selezione (può essere il giorno dopo)
-  const [hoverCell, setHoverCell] = useState(null) // {date, occupied} — solo per il cursore a riposo
+  const [hoverCell, setHoverCell] = useState(null) // {date, hour, lane, occupied} — cella libera sotto il mouse: mostra l'anteprima della nuova attività
   const [dragOverKey, setDragOverKey] = useState(null) // item.key sotto il drag di una persona
   // Filtro attività — eventi, rent/install e fasi montaggio-smontaggio sono
   // spesso "rumore di fondo" diverso a seconda di chi pianifica le ore,
@@ -279,22 +288,6 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-
-  const cancelRangeSelect = () => { setRangeSelect(null); setHoverHour(null); setHoverDate(null) }
-
-  // Esc o tasto destro del mouse annullano una selezione a metà — il destro
-  // non deve anche aprire il menu contestuale del browser.
-  useEffect(() => {
-    if (!rangeSelect) return
-    const onKey = e => { if (e.key === 'Escape') cancelRangeSelect() }
-    const onContextMenu = e => { e.preventDefault(); cancelRangeSelect() }
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('contextmenu', onContextMenu)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('contextmenu', onContextMenu)
-    }
-  }, [rangeSelect])
 
   const todayStr = toDateStr(new Date())
   // Striscia "ora attuale": un punto di riferimento verticale sulla colonna
@@ -374,10 +367,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // nessuno assegnato: è il punto — vederli per poterci allocare qualcuno) +
   // le fasi (montaggio/smontaggio) che cadono su un giorno diverso da quello
   // dell'evento vero e proprio (altrimenti lì non comparirebbe nulla da
-  // assegnare) + i task liberi creati su quel giorno. Priorità fissa:
-  // evento vero (0) > fase (1) > task libero (2) > rent/install (3, sempre
-  // per ultimo) — usata sia per l'ordine di impacchettamento delle corsie
-  // (packLanes) sia, implicitamente, per quale item vince la prima corsia in alto.
+  // assegnare) + i task liberi creati su quel giorno. L'ordine delle corsie
+  // (packLanes) è per orario d'inizio, con i rent/install (rank 3) sempre
+  // in fondo; `rank` (evento 0 < fase 1 < task 2) conta solo a parità d'orario.
   const itemsByDay = useMemo(() => {
     const map = {}
     // Un giorno IN PIÙ prima della settimana mostrata: un task che parte la
@@ -440,7 +432,8 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         const overnight = !!withTask && isOvernight(startTime, endTime)
         const sm = toMin(startTime), em = toMin(endTime)
         const anchor = { overnight, startMin: sm }
-        const base = { key: `tk${gid}`, type: 'task', block: group[0], group, taskGroupId: gid, date, startTime, endTime, overnight, rank: 2, assigned }
+        const base = { key: `tk${gid}`, type: 'task', block: group[0], group, taskGroupId: gid, date, startTime, endTime, overnight, rank: 2, assigned,
+          linkedEventId: group.find(b => b.linkedEventId)?.linkedEventId || null, linkedListId: group.find(b => b.linkedListId)?.linkedListId || null }
         return finishItem(base, overnight
           ? { winStart: sm, winEnd: 1440, geoStartMin: sm, geoEndMin: 1440, anchor }
           : { winStart: sm, winEnd: em, geoStartMin: sm, geoEndMin: em, anchor })
@@ -589,7 +582,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   useEffect(() => {
     if (!panel) return
     const onKey = e => {
-      if (e.key !== 'Escape' || rangeSelect) return
+      if (e.key !== 'Escape') return
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
       closePanel()
@@ -662,12 +655,12 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     if (!(await confirmAvailability(person, item.date, eventName))) return
     if (item.type === 'task') {
       const placeholder = item.group.find(b => !b.workerId && !b.externalWorkerId)
-      if (placeholder) { await updateAssignmentBlock(placeholder.id, placeholder, { ...personFields(person), taskStart: item.startTime, taskEnd: item.endTime }, blocksCtx()); return }
+      if (placeholder) { await updateAssignmentBlock(placeholder.id, placeholder, { ...personFields(person), taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId }, blocksCtx()); return }
       await createAssignmentBlock({
         teamId, date: item.date, startTime: item.startTime, endTime: item.endTime,
         ...personFields(person),
         eventId: null, taskGroupId: item.taskGroupId, label: item.block.label || '', description: item.block.description || '',
-        taskStart: item.startTime, taskEnd: item.endTime, createdBy: user.uid,
+        taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId, createdBy: user.uid,
       }, blocksCtx())
       return
     }
@@ -734,13 +727,13 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     const item = panelItem
     if (!item) return
     const apply = async (b, data) => {
-      const changed = Object.entries(data).some(([k, v]) => (b[k] ?? '') !== v)
+      const changed = Object.entries(data).some(([k, v]) => (b[k] ?? '') !== (v ?? ''))
       if (changed) await updateAssignmentBlock(b.id, b, data, blocksCtx())
     }
     if (item.type === 'task') {
       for (const b of item.group) {
         const row = payload.rows.find(r => r.blockId === b.id)
-        const data = { label: payload.label, description: payload.description, taskStart: payload.startTime, taskEnd: payload.endTime }
+        const data = { label: payload.label, description: payload.description, taskStart: payload.startTime, taskEnd: payload.endTime, linkedEventId: payload.linkedEventId, linkedListId: payload.linkedListId }
         if (row) Object.assign(data, { startTime: row.startTime, endTime: row.endTime, note: row.note })
         else if (!b.workerId && !b.externalWorkerId) Object.assign(data, { startTime: payload.startTime, endTime: payload.endTime })
         await apply(b, data)
@@ -788,44 +781,18 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setPanel({ key: `tk${taskGroupId}`, date, isNew: true })
   }
 
-  // Il giorno dopo quello in cui è iniziata la selezione: cliccarci la
-  // seconda volta crea un task che scavalca la mezzanotte (es. 23:00–02:00).
-  const selNextDate = rangeSelect ? toDateStr(addDays(new Date(rangeSelect.date + 'T12:00:00'), 1)) : null
-
+  // Un tocco su una cella libera crea subito l'attività (di un'ora, dall'ora
+  // toccata) e apre la colonna per dare nome, orario esatto e persone — niente
+  // più selezione a due tocchi: durata e giorno (anche a cavallo di
+  // mezzanotte) si cambiano dalla colonna.
   const handleGridClick = (e, date) => {
     if (selectedPerson || e.target !== e.currentTarget) return
     const rect = e.currentTarget.getBoundingClientRect()
     const hour = hourSlotFromClientX(e.clientX, rect)
-    if (rangeSelect && date === selNextDate) {
-      // Seconda tap sul giorno dopo: dalla cella di partenza a fine giornata
-      // devono essere libere in quella corsia; l'ora di fine è la cella
-      // cliccata (inclusa) e deve cadere PRIMA dell'inizio, altrimenti
-      // sarebbe oltre le 24 ore (non previsto: per più giorni c'è l'evento).
-      for (let h = rangeSelect.startHour; h < TIMELINE_HOURS; h++) { if (laneHourOccupied(rangeSelect.date, rangeSelect.lane, h)) return }
-      const startTime = hourToTime(TIMELINE_START_HOUR + rangeSelect.startHour)
-      const endTime = hourToTime(TIMELINE_START_HOUR + hour + 1)
-      if (toMin(endTime) >= toMin(startTime)) return
-      const startDate = rangeSelect.date
-      cancelRangeSelect()
-      createTaskAndOpen(startDate, startTime, endTime)
-      return
-    }
-    if (!rangeSelect || rangeSelect.date !== date) {
-      // La riga si fissa qui, al primo tocco — il secondo tap conta solo per
-      // l'ora di fine, non può più "scivolare" su un'altra corsia. Se la
-      // cella di partenza è già coperta da una card esistente, niente da
-      // fare: non si avvia nessuna selezione lì.
-      const lane = laneFromClientY(e.clientY, rect, laneTop, laneHeights)
-      if (laneHourOccupied(date, lane, hour)) return
-      setRangeSelect({ date, lane, startHour: hour }); setHoverHour(hour); setHoverDate(date); return
-    }
-    if (rangeSelect.startHour === hour) { cancelRangeSelect(); return }
-    const lo = Math.min(rangeSelect.startHour, hour), hi = Math.max(rangeSelect.startHour, hour)
-    // L'intero intervallo deve essere libero in quella corsia, non solo i
-    // due estremi — altrimenti si creerebbe un task sovrapposto a una card.
-    for (let h = lo; h <= hi; h++) { if (laneHourOccupied(date, rangeSelect.lane, h)) return }
-    cancelRangeSelect()
-    createTaskAndOpen(date, hourToTime(TIMELINE_START_HOUR + lo), hourToTime(TIMELINE_START_HOUR + hi + 1))
+    const lane = laneFromClientY(e.clientY, rect, laneTop, laneHeights)
+    if (laneHourOccupied(date, lane, hour)) return
+    setHoverCell(null)
+    createTaskAndOpen(date, hourToTime(TIMELINE_START_HOUR + hour), hourToTime(TIMELINE_START_HOUR + hour + 1))
   }
 
   const weekRangeLabel = `${formatDate(weekDates[0] + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} – ${formatDate(weekEnd + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}`
@@ -847,7 +814,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       <p style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>
         {t('staffTimeline.peopleLabel')}
         <span style={{ marginLeft: 8, fontWeight: 600, color: '#9a9a9a', textTransform: 'none', letterSpacing: 0 }}>
-          {selectedPerson ? t('staffTimeline.peopleHint') : rangeSelect ? t('staffTimeline.rangeSelectHint') : t('staffTimeline.searchHint')}
+          {selectedPerson ? t('staffTimeline.peopleHint') : t('staffTimeline.searchHint')}
         </span>
       </p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -971,36 +938,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
               const isPast = date < todayStr
               const dayItems = itemsByDay[date]
               const { laneOf } = dayLaneInfo[date]
-              // Anteprima della selezione in questa colonna: sul giorno di
-              // partenza (fino a fine giornata se il mouse è già sul giorno
-              // dopo) e, in quel caso, anche sul giorno dopo (da mezzanotte).
-              const selOvernight = !!rangeSelect && hoverHour != null && hoverDate === selNextDate
-              let previewSeg = null
-              let previewBlocked = false
-              if (rangeSelect && hoverHour != null) {
-                if (rangeSelect.date === date) {
-                  if (selOvernight) {
-                    previewSeg = { startMin: rangeSelect.startHour * 60, endMin: 1440 }
-                    for (let h = rangeSelect.startHour; h < TIMELINE_HOURS; h++) { if (laneHourOccupied(date, rangeSelect.lane, h)) { previewBlocked = true; break } }
-                  } else {
-                    const lo = Math.min(rangeSelect.startHour, hoverHour), hi = Math.max(rangeSelect.startHour, hoverHour)
-                    previewSeg = { startMin: lo * 60, endMin: (hi + 1) * 60 }
-                    // Se l'intervallo in anteprima attraversa una cella già occupata,
-                    // il tap di chiusura verrà ignorato (handleGridClick) — qui si
-                    // segnala la stessa cosa visivamente.
-                    for (let h = lo; h <= hi; h++) { if (laneHourOccupied(date, rangeSelect.lane, h)) { previewBlocked = true; break } }
-                  }
-                } else if (selOvernight && date === selNextDate) {
-                  previewSeg = { startMin: 0, endMin: (hoverHour + 1) * 60 }
-                  const sTime = hourToTime(TIMELINE_START_HOUR + rangeSelect.startHour), eTime = hourToTime(TIMELINE_START_HOUR + hoverHour + 1)
-                  previewBlocked = toMin(eTime) >= toMin(sTime)
-                  for (let h = rangeSelect.startHour; h < TIMELINE_HOURS && !previewBlocked; h++) { if (laneHourOccupied(rangeSelect.date, rangeSelect.lane, h)) previewBlocked = true }
-                }
-              }
-              const previewGeo = previewSeg ? cardGeometry(previewSeg.startMin, previewSeg.endMin) : null
-              const previewLabel = !previewSeg ? '' : selOvernight
-                ? `${hourToTime(TIMELINE_START_HOUR + rangeSelect.startHour)}–${hourToTime(TIMELINE_START_HOUR + hoverHour + 1)} (+1)`
-                : `${hourToTime(TIMELINE_START_HOUR + Math.floor(previewSeg.startMin / 60))}–${hourToTime(TIMELINE_START_HOUR + Math.round(previewSeg.endMin / 60))}`
+              // Anteprima della nuova attività: una card chiara che segue il mouse
+              // sulle celle libere di questa colonna.
+              const ghost = !selectedPerson && hoverCell?.date === date && !hoverCell.occupied ? hoverCell : null
+              const ghostGeo = ghost ? cardGeometry(ghost.hour * 60, (ghost.hour + 1) * 60) : null
               return (
                 <div key={date} style={{ flex: '1 1 0', minWidth: 'min(90vw, 230px)', borderRight: '1px solid #e0ddd6' }}>
                   <div style={{ height: 36, position: 'sticky', top: 0, zIndex: 6, background: '#fff', borderBottom: isToday ? '2px solid #e63946' : '1px solid #e0ddd6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1014,15 +955,14 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                       if (e.target !== e.currentTarget) return
                       const rect = e.currentTarget.getBoundingClientRect()
                       const hour = hourSlotFromClientX(e.clientX, rect)
-                      if (rangeSelect && (rangeSelect.date === date || date === selNextDate)) { setHoverHour(hour); setHoverDate(date); return }
                       const lane = laneFromClientY(e.clientY, rect, laneTop, laneHeights)
-                      setHoverCell({ date, occupied: laneHourOccupied(date, lane, hour) })
+                      setHoverCell(prev => (prev && prev.date === date && prev.hour === hour && prev.lane === lane ? prev : { date, hour, lane, occupied: laneHourOccupied(date, lane, hour) }))
                     }}
                     onMouseLeave={() => setHoverCell(null)}
                     style={{
                       position: 'relative', height: totalGridHeight,
                       backgroundColor: isToday ? 'rgba(230,57,70,0.045)' : 'transparent', 
-                      cursor: selectedPerson ? 'default' : (rangeSelect?.date === date || (rangeSelect && date === selNextDate)) ? (previewBlocked ? 'not-allowed' : 'crosshair') : (hoverCell?.date === date && hoverCell.occupied ? 'not-allowed' : 'crosshair'),
+                      cursor: selectedPerson ? 'default' : (ghost ? 'pointer' : 'default'),
                     }}
                   >
                     {/* Striscia "ora attuale", solo sulla colonna di oggi — vedi
@@ -1034,14 +974,15 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                         <div style={{ position: 'absolute', top: -5, left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, borderRadius: '50%', background: '#0066cc' }} />
                       </div>
                     )}
-                    {previewGeo && (
-                      <div style={{
-                        position: 'absolute', top: laneTop[rangeSelect.lane] + ITEM_MARGIN, height: laneHeights[rangeSelect.lane] - ITEM_MARGIN * 2, left: `${previewGeo.left * 100}%`, width: `${previewGeo.width * 100}%`,
-                        background: previewBlocked ? 'rgba(154,154,154,0.18)' : 'rgba(230,57,70,0.14)',
-                        border: `1.5px dashed ${previewBlocked ? '#9a9a9a' : '#e63946'}`,
-                        borderRadius: 8, pointerEvents: 'none', padding: '4px 6px', overflow: 'hidden',
-                        fontSize: 10, fontWeight: 800, color: previewBlocked ? '#6b6b6b' : '#e63946', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-                      }}>{previewLabel}</div>
+                    {ghost && (
+                      <div aria-hidden="true" style={{
+                        position: 'absolute', top: laneTop[ghost.lane] + ITEM_MARGIN, height: EMPTY_ITEM_H, left: `${ghostGeo.left * 100}%`, width: `${ghostGeo.width * 100}%`,
+                        background: 'rgba(255,255,255,0.78)', border: '1.5px solid #dcd9d2', borderRadius: 10, boxShadow: '4px 2px 10px -2px rgba(0,0,0,0.08)',
+                        pointerEvents: 'none', padding: `${CARD_PAD}px 10px`, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: ROW_GAP,
+                      }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#9a9a9a', height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, whiteSpace: 'nowrap' }}>+ {t('staffTimeline.newTaskGhost')}</span>
+                        <span style={{ fontSize: 9.5, fontWeight: 600, color: '#b5b2ab', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{hourToTime(TIMELINE_START_HOUR + ghost.hour)}–{hourToTime(TIMELINE_START_HOUR + ghost.hour + 1)}</span>
+                      </div>
                     )}
                     {dayItems.map(item => {
                       const lane = laneOf[item.key]
@@ -1055,7 +996,6 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                       // identifica la card per la colonna laterale.
                       const isPanelOpen = panel?.key === item.key && panel?.date === item.date
                       const openOrAssign = () => {
-                        setRangeSelect(null); setHoverHour(null)
                         if (selectedPerson) { handleDropOrTap(item, selectedPerson); return }
                         requestPanel({ key: item.key, date: item.date, isNew: false })
                       }
@@ -1171,6 +1111,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           date={panel.date}
           isNew={!!panel.isNew}
           activeWorkers={activeWorkers}
+          events={events}
           externalWorkers={externalWorkers}
           unavailability={unavailability}
           focusAddToken={panel.focusToken}

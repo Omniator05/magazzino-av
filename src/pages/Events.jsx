@@ -71,7 +71,21 @@ const IconPlus = () => (
 // Definiti a livello di modulo (non dentro Events()) così React li riconosce
 // come lo stesso tipo di componente tra un render e l'altro invece di
 // smontare/rimontare ogni card a ogni tasto premuto nella ricerca.
-function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDelete, loadListsOn }) {
+// Fasi (montaggio/smontaggio) di un evento che cadono oggi.
+const PHASE_TODAY_COLORS = { montaggio: '#2563eb', smontaggio: '#ea580c' }
+function phaseKeysToday(ev, today) {
+  return Object.entries(ev.phases || {}).filter(([k, d]) => d === today && PHASE_TODAY_COLORS[k]).map(([k]) => k)
+}
+
+// todayKind (dalla sezione "Oggi"): 'event' = l'evento è in corso oggi,
+// 'phase' = oggi c'è solo un montaggio/smontaggio di un evento di un altro
+// giorno — la card mostra OGGI nell'icona (blu/arancione come la fase) e
+// la fase nella riga di stato.
+function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDelete, loadListsOn, todayKind }) {
+  const isPhaseOnly = todayKind === 'phase'
+  const phaseKeys = isPhaseOnly ? phaseKeysToday(event, today) : []
+  const phaseColor = isPhaseOnly && phaseKeys[0] ? PHASE_TODAY_COLORS[phaseKeys[0]] : null
+  const shownDate = isPhaseOnly ? today : event.date
   const items    = event.items || []
   // Se il modulo liste di carico è disattivato, la riga di stato sotto il
   // titolo non va mostrata: azzerare qui invece che nel JSX fa sì che anche
@@ -81,9 +95,9 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
   const returned = loadListsOn ? items.filter(i => i.returned).length : 0
   const total    = loadListsOn ? items.length : 0
-  const isToday  = event.date === today
+  const isToday  = event.date === today || !!todayKind
   const evEnd    = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
-  const isMultiDay = evEnd !== event.date
+  const isMultiDay = !isPhaseOnly && evEnd !== event.date
   const isPast   = evEnd < today
   // Un rent/install scaduto conta come "da scaricare" anche se tutto è già
   // rientrato — a differenza di un evento normale, qui l'urgenza non è "c'è
@@ -105,13 +119,15 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
 
   const iconGradient = daScaricare
     ? '#fb8500'
+    : phaseColor
+    ? phaseColor
     : event.type === 'installation'
     ? '#a7c957'
     : (isToday || loaded > 0)
     ? 'var(--accent)'
     : '#a8dadc'
 
-  const cardBorder = isToday ? 'rgba(220,38,38,0.4)' : daScaricare ? 'rgba(234,88,12,0.4)' : 'var(--dash-card-border)'
+  const cardBorder = phaseColor ? `${phaseColor}66` : isToday ? 'rgba(220,38,38,0.4)' : daScaricare ? 'rgba(234,88,12,0.4)' : 'var(--dash-card-border)'
 
   return (
     <div onClick={() => navigate(`/events/${event.id}`)}
@@ -126,10 +142,10 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
       <div style={{ position:'relative', width:52, height:52, flexShrink:0 }}>
         <div style={{ width:52, height:52, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
           <span style={{ fontSize: isMultiDay ? 15 : 20, fontWeight:800 }}>
-            {event.date ? (isMultiDay ? `${new Date(event.date+'T12:00:00').getDate()}-${new Date(evEnd+'T12:00:00').getDate()}` : new Date(event.date+'T12:00:00').getDate()) : '?'}
+            {shownDate ? (isMultiDay ? `${new Date(shownDate+'T12:00:00').getDate()}-${new Date(evEnd+'T12:00:00').getDate()}` : new Date(shownDate+'T12:00:00').getDate()) : '?'}
           </span>
           <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
-            {event.date ? formatDate(event.date+'T12:00:00', {month:'short'}, i18n.language) : ''}
+            {shownDate ? formatDate(shownDate+'T12:00:00', {month:'short'}, i18n.language) : ''}
           </span>
         </div>
         {event.seriesId && (
@@ -160,16 +176,26 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
             <span className="install-tag" style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
           )}
         </div>
+        {isPhaseOnly && phaseKeys.map(k => {
+          const pt = event.phaseTimes?.[k]
+          return (
+            <p key={k} style={{ fontSize:12, fontWeight:700, color:PHASE_TODAY_COLORS[k], display:'flex', alignItems:'center', gap:5, marginBottom:2 }}>
+              <Dot size={7} color={PHASE_TODAY_COLORS[k]} />
+              {t('workerHome.phaseTodayBadge', { phase: t(k === 'montaggio' ? 'calendar.legendAssembly' : 'calendar.legendDisassembly') })}
+              {pt?.timeStart && pt?.timeEnd && <span style={{ fontVariantNumeric:'tabular-nums' }}>· {pt.timeStart}–{pt.timeEnd}</span>}
+            </p>
+          )
+        })}
         {loadListsOn && (
-          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : isToday ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
-            {(daScaricare || isToday) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
+          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : (isToday && !isPhaseOnly) ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
+            {(daScaricare || (isToday && !isPhaseOnly)) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
             {daScaricare
               // Un rent/install scaduto va chiuso anche se non c'è più
               // nulla da rientrare fisicamente (total-returned potrebbe
               // essere 0) — "0 da rientrare" leggerebbe come "niente da
               // fare", il contrario del messaggio voluto.
               ? (event.type === 'installation' ? t('events.installationEnded') : t('events.daScaricareCount', { count: total-returned }))
-              : isToday ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
+              : (isToday && !isPhaseOnly) ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
           </p>
         )}
         {(event.location || (event.phases && phaseConfig.some(p => event.phases[p.key]))) && (
@@ -406,7 +432,6 @@ export default function Events() {
     return items.some(i => i.returned) && !items.some(i => i.loaded && !i.returned)
   }
 
-  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e))
   const daScaricareSingle = events.filter(e => {
     if (e.seriesId) return false  // i ricorrenti passati non rientrati sono già in pastUnfinished sopra
     if (e.type === 'installation') {
@@ -422,6 +447,20 @@ export default function Events() {
     return its.length > 0 && its.some(i => i.loaded && !i.returned)
   }).sort((a, b) => (a.type === 'installation') === (b.type === 'installation') ? 0 : a.type === 'installation' ? -1 : 1)
 
+  // Sezione "Oggi": eventi di oggi (anche in corso da prima; un rent/install
+  // solo se parte oggi) e montaggi/smontaggi con data di OGGI — questi anche
+  // se l'evento è un altro giorno. Chi è già in "Da scaricare" resta lì.
+  // Quello che entra qui non si ripete nelle altre sezioni.
+  const daScaricareIds = new Set(daScaricareSingle.map(e => e.id))
+  const happeningToday = e => (e.type !== 'installation' && e.date <= today && effectiveEndDate(e) >= today && !isWrappedToday(e))
+    || (e.type === 'installation' && e.date === today)
+  const todayList = events.filter(e => !e.archived && !e.isDeadlineReminder && !daScaricareIds.has(e.id) && (happeningToday(e) || phaseKeysToday(e, today).length > 0))
+    .sort((a, b) => (happeningToday(b) ? 1 : 0) - (happeningToday(a) ? 1 : 0))
+  const todayIds = new Set(todayList.map(e => e.id))
+  const upcomingSingle = singleEvents.filter(e => effectiveEndDate(e) >= today && !isWrappedToday(e) && !todayIds.has(e.id))
+  const recurringShown = pinnedRecurring.filter(e => !todayIds.has(e.id))
+  const installationsShown = installations.filter(e => !todayIds.has(e.id))
+
   // Cap con "carica altri"
   const [visibleCount, setVisibleCount] = useState(EVENT_CAP)
   const visibleSingle = upcomingSingle.slice(0, visibleCount)
@@ -434,10 +473,16 @@ export default function Events() {
   })
 
   // Ricerca su tutti gli eventi
+  // Solo quelli ancora "vivi" (in programma, di oggi, o passati ma con roba
+  // ancora fuori / rent scaduto da chiudere) — i passati già conclusi stanno
+  // nell'Archivio, che ha la sua ricerca.
+  const isSearchable = e => !e.isDeadlineReminder && !e.archived && (e.type === 'installation' || (isActive(e) && !isWrappedToday(e)))
   const searchResults = search.trim()
     ? events.filter(e =>
-        e.name?.toLowerCase().includes(search.toLowerCase()) ||
-        e.location?.toLowerCase().includes(search.toLowerCase())
+        isSearchable(e) && (
+          e.name?.toLowerCase().includes(search.toLowerCase()) ||
+          e.location?.toLowerCase().includes(search.toLowerCase())
+        )
       )
     : []
 
@@ -500,16 +545,13 @@ export default function Events() {
 
   return (
     <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
-      <div style={{ padding:'56px 22px 18px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-        <div>
-          <h1 style={{ fontSize:32, fontWeight:800, color:'var(--dash-title)', letterSpacing:'-0.5px', lineHeight:1.1 }}>{t('events.title')}</h1>
-          <p style={{ fontSize:13, color:'var(--dash-muted)', fontWeight:500, marginTop:3 }}>{t('events.upcomingCount', { count: upcomingSingle.length + pinnedRecurring.length })}</p>
-        </div>
-        <div style={{ display:'flex', gap:8, paddingTop:4 }}>
-          <button onClick={() => navigate('/archive')} style={{
-            background:'var(--dash-pill-bg)', border:'1px solid var(--dash-pill-border)', color:'var(--dash-muted)',
-            borderRadius:50, padding:'8px 14px', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6,
-          }}>
+      <div className="page-header rc-page-header">
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div>
+            <h1>{t('events.title')}</h1>
+            <p>{t('events.upcomingCount', { count: upcomingSingle.length + recurringShown.length + todayList.length })}</p>
+          </div>
+          <button onClick={() => navigate('/archive')} className="rc-pill-btn" style={{ padding:'9px 14px', fontSize:12.5, gap:6 }}>
             <IconArchive /> {t('events.archive')}
           </button>
         </div>
@@ -517,13 +559,12 @@ export default function Events() {
 
       <FabButton onClick={() => { setCreateFlowSkip('blank'); setCreateFlowOpen(true) }} ariaLabel={t('events.newEventButton')} />
 
-      {/* Search bar SEMPRE visibile */}
-      <div style={{ padding:'0 16px 12px' }}>
-        <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
-          <svg style={{ position:'absolute', left:14 }} viewBox="0 0 24 24" fill="var(--dash-muted)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('events.searchPlaceholder')}
-            aria-label={t('events.searchPlaceholder')}
-            style={{ width:'100%', padding:'12px 14px 12px 40px', borderRadius:14, border:'1.5px solid var(--dash-card-border)', background:'var(--dash-card)', color:'var(--dash-title)', fontSize:14 }} />
+      {/* Barra di ricerca SEMPRE visibile — stessa del Magazzino (fondo grigio,
+          appiccicata in alto), con un po' d'aria sotto l'intestazione. */}
+      <div className="search-bar rc-inv-search" style={{ marginTop:14 }}>
+        <div>
+          <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('events.searchPlaceholder')} aria-label={t('events.searchPlaceholder')} />
         </div>
       </div>
 
@@ -542,6 +583,21 @@ export default function Events() {
           </>
         ) : (
           <>
+            {/* OGGI — eventi di oggi e montaggi/smontaggi di oggi (anche di eventi
+                in un altro giorno): separati dai "prossimi" per vedere subito
+                cosa c'è da fare oggi. Sempre aperta, non collassabile. */}
+            {todayList.length > 0 && (
+              <div style={{ marginBottom:8 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px' }}>
+                  <span style={{ color:'#e63946', fontWeight:800, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.todoToday')}</span>
+                  <span style={{ background:'rgba(230,57,70,0.12)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:800, color:'#e63946' }}>{todayList.length}</span>
+                </div>
+                {todayList.map(ev => ev.type === 'installation'
+                  ? <InstallationCard key={ev.id} event={ev} {...instCardProps} />
+                  : <EventCard key={ev.id} event={ev} {...cardProps} todayKind={happeningToday(ev) ? 'event' : 'phase'} />)}
+              </div>
+            )}
+
             {/* DA SCARICARE — collassabile, solo se il modulo liste di carico è attivo */}
             {loadListsOn && daScaricareSingle.length > 0 && (
               <div style={{ marginBottom:4 }}>
@@ -556,15 +612,15 @@ export default function Events() {
             )}
 
             {/* RICORRENTI — collassabile */}
-            {pinnedRecurring.length > 0 && (
+            {recurringShown.length > 0 && (
               <div style={{ marginBottom:4 }}>
                 <button onClick={() => toggle('recurring')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#1d6fce', display:'flex' }}><IconChevronSection open={openSections.recurring} /></span>
                   <span className="section-label" style={{ color:'#1d6fce', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.recurring')}</span>
-                  <span style={{ background:'#dbeafe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#1e3a5f' }}>{pinnedRecurring.length}</span>
+                  <span style={{ background:'#dbeafe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#1e3a5f' }}>{recurringShown.length}</span>
                 </button>
-                {openSections.recurring && pinnedRecurring.map(ev => <EventCard key={ev.id} event={ev} {...cardProps} />)}
+                {openSections.recurring && recurringShown.map(ev => <EventCard key={ev.id} event={ev} {...cardProps} />)}
               </div>
             )}
 
@@ -594,19 +650,19 @@ export default function Events() {
             )}
 
             {/* INSTALLAZIONI ATTIVE */}
-            {installations.length > 0 && (
+            {installationsShown.length > 0 && (
               <div style={{ marginTop:8 }}>
                 <button onClick={() => toggle('installations')} className="btn-section"
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#5b4fcf', display:'flex' }}><IconChevronSection open={openSections.installations} /></span>
                   <span className="section-label" style={{ color:'#5b4fcf', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.installations')}</span>
-                  <span style={{ background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installations.length}</span>
+                  <span style={{ background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installationsShown.length}</span>
                 </button>
-                {openSections.installations && installations.map(inst => <InstallationCard key={inst.id} event={inst} {...instCardProps} />)}
+                {openSections.installations && installationsShown.map(inst => <InstallationCard key={inst.id} event={inst} {...instCardProps} />)}
               </div>
             )}
 
-            {daScaricareSingle.length === 0 && pinnedRecurring.length === 0 && upcomingSingle.length === 0 && installations.length === 0 && (
+            {daScaricareSingle.length === 0 && todayList.length === 0 && recurringShown.length === 0 && upcomingSingle.length === 0 && installationsShown.length === 0 && (
               <button
                 type="button"
                 onClick={() => { setCreateFlowSkip('blank'); setCreateFlowOpen(true) }}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import PendingButton from './PendingButton'
 
 // Popup semplice per chiedere il nome di una lista di carico (nuova,
 // rinominata, o creata spostandoci le righe non caricate). Stessa grafica del
@@ -18,7 +19,8 @@ export default function ListNameModal({ open, title, message, initialName = '', 
 
   if (!open) return null
   const trimmed = name.trim()
-  const submit = () => { if (trimmed) onConfirm(trimmed) }
+  // onConfirm può ritornare una promessa: il bottone mostra lo spinner finché finisce.
+  const submit = () => (trimmed ? onConfirm(trimmed) : undefined)
 
   return createPortal(
     <div onClick={onCancel} style={{ position:'fixed', inset:0, zIndex:10002, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
@@ -36,7 +38,7 @@ export default function ListNameModal({ open, title, message, initialName = '', 
         />
         <div style={{ display:'flex', gap:10, marginTop:18 }}>
           <button onClick={onCancel} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none' }}>{cancelLabel}</button>
-          <button onClick={submit} disabled={!trimmed} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'var(--accent)', color:'#fff', border:'none', opacity: trimmed ? 1 : 0.5 }}>{confirmLabel}</button>
+          <PendingButton onClick={submit} disabled={!trimmed} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'var(--accent)', color:'#fff', border:'none', opacity: trimmed ? 1 : 0.5 }}>{confirmLabel}</PendingButton>
         </div>
       </div>
     </div>,

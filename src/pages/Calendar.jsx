@@ -486,6 +486,8 @@ export default function Calendar() {
       date,
       label: group[0].label,
       description: group[0].description,
+      linkedEventId: group.find(b => b.linkedEventId)?.linkedEventId || null,
+      linkedListId: group.find(b => b.linkedListId)?.linkedListId || null,
       startTime: group.reduce((min, b) => (b.startTime < min ? b.startTime : min), group[0].startTime),
       endTime: group.reduce((max, b) => (b.endTime > max ? b.endTime : max), group[0].endTime),
       assigned: group,
