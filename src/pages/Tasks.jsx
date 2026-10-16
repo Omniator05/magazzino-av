@@ -4,7 +4,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import DeleteButton from '../components/DeleteButton'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import FabButton from '../components/FabButton'
 import { Dot, Check, User } from '../components/Icon'
 import SaveButton from '../components/SaveButton'
@@ -145,23 +145,11 @@ export default function Tasks() {
   }
 
   return (
-    <div className="page">
-      {isAdmin ? (
-        <div className="page-header">
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-            <BackHomeButton />
-            <h1>{t('tasks.title')}</h1>
-          </div>
-          <p style={{ marginTop:4, textAlign:'right' }}>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
-        </div>
-      ) : (
-        <div className="page-header">
-          <h1>{t('tasks.title')}</h1>
-          <p>{t('tasks.toDoCount', { count: openTasks.length })}{doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}</p>
-        </div>
-      )}
+    <div className="page" style={{ background:'var(--surface)' }}>
+      <PageHeader title={t('tasks.title')} backTo={isAdmin ? '/' : undefined}
+        subtitle={`${t('tasks.toDoCount', { count: openTasks.length })}${doneTasks.length > 0 ? t('tasks.doneSuffix', { count: doneTasks.length }) : ''}`} />
 
-      <div style={{ padding:'16px 0' }}>
+      <div style={{ padding:'18px 0' }}>
 
         {/* Task aperte */}
         {openTasks.length === 0 && doneTasks.length === 0 ? (
@@ -190,7 +178,7 @@ export default function Tasks() {
             {/* Task completate — collassabili */}
             {doneTasks.length > 0 && (
               <details open style={{ marginTop:8 }}>
-                <summary style={{ padding:'10px 16px', color:'var(--text2)', fontSize:13, fontWeight:600, cursor:'pointer', listStyle:'none', display:'flex', alignItems:'center', gap:6 }}>
+                <summary style={{ padding:'10px 20px', color:'var(--c-ink3)', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', cursor:'pointer', listStyle:'none', display:'flex', alignItems:'center', gap:6 }}>
                   <span>▾</span> {t('tasks.doneCount', { count: doneTasks.length })}
                 </summary>
                 <div style={{ opacity:0.6 }}>
@@ -215,7 +203,7 @@ export default function Tasks() {
       {/* Modal crea/modifica task */}
       {showModal && (
         <div className={`modal-overlay${taskDrag.closing ? ' closing' : ''}`} onClick={taskDrag.onOverlayClick}>
-          <div className={`modal${taskDrag.jiggling ? ' modal-jiggle' : ''}${taskDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...taskDrag.props}>
+          <div className={`modal rc-sheet${taskDrag.jiggling ? ' modal-jiggle' : ''}${taskDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...taskDrag.props}>
             <button className="close-btn" onClick={taskDrag.close}>✕</button>
             <h2>{editingTask ? t('tasks.editTaskTitle') : (isAdmin ? t('tasks.newTaskTitle') : t('tasks.addTaskTitle'))}</h2>
 
@@ -297,17 +285,17 @@ function TaskCard({ task, isAdmin, canEdit, onToggle, onDelete, onEdit, assignee
   return (
     <div
       onClick={canEdit ? onEdit : undefined}
-      style={{ margin:'0 16px 10px', background:'var(--card)', border:`1px solid ${task.done ? 'var(--border)' : p.border}`, borderRadius:'var(--radius)', overflow:'hidden', cursor: canEdit ? 'pointer' : 'default' }}>
-      {/* Striscia priorità */}
-      {!task.done && <div style={{ height:3, background:p.color, opacity:0.6 }} />}
-      <div style={{ padding:'14px 16px', display:'flex', alignItems:'flex-start', gap:12 }}>
+      style={{ position:'relative', margin:'0 18px 12px', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, overflow:'hidden', cursor: canEdit ? 'pointer' : 'default' }}>
+      {/* Striscia priorità sul lato sinistro */}
+      {!task.done && <span aria-hidden="true" style={{ position:'absolute', top:0, bottom:0, left:0, width:4, background:p.color, opacity:0.75 }} />}
+      <div style={{ padding:'15px 16px 15px 20px', display:'flex', alignItems:'flex-start', gap:14 }}>
         {/* Checkbox */}
         <button onClick={e => { e.stopPropagation(); onToggle() }}
           style={{ width:26, height:26, borderRadius:8, border:`2px solid ${task.done ? 'var(--green)' : p.color}`, background: task.done ? 'var(--green)' : 'transparent', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', marginTop:1 }}>
           {task.done && <svg viewBox="0 0 24 24" fill="white" width="14" height="14"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>}
         </button>
         <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontWeight:700, fontSize:15, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--text2)' : 'var(--text)', marginBottom:3 }}>
+          <p style={{ fontWeight:800, fontSize:15, textDecoration: task.done ? 'line-through' : 'none', color: task.done ? 'var(--c-ink3)' : 'var(--c-ink)', marginBottom:4 }}>
             {task.title}
           </p>
           {task.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:4, lineHeight:1.5 }}>{task.notes}</p>}

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { isModuleEnabled } from '../utils/modules'
 import { getCodeDisplay } from '../utils/codeDisplay'
 import { QrCode, Barcode } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import SegmentedControl from '../components/SegmentedControl'
 
 // Riga di impostazione: titolo sopra, card bianca sotto con prima una breve
@@ -40,7 +40,7 @@ function Switch({ enabled, onClick, disabled, label }) {
       >
         <span style={{
           position:'absolute', top:3, left: enabled ? 23 : 3,
-          width:20, height:20, borderRadius:'50%', background:'#fff',
+          width:20, height:20, borderRadius:'50%', background:'var(--c-surface)',
           boxShadow:'0 1px 3px rgba(0,0,0,0.25)', transition:'left 0.15s ease',
         }} />
       </button>
@@ -89,10 +89,7 @@ export default function SettingsModules() {
         </div>
       )}
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-        <BackHomeButton to="/admin/settings" />
-        <h1 style={{ textAlign:'right' }}>{t('adminUsers.modulesTitle')}</h1>
-      </div>
+      <PageHeader title={t('adminUsers.modulesTitle')} backTo="/admin/settings" />
       <p style={{ padding:'0 16px 14px', color:'var(--text2)', fontSize:13, lineHeight:1.5, marginTop:-8 }}>{t('adminUsers.modulesPageDesc')}</p>
 
       <SettingRow title={t('workHours.moduleTitle')} desc={t('workHours.moduleDesc')}>

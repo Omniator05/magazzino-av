@@ -84,17 +84,17 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
   const timeLabel = eventOwnRange ? `${eventOwnRange[0]} – ${eventOwnRange[1]}` : t('events.allDayLabel')
 
   const Row = ({ icon, label, children }) => (
-    <div style={{ display:'flex', gap:12, padding:'12px 0', borderBottom:'1px solid #e0ddd6' }}>
-      <span style={{ flexShrink:0, color:'#9a9a9a', display:'flex', marginTop:2 }}>{icon}</span>
+    <div style={{ display:'flex', gap:12, padding:'12px 0', borderBottom:'1px solid var(--c-line)' }}>
+      <span style={{ flexShrink:0, color:'var(--c-ink3)', display:'flex', marginTop:2 }}>{icon}</span>
       <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontSize:11, fontWeight:800, color:'#9a9a9a', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>{label}</p>
+        <p style={{ fontSize:11, fontWeight:800, color:'var(--c-ink3)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>{label}</p>
         {children}
       </div>
     </div>
   )
   // Numero e email del responsabile: un tocco e parte la chiamata / la mail.
   const contactLink = (href, icon, text) => (
-    <a href={href} style={{ display:'inline-flex', alignItems:'center', gap:7, marginTop:6, marginRight:8, padding:'8px 13px', borderRadius:20, background:'#fff', border:'1px solid #e0ddd6', color:'#1a1a1a', fontSize:13.5, fontWeight:700, textDecoration:'none' }}>
+    <a href={href} style={{ display:'inline-flex', alignItems:'center', gap:7, marginTop:6, marginRight:8, padding:'8px 13px', borderRadius:20, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', fontSize:13.5, fontWeight:700, textDecoration:'none' }}>
       <span style={{ color:'#e63946', display:'flex' }}>{icon}</span>{text}
     </a>
   )
@@ -129,19 +129,19 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
         )}
 
         <Row icon={<Calendar size={15} />} label={t('eventDetail.dateFieldLabel')}>
-          <p style={{ fontSize:14, fontWeight:600, color:'#1a1a1a' }}>{dateLabel}</p>
+          <p style={{ fontSize:14, fontWeight:600, color:'var(--c-ink)' }}>{dateLabel}</p>
         </Row>
         <Row icon={<Clock size={15} />} label={t('eventSummary.timeLabel')}>
-          <p style={{ fontSize:14, fontWeight:600, color:'#1a1a1a' }}>{timeLabel}</p>
+          <p style={{ fontSize:14, fontWeight:600, color:'var(--c-ink)' }}>{timeLabel}</p>
         </Row>
         {event.location && (
           <Row icon={<Pin size={15} />} label={t('calendar.locationLabel')}>
-            <p style={{ fontSize:14, fontWeight:600, color:'#1a1a1a' }}>{event.location}</p>
+            <p style={{ fontSize:14, fontWeight:600, color:'var(--c-ink)' }}>{event.location}</p>
           </Row>
         )}
         {hasManager && (
           <Row icon={<User size={15} />} label={t('eventSummary.managerLabel')}>
-            {manager.name && <p style={{ fontSize:14, fontWeight:700, color:'#1a1a1a' }}>{manager.name}</p>}
+            {manager.name && <p style={{ fontSize:14, fontWeight:700, color:'var(--c-ink)' }}>{manager.name}</p>}
             <div>
               {manager.phone && contactLink(`tel:${manager.phone.replace(/\s+/g, '')}`, <Phone size={14} />, manager.phone)}
               {manager.email && contactLink(`mailto:${manager.email}`, <Mail size={14} />, manager.email)}
@@ -150,16 +150,16 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
         )}
         <Row icon={<User size={15} />} label={t('eventSummary.assignedLabel')}>
           {assignedPeople.length === 0 ? (
-            <p style={{ fontSize:13, color:'#9a9a9a', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
+            <p style={{ fontSize:13, color:'var(--c-ink3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {assignedPeople.map(p => (
                 <div key={p.key}>
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#fff', border:'1px solid #e0ddd6', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'#1a1a1a' }}>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--c-ink)' }}>
                     <User size={11} /> {p.name}{p.hours && <span style={{ fontWeight:600, opacity:0.8 }}>&nbsp;· {p.hours}</span>}
                   </span>
                   {p.phase && <span style={{ marginLeft:6, color:p.phase.color, background:p.phase.color+'18', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:800 }}>{p.phase.label}</span>}
-                  {p.note && <p style={{ margin:'4px 0 0 4px', fontSize:12.5, color:'#6b6b6b', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{p.note}</p>}
+                  {p.note && <p style={{ margin:'4px 0 0 4px', fontSize:12.5, color:'var(--c-ink2)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{p.note}</p>}
                 </div>
               ))}
             </div>
@@ -167,13 +167,13 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
         </Row>
         {event.notes && (
           <Row icon={<FileText size={15} />} label={t('calendar.notesLabel')}>
-            <p style={{ fontSize:14, color:'#1a1a1a', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{event.notes}</p>
+            <p style={{ fontSize:14, color:'var(--c-ink)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{event.notes}</p>
           </Row>
         )}
 
         <div style={{ display:'flex', gap:10, marginTop:22 }}>
           {onAssign && (
-            <button onClick={onAssign} className="btn-no-anim" style={{ flex:1, padding:'14px 12px', borderRadius:13, background:'#eceae6', color:'#1a1a1a', fontSize:14.5, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+            <button onClick={onAssign} className="btn-no-anim" style={{ flex:1, padding:'14px 12px', borderRadius:13, background:'var(--c-fill)', color:'var(--c-ink)', fontSize:14.5, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
               <User size={16} /> {t('eventSummary.assignSomeone')}
             </button>
           )}

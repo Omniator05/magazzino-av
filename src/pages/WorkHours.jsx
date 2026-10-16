@@ -7,7 +7,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
 import { Clock, Check, Calendar as CalendarIcon } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import DeleteButton from '../components/DeleteButton'
 import SaveButton from '../components/SaveButton'
 import DateField from '../components/DateField'
@@ -239,15 +239,10 @@ export default function WorkHours() {
           .shift-review-closing { animation: none; opacity: 0; }
         }
       `}</style>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Il worker ci arriva dalla sua tab dedicata, non serve un modo per
-              "tornare indietro" — c'è già la tab bar. L'admin invece ci
-              arriva da una card in Dashboard, un livello più in profondità. */}
-          {profile?.role !== 'worker' && <BackHomeButton />}
-          <h1>{t('workHours.title')}</h1>
-        </div>
-      </div>
+      {/* Il worker ci arriva dalla sua tab dedicata, non serve un modo per
+          "tornare indietro" — c'è già la tab bar. L'admin invece ci arriva da
+          una card in Dashboard, un livello più in profondità. */}
+      <PageHeader title={t('workHours.title')} backTo={profile?.role !== 'worker' ? '/' : undefined} />
 
       {/* Turno in corso / bottone Inizia turno */}
       <div style={{

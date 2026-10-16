@@ -42,8 +42,8 @@ export default function LogoutButton({ style, className, name }) {
         <div className="lo-confirm-bg" onClick={() => setConfirm(false)}>
           <div className="lo-confirm" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="lo-confirm-icon"><LogOut size={26} /></div>
-            <h3 style={{ fontSize:19, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>Vuoi uscire?</h3>
-            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>Dovrai effettuare di nuovo l'accesso per rientrare.</p>
+            <h3 style={{ fontSize:19, fontWeight:800, color:'var(--c-ink)', margin:'0 0 6px', letterSpacing:'-0.3px' }}>Vuoi uscire?</h3>
+            <p style={{ fontSize:14, color:'var(--c-ink2)', margin:0, lineHeight:1.45 }}>Dovrai effettuare di nuovo l'accesso per rientrare.</p>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
               <button className="lo-btn lo-cancel" onClick={() => setConfirm(false)}>Annulla</button>
               <button className="lo-btn lo-go" onClick={doLogout}>Esci</button>
@@ -81,14 +81,14 @@ export default function LogoutButton({ style, className, name }) {
         }
 
         .lo-confirm-bg {
-          position: fixed; inset: 0; z-index: 10000;
+          position: fixed; inset: 0; z-index: 10200;
           background: rgba(10,12,18,0.5);
           backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
           display: flex; align-items: center; justify-content: center; padding: 24px;
           animation: loFade 0.18s ease both;
         }
         .lo-confirm {
-          background: #fff; border-radius: 24px; padding: 28px 24px 22px;
+          background: var(--c-surface); border-radius: 24px; padding: 28px 24px 22px;
           width: 100%; max-width: 320px; text-align: center;
           box-shadow: 0 24px 70px rgba(0,0,0,0.35);
           animation: loPop 0.28s cubic-bezier(0.34,1.4,0.64,1) both;
@@ -102,15 +102,15 @@ export default function LogoutButton({ style, className, name }) {
           flex: 1; padding: 12px; border-radius: 13px; font-size: 14px; font-weight: 700;
           border: none; cursor: pointer;
         }
-        .lo-cancel { background: #f3f4f6; color: #374151; }
+        .lo-cancel { background: var(--c-fill); color: #374151; }
         .lo-go { background: #e63946; color: #fff; box-shadow: 0 4px 16px rgba(230,57,70,0.35); }
 
         .lo-overlay {
           /* Niente fade in entrata: opaca dal primissimo frame, per lo
              stesso motivo della schermata di benvenuto — evita di
              intravedere per un attimo la pagina sotto mentre sparisce. */
-          position: fixed; inset: 0; z-index: 10000; overflow: hidden;
-          background-image: linear-gradient(120deg, #ffffff 0%, #ffd9d6 15%, #f28b86 32%, #ffffff 48%, #b9d2f5 64%, #6f9fe6 80%, #ffffff 100%);
+          position: fixed; inset: 0; z-index: 10300; overflow: hidden;
+          background-image: linear-gradient(120deg, var(--c-surface) 0%, var(--ov-1) 15%, var(--ov-2) 32%, var(--c-surface) 48%, var(--ov-3) 64%, var(--ov-4) 80%, var(--c-surface) 100%);
           background-size: 280% 280%;
           animation: loGradientShift 15s ease-in-out infinite;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -125,12 +125,12 @@ export default function LogoutButton({ style, className, name }) {
           background: radial-gradient(circle, rgba(230,57,70,0.18) 0%, transparent 70%);
         }
         .lo-logo-card { position: relative; width: 100%; height: 100%; border-radius: 28px;
-          background: #fff; border: 1px solid rgba(17,24,39,0.06);
+          background: #ffffff; border: 1px solid rgba(17,24,39,0.06);
           box-shadow: 0 20px 46px rgba(230,57,70,0.14), 0 4px 14px rgba(17,24,39,0.06);
           display: flex; align-items: center; justify-content: center; padding: 18px;
         }
         .lo-logo { width: 100%; height: 100%; object-fit: contain; }
-        .lo-bye { z-index: 1; margin-top: 26px; color: #111827; font-size: 24px; font-weight: 800;
+        .lo-bye { z-index: 1; margin-top: 26px; color: var(--c-ink); font-size: 24px; font-weight: 800;
           letter-spacing: -0.4px; animation: loByeIn 0.5s ease 0.25s both;
         }
         .lo-spinner { z-index: 1; margin-top: 30px; width: 24px; height: 24px;

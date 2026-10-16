@@ -16,6 +16,7 @@ import EventFormFields, { Switch, fieldLabel } from './EventFormFields'
 import DateRangeField from './DateRangeField'
 import Picker from './Picker'
 import { TaskSummaryBody } from './TaskSummaryModal'
+import ArchiveEventDetail from './ArchiveEventDetail'
 import SegmentedControl from './SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from './AbsenceTypeBadge'
 import DeleteButton from './DeleteButton'
@@ -44,6 +45,7 @@ const SIDEBAR_MAX_HEIGHT = 'calc(100vh - 76px)'
 // raggiungibile comunque dopo creando l'evento e aprendolo).
 export default function CalendarSidePanel({
   absencesOnDate, todayStr, selectedDate, selectedDayEvents, selectedDayPhases = [], selectedDayTasks, user, isWorker, workers, teamId,
+  readOnly, onOpenEvent, eventDetail, eventBlocks, onCloseEvent, onOpenEventPage,
   onOpenTask, taskDetail, onCloseTask, onAddAbsence, onEditEvent, creating, onCancelCreate, onEventCreated,
   reportMode, rangeStart, onCancelReportMode,
   absenceFormOpen, absenceForm, setAbsenceForm, onSubmitAbsence, savingAbsence, editingAbsenceId, onCloseAbsenceForm, isAdmin, onEditAbsence, onDeleteAbsence,
@@ -98,11 +100,11 @@ export default function CalendarSidePanel({
 
   if (creating) {
     return (
-      <div key="create" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+      <div key="create" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px 12px', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{t('calendar.quickCreateTitle')}</h2>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--c-ink)' }}>{t('calendar.quickCreateTitle')}</h2>
           <button onClick={onCancelCreate} className="btn-no-anim" aria-label={t('common.cancel')}
-            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+            style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <EventFormFields form={quickForm} setForm={setQuickForm} idp="cal-quick" teamId={teamId} showType showRecurrence autoFocusName today={today} futureDates={quickFutureDates} />
@@ -124,18 +126,18 @@ export default function CalendarSidePanel({
   // precompilate.
   if (reportMode) {
     return (
-      <div key="absence-pick" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: SIDEBAR_MAX_HEIGHT, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
+      <div key="absence-pick" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: SIDEBAR_MAX_HEIGHT, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{t('calendar.absenceModalTitle')}</h2>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--c-ink)' }}>{t('calendar.absenceModalTitle')}</h2>
           <button onClick={onCancelReportMode} className="btn-no-anim" aria-label={t('common.cancel')}
-            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+            style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
         <div style={{ background: 'rgba(216,56,63,0.08)', border: '1px solid rgba(216,56,63,0.3)', borderRadius: 12, padding: '14px 16px' }}>
           <p style={{ fontSize: 13.5, color: 'var(--accent)', fontWeight: 600, lineHeight: 1.4 }}>
             {!rangeStart ? t('calendar.tapFirstDay') : t('calendar.tapLastDay')}
           </p>
         </div>
-        <p style={{ fontSize: 12, color: '#9a9a9a', margin: 0 }}>{t('calendar.absenceModalDesc')}</p>
+        <p style={{ fontSize: 12, color: 'var(--c-ink3)', margin: 0 }}>{t('calendar.absenceModalDesc')}</p>
       </div>
     )
   }
@@ -147,11 +149,11 @@ export default function CalendarSidePanel({
     const singleDay = !absenceForm.endDate || absenceForm.endDate === absenceForm.startDate
     const personOptions = workers.map(w => ({ value: w.id, label: w.name }))
     return (
-      <div key="absence-form" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+      <div key="absence-form" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px 12px', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{editingAbsenceId ? t('calendar.absenceModalEditTitle') : t('calendar.absenceModalTitle')}</h2>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--c-ink)' }}>{editingAbsenceId ? t('calendar.absenceModalEditTitle') : t('calendar.absenceModalTitle')}</h2>
           <button onClick={onCloseAbsenceForm} className="btn-no-anim" aria-label={t('common.cancel')}
-            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+            style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -172,12 +174,12 @@ export default function CalendarSidePanel({
 
           <div>
             <span style={fieldLabel}>{t('calendar.whenLabel')}</span>
-            <div style={{ border: '1px solid #e0ddd6', borderRadius: 14, background: '#fff' }}>
+            <div style={{ border: '1px solid var(--c-line)', borderRadius: 14, background: 'var(--c-surface)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, startDate: v, endDate: f.endDate < v ? '' : f.endDate }))} />
                 </div>
-                <span aria-hidden="true" style={{ color: '#9a9a9a', fontWeight: 700 }}>→</span>
+                <span aria-hidden="true" style={{ color: 'var(--c-ink3)', fontWeight: 700 }}>→</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <DateRangeField endOnly start={absenceForm.startDate} end={absenceForm.endDate || absenceForm.startDate} placeholder={t('calendar.endPlaceholder')} singleDayLabel={t('calendar.singleDay')}
                     onChange={(st, en) => setAbsenceForm(f => ({ ...f, endDate: en === st ? '' : en }))} />
@@ -186,12 +188,12 @@ export default function CalendarSidePanel({
               {/* Le ore hanno senso solo su un giorno solo — "qualche ora" su più
                   giorni non avrebbe un unico orario (stesso vincolo di addAbsence). */}
               {singleDay && (
-                <div style={{ borderTop: '1px solid #eceae6', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a', flex: absenceForm.allDay !== false ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
+                <div style={{ borderTop: '1px solid var(--c-fill)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-ink)', flex: absenceForm.allDay !== false ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
                   {absenceForm.allDay === false && (
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div style={{ flex: 1, minWidth: 0 }}><TimeField value={absenceForm.startTime} onChange={v => setAbsenceForm(f => ({ ...f, startTime: v }))} compact /></div>
-                      <span aria-hidden="true" style={{ color: '#9a9a9a' }}>–</span>
+                      <span aria-hidden="true" style={{ color: 'var(--c-ink3)' }}>–</span>
                       <div style={{ flex: 1, minWidth: 0 }}><TimeField value={absenceForm.endTime} onChange={v => setAbsenceForm(f => ({ ...f, endTime: v }))} clearable compact /></div>
                     </div>
                   )}
@@ -203,7 +205,7 @@ export default function CalendarSidePanel({
           </div>
 
           <div>
-            <label htmlFor="cal-absence-reason" style={fieldLabel}>{t('calendar.reason')} <span style={{ color: '#9a9a9a', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>{t('common.optional')}</span></label>
+            <label htmlFor="cal-absence-reason" style={fieldLabel}>{t('calendar.reason')} <span style={{ color: 'var(--c-ink3)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>{t('common.optional')}</span></label>
             <input id="cal-absence-reason" value={absenceForm.reason} onChange={e => setAbsenceForm(f => ({ ...f, reason: e.target.value }))} placeholder={t('calendar.reasonPlaceholder')} />
           </div>
         </div>
@@ -226,11 +228,11 @@ export default function CalendarSidePanel({
   // tipo/ricorrenza (resta solo nel flusso di creazione).
   if (editingEvent) {
     return (
-      <div key="edit-event" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+      <div key="edit-event" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px 12px', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{t('calendar.editEventTitle')}</h2>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--c-ink)' }}>{t('calendar.editEventTitle')}</h2>
           <button onClick={onCancelEdit} className="btn-no-anim" aria-label={t('common.cancel')}
-            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+            style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={today} />
@@ -246,14 +248,37 @@ export default function CalendarSidePanel({
     )
   }
 
+  // Magazziniere (sola lettura): dettagli completi dell'evento nella colonna, con la
+  // lista di carico e il pulsante per aprirla.
+  if (eventDetail) {
+    return (
+      <div key={`event-${eventDetail.id}`} className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '20px 28px 8px', flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.3px', overflowWrap: 'anywhere' }}>{eventDetail.name}</h2>
+          <button onClick={onCloseEvent} className="btn-no-anim" aria-label={t('common.close')}
+            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 20px' }}>
+          <ArchiveEventDetail event={eventDetail} workers={workers} blocks={eventBlocks || []} vehicles={[]} loadListsOn />
+        </div>
+        <div className="rc-side-footer">
+          <button onClick={() => onOpenEventPage(eventDetail)} className="btn-no-anim"
+            style={{ width: '100%', padding: '14px 16px', borderRadius: 13, background: '#e63946', color: '#fff', fontSize: 15, fontWeight: 800 }}>
+            {t('eventSummary.goToLoadList')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // Dettaglio di un'attività (al posto del modal): stessa colonna, con ✕ per tornare al giorno.
   if (taskDetail) {
     return (
-      <div key={`task-${taskDetail.id}`} className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
+      <div key={`task-${taskDetail.id}`} className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '20px 28px 8px', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a1a', letterSpacing: '-0.3px', overflowWrap: 'anywhere' }}>{taskDetail.label || t('staffTimeline.untitledTask')}</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--c-ink)', letterSpacing: '-0.3px', overflowWrap: 'anywhere' }}>{taskDetail.label || t('staffTimeline.untitledTask')}</h2>
           <button onClick={onCloseTask} className="btn-no-anim" aria-label={t('common.close')}
-            style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+            style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 24px' }}>
           <TaskSummaryBody block={taskDetail} workers={workers} />
@@ -263,15 +288,15 @@ export default function CalendarSidePanel({
   }
 
   return (
-    <div key="browse" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 18, minHeight: SIDEBAR_MAX_HEIGHT, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
+    <div key="browse" className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 18, minHeight: SIDEBAR_MAX_HEIGHT, maxHeight: SIDEBAR_MAX_HEIGHT, overflowY: 'auto' }}>
 
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <h2 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('calendar.absences')}</h2>
-          {dayAbsences.length > 0 && <span style={{ background: '#eceae6', color: '#6b6b6b', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 9 }}>{dayAbsences.length}</span>}
+          <h2 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'var(--c-ink)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('calendar.absences')}</h2>
+          {dayAbsences.length > 0 && <span style={{ background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 9 }}>{dayAbsences.length}</span>}
         </div>
         {dayAbsences.length === 0 ? (
-          <p style={{ fontSize: 12, color: '#9a9a9a' }}>{t('calendar.weekAbsencesEmpty')}</p>
+          <p style={{ fontSize: 12, color: 'var(--c-ink3)' }}>{t('calendar.weekAbsencesEmpty')}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {dayAbsences.map(a => {
@@ -279,46 +304,46 @@ export default function CalendarSidePanel({
               const Wrapper = canEdit ? 'button' : 'div'
               return (
                 <Wrapper key={a.id} {...(canEdit ? { type: 'button', onClick: () => onEditAbsence(a), 'aria-label': t('common.edit') + ' · ' + a.workerName, className: 'btn-no-anim' } : {})}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', background: 'var(--bg)', border: '1px solid #e0ddd6', borderRadius: 12, padding: '9px 11px', cursor: canEdit ? 'pointer' : 'default' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', background: 'var(--bg)', border: '1px solid var(--c-line)', borderRadius: 12, padding: '9px 11px', cursor: canEdit ? 'pointer' : 'default' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.workerName}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.workerName}</span>
                       <AbsenceTypeBadge type={a.type} />
                     </div>
-                    <div style={{ fontSize: 11, color: '#6b6b6b', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 2 }}>
                       {a.startDate === a.endDate
                         ? formatDate(a.startDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)
                         : `${formatDate(a.startDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)} → ${formatDate(a.endDate + 'T12:00:00', { day: 'numeric', month: 'short' }, i18n.language)}`}
                       {a.allDay === false && (a.startTime || a.endTime) && (
-                        <span style={{ fontWeight: 700, color: '#1a1a1a' }}> · {a.startTime || '?'}–{a.endTime || '?'}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--c-ink)' }}> · {a.startTime || '?'}–{a.endTime || '?'}</span>
                       )}
                       {a.reason ? <span> · {a.reason}</span> : null}
                     </div>
                   </div>
-                  {canEdit && <span style={{ color: '#9a9a9a', display: 'flex', flexShrink: 0 }}><ChevronRight size={16} /></span>}
+                  {canEdit && <span style={{ color: 'var(--c-ink3)', display: 'flex', flexShrink: 0 }}><ChevronRight size={16} /></span>}
                 </Wrapper>
               )
             })}
           </div>
         )}
         <button onClick={onAddAbsence} className="btn-no-anim"
-          style={{ width: '100%', marginTop: 10, padding: 9, borderRadius: 10, border: '1.5px dashed #e0ddd6', background: 'transparent', color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
+          style={{ width: '100%', marginTop: 10, padding: 9, borderRadius: 10, border: '1.5px dashed var(--c-line)', background: 'transparent', color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
           + {t('calendar.reportAbsence')}
         </button>
       </div>
 
-      <div style={{ height: 1, background: '#e0ddd6' }} />
+      <div style={{ height: 1, background: 'var(--c-line)' }} />
 
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+          <h2 style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'var(--c-ink)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
             {selectedDateObj ? capitalize(formatDate(selectedDateObj, { weekday: 'long', day: 'numeric', month: 'long' }, i18n.language)) : t('calendar.pickADay')}
           </h2>
           {selectedDate === todayStr && <span style={{ background: 'rgba(216,56,63,0.12)', color: 'var(--accent)', fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 9 }}>{t('calendar.today').toUpperCase()}</span>}
         </div>
 
         {!selectedDate ? null : (selectedDayEvents.length === 0 && selectedDayPhases.length === 0 && selectedDayTasks.length === 0) ? (
-          <p style={{ fontSize: 12, color: '#9a9a9a' }}>{t('calendar.dayEmpty')}</p>
+          <p style={{ fontSize: 12, color: 'var(--c-ink3)' }}>{t('calendar.dayEmpty')}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {selectedDayEvents.map(ev => {
@@ -340,13 +365,13 @@ export default function CalendarSidePanel({
               // "Rientrato n/n" (verde, l'unico stadio che resta finale).
               let status
               if (total === 0) status = { label: t('calendar.listEmpty'), bg: 'rgba(204,34,34,0.12)', color: 'var(--red)' }
-              else if (prontoN < total) status = { label: `${t('calendar.statusReady')} ${prontoN}/${total}`, bg: '#eceae6', color: '#6b6b6b' }
-              else if (loadedN < total) status = { label: `${t('calendar.statusLoaded')} ${loadedN}/${total}`, bg: '#eceae6', color: '#6b6b6b' }
-              else if (returnedN < total) status = { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: '#eceae6', color: '#6b6b6b' }
+              else if (prontoN < total) status = { label: `${t('calendar.statusReady')} ${prontoN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
+              else if (loadedN < total) status = { label: `${t('calendar.statusLoaded')} ${loadedN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
+              else if (returnedN < total) status = { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
               else status = { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'rgba(5,150,105,0.12)', color: '#059669' }
 
               return (
-                <div key={ev.id} style={{ position: 'relative', border: '1px solid #e0ddd6', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
+                <div key={ev.id} style={{ position: 'relative', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
                   {/* Card divisa in due metà cliccabili invece di un unico
                       onClick: a sinistra (verso il nome) apre la modifica
                       rapida, a destra (verso "apri evento") va alla lista di
@@ -356,37 +381,37 @@ export default function CalendarSidePanel({
                       sui controlli specifici (telefono/email/avatar/link),
                       così il tap su un punto "vuoto" della card cade comunque
                       su una delle due zone. */}
-                  <div onClick={e => onEditEvent(e, ev)} role="button" tabIndex={-1}
+                  <div onClick={e => (readOnly ? onOpenEvent(ev) : onEditEvent(e, ev))} role="button" tabIndex={-1}
                     style={{ position: 'absolute', inset: '0 50% 0 0', cursor: 'pointer', zIndex: 1 }} />
                   <Link to={`/events/${ev.id}`} aria-label={t('calendar.openEventLink')}
                     style={{ position: 'absolute', inset: '0 0 0 50%', cursor: 'pointer', zIndex: 1 }} />
 
                   <div style={{ position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>{ev.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-ink)' }}>{ev.name}</span>
                       <span style={{ background: status.bg, color: status.color, fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0 }}>{status.label}</span>
                     </div>
 
-                    <div style={{ fontSize: 11, color: '#6b6b6b', marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 4 }}>
                       {durationLabel}{ev.location ? ` · ${ev.location}` : ''}
                     </div>
 
                     {mgr?.name && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, color: '#6b6b6b' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, color: 'var(--c-ink2)' }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mgr.name}</span>
                         {mgr.phone && (
                           <a href={`tel:${mgr.phone}`} aria-label={t('calendar.callManagerAria', { name: mgr.name })}
-                            style={{ display: 'flex', color: '#6b6b6b', flexShrink: 0, pointerEvents: 'auto' }}><Phone size={12} /></a>
+                            style={{ display: 'flex', color: 'var(--c-ink2)', flexShrink: 0, pointerEvents: 'auto' }}><Phone size={12} /></a>
                         )}
                         {mgr.email && (
                           <a href={`mailto:${mgr.email}`} aria-label={t('calendar.emailManagerAria', { name: mgr.name })}
-                            style={{ display: 'flex', color: '#6b6b6b', flexShrink: 0, pointerEvents: 'auto' }}><Mail size={12} /></a>
+                            style={{ display: 'flex', color: 'var(--c-ink2)', flexShrink: 0, pointerEvents: 'auto' }}><Mail size={12} /></a>
                         )}
                       </div>
                     )}
 
                     {isWorker && !isAssigned && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, color: '#9a9a9a', fontSize: 10.5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, color: 'var(--c-ink3)', fontSize: 10.5 }}>
                         <Warn size={11} /> {t('calendar.notAssignedHint')}
                       </div>
                     )}
@@ -421,13 +446,13 @@ export default function CalendarSidePanel({
                 carico da preparare. */}
             {selectedDayPhases.map(ph => (
               <Link key={`${ph.event.id}-${ph.key}`} to={`/events/${ph.event.id}`}
-                style={{ position: 'relative', display: 'block', textDecoration: 'none', border: '1px solid #e0ddd6', borderRadius: 12, padding: '12px 12px 12px 16px', background: 'var(--card)', overflow: 'hidden' }}>
+                style={{ position: 'relative', display: 'block', textDecoration: 'none', border: '1px solid var(--c-line)', borderRadius: 12, padding: '12px 12px 12px 16px', background: 'var(--card)', overflow: 'hidden' }}>
                 <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 4, background: ph.color }} />
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>{ph.event.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-ink)' }}>{ph.event.name}</span>
                   <span style={{ background: `${ph.color}18`, color: ph.color, fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0 }}>{ph.label}</span>
                 </div>
-                <div style={{ fontSize: 11, color: '#6b6b6b', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 4 }}>
                   {ph.time || t('events.allDayLabel')}{ph.event.location ? ` · ${ph.event.location}` : ''}
                 </div>
                 {ph.assigned.length > 0 && (
@@ -447,9 +472,9 @@ export default function CalendarSidePanel({
             ))}
             {selectedDayTasks.map(tk => (
               <button key={tk.id} onClick={() => onOpenTask(tk)} className="btn-no-anim"
-                style={{ textAlign: 'left', border: '1px solid #e0ddd6', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a1a' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
-                <div style={{ fontSize: 11, color: '#6b6b6b', marginTop: 4 }}>{tk.startTime}–{tk.endTime}</div>
+                style={{ textAlign: 'left', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink)' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
+                <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 4 }}>{tk.startTime}–{tk.endTime}</div>
               </button>
             ))}
           </div>

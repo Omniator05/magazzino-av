@@ -646,7 +646,7 @@ export default function Inventory() {
                   />
                   <div style={{
                     position:'absolute', top:'calc(100% + 6px)', right:0, zIndex:100,
-                    background:'#fff', border:'1px solid #e0ddd6',
+                    background:'var(--c-surface)', border:'1px solid var(--c-line)',
                     borderRadius:14, boxShadow:'0 12px 32px rgba(0,0,0,0.20)',
                     minWidth:190, overflow:'hidden',
                   }}>
@@ -723,7 +723,7 @@ export default function Inventory() {
                 <div onClick={() => setShowFilterMenu(false)} style={{ position:'fixed', inset:0, zIndex:99 }} />
                 <div style={{
                   position:'fixed', top:filterMenuPos.top, right:filterMenuPos.right, zIndex:100,
-                  background:'#fff', border:'1px solid #e0ddd6', borderRadius:14,
+                  background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:14,
                   boxShadow:'0 12px 32px rgba(0,0,0,0.20)', width:250, padding:14,
                   maxHeight:'70vh', overflowY:'auto',
                   opacity: filterMenuEntered ? 1 : 0,
@@ -867,14 +867,14 @@ export default function Inventory() {
           <button key={f.key} onClick={() => setActiveFilter(f.key)} aria-pressed={activeFilter === f.key}
             style={{
               padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
-              background: activeFilter === f.key ? (f.bg || '#e63946') : '#eceae6',
-              color: activeFilter === f.key ? (f.color || '#fff') : '#6b6b6b',
+              background: activeFilter === f.key ? (f.bg || '#e63946') : 'var(--c-fill)',
+              color: activeFilter === f.key ? (f.color || '#fff') : 'var(--c-ink2)',
               border: `1px solid ${activeFilter === f.key ? (f.border || '#e63946') : 'transparent'}`,
               display:'flex', alignItems:'center', gap:5,
             }}>
             {f.label}
             {f.count > 0 && (
-              <span style={{ background: activeFilter === f.key ? 'rgba(0,0,0,0.12)' : '#e0ddd6', borderRadius:10, padding:'1px 6px', fontSize:11 }}>
+              <span style={{ background: activeFilter === f.key ? 'rgba(0,0,0,0.12)' : 'var(--c-line)', borderRadius:10, padding:'1px 6px', fontSize:11 }}>
                 {f.count}
               </span>
             )}
@@ -884,7 +884,7 @@ export default function Inventory() {
       </div>
 
       {(advancedFiltersActive ? sortedFlat.length === 0 : filtered.length === 0)
-        ? <div className="rc-inv-card" style={{ background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
+        ? <div className="rc-inv-card" style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
             <div className="empty-state">
               <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p>
               {/* Solo se il magazzino è VERAMENTE vuoto — non quando questo
@@ -894,7 +894,7 @@ export default function Inventory() {
             </div>
           </div>
         : advancedFiltersActive
-        ? <div className="rc-inv-card" style={{ background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
+        ? <div className="rc-inv-card" style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
             {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={activeFilter === 'out' ? getOutEventNames(item) : null} />)}
           </div>
         : groupedFiltered.map(({ cat, catItems, isForgottenGroup, needsAttention }) => {
@@ -905,14 +905,14 @@ export default function Inventory() {
             const defaultOpen = isForgottenGroup || needsAttention || narrowed
             const open = manualCollapse[cat] != null ? !manualCollapse[cat] : defaultOpen
             return (
-              <div key={cat} className="rc-inv-card" style={{ background:'#fff', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid #e0ddd6', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
+              <div key={cat} className="rc-inv-card" style={{ background:'var(--c-surface)', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
                 {/* Intestazione categoria (o gruppo "dimenticati", sempre in cima) —
                     cliccabile per aprire/chiudere, non solo decorativa. */}
                 <button type="button" className="btn-no-anim" onClick={() => setManualCollapse(c => ({ ...c, [cat]: open }))}
                   aria-expanded={open}
-                  style={{ width:'100%', padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : '#faf9f7', borderBottom: open ? `1px solid ${isForgottenGroup ? 'rgba(245,166,35,0.3)' : '#e0ddd6'}` : 'none', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
+                  style={{ width:'100%', padding:'7px 14px', background: isForgottenGroup ? 'rgba(245,166,35,0.12)' : 'var(--c-alt)', borderBottom: open ? `1px solid ${isForgottenGroup ? 'rgba(245,166,35,0.3)' : 'var(--c-line)'}` : 'none', display:'flex', alignItems:'center', gap:8, textAlign:'left' }}>
                   {isForgottenGroup && <span style={{ color:'var(--accent2)', display:'flex' }}><Warn size={14} /></span>}
-                  <span style={{ fontWeight:800, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : '#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
+                  <span style={{ fontWeight:800, fontSize:12, color: isForgottenGroup ? 'var(--accent2)' : 'var(--c-ink)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{isForgottenGroup ? t('inventory.forgottenCategory') : cat}</span>
                   {!isForgottenGroup && needsAttention && (
                     <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent2)', flexShrink:0 }} />
                   )}
@@ -941,13 +941,13 @@ export default function Inventory() {
         // colonna del Calendario): intestazione sempre visibile, contenuto
         // dentro la scheda quando è aperta.
         const section = (key, label, open, count, body) => (
-          <div style={{ border:'1px solid #e0ddd6', borderRadius:14, background:'#faf9f6', overflow:'hidden' }}>
+          <div style={{ border:'1px solid var(--c-line)', borderRadius:14, background:'var(--c-alt)', overflow:'hidden' }}>
             <button type="button" className="btn-no-anim" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
               aria-expanded={open}
-              style={{ width:'100%', padding:'13px 14px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left', borderBottom: open ? '1px solid #e0ddd6' : 'none' }}>
-              <span style={{ fontSize:12.5, fontWeight:800, color:'#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</span>
-              {count > 0 && <span style={{ fontSize:11, fontWeight:800, color:'#6b6b6b', background:'#eceae6', borderRadius:20, padding:'1px 8px' }}>{count}</span>}
-              <span style={{ marginLeft:'auto', color:'#9a9a9a', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
+              style={{ width:'100%', padding:'13px 14px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left', borderBottom: open ? '1px solid var(--c-line)' : 'none' }}>
+              <span style={{ fontSize:12.5, fontWeight:800, color:'var(--c-ink)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</span>
+              {count > 0 && <span style={{ fontSize:11, fontWeight:800, color:'var(--c-ink2)', background:'var(--c-fill)', borderRadius:20, padding:'1px 8px' }}>{count}</span>}
+              <span style={{ marginLeft:'auto', color:'var(--c-ink3)', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
             </button>
             {open && <div style={{ padding:'14px 14px 2px' }}>{body}</div>}
           </div>
@@ -981,8 +981,8 @@ export default function Inventory() {
                         aria-pressed={form.consumableUnit === u}
                         style={{
                           flex:1, padding:'10px 8px', borderRadius:10, fontSize:13, fontWeight:700,
-                          background: form.consumableUnit === u ? '#e63946' : '#eceae6',
-                          color: form.consumableUnit === u ? '#fff' : '#6b6b6b',
+                          background: form.consumableUnit === u ? '#e63946' : 'var(--c-fill)',
+                          color: form.consumableUnit === u ? '#fff' : 'var(--c-ink2)',
                           border:'none',
                         }}>
                         {t(`inventory.consumableUnit_${u}`)}
@@ -1021,7 +1021,7 @@ export default function Inventory() {
                   <label>{t('inventory.minStockLabel')}</label>
                   <Stepper value={form.minStock || 0} min={0} onChange={minStock => setForm({...form, minStock})}
                     decAria={t('inventory.decreaseMinStockAria')} incAria={t('inventory.increaseMinStockAria')} />
-                  {(form.minStock||0) > 0 && <p style={{ color:'#6b6b6b', fontSize:12, marginTop:8 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
+                  {(form.minStock||0) > 0 && <p style={{ color:'var(--c-ink2)', fontSize:12, marginTop:8 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
                 </div>
               )}
             </div>
@@ -1088,7 +1088,7 @@ export default function Inventory() {
             </div>
 
             {/* ── Scheda: una riga per campo, come un documento ── */}
-            <div style={{ background:'#faf9f6', border:'1px solid #e0ddd6', borderRadius:16, overflow:'hidden', marginBottom:14 }}>
+            <div style={{ background:'var(--c-alt)', border:'1px solid var(--c-line)', borderRadius:16, overflow:'hidden', marginBottom:14 }}>
               {(showDetail.brand || showDetail.model) && (
                 <div style={row(r++)}>
                   <span style={rowLabel}>{t('inventory.brandModelLabel')}</span>
@@ -1212,7 +1212,7 @@ export default function Inventory() {
                   await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
                   setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
                 }}
-                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'#fff', border:'1px solid #e0ddd6', color:'#1a1a1a', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
+                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               >
                 <Wrench size={15} /> {t('inventory.repairOneButton')}
               </button>
@@ -1225,12 +1225,12 @@ export default function Inventory() {
                   await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
                   setShowDetail(d => ({ ...d, availableQty: newAvailable }))
                 }}
-                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'#fff', border:'1px solid #e0ddd6', color:'#1a1a1a', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14 }}
+                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14 }}
               >
                 {t('inventory.restoreStock', { count: outCount })}
               </button>
             )}
-            {showDetail.notes && <p style={{ color:'#6b6b6b', fontSize:13, marginBottom:14, padding:'10px 12px', background:'#faf9f7', border:'1px solid #e0ddd6', borderRadius:10 }}>{showDetail.notes}</p>}
+            {showDetail.notes && <p style={{ color:'var(--c-ink2)', fontSize:13, marginBottom:14, padding:'10px 12px', background:'var(--c-alt)', border:'1px solid var(--c-line)', borderRadius:10 }}>{showDetail.notes}</p>}
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <button
@@ -1714,17 +1714,17 @@ function Stepper({ value, onChange, min = 0, max, tone, decAria, incAria }) {
   const clamp = v => Math.min(max ?? Infinity, Math.max(min, v))
   const red = tone === 'red' && value > 0
   const btn = {
-    width:40, height:40, borderRadius:9, background:'#fff', color: tone === 'red' ? '#e63946' : '#1a1a1a',
+    width:40, height:40, borderRadius:9, background:'var(--c-surface)', color: tone === 'red' ? '#e63946' : 'var(--c-ink)',
     fontSize:19, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
     boxShadow:'0 1px 2px rgba(0,0,0,0.08)',
   }
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:4, background: red ? 'rgba(230,57,70,0.10)' : '#e8e5df', borderRadius:12, padding:3 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:4, background: red ? 'rgba(230,57,70,0.10)' : 'var(--c-fill2)', borderRadius:12, padding:3 }}>
       <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value - 1))} aria-label={decAria} style={btn}>−</button>
       <input type="number" min={min} max={max} value={value}
         onChange={e => onChange(clamp(parseInt(e.target.value, 10) || min))}
         onFocus={e => e.target.select()}
-        style={{ flex:1, minWidth:0, textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 2px', border:'none', background:'transparent', boxShadow:'none', color: red ? '#e63946' : '#1a1a1a' }} />
+        style={{ flex:1, minWidth:0, textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 2px', border:'none', background:'transparent', boxShadow:'none', color: red ? '#e63946' : 'var(--c-ink)' }} />
       <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value + 1))} aria-label={incAria} style={btn}>+</button>
     </div>
   )

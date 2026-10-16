@@ -305,7 +305,7 @@ export default function BrasserieEditor({ date, onBack }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                   {nextGraphics.map((g, i) => (
                     <div key={g.path} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <img src={g.url} alt={`Next ${i + 1}`} style={{ width: 60, height: 60, objectFit: 'contain', background: '#fff', borderRadius: 8, border: '1px solid var(--border)' }} />
+                      <img src={g.url} alt={`Next ${i + 1}`} style={{ width: 60, height: 60, objectFit: 'contain', background: 'var(--c-surface)', borderRadius: 8, border: '1px solid var(--border)' }} />
                       <div style={{ flex: 1 }}>
                         <p style={{ fontSize: 13, color: 'var(--text2)' }}>Grafica {i + 1}</p>
                       </div>

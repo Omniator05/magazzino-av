@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-16',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Tema scuro: dal Profilo scegli Chiaro, Scuro o Automatico (predefinito, segue il dispositivo)',
+        'Nuove home per admin e magazzinieri con sezioni "Oggi" e "Da vedere"; l\'uscita dall\'app ora è in fondo al Profilo',
+        'Magazzinieri su computer: calendario del mese con colonna dei dettagli e timeline della settimana, in sola lettura',
+        'Archivio rifatto con dettaglio e lista di carico in una colonna (computer) o in un foglio (telefono); form eventi più ordinato; assenze gestibili dall\'admin per tutti',
+        'Liste di carico: Seleziona più comodo, quantità tipo 6x5, pulsanti con caricamento; notifiche non più doppie',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Dark mode: pick Light, Dark or Automatic (default, follows your device) from your Profile',
+        'New home pages for admins and warehouse workers with "Today" and "Needs attention" sections; logging out is now at the bottom of the Profile',
+        'Warehouse workers on desktop: month calendar with a details column and the weekly timeline, read-only',
+        'Archive redesigned with details and loading list in a column (desktop) or a sheet (phone); a tidier event form; admins can manage absences for everyone',
+        'Loading lists: easier selection, quantities like 6x5, buttons with progress; no more duplicate notifications',
+      ],
+    },
+  },
+  {
     version: '2026-10-14',
     it: {
       title: 'Novità di oggi',

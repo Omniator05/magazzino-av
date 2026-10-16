@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 
 // Sotto-pagina "Profilo squadra" di Impostazioni — logo (sostituisce quello
 // di default nell'app e nei PDF) e URL del sito (dove finisce chi scansiona
@@ -90,10 +90,7 @@ export default function SettingsProfile() {
         </div>
       )}
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-        <BackHomeButton to="/admin/settings" />
-        <h1 style={{ textAlign:'right' }}>{t('adminUsers.settingsProfileTitle')}</h1>
-      </div>
+      <PageHeader title={t('adminUsers.settingsProfileTitle')} backTo="/admin/settings" />
 
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px', display:'flex', alignItems:'center', gap:14 }}>
         <div style={{

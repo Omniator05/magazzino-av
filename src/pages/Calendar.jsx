@@ -74,6 +74,9 @@ export default function Calendar() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user, profile, isWorker, isAdmin, teamId } = useAuth()
+  // Il magazziniere usa questa stessa pagina su computer, ma in sola lettura
+  // (niente creazione/modifica di eventi né assegnazioni; sue assenze sì).
+  const readOnly = !isAdmin
   const confirm = useConfirm()
   const isOnline = useOnlineStatus()
   const [toast, setToast] = useState('')
@@ -153,6 +156,8 @@ export default function Calendar() {
   const [summaryEvent, setSummaryEvent] = useState(null)
   // Stesso riepilogo, versione per i task liberi (niente lista di carico) — vedi TaskSummaryModal.jsx.
   const [summaryTask, setSummaryTask] = useState(null)
+  // Magazziniere (sola lettura): evento aperto nella colonna con tutti i dettagli.
+  const [detailEvent, setDetailEvent] = useState(null)
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
@@ -169,7 +174,7 @@ export default function Calendar() {
   // Selezione assenza tap-sul-calendario
   const [reportMode, setReportMode] = useState(false)
   // Il dettaglio attività in colonna (desktop) sparisce cambiando giorno o aprendo un altro form.
-  useEffect(() => { setSummaryTask(null) }, [selectedDate, sidebarCreating, editingEvent, reportMode, mode])
+  useEffect(() => { setSummaryTask(null); setDetailEvent(null) }, [selectedDate, sidebarCreating, editingEvent, reportMode, mode])
   const [rangeStart, setRangeStart] = useState(null)
   const [hoverDate, setHoverDate] = useState(null) // anteprima range stile "booking" al passaggio del mouse
 
@@ -362,10 +367,14 @@ export default function Calendar() {
 
   useEffect(() => {
     if (!teamId) return
-    return onSnapshot(query(collection(db, 'unavailability'), where('teamId', '==', teamId)), snap => {
+    // Un magazziniere vede solo le PROPRIE assenze (come nella vista telefono).
+    const q = readOnly
+      ? query(collection(db, 'unavailability'), where('teamId', '==', teamId), where('workerId', '==', user?.uid))
+      : query(collection(db, 'unavailability'), where('teamId', '==', teamId))
+    return onSnapshot(q, snap => {
       setUnavailability(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-  }, [teamId])
+  }, [teamId, readOnly, user?.uid])
 
   // Eventi importati da Google Calendar (sync giornaliero in sola lettura, vedi /api/sync-google-calendar)
   useEffect(() => {
@@ -557,13 +566,13 @@ export default function Calendar() {
   return (
     <div className="page" style={{ paddingBottom:160 }}>
       <Toast message={toast} />
-      <div className="page-header" style={!isMobile ? { background:'#fff', borderBottom:'1px solid #e0ddd6', padding:'18px 32px 14px' } : { background:'#fff', borderBottom:'1px solid #e0ddd6', paddingBottom:14 }}>
+      <div className="page-header" style={!isMobile ? { background:'var(--c-surface)', borderBottom:'1px solid var(--c-line)', padding:'18px 32px 14px' } : { background:'var(--c-surface)', borderBottom:'1px solid var(--c-line)', paddingBottom:14 }}>
         {isMobile ? (
           <>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <h1 style={{ fontSize:26, letterSpacing:'-0.5px', color:'#1a1a1a' }}>{t('calendar.title')}</h1>
-                <p style={{ color:'#9a9a9a' }}>{t('calendar.totalEvents', { count: events.length })}</p>
+                <h1 style={{ fontSize:26, letterSpacing:'-0.5px', color:'var(--c-ink)' }}>{t('calendar.title')}</h1>
+                <p style={{ color:'var(--c-ink3)' }}>{t('calendar.totalEvents', { count: events.length })}</p>
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 {/* Il flusso "tocca primo/ultimo giorno" dipende dalla griglia
@@ -575,8 +584,8 @@ export default function Calendar() {
                   <button onClick={() => reportMode ? cancelReportMode() : startReportMode()}
                     aria-pressed={reportMode} className="btn-no-anim"
                     style={{
-                      background: reportMode ? 'rgba(230,57,70,0.12)' : '#eceae6',
-                      color: reportMode ? '#e63946' : '#6b6b6b',
+                      background: reportMode ? 'rgba(230,57,70,0.12)' : 'var(--c-fill)',
+                      color: reportMode ? '#e63946' : 'var(--c-ink2)',
                       border:'none', borderRadius:10, padding:'9px 13px', fontSize:12.5, fontWeight:700,
                     }}>
                     {t('calendar.reportAbsence')}
@@ -590,18 +599,18 @@ export default function Calendar() {
             {mode === 'grid' && (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:16 }}>
               <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} className="btn-no-anim"
-                style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'#9a9a9a' }}>‹</button>
+                style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'var(--c-ink3)' }}>‹</button>
               <button onClick={goToday} className="btn-no-anim rc-cal-today-btn"
                 style={{ textAlign:'center', background:'none', border:'none', padding:'2px 12px', borderRadius:9, minWidth:150 }}>
-                <div style={{ fontSize:17, fontWeight:800, whiteSpace:'nowrap', color:'#1a1a1a' }}>
+                <div style={{ fontSize:17, fontWeight:800, whiteSpace:'nowrap', color:'var(--c-ink)' }}>
                   {capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}
                 </div>
-                <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: isCurrentMonth ? '#e63946' : '#6b6b6b' }}>
+                <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: isCurrentMonth ? '#e63946' : 'var(--c-ink2)' }}>
                   {t('calendar.today')}
                 </div>
               </button>
               <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} className="btn-no-anim"
-                style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'#9a9a9a' }}>›</button>
+                style={{ width:40, height:40, borderRadius:10, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, color:'var(--c-ink3)' }}>›</button>
             </div>
             )}
           </>
@@ -616,12 +625,12 @@ export default function Calendar() {
           <div style={{ position:'relative', display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', minHeight:28 }}>
             <h1 style={{ margin:0, fontSize:24, fontWeight:800, letterSpacing:'-0.5px' }}>{t('calendar.title')}</h1>
 
-            <div style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%, -50%)', display:'flex', gap:4, background:'#eceae6', borderRadius:10, padding:3, width:'fit-content' }}>
-              <button onClick={() => setMode('grid')} aria-pressed={mode === 'grid'} className="btn-no-anim" style={{ padding:'6px 16px', borderRadius:8, fontSize:12.5, fontWeight:700, background: mode === 'grid' ? '#e63946' : 'transparent', color: mode === 'grid' ? '#fff' : '#6b6b6b' }}>
+            <div style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%, -50%)', display:'flex', gap:4, background:'var(--c-fill)', borderRadius:10, padding:3, width:'fit-content' }}>
+              <button onClick={() => setMode('grid')} aria-pressed={mode === 'grid'} className="btn-no-anim" style={{ padding:'6px 16px', borderRadius:8, fontSize:12.5, fontWeight:700, background: mode === 'grid' ? '#e63946' : 'transparent', color: mode === 'grid' ? '#fff' : 'var(--c-ink2)' }}>
                 {t('calendar.viewGrid')}
               </button>
-              <button onClick={() => { if (reportMode) cancelReportMode(); setMode('assign') }} aria-pressed={mode === 'assign'} className="btn-no-anim" style={{ padding:'6px 16px', borderRadius:8, fontSize:12.5, fontWeight:700, background: mode === 'assign' ? '#e63946' : 'transparent', color: mode === 'assign' ? '#fff' : '#6b6b6b' }}>
-                {t('calendar.viewAssign')}
+              <button onClick={() => { if (reportMode) cancelReportMode(); setMode('assign') }} aria-pressed={mode === 'assign'} className="btn-no-anim" style={{ padding:'6px 16px', borderRadius:8, fontSize:12.5, fontWeight:700, background: mode === 'assign' ? '#e63946' : 'transparent', color: mode === 'assign' ? '#fff' : 'var(--c-ink2)' }}>
+                {readOnly ? t('calendar.viewTimeline') : t('calendar.viewAssign')}
               </button>
             </div>
           </div>
@@ -654,18 +663,18 @@ export default function Calendar() {
           <div style={{ position:'relative', display:'flex', justifyContent:'center', padding:'20px 0 10px', minHeight:36 }}>
             <div style={{ display:'flex', alignItems:'center', gap:2 }}>
               <button onClick={goPrevMonth} aria-label={t('calendar.prevMonthAria')} className="btn-no-anim"
-                style={{ width:22, height:22, borderRadius:6, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:'#9a9a9a' }}>‹</button>
+                style={{ width:22, height:22, borderRadius:6, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:'var(--c-ink3)' }}>‹</button>
               <button onClick={goToday} className="btn-no-anim rc-cal-today-btn"
                 style={{ textAlign:'center', background:'none', border:'none', padding:'2px 10px', borderRadius:9 }}>
-                <div style={{ fontSize:15, fontWeight:800, whiteSpace:'nowrap', color:'#1a1a1a' }}>
+                <div style={{ fontSize:15, fontWeight:800, whiteSpace:'nowrap', color:'var(--c-ink)' }}>
                   {capitalize(formatDate(new Date(cursor.year, cursor.month, 1), { month:'long' }, i18n.language))} {cursor.year}
                 </div>
-                <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: isCurrentMonth ? '#e63946' : '#6b6b6b' }}>
+                <div className="rc-cal-today-label" style={{ fontSize:11, fontWeight:800, marginTop:1, color: isCurrentMonth ? '#e63946' : 'var(--c-ink2)' }}>
                   {t('calendar.today')}
                 </div>
               </button>
               <button onClick={goNextMonth} aria-label={t('calendar.nextMonthAria')} className="btn-no-anim"
-                style={{ width:22, height:22, borderRadius:6, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:'#9a9a9a' }}>›</button>
+                style={{ width:22, height:22, borderRadius:6, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:'var(--c-ink3)' }}>›</button>
             </div>
 
             {/* Ricerca evento — ancorata all'angolo in alto a destra della
@@ -674,7 +683,7 @@ export default function Calendar() {
                 scatta prima del blur dell'input che altrimenti lo chiuderebbe. */}
             <div style={{ position:'absolute', right:0, top:'50%', transform:'translateY(-50%)', width:280, isolation:'isolate', zIndex:50 }}>
               <div style={{ position:'relative', display:'flex', alignItems:'center' }}>
-                <span style={{ position:'absolute', left:10, display:'flex', color:'#9a9a9a', pointerEvents:'none' }}><Search size={15} /></span>
+                <span style={{ position:'absolute', left:10, display:'flex', color:'var(--c-ink3)', pointerEvents:'none' }}><Search size={15} /></span>
                 <input
                   value={eventSearch}
                   onChange={e => { setEventSearch(e.target.value); setEventSearchOpen(true) }}
@@ -682,24 +691,24 @@ export default function Calendar() {
                   onBlur={() => setTimeout(() => setEventSearchOpen(false), 150)}
                   onKeyDown={e => { if (e.key === 'Escape') { setEventSearch(''); setEventSearchOpen(false); e.target.blur() } }}
                   placeholder={t('calendar.searchPlaceholder')}
-                  style={{ width:'100%', background:'#eceae6', border:'none', borderRadius:10, padding:'8px 10px 8px 32px', fontSize:12.5, color:'#1a1a1a' }}
+                  style={{ width:'100%', background:'var(--c-fill)', border:'none', borderRadius:10, padding:'8px 10px 8px 32px', fontSize:12.5, color:'var(--c-ink)' }}
                 />
               </div>
               {eventSearchOpen && eventSearch.trim().length >= 2 && (
-                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, width:280, background:'#fff', opacity:1, border:'1px solid #e0ddd6', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.22)', overflow:'hidden' }}>
+                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, width:280, background:'var(--c-surface)', opacity:1, border:'1px solid var(--c-line)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.22)', overflow:'hidden' }}>
                   {eventSearchResults.length === 0 ? (
-                    <div style={{ padding:'12px 14px', fontSize:12.5, color:'#9a9a9a', background:'#fff' }}>{t('calendar.searchNoResults')}</div>
+                    <div style={{ padding:'12px 14px', fontSize:12.5, color:'var(--c-ink3)', background:'var(--c-surface)' }}>{t('calendar.searchNoResults')}</div>
                   ) : eventSearchResults.map((ev, i) => (
                     <div key={ev.id}>
                       {i === eventSearchSplit && i > 0 && i < eventSearchResults.length && (
-                        <div style={{ padding:'5px 14px', background:'#f4f4f2', borderTop:'2px solid #e0ddd6', borderBottom:'1px solid #e0ddd6', fontSize:10, fontWeight:800, color:'#9a9a9a', textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                        <div style={{ padding:'5px 14px', background:'var(--c-alt)', borderTop:'2px solid var(--c-line)', borderBottom:'1px solid var(--c-line)', fontSize:10, fontWeight:800, color:'var(--c-ink3)', textTransform:'uppercase', letterSpacing:'0.5px' }}>
                           {t('calendar.searchPastSection')}
                         </div>
                       )}
                       <button onMouseDown={() => goToSearchResult(ev)} className="btn-no-anim"
-                        style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', background:'#fff', borderBottom: i === eventSearchResults.length - 1 ? 'none' : '1px solid #f0efec' }}>
-                        <div style={{ fontSize:12.5, fontWeight:700, color:'#1a1a1a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</div>
-                        <div style={{ fontSize:11, color:'#9a9a9a', marginTop:2 }}>
+                        style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', background:'var(--c-surface)', borderBottom: i === eventSearchResults.length - 1 ? 'none' : '1px solid var(--c-fill)' }}>
+                        <div style={{ fontSize:12.5, fontWeight:700, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</div>
+                        <div style={{ fontSize:11, color:'var(--c-ink3)', marginTop:2 }}>
                           {capitalize(formatDate(ev.date + 'T12:00:00', { day:'numeric', month:'long', year:'numeric' }, i18n.language))}
                         </div>
                       </button>
@@ -720,11 +729,11 @@ export default function Calendar() {
         <div style={isMobile
           // Telefono: a tutta larghezza, senza margini né angoli — la linea sotto
           // l'intestazione fa da bordo in alto, qui solo quello in basso.
-          ? { background:'#fff', borderBottom:'1px solid #e0ddd6', overflow:'hidden' }
-          : { background:'#fff', border:'1px solid #e0ddd6', borderRadius:16, overflow:'hidden' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', borderBottom:'1px solid #e0ddd6' }}>
+          ? { background:'var(--c-surface)', borderBottom:'1px solid var(--c-line)', overflow:'hidden' }
+          : { background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, overflow:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', borderBottom:'1px solid var(--c-line)' }}>
           {WEEKDAYS.map((w, i) => (
-            <div key={i} style={{ textAlign:'center', fontSize: isMobile ? 10 : 11.5, fontWeight:700, color:'#9a9a9a', textTransform:'uppercase', letterSpacing: isMobile ? '0.2px' : '0.4px', padding: isMobile ? '8px 0' : '9px 0' }}>{w}</div>
+            <div key={i} style={{ textAlign:'center', fontSize: isMobile ? 10 : 11.5, fontWeight:700, color:'var(--c-ink3)', textTransform:'uppercase', letterSpacing: isMobile ? '0.2px' : '0.4px', padding: isMobile ? '8px 0' : '9px 0' }}>{w}</div>
           ))}
         </div>
 
@@ -771,9 +780,9 @@ export default function Calendar() {
                   minHeight: isMobile ? 76 : 118,
                   borderRadius:0,
                   padding: isMobile ? '6px 3px 4px' : '8px 6px 6px',
-                  borderRight: isLastCol ? 'none' : '1px solid #e0ddd6',
-                  borderBottom: isLastRow ? 'none' : '1px solid #e0ddd6',
-                  background: isSelected ? 'rgba(0,102,204,0.08)' : isRangeStart ? 'rgba(216,56,63,0.12)' : isInPreviewRange ? 'rgba(216,56,63,0.06)' : isToday ? 'rgba(230,57,70,0.045)' : cell.current ? '#fff' : 'transparent',
+                  borderRight: isLastCol ? 'none' : '1px solid var(--c-line)',
+                  borderBottom: isLastRow ? 'none' : '1px solid var(--c-line)',
+                  background: isSelected ? 'rgba(0,102,204,0.08)' : isRangeStart ? 'rgba(216,56,63,0.12)' : isInPreviewRange ? 'rgba(216,56,63,0.06)' : isToday ? 'rgba(230,57,70,0.045)' : cell.current ? 'var(--c-surface)' : 'transparent',
                   boxShadow: isSelected ? 'inset 0 0 0 1.5px #0066cc' : isToday ? 'inset 0 2px 0 #e63946' : 'none',
                   opacity: cell.current ? (isPast ? 0.5 : 1) : 0.3,
                   display:'flex',
@@ -937,7 +946,8 @@ export default function Calendar() {
         <CalendarSidePanel
           absencesOnDate={absencesOnDate} workers={workers} teamId={teamId}
           todayStr={todayStr} selectedDate={selectedDate} selectedDayEvents={selectedEvents} selectedDayPhases={selectedDayPhases} selectedDayTasks={selectedTasks}
-          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} taskDetail={!isMobile ? summaryTask : null} onCloseTask={() => setSummaryTask(null)} onEditEvent={(e, ev) => openEdit(e, ev)}
+          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} taskDetail={!isMobile ? summaryTask : null} onCloseTask={() => setSummaryTask(null)}
+          readOnly={readOnly} onOpenEvent={ev => { setSummaryTask(null); setDetailEvent(ev) }} eventDetail={!isMobile && readOnly ? detailEvent : null} eventBlocks={detailEvent ? assignmentBlocks.filter(b => b.eventId === detailEvent.id) : []} onCloseEvent={() => setDetailEvent(null)} onOpenEventPage={ev => navigate(`/events/${ev.id}`)} onEditEvent={(e, ev) => openEdit(e, ev)}
           onAddAbsence={() => { if (reportMode) { cancelReportMode() } else { setSidebarCreating(false); setEditingEvent(null); startReportMode() } }}
           creating={sidebarCreating} onCancelCreate={() => setSidebarCreating(false)}
           onEventCreated={() => setSidebarCreating(false)}
@@ -961,7 +971,7 @@ export default function Calendar() {
         const isSelectedDayPast = selectedDate < todayStr
         return (
         <div style={{ padding:'0 16px 24px' }}>
-          <p style={{ fontSize:12.5, fontWeight:800, color:'#1a1a1a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:10 }}>
+          <p style={{ fontSize:12.5, fontWeight:800, color:'var(--c-ink)', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:10 }}>
             {formatDate(selectedDateObj, { weekday:'long', day:'numeric', month:'long' }, i18n.language)}
             {selectedDate === todayStr && ` · ${t('calendar.today')}`}
           </p>
@@ -1010,7 +1020,7 @@ export default function Calendar() {
                   return (
                     <div key={`tk${task.id}`}
                       onClick={() => setSummaryTask(task)}
-                      style={{ background:'#fff', border:`1px solid ${borderColor === 'var(--border)' ? '#e0ddd6' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
+                      style={{ background:'var(--c-surface)', border:`1px solid ${borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
                     >
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
                       <div style={{ flex:1, minWidth:0 }}>
@@ -1038,7 +1048,7 @@ export default function Calendar() {
                 // disallineati.
                 if (ev.isDeadlineReminder) {
                   return (
-                    <div key={ev.id} style={{ background:'#fff', border:`1px solid ${borderColor === 'var(--border)' ? '#e0ddd6' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12 }}>
+                    <div key={ev.id} style={{ background:'var(--c-surface)', border:`1px solid ${borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12 }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
                       <div style={{ flex:1, minWidth:0 }}>
                         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</p>
@@ -1050,7 +1060,7 @@ export default function Calendar() {
                 return (
                   <div key={ev.id}
                     onClick={() => setSummaryEvent(ev)}
-                    style={{ background:'#fff', border:`1px solid ${borderColor === 'var(--border)' ? '#e0ddd6' : borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
+                    style={{ background:'var(--c-surface)', border:`1px solid ${borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
                   >
                     <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />
@@ -1205,7 +1215,7 @@ export default function Calendar() {
 
       {/* Vista "Assegna personale" — timeline settimanale ore per persona, vedi StaffTimeline.jsx */}
       {mode === 'assign' && (
-        <StaffTimeline teamId={teamId} events={events} workers={workers} unavailability={unavailability} user={user} focusAssign={focusAssign} onFocusAssignConsumed={() => setFocusAssign(null)} />
+        <StaffTimeline readOnly={readOnly} teamId={teamId} events={events} workers={workers} unavailability={unavailability} user={user} focusAssign={focusAssign} onFocusAssignConsumed={() => setFocusAssign(null)} />
       )}
 
       {/* FAB nuovo evento — solo in vista griglia, in "Assegna personale" lascia spazio alla lista.
@@ -1213,7 +1223,7 @@ export default function Calendar() {
           il modal (sperimentale, vedi CalendarSidePanel); su mobile resta il
           modal di sempre, la colonna non esiste lì. Nascosto mentre il form è
           già aperto, per non doverci rinavigare sopra. */}
-      {mode === 'grid' && !sidebarCreating && (
+      {mode === 'grid' && !sidebarCreating && !readOnly && (
       <button
         onClick={() => { if (isMobile) { setShowCreate(true) } else { if (reportMode) cancelReportMode(); if (showAbsenceModal) closeAbsenceModal(); setEditingEvent(null); setSidebarCreating(true) } }}
         style={{

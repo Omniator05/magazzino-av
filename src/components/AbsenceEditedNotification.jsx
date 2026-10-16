@@ -79,38 +79,38 @@ export default function AbsenceEditedNotification() {
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        style={{ background: '#fff', borderRadius: 24, padding: '26px 22px 20px', width: '100%', maxWidth: 340, textAlign: 'center', boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'absEditPopOut 0.15s ease forwards' : 'absEditPopIn 0.24s cubic-bezier(0.32,0.72,0,1)' }}
+        style={{ background: 'var(--c-surface)', borderRadius: 24, padding: '26px 22px 20px', width: '100%', maxWidth: 340, textAlign: 'center', boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'absEditPopOut 0.15s ease forwards' : 'absEditPopIn 0.24s cubic-bezier(0.32,0.72,0,1)' }}
       >
         <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(79,195,247,0.15)', color: 'var(--blue)' }}>
           <CalendarIcon size={22} />
         </div>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111827', margin: '0 0 4px', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--c-ink)', margin: '0 0 4px', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
           {t('calendar.absenceEditedNotifTitle')}
           {pending.length > 1 && (
-            <span style={{ background: '#f3f4f6', borderRadius: 10, padding: '1px 8px', fontSize: 13, fontWeight: 700, color: '#6b7280' }}>{pending.length}</span>
+            <span style={{ background: 'var(--c-fill)', borderRadius: 10, padding: '1px 8px', fontSize: 13, fontWeight: 700, color: 'var(--c-ink2)' }}>{pending.length}</span>
           )}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14, marginBottom: 20, textAlign: 'left', maxHeight: 260, overflowY: 'auto' }}>
           {pending.map(n => (
-            <div key={n.id} style={{ background: '#f9fafb', borderRadius: 12, padding: '11px 14px' }}>
+            <div key={n.id} style={{ background: 'var(--c-alt)', borderRadius: 12, padding: '11px 14px' }}>
               {n.oldStartDate && (
-                <p style={{ fontSize: 12, color: '#9ca3af', textDecoration: 'line-through' }}>
+                <p style={{ fontSize: 12, color: 'var(--c-ink3)', textDecoration: 'line-through' }}>
                   {formatDate(n.oldStartDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)}
                   {n.oldEndDate && n.oldEndDate !== n.oldStartDate ? ` → ${formatDate(n.oldEndDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)}` : ''}
                 </p>
               )}
-              <p style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginTop: n.oldStartDate ? 2 : 0 }}>
+              <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--c-ink)', marginTop: n.oldStartDate ? 2 : 0 }}>
                 {formatDate(n.startDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)}
                 {n.endDate && n.endDate !== n.startDate ? ` → ${formatDate(n.endDate + 'T12:00:00', { day: 'numeric', month: 'long' }, i18n.language)}` : ''}
               </p>
               {n.editedByName && (
-                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{t('calendar.absenceEditedByLabel', { name: n.editedByName })}</p>
+                <p style={{ fontSize: 12, color: 'var(--c-ink2)', marginTop: 4 }}>{t('calendar.absenceEditedByLabel', { name: n.editedByName })}</p>
               )}
             </div>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => close(false)} style={{ flex: 1, padding: 12, borderRadius: 13, fontSize: 14, fontWeight: 700, background: '#f3f4f6', color: '#374151', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => close(false)} style={{ flex: 1, padding: 12, borderRadius: 13, fontSize: 14, fontWeight: 700, background: 'var(--c-fill)', color: 'var(--c-ink2)', border: 'none', cursor: 'pointer' }}>
             {t('calendar.absenceNotifClose')}
           </button>
           <button onClick={() => close(true)} style={{ flex: 1, padding: 12, borderRadius: 13, fontSize: 14, fontWeight: 700, background: 'var(--blue)', color: '#fff', border: 'none', cursor: 'pointer' }}>

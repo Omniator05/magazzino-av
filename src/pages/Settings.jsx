@@ -8,6 +8,7 @@ import { isModuleEnabled } from '../utils/modules'
 import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck } from '../components/Icon'
 import { trialDaysLeft } from '../utils/billing'
 import Toast from '../components/Toast'
+import PageHeader from '../components/PageHeader'
 
 const SUPPORT_EMAIL = 'info@roadcase.it'
 
@@ -161,9 +162,7 @@ export default function Settings() {
     <div className="page">
       <Toast message={toast} />
 
-      <div className="page-header">
-        <h1>{t('adminUsers.settingsHomeTitle')}</h1>
-      </div>
+      <PageHeader title={t('adminUsers.settingsHomeTitle')} />
 
       {/* Card squadra — stessa veste (var(--card)/var(--border)) delle righe
           sotto: prima era tinta di accento e sembrava un elemento a sé,
@@ -171,7 +170,7 @@ export default function Settings() {
           contenuto (logo grande, statistiche), non per un colore diverso.
           Non cliccabile: per modificare logo/nome si passa dalla riga
           "Profilo squadra" nella lista sotto. */}
-      <div style={{ margin:'0 16px 20px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
+      <div style={{ margin:'18px 16px 20px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
         <div style={{ padding:'20px 20px 18px', display:'flex', alignItems:'center', gap:16 }}>
           <div style={{
             width:72, height:72, borderRadius:18, flexShrink:0, overflow:'hidden',

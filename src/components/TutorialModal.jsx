@@ -95,24 +95,24 @@ export default function TutorialModal({ role }) {
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        style={{ background:'#fff', borderRadius:24, padding:'30px 26px 24px', width:'100%', maxWidth:340, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'tutPopOut 0.2s ease forwards' : 'tutPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
+        style={{ background:'var(--c-surface)', borderRadius:24, padding:'30px 26px 24px', width:'100%', maxWidth:340, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'tutPopOut 0.2s ease forwards' : 'tutPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
       >
         <div key={index} style={{ animation:'tutSlideIn 0.25s ease both' }}>
           <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 16px', display:'flex', alignItems:'center', justifyContent:'center', background:slide.tint, color:slide.color }}>
             <slide.Icon />
           </div>
-          <h3 style={{ fontSize:19, fontWeight:800, color:'#111827', margin:'0 0 8px' }}>{t(slide.titleKey)}</h3>
-          <p style={{ fontSize:14, color:'#6b7280', lineHeight:1.5, margin:'0 0 22px' }}>{t(slide.textKey)}</p>
+          <h3 style={{ fontSize:19, fontWeight:800, color:'var(--c-ink)', margin:'0 0 8px' }}>{t(slide.titleKey)}</h3>
+          <p style={{ fontSize:14, color:'var(--c-ink2)', lineHeight:1.5, margin:'0 0 22px' }}>{t(slide.textKey)}</p>
         </div>
 
         <div style={{ display:'flex', gap:6, justifyContent:'center', marginBottom:22 }}>
           {slides.map((_, i) => (
-            <div key={i} style={{ width: i === index ? 20 : 7, height:7, borderRadius:4, background: i === index ? '#e63946' : '#e5e7eb', transition:'all 0.25s ease' }} />
+            <div key={i} style={{ width: i === index ? 20 : 7, height:7, borderRadius:4, background: i === index ? '#e63946' : 'var(--c-line)', transition:'all 0.25s ease' }} />
           ))}
         </div>
 
         <div style={{ display:'flex', gap:10 }}>
-          <button onClick={close} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none', cursor:'pointer' }}>
+          <button onClick={close} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'var(--c-fill)', color:'var(--c-ink2)', border:'none', cursor:'pointer' }}>
             {t('tutorial.skip')}
           </button>
           <button

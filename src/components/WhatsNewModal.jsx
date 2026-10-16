@@ -91,13 +91,13 @@ export default function WhatsNewModal() {
           role="dialog"
           aria-modal="true"
           style={{
-            background: '#fff', borderRadius: 24, padding: '24px 24px 22px', width: '100%', maxWidth: 360,
+            background: 'var(--c-surface)', borderRadius: 24, padding: '24px 24px 22px', width: '100%', maxWidth: 360,
             maxHeight: 'calc(100dvh - 48px)', display: 'flex', flexDirection: 'column',
             boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: closing ? 'wnPopOut 0.15s ease forwards' : 'wnPopIn 0.28s cubic-bezier(0.32,0.72,0,1)',
           }}
         >
-          <p style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4, flexShrink: 0 }}>{t('common.whatsNewLabel')}</p>
-          <h2 style={{ textAlign: 'center', fontSize: 19, fontWeight: 800, color: '#111827', margin: '0 0 16px', letterSpacing: '-0.3px', flexShrink: 0 }}>{entry.title}</h2>
+          <p style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: 'var(--c-ink3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4, flexShrink: 0 }}>{t('common.whatsNewLabel')}</p>
+          <h2 style={{ textAlign: 'center', fontSize: 19, fontWeight: 800, color: 'var(--c-ink)', margin: '0 0 16px', letterSpacing: '-0.3px', flexShrink: 0 }}>{entry.title}</h2>
 
           {/* Tante voci in una volta stanno scomode su un solo schermo —
               scorre solo questa lista, non tutto il popup: titolo, pallini e
@@ -108,7 +108,7 @@ export default function WhatsNewModal() {
                 <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1, background: 'rgba(52,211,153,0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Check size={11} />
                 </span>
-                <p style={{ fontSize: 13.5, color: '#374151', lineHeight: 1.45 }}>{it}</p>
+                <p style={{ fontSize: 13.5, color: 'var(--c-ink2)', lineHeight: 1.45 }}>{it}</p>
               </div>
             ))}
           </div>
@@ -116,7 +116,7 @@ export default function WhatsNewModal() {
           {pending.length > 1 && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 16, flexShrink: 0 }}>
               {pending.map((_, i) => (
-                <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === step ? 'var(--accent)' : '#e5e7eb' }} />
+                <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === step ? 'var(--accent)' : 'var(--c-line)' }} />
               ))}
             </div>
           )}

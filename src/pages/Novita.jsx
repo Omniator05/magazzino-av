@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import { CHANGELOG } from '../data/changelog'
 import { markWhatsNewSeen } from '../utils/whatsNew'
 import { formatDate } from '../utils/formatDate'
@@ -55,33 +55,30 @@ export default function Novita() {
 
   return (
     <div className="page">
-      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-        <BackHomeButton to="/" />
-        <h1 style={{ textAlign:'right' }}>{t('whatsNew.title')}</h1>
-      </div>
+      <PageHeader title={t('whatsNew.title')} backTo="/" />
 
-      <p style={{ margin:'0 16px 16px', color:'var(--text2)', fontSize:14, lineHeight:1.5 }}>{t('whatsNew.subtitle')}</p>
+      <p style={{ margin:'0 20px 18px', paddingTop:18, color:'var(--c-ink2)', fontSize:14, lineHeight:1.5 }}>{t('whatsNew.subtitle')}</p>
 
       {/* Chip di filtro — scrollabili orizzontalmente, stesso pattern già
           usato in Inventory.jsx per i filtri rapidi. */}
       <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none', marginBottom:22 }}>
-        <div style={{ display:'flex', gap:8, padding:'0 16px', width:'max-content', minWidth:'100%' }}>
+        <div style={{ display:'flex', gap:8, padding:'0 20px', width:'max-content', minWidth:'100%' }}>
           {[
-            { key:'all', label:t('whatsNew.filterAll'), count:counts.all, color:'#fff', bg:'var(--text)' },
+            { key:'all', label:t('whatsNew.filterAll'), count:counts.all, color:'var(--c-surface)', bg:'var(--c-ink)' },
             { key:'new', label:t('whatsNew.kindNew'),    count:counts.new, color:'#fff', bg:'var(--accent)' },
             { key:'fix', label:t('whatsNew.kindFixPlural'), count:counts.fix, color:'#fff', bg:'var(--accent2)' },
           ].map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)} aria-pressed={filter === f.key} style={{
               padding:'7px 14px', borderRadius:20, fontSize:13, fontWeight:700,
-              background: filter === f.key ? f.bg : 'var(--card2)',
-              color: filter === f.key ? f.color : 'var(--text2)',
-              border: `1px solid ${filter === f.key ? f.bg : 'var(--border)'}`,
+              background: filter === f.key ? f.bg : 'var(--c-fill)',
+              color: filter === f.key ? f.color : 'var(--c-ink2)',
+              border: `1px solid ${filter === f.key ? f.bg : 'transparent'}`,
               display:'flex', alignItems:'center', gap:6,
             }}>
               {f.label}
               <span style={{
-                background: filter === f.key ? 'rgba(255,255,255,0.22)' : 'var(--card3)',
-                color: filter === f.key ? f.color : 'var(--text3)',
+                background: filter === f.key ? 'rgba(255,255,255,0.22)' : 'var(--c-fill2)',
+                color: filter === f.key ? f.color : 'var(--c-ink3)',
                 borderRadius:10, padding:'1px 6px', fontSize:11, fontWeight:800,
               }}>{f.count}</span>
             </button>
@@ -94,11 +91,11 @@ export default function Novita() {
           {t('whatsNew.emptyFilter')}
         </p>
       ) : (
-        <div style={{ position:'relative', margin:'0 16px 24px', paddingLeft:24 }}>
+        <div style={{ position:'relative', margin:'0 20px 24px', paddingLeft:24 }}>
           {/* Riga del tempo — una sola linea continua dietro tutti i pallini
               di release, non una per sezione: evita di dover indovinare
               l'altezza di ciascun blocco per farla combaciare. */}
-          <div style={{ position:'absolute', left:11, top:6, bottom:6, width:2, background:'var(--border)' }} />
+          <div style={{ position:'absolute', left:11, top:6, bottom:6, width:2, background:'var(--c-line)' }} />
 
           {releases.map((release, ri) => {
             const isOpen = openReleases.has(release.id)
@@ -107,8 +104,8 @@ export default function Novita() {
               <section key={release.id} style={{ position:'relative', marginBottom: ri === releases.length - 1 ? 0 : 22 }}>
                 <div style={{
                   position:'absolute', left:-17, top:3, width:12, height:12, borderRadius:'50%',
-                  background: isLatest ? 'var(--accent)' : 'var(--card)',
-                  border: `2px solid ${isLatest ? 'var(--accent)' : 'var(--border2)'}`,
+                  background: isLatest ? 'var(--accent)' : 'var(--c-surface)',
+                  border: `2px solid ${isLatest ? 'var(--accent)' : 'var(--c-line)'}`,
                   boxShadow: isLatest ? '0 0 0 4px rgba(230,57,70,0.14)' : 'none',
                 }} />
 
@@ -142,13 +139,13 @@ export default function Novita() {
                 </div>
 
                 {isOpen && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:14 }}>
+                  <div style={{ display:'flex', flexDirection:'column', gap:12, marginTop:14 }}>
                     {release.items.map(item => {
                       const kind = KIND_STYLE[item.kind] || KIND_STYLE.new
                       const KindIcon = kind.Icon
                       return (
                         <div key={item.title.it} className="novita-item-card" style={{
-                          background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px',
+                          background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, padding:'15px 16px',
                         }}>
                           <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
                             <div style={{
@@ -158,8 +155,8 @@ export default function Novita() {
                               <KindIcon size={13} />
                             </div>
                             <div style={{ flex:1, minWidth:0 }}>
-                              <h3 style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>{item.title[lang]}</h3>
-                              <p style={{ fontSize:13.5, lineHeight:1.55, color:'var(--text2)' }}>{item.text[lang]}</p>
+                              <h3 style={{ fontSize:15, fontWeight:800, marginBottom:5 }}>{item.title[lang]}</h3>
+                              <p style={{ fontSize:13.5, lineHeight:1.55, color:'var(--c-ink2)' }}>{item.text[lang]}</p>
                             </div>
                           </div>
                         </div>

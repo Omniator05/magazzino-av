@@ -75,8 +75,8 @@ export default function ProUpsell() {
         className="btn-no-anim pro-upsell-banner"
         onClick={() => navigate('/admin/settings/billing')}
         style={{
-          width: '100%', background: urgent ? '#fff5f5' : 'var(--dash-card)',
-          border: `1px solid ${urgent ? '#fecdd3' : 'var(--dash-card-border)'}`,
+          width: '100%', background: urgent ? 'var(--c-t-red)' : 'var(--dash-card)',
+          border: `1px solid ${urgent ? 'rgba(230,57,70,0.35)' : 'var(--dash-card-border)'}`,
           borderRadius: 16, padding: '12px 15px', marginBottom: 10,
           display: 'flex', alignItems: 'center', gap: 11, textAlign: 'left',
         }}
@@ -98,22 +98,22 @@ export default function ProUpsell() {
             onClick={e => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            style={{ background: '#fff', borderRadius: 24, padding: '26px 22px 20px', width: '100%', maxWidth: 340, textAlign: 'center', boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: 'proUpsellPop 0.24s cubic-bezier(0.32,0.72,0,1)' }}
+            style={{ background: 'var(--c-surface)', borderRadius: 24, padding: '26px 22px 20px', width: '100%', maxWidth: 340, textAlign: 'center', boxShadow: '0 24px 70px rgba(0,0,0,0.35)', animation: 'proUpsellPop 0.24s cubic-bezier(0.32,0.72,0,1)' }}
           >
             <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(230,57,70,0.12)', color: 'var(--accent)' }}>
               <Star size={24} />
             </div>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#111827', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: 'var(--c-ink)', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
               {trialExpired ? t('proUpsell.modalExpiredTitle') : t('proUpsell.modalEndingTitle', { count: days })}
             </h3>
-            <p style={{ fontSize: 14, color: '#6b7280', margin: 0, lineHeight: 1.45 }}>
+            <p style={{ fontSize: 14, color: 'var(--c-ink2)', margin: 0, lineHeight: 1.45 }}>
               {trialExpired ? t('proUpsell.modalExpiredBody') : t('proUpsell.modalEndingBody')}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
               <button onClick={goToBilling} style={{ padding: 12, borderRadius: 13, fontSize: 14, fontWeight: 800, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer' }}>
                 {t('proUpsell.modalCta')}
               </button>
-              <button onClick={closeModal} style={{ padding: 10, borderRadius: 13, fontSize: 13.5, fontWeight: 700, background: 'transparent', color: '#6b7280', border: 'none', cursor: 'pointer' }}>
+              <button onClick={closeModal} style={{ padding: 10, borderRadius: 13, fontSize: 13.5, fontWeight: 700, background: 'transparent', color: 'var(--c-ink2)', border: 'none', cursor: 'pointer' }}>
                 {t('proUpsell.modalLater')}
               </button>
             </div>

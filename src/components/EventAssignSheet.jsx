@@ -152,7 +152,7 @@ export default function EventAssignSheet({ event, blocks, workers, unavailabilit
               return (
                 <button key={x.key} role="tab" aria-selected={active} type="button" className="btn-no-anim" onClick={() => switchTarget(x.key)}
                   style={{ flexShrink: 0, padding: '7px 13px', borderRadius: 20, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap',
-                    background: active ? x.color : '#fff', color: active ? '#fff' : x.color, border: `1.5px solid ${x.color}${active ? '' : '66'}` }}>
+                    background: active ? x.color : 'var(--c-surface)', color: active ? '#fff' : x.color, border: `1.5px solid ${x.color}${active ? '' : '66'}` }}>
                   {x.label}
                 </button>
               )

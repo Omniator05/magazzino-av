@@ -89,7 +89,7 @@ export default function ActiveShiftBadge() {
           border: none;
         }
         .active-shift-dot {
-          width: 7px; height: 7px; border-radius: 50%; background: #fff; flex-shrink: 0;
+          width: 7px; height: 7px; border-radius: 50%; background: var(--c-surface); flex-shrink: 0;
           animation: activeShiftPulse 1.8s ease-in-out infinite;
         }
         @keyframes activeShiftPulse {

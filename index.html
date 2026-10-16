@@ -4,7 +4,21 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#e63946" />
+    <meta name="theme-color" content="#f5f5f3" />
+    <style>html { background: #f5f5f3; } html[data-theme="dark"] { background: #121211; }</style>
+    <script>
+      // Tema scelto dall'utente (src/utils/theme.js): applicato prima del primo paint.
+      (function () {
+        try {
+          var p = localStorage.getItem('rcTheme');
+          var dark = p === 'dark' || (p !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var t = dark ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.style.colorScheme = t;
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#121211' : '#f5f5f3');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

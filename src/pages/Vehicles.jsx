@@ -7,7 +7,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
 import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { Check, Edit, Trash, Truck } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import FabButton from '../components/FabButton'
@@ -159,19 +159,13 @@ export default function Vehicles() {
   )
 
   return (
-    <div className="page users-page">
+    <div className="page users-page" style={{ background:'var(--surface)' }}>
       <Toast message={toast} />
 
-      <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-          <BackHomeButton to="/admin/settings" />
-          <h1>{t('vehicles.title')}</h1>
-        </div>
-        <p style={{ marginTop:4, textAlign:'right' }}>{t('vehicles.totalCount', { count: vehicles.length })}</p>
-      </div>
+      <PageHeader title={t('vehicles.title')} subtitle={t('vehicles.totalCount', { count: vehicles.length })} backTo="/admin/settings" />
 
-      <div style={{ padding: '16px 0 0' }}>
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', margin: '0 16px 16px', overflow: 'hidden' }}>
+      <div style={{ padding: '18px 0 0' }}>
+        <div style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 18, margin: '0 18px 16px', overflow: 'hidden' }}>
           {vehicles.length === 0
             ? <div className="empty-state" style={{ padding: '30px' }}>
                 <p style={{ color: 'var(--text3)', marginBottom: 4 }}><Truck size={34} /></p>
@@ -188,7 +182,7 @@ export default function Vehicles() {
       {/* Modal crea furgone */}
       {showCreate && (
         <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
-          <div className={`modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...createDrag.props}>
+          <div className={`modal rc-sheet${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...createDrag.props}>
             <button className="close-btn" onClick={createDrag.close}>✕</button>
             <h2>{t('vehicles.newTitle')}</h2>
 
@@ -229,7 +223,7 @@ export default function Vehicles() {
       {/* Modal dettaglio/modifica furgone */}
       {showDetail && (
         <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
-          <div className={`modal${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...detailDrag.props}>
+          <div className={`modal rc-sheet${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position: 'relative' }} {...detailDrag.props}>
             <button className="close-btn" onClick={detailDrag.close}>✕</button>
 
             {!editMode ? (

@@ -182,28 +182,28 @@ export default function Archive() {
     return (
       <button key={event.id} type="button" onClick={() => setSelectedId(cur => (!isMobile && cur === event.id ? null : event.id))}
         aria-pressed={!isMobile ? isSel : undefined} aria-label={t('archive.openEventAria', { name: event.name })}
-        style={{ width:'calc(100% - 32px)', margin:'0 16px 10px', display:'flex', alignItems:'center', gap:13, padding:'12px 14px 12px 12px', background: isSel ? '#fff7f7' : '#fff', border:`1px solid ${isSel ? '#e63946' : '#e0ddd6'}`, borderRadius:16, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer', transition:'border-color 0.15s ease, background-color 0.15s ease' }}>
-        <span style={{ width:54, height:54, borderRadius:13, background: isSel ? '#e63946' : '#eceae6', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flexShrink:0, lineHeight:1.1, transition:'background-color 0.15s ease' }}>
-          <span style={{ fontSize: dl.multi ? 16 : 21, fontWeight:800, color: isSel ? '#fff' : '#1a1a1a', fontVariantNumeric:'tabular-nums' }}>{dl.day}</span>
-          <span style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.04em', color: isSel ? 'rgba(255,255,255,0.85)' : '#6b6b6b', marginTop:2 }}>
+        style={{ width:'calc(100% - 32px)', margin:'0 16px 10px', display:'flex', alignItems:'center', gap:13, padding:'12px 14px 12px 12px', background: isSel ? 'var(--c-t-red)' : 'var(--c-surface)', border:`1px solid ${isSel ? '#e63946' : 'var(--c-line)'}`, borderRadius:16, textAlign:'left', font:'inherit', color:'inherit', cursor:'pointer', transition:'border-color 0.15s ease, background-color 0.15s ease' }}>
+        <span style={{ width:54, height:54, borderRadius:13, background: isSel ? '#e63946' : 'var(--c-fill)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flexShrink:0, lineHeight:1.1, transition:'background-color 0.15s ease' }}>
+          <span style={{ fontSize: dl.multi ? 16 : 21, fontWeight:800, color: isSel ? '#fff' : 'var(--c-ink)', fontVariantNumeric:'tabular-nums' }}>{dl.day}</span>
+          <span style={{ fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.04em', color: isSel ? 'rgba(255,255,255,0.85)' : 'var(--c-ink2)', marginTop:2 }}>
             {dl.month}{dl.year !== thisYear ? ` ${String(dl.year).slice(2)}` : ''}
           </span>
         </span>
         <span style={{ flex:1, minWidth:0, display:'block' }}>
-          <span style={{ display:'block', fontSize:15.5, fontWeight:800, color:'#1a1a1a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</span>
+          <span style={{ display:'block', fontSize:15.5, fontWeight:800, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.name}</span>
           {event.location && (
-            <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'#6b6b6b', marginTop:3, minWidth:0 }}>
+            <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'var(--c-ink2)', marginTop:3, minWidth:0 }}>
               <Pin size={13} />
               <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.location}</span>
             </span>
           )}
           {loadListsOn && total > 0 && (
-            <span style={{ display:'block', fontSize:12, fontWeight:700, marginTop:3, color: allBack ? '#15803d' : '#ea580c' }}>
+            <span style={{ display:'block', fontSize:12, fontWeight:700, marginTop:3, color: allBack ? 'var(--c-green)' : '#ea580c' }}>
               {t('archive.itemsCount', { count: total })} · {allBack ? t('archive.allReturned') : t('archive.partialReturned', { returned, total })}
             </span>
           )}
         </span>
-        <span style={{ color:'#9a9a9a', display:'flex' }}><ChevronRight size={18} /></span>
+        <span style={{ color:'var(--c-ink3)', display:'flex' }}><ChevronRight size={18} /></span>
       </button>
     )
   }
@@ -212,7 +212,7 @@ export default function Archive() {
     <div style={{ padding:'12px 0 0' }}>
       {loading ? (
         <div style={{ padding:'40px', textAlign:'center', color:'var(--text2)' }}>
-          <div style={{ width:32, height:32, border:'3px solid #e0ddd6', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }} />
+          <div style={{ width:32, height:32, border:'3px solid var(--c-line)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }} />
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           <p>{t('archive.loadingArchive')}</p>
         </div>
@@ -291,18 +291,18 @@ export default function Archive() {
           alto, accanto all'header) — così titolo, dettagli e i due pulsanti
           fissi in fondo stanno sempre in vista senza scorrere la pagina. */}
       <aside className={`rc-aside-slide${selected ? ' open' : ''}`} aria-hidden={!selected}>
-        <div style={{ width:460, height:'100dvh', background:'#fff', borderLeft:'1px solid #e0ddd6', display:'flex', flexDirection:'column' }}>
+        <div style={{ width:460, height:'100dvh', background:'var(--c-surface)', borderLeft:'1px solid var(--c-line)', display:'flex', flexDirection:'column' }}>
           {shown && (
             <div key={shown.id} className="rc-sidebar-swap" style={{ display:'flex', flexDirection:'column', minHeight:0, flex:1 }}>
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, padding:'24px 28px 8px' }}>
-                <h2 style={{ margin:0, fontSize:20, fontWeight:800, letterSpacing:'-0.3px', color:'#1a1a1a', overflowWrap:'anywhere' }}>{shown.name}</h2>
+                <h2 style={{ margin:0, fontSize:20, fontWeight:800, letterSpacing:'-0.3px', color:'var(--c-ink)', overflowWrap:'anywhere' }}>{shown.name}</h2>
                 <button onClick={() => setSelectedId(null)} aria-label={t('common.close')}
-                  style={{ width:30, height:30, borderRadius:10, background:'#eceae6', color:'#6b6b6b', fontSize:14, fontWeight:800, flexShrink:0 }}>✕</button>
+                  style={{ width:30, height:30, borderRadius:10, background:'var(--c-fill)', color:'var(--c-ink2)', fontSize:14, fontWeight:800, flexShrink:0 }}>✕</button>
               </div>
               <div style={{ flex:1, minHeight:0, overflowY:'auto', padding:'0 28px 20px' }}>
                 <ArchiveEventDetail {...detailProps(shown)} />
               </div>
-              <div style={{ padding:'14px 28px 20px', borderTop:'1px solid #e0ddd6', background:'#fff' }}>{actionBar(shown)}</div>
+              <div style={{ padding:'14px 28px 20px', borderTop:'1px solid var(--c-line)', background:'var(--c-surface)' }}>{actionBar(shown)}</div>
             </div>
           )}
         </div>
@@ -324,7 +324,7 @@ function ArchiveSheet({ event, onClose, footer, children }) {
         <button className="close-btn" onClick={drag.close} aria-label={t('common.close')}>✕</button>
         <h2 style={{ padding:'0 66px 0 22px', marginBottom:6, flexShrink:0, overflowWrap:'anywhere' }}>{event.name}</h2>
         <div style={{ flex:1, minHeight:0, overflowY:'auto', padding:'0 22px 20px', WebkitOverflowScrolling:'touch' }}>{children}</div>
-        <div style={{ flexShrink:0, padding:'12px 22px calc(env(safe-area-inset-bottom, 0px) + 16px)', borderTop:'1px solid #e0ddd6', background:'#f4f3ef' }}>{footer}</div>
+        <div style={{ flexShrink:0, padding:'12px 22px calc(env(safe-area-inset-bottom, 0px) + 16px)', borderTop:'1px solid var(--c-line)', background:'var(--c-sheet)' }}>{footer}</div>
       </div>
     </div>
   )

@@ -142,7 +142,7 @@ function LoadListPreview() {
 
 export default function Landing() {
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)', color: 'var(--text)' }}>
+    <div data-theme="light" style={{ minHeight: '100dvh', background: 'var(--bg)', color: 'var(--text)' }}>
       <style>{`
         @keyframes landingReveal {
           from { opacity: 0; transform: translateY(14px); }

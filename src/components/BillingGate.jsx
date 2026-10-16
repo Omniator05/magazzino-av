@@ -51,7 +51,7 @@ export default function BillingGate() {
         <p style={{ color:'var(--text2)', fontSize:14, lineHeight:1.6, marginBottom:26 }}>
           {isAdmin ? t('billing.adminDesc') : t('billing.workerDesc')}
         </p>
-        {error && <p style={{ color:'#dc2626', fontSize:13, marginBottom:14, fontWeight:600 }}>{error}</p>}
+        {error && <p style={{ color:'var(--c-danger)', fontSize:13, marginBottom:14, fontWeight:600 }}>{error}</p>}
         {isAdmin && (
           <button onClick={fixPayment} disabled={loading} className="btn btn-primary btn-full">
             {loading ? t('common.redirecting') : t('billing.fixPaymentButton')}

@@ -6,7 +6,7 @@ import { trialDaysLeft } from '../utils/billing'
 import { FREE_LIMITS, TEAM_LIMITS } from '../utils/planLimits'
 import { formatDate } from '../utils/formatDate'
 import { Check, Star, Warn } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 
 // Sotto-pagina "Abbonamento" di Impostazioni — stato Stripe e link a
 // Checkout/Billing Portal. Le carte non passano mai dal nostro codice: sia
@@ -160,10 +160,7 @@ export default function SettingsBilling() {
     : null
 
   const header = (
-    <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-      <BackHomeButton to="/admin/settings" />
-      <h1 style={{ textAlign:'right' }}>{t('adminUsers.billingTitle')}</h1>
-    </div>
+    <PageHeader title={t('adminUsers.billingTitle')} backTo="/admin/settings" />
   )
 
   // Scheda piano — riusata identica sia per le 3 card della vista

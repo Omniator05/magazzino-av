@@ -96,8 +96,8 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   // conteggio, nello stesso ordine in cui li segnano dallo scanner.
   let statusColor = 'var(--dash-muted)', statusText = t('events.statusEmptyList')
   if (total > 0) {
-    if (returned > 0)      { statusColor = '#15803d'; statusText = t('events.statusReturnedCount', { returned, total }) }
-    else if (loaded > 0)   { statusColor = '#b45309'; statusText = t('events.statusLoadedCount', { loaded, total }) }
+    if (returned > 0)      { statusColor = 'var(--c-green)'; statusText = t('events.statusReturnedCount', { returned, total }) }
+    else if (loaded > 0)   { statusColor = 'var(--c-amber)'; statusText = t('events.statusLoadedCount', { loaded, total }) }
     else if (prepared > 0) { statusColor = 'var(--blue)'; statusText = t('events.statusReadyCount', { prepared, total }) }
     else                    { statusColor = 'var(--dash-muted)'; statusText = t('events.statusInList', { count: total }) }
   }
@@ -158,7 +158,7 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
               distingue da un evento normale, visibile invece sulla sua
               card originale in "Installazioni". */}
           {event.type === 'installation' && (
-            <span className="install-tag" style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+            <span className="install-tag" style={{ background:'var(--c-violet-bg)', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
           )}
         </div>
         {isPhaseOnly && phaseKeys.map(k => {
@@ -172,8 +172,8 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
           )
         })}
         {loadListsOn && (
-          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : (isToday && !isPhaseOnly) ? '#dc2626' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
-            {(daScaricare || (isToday && !isPhaseOnly)) && <Dot size={7} color={daScaricare ? '#ea580c' : '#dc2626'} />}
+          <p style={{ fontSize:12, fontWeight:600, color: daScaricare ? '#ea580c' : (isToday && !isPhaseOnly) ? 'var(--c-danger)' : statusColor, display:'flex', alignItems:'center', gap:5 }}>
+            {(daScaricare || (isToday && !isPhaseOnly)) && <Dot size={7} color={daScaricare ? '#ea580c' : 'var(--c-danger)'} />}
             {daScaricare
               // Un rent/install scaduto va chiuso anche se non c'è più
               // nulla da rientrare fisicamente (total-returned potrebbe
@@ -228,7 +228,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
 
   const cardBorder = isToday ? 'rgba(220,38,38,0.4)' : 'var(--dash-card-border)'
   const iconColor = isToday ? 'var(--accent)' : '#7c6fea'
-  const statusColor = isToday ? '#dc2626' : loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)'
+  const statusColor = isToday ? 'var(--c-danger)' : loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)'
   const baseStatusText = total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })
   const statusText = isToday ? t('events.todayStatus', { status: baseStatusText.toLowerCase() }) : baseStatusText
 
@@ -261,11 +261,11 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
               tre bottoni-azione, il tag finiva per mangiarsi quasi tutto lo
               spazio del titolo. Il colore della card (icona viola/rossa)
               basta comunque a distinguerla da un evento normale. */}
-          <span className="install-tag" style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+          <span className="install-tag" style={{ background:'var(--c-violet-bg)', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
         </div>
         {loadListsOn && (
           <p style={{ fontSize:12, fontWeight:600, color:statusColor, display:'flex', alignItems:'center', gap:5 }}>
-            {isToday && <Dot size={7} color="#dc2626" />}
+            {isToday && <Dot size={7} color="var(--c-danger)" />}
             {statusText}
           </p>
         )}
@@ -277,7 +277,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
           larghezza sotto, ora un'icona in fila con le altre due). */}
       <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
         <button onClick={() => onClose(inst)} aria-label={t('events.closeInstallationBtn')} title={t('events.closeInstallationBtn')}
-          style={{ width:44, height:44, borderRadius:12, background:'#ede9fe', color:'#5b4fcf', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          style={{ width:44, height:44, borderRadius:12, background:'var(--c-violet-bg)', color:'#5b4fcf', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
           <IconCheckSm />
         </button>
         <EditButton onClick={e => onEdit(e, inst)} size={44} ariaLabel={t('events.editInstallationAria')} />
@@ -293,8 +293,8 @@ export default function Events() {
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const PHASE_CONFIG = [
-    { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
-    { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
+    { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'var(--c-blue-bg)' },
+    { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'var(--c-orange-bg)' },
   ]
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
@@ -588,7 +588,7 @@ export default function Events() {
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#ea580c', display:'flex' }}><IconChevronSection open={openSections.unload} /></span>
                   <span className="section-label" style={{ color:'#ea580c', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.toUnload')}</span>
-                  <span style={{ background:'#fed7aa', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#9a3412' }}>{daScaricareSingle.length}</span>
+                  <span style={{ background:'#fed7aa', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'var(--c-orange-ink)' }}>{daScaricareSingle.length}</span>
                 </button>
                 {openSections.unload && daScaricareSingle.map(ev => <EventCard key={ev.id} event={ev} {...cardProps} />)}
               </div>
@@ -601,7 +601,7 @@ export default function Events() {
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#1d6fce', display:'flex' }}><IconChevronSection open={openSections.recurring} /></span>
                   <span className="section-label" style={{ color:'#1d6fce', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('workerHome.recurring')}</span>
-                  <span style={{ background:'#dbeafe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#1e3a5f' }}>{recurringShown.length}</span>
+                  <span style={{ background:'var(--c-blue-bg)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#1e3a5f' }}>{recurringShown.length}</span>
                 </button>
                 {openSections.recurring && recurringShown.map(ev => <EventCard key={ev.id} event={ev} {...cardProps} />)}
               </div>
@@ -639,7 +639,7 @@ export default function Events() {
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 16px 12px', background:'transparent', border:'none', outline:'none' }}>
                   <span style={{ color:'#5b4fcf', display:'flex' }}><IconChevronSection open={openSections.installations} /></span>
                   <span className="section-label" style={{ color:'#5b4fcf', fontWeight:700, fontSize:11, textTransform:'uppercase', letterSpacing:'0.1em' }}>{t('events.installations')}</span>
-                  <span style={{ background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installationsShown.length}</span>
+                  <span style={{ background:'var(--c-violet-bg)', borderRadius:10, padding:'1px 8px', fontSize:11, fontWeight:700, color:'#5b4fcf' }}>{installationsShown.length}</span>
                 </button>
                 {openSections.installations && installationsShown.map(inst => <InstallationCard key={inst.id} event={inst} {...instCardProps} />)}
               </div>

@@ -25,7 +25,7 @@ export default function DeadlinesField({ value, onChange, quickLabels }) {
             <DateField value={d.date} clearable onChange={v => update(d.id, { date: v })} />
           </div>
           <button type="button" onClick={() => remove(d.id)} aria-label={t('deadlines.removeAria')}
-            style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--red)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--c-fill)', border: '1px solid var(--c-line)', color: 'var(--red)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Trash size={15} />
           </button>
         </div>
@@ -36,12 +36,12 @@ export default function DeadlinesField({ value, onChange, quickLabels }) {
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {quickLabels && quickLabels.filter(l => !list.some(d => d.label === l)).map(l => (
           <button key={l} type="button" onClick={() => add(l)}
-            style={{ padding: '5px 10px', borderRadius: 16, background: 'var(--card2)', border: '1px dashed var(--border)', color: 'var(--text2)', fontSize: 12, fontWeight: 700 }}>
+            style={{ padding: '5px 10px', borderRadius: 16, background: 'transparent', border: '1.5px dashed var(--c-dash)', color: 'var(--text2)', fontSize: 12, fontWeight: 700 }}>
             + {l}
           </button>
         ))}
         <button type="button" onClick={() => add()}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 16, background: 'var(--card2)', border: '1px dashed var(--border)', color: 'var(--text2)', fontSize: 12, fontWeight: 700 }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 16, background: 'transparent', border: '1.5px dashed var(--c-dash)', color: 'var(--text2)', fontSize: 12, fontWeight: 700 }}>
           <Plus size={12} /> {t('deadlines.addDeadline')}
         </button>
       </div>

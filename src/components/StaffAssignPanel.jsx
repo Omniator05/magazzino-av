@@ -141,8 +141,8 @@ export default function StaffAssignPanel({
     : null
 
   const InfoRow = ({ icon, children }) => (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: '#1a1a1a', lineHeight: 1.4 }}>
-      <span style={{ flexShrink: 0, color: '#9a9a9a', display: 'flex', marginTop: 2 }}>{icon}</span>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: 'var(--c-ink)', lineHeight: 1.4 }}>
+      <span style={{ flexShrink: 0, color: 'var(--c-ink3)', display: 'flex', marginTop: 2 }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
     </div>
   )
@@ -151,21 +151,21 @@ export default function StaffAssignPanel({
     <div className={embedded ? undefined : 'rc-sidebar-swap'}
       style={embedded
         ? { display: 'flex', flexDirection: 'column', gap: 14 }
-        : { width: 460, flexShrink: 0, alignSelf: 'flex-start', position: 'sticky', top: 0, background: '#fff', borderLeft: '1px solid #e0ddd6', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: PANEL_MAX_HEIGHT, maxHeight: PANEL_MAX_HEIGHT, overflowY: 'auto' }}>
+        : { width: 460, flexShrink: 0, alignSelf: 'flex-start', position: 'sticky', top: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: PANEL_MAX_HEIGHT, maxHeight: PANEL_MAX_HEIGHT, overflowY: 'auto' }}>
       {/* Incorporato (es. foglio nella lista di carico): titolo e chiusura
           li mette il contenitore. */}
       {!embedded && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--c-ink)', display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
           {item.type === 'event' && event.type === 'installation' && <Wrench size={15} />}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {isTask ? (isNew ? t('staffTimeline.newTaskTitle') : t('staffTimeline.editTaskTitle')) : event.name}
           </span>
         </h2>
         <button onClick={onClose} className="btn-no-anim" aria-label={t('common.close')}
-          style={{ width: 28, height: 28, borderRadius: 8, background: '#eceae6', color: '#6b6b6b', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+          style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
       </div>}
 
-      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: '#6b6b6b' }}>
+      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink2)' }}>
         {dateLabel}
         {phaseTag && <span style={{ marginLeft: 8, color: phaseTag.color, background: `${phaseTag.color}18`, borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 800 }}>{phaseTag.label}</span>}
       </p>
@@ -222,7 +222,7 @@ export default function StaffAssignPanel({
               {[manager.name, manager.phone, manager.email].filter(Boolean).join(' · ')}
             </InfoRow>
           )}
-          {event.notes && <InfoRow icon={<FileText size={14} />}><span style={{ whiteSpace: 'pre-wrap', color: '#6b6b6b' }}>{event.notes}</span></InfoRow>}
+          {event.notes && <InfoRow icon={<FileText size={14} />}><span style={{ whiteSpace: 'pre-wrap', color: 'var(--c-ink2)' }}>{event.notes}</span></InfoRow>}
         </div>
       )}
 
@@ -232,18 +232,18 @@ export default function StaffAssignPanel({
             <label style={{ marginBottom: 0 }}>{isMultiDayEvent ? t('staffTimeline.dayHoursTitle') : t('staffTimeline.timeLabel')}</label>
             {hasDayOverride && (
               <button type="button" className="btn-no-anim" onClick={onResetDayHours}
-                style={{ fontSize: 11.5, fontWeight: 700, color: '#6b6b6b', padding: '3px 9px', borderRadius: 20, background: '#eceae6' }}>
+                style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--c-ink2)', padding: '3px 9px', borderRadius: 20, background: 'var(--c-fill)' }}>
                 {t('staffTimeline.resetDayHours')}
               </button>
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <label style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('staffTimeline.startLabel')}</label>
+              <label style={{ fontSize: 11, color: 'var(--c-ink2)', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('staffTimeline.startLabel')}</label>
               <TimeField value={startTime} onChange={v => setShared('startTime', v)} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <label style={{ fontSize: 11, color: '#6b6b6b', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('staffTimeline.endLabel')}</label>
+              <label style={{ fontSize: 11, color: 'var(--c-ink2)', fontWeight: 700, display: 'block', marginBottom: 4 }}>{t('staffTimeline.endLabel')}</label>
               <TimeField value={endTime} onChange={v => setShared('endTime', v)} />
             </div>
           </div>
@@ -262,8 +262,8 @@ export default function StaffAssignPanel({
         style={{ display: 'flex', flexDirection: 'column', gap: 10, borderRadius: 12, outline: dropHover ? '2px dashed #e63946' : 'none', outlineOffset: 4 }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('staffTimeline.assignedTitle')}</span>
-          <span style={{ fontSize: 11, fontWeight: 800, color: '#6b6b6b', background: '#eceae6', borderRadius: 20, padding: '1px 8px' }}>{rows.length}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--c-ink)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{t('staffTimeline.assignedTitle')}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-ink2)', background: 'var(--c-fill)', borderRadius: 20, padding: '1px 8px' }}>{rows.length}</span>
         </div>
 
         <div>
@@ -289,7 +289,7 @@ export default function StaffAssignPanel({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {shown.map(c => (
                 <button key={`${c.kind}-${c.id}`} type="button" className="btn-no-anim" onClick={() => add(c)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px 4px 4px', borderRadius: 20, background: '#fff', border: '1.5px solid #e0ddd6', fontSize: 12, fontWeight: 700, color: '#1a1a1a' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 11px 4px 4px', borderRadius: 20, background: 'var(--c-surface)', border: '1.5px solid var(--c-line)', fontSize: 12, fontWeight: 700, color: 'var(--c-ink)' }}>
                   <span style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, background: personColor(c.id), color: '#fff', fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(c.name)}</span>
                   {c.name}
                 </button>
@@ -306,9 +306,9 @@ export default function StaffAssignPanel({
         </div>
 
         {rows.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 12.5, color: '#9a9a9a', fontStyle: 'italic' }}>{t('staffTimeline.noPeopleYet')}</p>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--c-ink3)', fontStyle: 'italic' }}>{t('staffTimeline.noPeopleYet')}</p>
         ) : (
-          <div style={{ borderRadius: 12, border: '1px solid #e0ddd6', overflow: 'hidden' }}>
+          <div style={{ borderRadius: 12, border: '1px solid var(--c-line)', overflow: 'hidden' }}>
             {rows.map((r, i) => {
               const b = blockOf(r.blockId)
               if (!b) return null
@@ -317,17 +317,17 @@ export default function StaffAssignPanel({
               const name = (isWorker ? (activeWorkers.find(w => w.id === b.workerId)?.name) : b.externalWorkerName) || t('common.noName')
               const unavailable = isWorker && isWorkerUnavailable(b.workerId, { date, dateEnd: date }, unavailability)
               return (
-                <div key={r.blockId} style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid #e0ddd6' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div key={r.blockId} style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--c-line)' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: personColor(pid), color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(name)}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                    {!isWorker && <span style={{ fontSize: 9.5, fontWeight: 800, color: '#9a9a9a', background: '#eceae6', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>}
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--c-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                    {!isWorker && <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>}
                     <button type="button" className="btn-no-anim" onClick={() => onRemoveBlock(b)} aria-label={t('staffTimeline.removePersonAria', { name })}
-                      style={{ width: 22, height: 22, borderRadius: 6, background: '#eceae6', color: '#6b6b6b', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+                      style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ flex: 1, minWidth: 0 }}><TimeField compact value={r.startTime} onChange={v => updateRow(r.blockId, { startTime: v })} /></div>
-                    <span style={{ color: '#9a9a9a', fontSize: 12, fontWeight: 700 }}>–</span>
+                    <span style={{ color: 'var(--c-ink3)', fontSize: 12, fontWeight: 700 }}>–</span>
                     <div style={{ flex: 1, minWidth: 0 }}><TimeField compact value={r.endTime} onChange={v => updateRow(r.blockId, { endTime: v })} /></div>
                   </div>
                   {r.noteOpen ? (
@@ -335,7 +335,7 @@ export default function StaffAssignPanel({
                       placeholder={t('staffTimeline.personNotePlaceholder')} style={{ resize: 'vertical', fontSize: 13 }} />
                   ) : (
                     <button type="button" className="btn-no-anim" onClick={() => updateRow(r.blockId, { noteOpen: true })}
-                      style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 700, color: '#6b6b6b', padding: '3px 9px', borderRadius: 20, background: '#eceae6' }}>
+                      style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 700, color: 'var(--c-ink2)', padding: '3px 9px', borderRadius: 20, background: 'var(--c-fill)' }}>
                       + {t('staffTimeline.personNoteAdd')}
                     </button>
                   )}

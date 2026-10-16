@@ -4,9 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase/firestore'
-import DateBadge from '../components/DateBadge'
-import LogoutButton from '../components/LogoutButton'
-import { Pin, Gear } from '../components/Icon'
+import { Pin } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
@@ -17,6 +15,9 @@ import DeadlineReminderModal from '../components/DeadlineReminderModal'
 import RentalEndedReminderModal from '../components/RentalEndedReminderModal'
 import ProUpsell from '../components/ProUpsell'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useIsMobile } from '../hooks/useIsMobile'
+import { hasUnseenWhatsNew } from '../utils/whatsNew'
+import SkyArc from '../components/SkyArc'
 
 const RECAP_SEEN_KEY = 'weeklyRecapSeenWeek'
 const RECAP_TASK_DOT = { alta:'#f87171', media:'#f5a623', bassa:'#34d399' }
@@ -64,19 +65,6 @@ const IconChevron = () => (
     <polyline points="9 18 15 12 9 6"/>
   </svg>
 )
-const IconAlert = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="12" y1="8" x2="12" y2="12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-    <circle cx="12" cy="16" r="1" fill="white"/>
-  </svg>
-)
-const IconCart = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-  </svg>
-)
 const IconClipboard = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
@@ -119,6 +107,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   const { t, i18n } = useTranslation()
   const { profile, logout, teamId, team, showOverlay } = useAuth()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [showProfile, setShowProfile] = useState(false)
   const [dash, setDash] = useState(() => (dashCache.teamId && dashCache.teamId === teamId ? { ...dashCache } : { ...EMPTY_DASH }))
   const { items, vehicles, tasks, events, itemsLoaded, eventsLoaded } = dash
@@ -247,19 +236,27 @@ export default function Dashboard({ toggleTheme, theme }) {
   // lista, altrimenti si confonde con gli altri e non salta all'occhio che
   // c'è un rent da smontare/controllare rimasto indietro.
   const isOverdueRent = e => e.type === 'installation' && !e.archived && effectiveEnd(e) < today
+  // "Oggi" per un rent/install: solo se oggi è il suo inizio, la sua fine o una
+  // sua fase (o se è scaduto e non chiuso) — NON per tutta la durata né in
+  // anticipo: un rent di sabato non è "di oggi" il lunedì prima.
+  const rentIsToday = e => {
+    const phases = e.phases || {}
+    return e.date === today || effectiveEnd(e) === today || phases.montaggio === today || phases.smontaggio === today || isOverdueRent(e)
+  }
   const isRelevantToday = e => e.type === 'installation'
-    ? rentNeedsAttention(e)
+    ? rentIsToday(e)
     : e.date <= today && (e.dateEnd || e.date) >= today
   // Un rent scaduto va in testa a prescindere dalla data (è il più urgente
   // da notare), poi tutto il resto in ordine cronologico come sempre.
-  const upcoming = events
+  const upcomingAll = events
     .filter(e => e.type === 'installation' ? rentNeedsAttention(e) : (e.dateEnd || e.date) >= today)
     .sort((a, b) => {
       const overdueA = isOverdueRent(a), overdueB = isOverdueRent(b)
       if (overdueA !== overdueB) return overdueA ? -1 : 1
       return (a.date || '').localeCompare(b.date || '')
     })
-    .slice(0, 3)
+  // Telefono: tre; computer: sei (c'è lo spazio).
+  const upcoming = upcomingAll.slice(0, isMobile ? 3 : 6)
 
   const weekEvents = recapWeek
     ? events.filter(e => e.date && e.date <= recapWeek.sunday && (e.dateEnd || e.date) >= recapWeek.monday)
@@ -271,6 +268,7 @@ export default function Dashboard({ toggleTheme, theme }) {
     : []
   const recapSectionLabel = { fontSize:11, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:8 }
 
+  const loadListsOn = isModuleEnabled(team, 'loadLists')
   const todayLabel = formatDate(new Date(), { weekday:'long', day:'numeric', month:'long' }, i18n.language)
 
   /* Tool cards config — icone monocromatiche, un solo colore per tutte le tile.
@@ -302,481 +300,250 @@ export default function Dashboard({ toggleTheme, theme }) {
       : { label: t('dashboard.tools.vehicles'), icon: <IconTruck />, path: '/vehicles', badge: null },
   ]
 
-  // Posizione corpo celeste basata sull'orario
-  const _now = new Date()
-  const _h = _now.getHours() + _now.getMinutes() / 60
-  const _DAY_START = 6, _DAY_END = 20
-  const _isDay = _h >= _DAY_START && _h < _DAY_END
-  const _prog = _isDay
-    ? (_h - _DAY_START) / (_DAY_END - _DAY_START)
-    : (_h >= _DAY_END ? _h - _DAY_END : _h + (24 - _DAY_END)) / (24 - _DAY_END + _DAY_START)
-  const _cx = 5 + _prog * 90
-  const _cy = 82 - Math.sin(_prog * Math.PI) * 72
+  // Stessi dati di prima, solo raggruppati: "Oggi" = quelli rilevanti oggi
+  // (compresi i rent scaduti, in testa), "Prossimi" = gli altri della stessa
+  // lista di tre.
+  const todayEvents = upcoming.filter(e => isRelevantToday(e) || isOverdueRent(e))
+  const nextEvents = upcoming.filter(e => !(isRelevantToday(e) || isOverdueRent(e)))
+  const sectionLabel = { fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink3)', margin:'0 0 12px 2px' }
+  const attentionRow = { width:'100%', display:'flex', alignItems:'center', gap:12, padding:'14px 16px', borderRadius:12, background:'var(--c-surface)', border:'1px solid var(--c-line)', fontSize:13, fontWeight:600, color:'var(--c-ink)' }
+  const attentionDot = { width:8, height:8, borderRadius:'50%', flexShrink:0 }
 
-  const _bg = _h >= 5 && _h < 7   ? 'linear-gradient(135deg,#2a3560 0%,#18234a 100%)'
-            : _h >= 7 && _h < 17  ? 'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)'
-            : _h >= 17 && _h < 20 ? 'linear-gradient(135deg,#3a2f58 0%,#201730 100%)'
-                                  : 'linear-gradient(135deg,#1a2240 0%,#0d1525 100%)'
+  const renderEventCard = ev => {
+    const isToday = isRelevantToday(ev)
+    const overdue = isOverdueRent(ev)
+    const dateLabel = ev.date ? formatDate(ev.date+'T12:00:00', {weekday:'short',day:'numeric',month:'short'}, i18n.language) : ''
+    const dateEndLabel = ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + formatDate(ev.dateEnd+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
+    // Avanzamento della lista di carico, come nella card di Eventi.
+    const evItems = loadListsOn ? (ev.items || []) : []
+    const nTot = evItems.length
+    const nReturned = evItems.filter(i => i.returned).length
+    const nLoaded = evItems.filter(i => i.loaded).length
+    const nReady = evItems.filter(i => i.pronto).length
+    const status = nTot === 0 ? null
+      : nReturned > 0 ? { color:'var(--c-green)', text:t('events.statusReturnedCount', { returned:nReturned, total:nTot }) }
+      : nLoaded > 0 ? { color:'var(--c-amber)', text:t('events.statusLoadedCount', { loaded:nLoaded, total:nTot }) }
+      : nReady > 0 ? { color:'#2563eb', text:t('events.statusReadyCount', { prepared:nReady, total:nTot }) }
+      : { color:'var(--c-ink3)', text:t('events.statusInList', { count:nTot }) }
+    const tileBg = overdue ? '#ea580c' : isToday ? '#e63946' : 'var(--c-fill)'
+    const tileFg = overdue || isToday ? '#fff' : 'var(--c-ink)'
+    const tileSub = overdue || isToday ? 'rgba(255,255,255,0.85)' : 'var(--c-ink2)'
+    return (
+      <button type="button" key={ev.id} onClick={() => navigate(`/events/${ev.id}`)} aria-label={t('events.openEventAria', { name: ev.name })} className="btn-no-anim"
+        style={{ width:'100%', marginBottom:12, background:'var(--c-surface)', border:`1px solid ${overdue ? 'rgba(234,88,12,0.45)' : 'var(--c-line)'}`, borderRadius:18, display:'flex', alignItems:'center', gap:14, padding:'15px 16px', textAlign:'left' }}>
+        <div style={{ position:'relative', width:50, height:50, flexShrink:0 }}>
+          <div style={{ width:50, height:50, borderRadius:13, background:tileBg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:tileFg, lineHeight:1.1 }}>
+            <span style={{ fontSize:19, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>
+            <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', color:tileSub }}>{ev.date ? formatDate(ev.date+'T12:00:00', {month:'short'}, i18n.language) : ''}</span>
+          </div>
+          {ev.seriesId && (
+            <span style={{ position:'absolute', bottom:-5, right:-5, background:'#2563eb', borderRadius:7, width:20, height:20, display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid var(--c-surface)' }}>
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+              </svg>
+            </span>
+          )}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4, minWidth:0 }}>
+            <p style={{ fontWeight:800, fontSize:15, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0, margin:0 }}>{ev.name}</p>
+            {overdue && (
+              <span style={{ flexShrink:0, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'#ea580c', background:'rgba(234,88,12,0.12)', borderRadius:6, padding:'2px 7px' }}>{t('dashboard.overdueRentBadge')}</span>
+            )}
+          </div>
+          <p style={{ fontSize:12, fontWeight:500, color:'var(--c-ink2)', margin:0, textTransform:'capitalize' }}>{dateLabel}{dateEndLabel}</p>
+          {status && <p style={{ fontSize:11.5, fontWeight:700, color:status.color, margin:'4px 0 0' }}>{status.text}</p>}
+          {ev.location && <p style={{ fontSize:11.5, color:'var(--c-ink3)', margin:'4px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={11} /> {ev.location}</p>}
+        </div>
+        <span style={{ color:'var(--c-ink3)', display:'flex', flexShrink:0 }}><IconChevron /></span>
+      </button>
+    )
+  }
 
-  const _wc = weather?.code ?? -1
-  const _wCond = _wc < 0 ? 'clear'
-    : _wc <= 1  ? 'clear'
-    : _wc === 2 ? 'partly'
-    : _wc === 3 ? 'overcast'
-    : _wc === 45 || _wc === 48 ? 'fog'
-    : (_wc >= 71 && _wc <= 77) ? 'snow'
-    : (_wc >= 51 && _wc <= 67) || (_wc >= 80 && _wc <= 82) ? 'rain'
-    : _wc >= 95 ? 'storm'
-    : 'clear'
-  const _showCelestial = _wCond === 'clear' || _wCond === 'partly'
-  const _cloudOpMult   = _wCond === 'overcast' ? 3 : _wCond === 'partly' ? 1.6 : 1
+  const IconBox = () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.3 7.5L12 12.5l8.7-5"/><line x1="12" y1="22" x2="12" y2="12.5"/></svg>
+  )
+  const stats = [
+    { label:t('dashboard.stats.items'), value:items.length, path:'/inventory', icon:<IconBox />, tint:'var(--c-t-blue)', fg:'#2563eb' },
+    { label:t('dashboard.stats.events'), value:upcomingAll.length, path:'/events', icon:<IconCalendarEmpty />, tint:'var(--c-t-red)', fg:'#e63946' },
+    { label:t('dashboard.stats.tasks'), value:openTasks.length, path:'/tasks', icon:<IconCheck />, tint:'var(--c-t-amber)', fg:'var(--c-amber)' },
+    { label:t('dashboard.stats.broken'), value:totalBroken, path:'/inventory', state:{ filter:'broken' }, icon:<IconClipboard />, tint: totalBroken > 0 ? 'var(--c-t-red)' : 'var(--c-t-green)', fg: totalBroken > 0 ? '#e63946' : 'var(--c-green)' },
+  ]
+
+  const toolsBlock = isMobile ? (
+    <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:10, marginBottom:32 }}>
+      {tools.map((tool) => (
+        <button key={tool.path} className="dash-tool-tile btn-no-anim" onClick={() => navigate(tool.path)}
+          style={{ position:'relative', background:'var(--c-fill)', border:'none', borderRadius:16, padding:'18px 4px 14px', display:'flex', flexDirection:'column', alignItems:'center', gap:9, color:'var(--c-ink)' }}>
+          {tool.badge !== null && (
+            <span style={{ position:'absolute', top:-6, right:-4, minWidth:20, height:20, padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--accent)', color:'#fff', borderRadius:10, fontSize:11, fontWeight:800 }}>{tool.badge}</span>
+          )}
+          <span style={{ display:'flex', transform:'scale(0.82)' }}>{tool.icon}</span>
+          <span style={{ fontSize:11.5, fontWeight:700, maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tool.label}</span>
+        </button>
+      ))}
+    </div>
+  ) : (
+    <>
+      <p style={sectionLabel}>{t('dashboard.toolsSection')}</p>
+      <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:12, marginBottom:28 }}>
+        {tools.map((tool) => (
+          <button key={tool.path} className="dash-tool-tile btn-no-anim" onClick={() => navigate(tool.path)}
+            style={{ position:'relative', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding:'18px 16px', display:'flex', alignItems:'center', gap:12, color:'var(--c-ink)', textAlign:'left' }}>
+            <span style={{ width:42, height:42, borderRadius:13, background:'var(--c-fill)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{tool.icon}</span>
+            <span style={{ fontSize:14, fontWeight:700 }}>{tool.label}</span>
+            {tool.badge !== null && (
+              <span style={{ marginLeft:'auto', minWidth:22, height:22, padding:'0 7px', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--accent)', color:'#fff', borderRadius:11, fontSize:12, fontWeight:800 }}>{tool.badge}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+
+  const attentionBlock = (brokenItems.length > 0 || reorderItems.length > 0) ? (
+    <>
+      <p style={sectionLabel}>{t('dashboard.attentionSection')}</p>
+      <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:32 }}>
+        {brokenItems.length > 0 && (
+          <button type="button" className="btn-no-anim" onClick={() => navigate('/inventory', { state: { filter: 'broken' } })} style={attentionRow}>
+            <span style={{ ...attentionDot, background:'#e63946' }} />
+            <span style={{ flex:1, textAlign:'left' }}>{t('dashboard.brokenAlert', { count: totalBroken })}</span>
+            <span style={{ color:'var(--c-ink3)', display:'flex' }}><IconChevron /></span>
+          </button>
+        )}
+        {reorderItems.length > 0 && (
+          <button type="button" className="btn-no-anim" onClick={() => navigate('/inventory', { state:{ filter:'reorder' } })} style={attentionRow}>
+            <span style={{ ...attentionDot, background:'#ea580c' }} />
+            <span style={{ flex:1, textAlign:'left' }}>
+              {reorderItems.length === 1
+                ? t('dashboard.reorderSingle', { name: reorderItems[0].name })
+                : t('dashboard.reorderMultiple', { count: reorderItems.length })}
+            </span>
+            <span style={{ color:'var(--c-ink3)', display:'flex' }}><IconChevron /></span>
+          </button>
+        )}
+      </div>
+    </>
+  ) : null
+
+  const upcomingBlock = upcoming.length === 0 ? (
+    <>
+      <p style={sectionLabel}>{t('dashboard.upcomingEvents')}</p>
+      <button type="button" onClick={() => navigate('/events', { state: { openNewEvent: true } })} className="btn-no-anim"
+        style={{ width:'100%', background:'var(--c-surface)', border:'1.5px dashed var(--c-dash)', borderRadius:16, padding:'26px 20px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
+        <div style={{ width:48, height:48, borderRadius:'50%', background:'var(--c-fill)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--c-ink2)' }}>
+          <IconCalendarEmpty />
+        </div>
+        <div>
+          <p style={{ fontWeight:700, fontSize:15, color:'var(--c-ink)', marginBottom:4 }}>{t('dashboard.noUpcomingEventsTitle')}</p>
+          <p style={{ fontSize:12.5, color:'var(--c-ink2)', maxWidth:260 }}>{t('dashboard.noUpcomingEventsDesc')}</p>
+        </div>
+        <span style={{ marginTop:4, display:'inline-flex', alignItems:'center', gap:6, padding:'10px 18px', borderRadius:12, background:'var(--accent)', color:'#fff', fontWeight:700, fontSize:13 }}>
+          <IconPlusSm /> {t('dashboard.createFirstEvent')}
+        </span>
+      </button>
+    </>
+  ) : (
+    <>
+      {nextEvents.length > 0 && (
+        <>
+          <p style={sectionLabel}>{t('dashboard.upcomingEvents')}</p>
+          <div>{nextEvents.map(renderEventCard)}</div>
+        </>
+      )}
+      <button onClick={() => navigate('/events')} className="btn-no-anim"
+        style={{ width:'100%', padding:'13px', borderRadius:14, background:'var(--c-fill)', border:'none', color:'var(--c-ink2)', fontWeight:700, fontSize:13, marginTop:10, display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
+        {t('dashboard.viewAllEvents')} <IconChevron />
+      </button>
+    </>
+  )
 
   return (
-    <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:110 }}>
+    <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom: isMobile ? 150 : 110 }}>
 
-      {/* ── Header hero (card) ──────────────────────────────── */}
-      <div style={{ position:'relative', overflow:'hidden', background:_bg, margin:'calc(env(safe-area-inset-top) + 24px) 16px 20px', padding:'26px 22px', borderRadius:26, boxShadow:'0 12px 32px rgba(34,44,66,0.26)' }}>
-        {/* Orb decorativi */}
-        <div style={{ position:'absolute', top:'-55%', right:'-6%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle, rgba(255,255,255,0.14) 0%, transparent 65%)', animation:'dashOrb1 14s ease-in-out infinite', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', bottom:'-70%', left:'-5%', width:280, height:280, borderRadius:'50%', background:'radial-gradient(circle, rgba(0,0,0,0.2) 0%, transparent 65%)', animation:'dashOrb2 18s ease-in-out infinite', pointerEvents:'none' }} />
-
-        {/* Sole / Luna */}
-        {_showCelestial && (
-          <div style={{
-            position:'absolute', pointerEvents:'none', zIndex:0,
-            left:`${_cx}%`, top:`${_cy}%`, transform:'translate(-50%,-50%)',
-            width: _isDay ? 100 : 72, height: _isDay ? 100 : 72, borderRadius:'50%',
-            background: _isDay
-              ? 'radial-gradient(circle, rgba(255,230,100,0.95) 0%, rgba(255,190,50,0.65) 45%, transparent 72%)'
-              : 'radial-gradient(circle, rgba(210,220,255,0.90) 0%, rgba(170,190,245,0.55) 45%, transparent 72%)',
-            filter:`blur(${_isDay ? 22 : 17}px)`,
-          }} />
-        )}
-
-        {/* Stelle (notte, solo cielo sereno/parziale) */}
-        {!_isDay && _showCelestial && [
-          { l:'8%',  t:'22%', s:2,   dur:'3.2s', d:'0s' },
-          { l:'22%', t:'48%', s:1.5, dur:'4.6s', d:'-1.5s' },
-          { l:'38%', t:'14%', s:2.5, dur:'2.9s', d:'-0.8s' },
-          { l:'52%', t:'52%', s:1.5, dur:'5.1s', d:'-2s' },
-          { l:'65%', t:'24%', s:2,   dur:'3.7s', d:'-3s' },
-          { l:'78%', t:'56%', s:1.5, dur:'4.1s', d:'-1s' },
-          { l:'88%', t:'18%', s:2,   dur:'3.4s', d:'-2.5s' },
-          { l:'30%', t:'66%', s:1,   dur:'6s',   d:'-0.5s' },
-        ].map((s,i) => (
-          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
-            left:s.l, top:s.t, width:s.s, height:s.s, borderRadius:'50%',
-            background:'white', animation:`dashStarTwinkle ${s.dur} ease-in-out infinite ${s.d}` }} />
-        ))}
-
-        {/* Nuvole (giorno o coperto) */}
-        {(_isDay || _wCond === 'overcast') && _wCond !== 'rain' && _wCond !== 'storm' && _wCond !== 'snow' && _wCond !== 'fog' && [
-          { l:'-18%', t:'20%', w:150, h:44, op:0.09, dur:'70s', d:'0s' },
-          { l:'40%',  t:'55%', w:120, h:36, op:0.07, dur:'85s', d:'-30s' },
-          { l:'68%',  t:'6%',  w:96,  h:32, op:0.08, dur:'62s', d:'-16s' },
-        ].map((c,i) => (
-          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
-            left:c.l, top:c.t, width:c.w, height:c.h, borderRadius:'50%',
-            background:'white', opacity: Math.min(c.op * _cloudOpMult, 0.32), filter:'blur(9px)',
-            animation:`dashCloudDrift ${c.dur} linear infinite ${c.d}` }} />
-        ))}
-
-        {/* Nuvole pioggia/temporale */}
-        {(_wCond === 'rain' || _wCond === 'storm') && [
-          { l:'-8%',  t:'-30%', w:130, h:50, op:0.55, dur:'38s', d:'0s' },
-          { l:'35%',  t:'-35%', w:110, h:44, op:0.45, dur:'50s', d:'-20s' },
-          { l:'72%',  t:'-25%', w:95,  h:38, op:0.50, dur:'42s', d:'-11s' },
-        ].map((c,i) => (
-          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
-            left:c.l, top:c.t, width:c.w, height:c.h, borderRadius:'50%',
-            background:'rgba(90,100,120,1)', opacity:c.op, filter:'blur(16px)',
-            animation:`dashCloudDrift ${c.dur} linear infinite ${c.d}` }} />
-        ))}
-
-        {/* Pioggia — px assoluti per coprire tutto l'header */}
-        {(_wCond === 'rain' || _wCond === 'storm') && Array.from({length:18}, (_,i) => (
-          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:1,
-            left:`${(i*5.8+1)%100}%`, top:0,
-            width:1, height: 5+(i%3), borderRadius:1,
-            background:`rgba(180,215,255,${0.4+((i%3)*0.1)})`,
-            animation:`dashRainFall ${(0.45+(i%5)*0.06).toFixed(2)}s linear infinite -${(i*0.04).toFixed(2)}s` }} />
-        ))}
-
-        {/* Fulmini */}
-        {(_wCond === 'rain' || _wCond === 'storm') && <>
-          <div style={{ position:'absolute', inset:0, zIndex:2, pointerEvents:'none', borderRadius:'inherit',
-            background:'linear-gradient(95deg, rgba(200,225,255,0.5) 0%, transparent 65%)',
-            animation:'dashLightning 15s ease-out infinite 0s', opacity:0 }}>
-            <svg viewBox="0 0 30 90" width="13" height="58" style={{ position:'absolute', left:'11%', top:0 }}
-              fill="none" stroke="rgba(255,255,250,0.95)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22,0 9,34 17,34 4,90" />
-            </svg>
+      {/* ── Header: stesso stile delle altre pagine (bianco, filo sottile).
+          Saluto, nome, data e meteo a sinistra; l'avatar a destra apre il
+          profilo (da lì anche l'uscita). Niente più scena animata. ── */}
+      <div className="page-header rc-page-header" style={{ position:'relative', overflow:'hidden', ...(isMobile ? { padding:'calc(env(safe-area-inset-top) + 36px) 22px 24px' } : {}) }}>
+        <SkyArc weather={weather} isMobile={isMobile} />
+        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <div style={{ minWidth:0 }}>
+            <p style={{ fontSize:12.5, color:'var(--c-ink3)', fontWeight:600, margin:0 }}>{t(greetingKey())}</p>
+            <h1 style={{ fontSize:isMobile ? 28 : 26, margin:'4px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</h1>
+            <p style={{ fontSize:12.5, color:'var(--c-ink3)', fontWeight:500, margin:'6px 0 0', textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
           </div>
-          <div style={{ position:'absolute', inset:0, zIndex:2, pointerEvents:'none', borderRadius:'inherit',
-            background:'linear-gradient(265deg, rgba(200,225,255,0.5) 0%, transparent 65%)',
-            animation:'dashLightning 21s ease-out infinite -8s', opacity:0 }}>
-            <svg viewBox="0 0 30 90" width="11" height="52" style={{ position:'absolute', right:'13%', top:'6%' }}
-              fill="none" stroke="rgba(255,255,250,0.95)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="8,0 21,32 13,32 26,90" />
-            </svg>
-          </div>
-        </>}
-
-        {/* Neve */}
-        {_wCond === 'snow' && Array.from({length:10}, (_,i) => (
-          <div key={i} style={{ position:'absolute', pointerEvents:'none', zIndex:0,
-            left:`${(i*10.5+3)%100}%`, top:'-8%',
-            width: 3+(i%3), height: 3+(i%3), borderRadius:'50%',
-            background:'rgba(255,255,255,0.85)', filter:'blur(1px)',
-            animation:`dashSnowFall ${(2.2+(i%4)*0.5).toFixed(2)}s linear infinite -${(i*0.22).toFixed(2)}s` }} />
-        ))}
-
-        {/* Nebbia */}
-        {_wCond === 'fog' && (
-          <div style={{ position:'absolute', inset:0, zIndex:0, pointerEvents:'none',
-            background:'rgba(200,210,230,0.22)', borderRadius:'inherit' }} />
-        )}
-
-        {/* Riga principale */}
-        <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:15, flex:1, minWidth:0 }}>
-            <button onClick={() => setShowProfile(true)} aria-label={t('dashboard.openSettings')} style={{ position:'relative', flexShrink:0, width:58, height:58, borderRadius:18, background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.28)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize: profile?.avatar ? 30 : 25, fontWeight:800, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', cursor:'pointer', WebkitTapHighlightColor:'transparent' }}>
-              {profile?.avatar || name.charAt(0).toUpperCase()}
-              <span style={{ position:'absolute', bottom:-4, right:-4, width:22, height:22, borderRadius:'50%', background:'var(--accent)', color:'white', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 6px rgba(0,0,0,0.35)' }}>
-                <Gear size={12} />
-              </span>
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            {profile?.superAdmin && (
+              <button onClick={() => navigate('/super')} aria-label={t('dashboard.superAdminAria')} className="rc-pill-btn" style={{ width:38, height:38, padding:0 }}>
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>
+                  <line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="12" x2="9" y2="12.01"/><line x1="9" y1="15" x2="9" y2="15.01"/>
+                </svg>
+              </button>
+            )}
+            <button onClick={() => setShowProfile(true)} aria-label={t('dashboard.openSettings')} className="btn-no-anim"
+              style={{ position:'relative', width:46, height:46, borderRadius:'50%', background:'var(--c-surface)', color:'var(--c-ink)', border:'1px solid var(--c-line)', fontSize:16, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {name.charAt(0).toUpperCase()}
+              {hasUnseenWhatsNew() && <span aria-hidden="true" style={{ position:'absolute', top:-2, right:-2, width:13, height:13, borderRadius:'50%', background:'#e63946', border:'2px solid var(--c-surface)' }} />}
             </button>
-            <div style={{ minWidth:0 }}>
-              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.78)', fontWeight:600, letterSpacing:'0.04em', marginBottom:2 }}>{t(greetingKey())}</p>
-              <h1 style={{ fontSize:28, fontWeight:800, color:'white', lineHeight:1.08, letterSpacing:'-0.5px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</h1>
-              <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.72)', fontWeight:500, marginTop:4, textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
-            </div>
           </div>
-          {/* Pannello super admin — visibile solo col flag (mai per i clienti) */}
-          {profile?.superAdmin && (
-            <button onClick={() => navigate('/super')} aria-label={t('dashboard.superAdminAria')} style={{
-              flexShrink:0, width:38, height:38, borderRadius:12,
-              background:'rgba(255,255,255,0.16)', border:'1px solid rgba(255,255,255,0.3)',
-              color:'white', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer',
-            }}>
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>
-                <line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="12" x2="9" y2="12.01"/><line x1="9" y1="15" x2="9" y2="15.01"/>
-              </svg>
-            </button>
-          )}
-          <LogoutButton name={name} style={{
-            flexShrink:0,
-            background:'rgba(255,255,255,0.16)',
-            border:'1px solid rgba(255,255,255,0.3)',
-            color:'white',
-            borderRadius:12,
-            padding:'9px 16px',
-            fontSize:13,
-            fontWeight:700,
-            cursor:'pointer',
-          }} />
         </div>
       </div>
 
-      <div style={{ padding:'0 16px' }}>
+      <div style={isMobile ? { padding:'26px 18px 0' } : { padding:'24px 32px 0' }}>
 
-        {/* ── Promemoria piano Pro (solo admin non abbonati) — subito sotto
-            l'header, prima di tutto il resto: non deve poter passare
-            inosservato scorrendo verso gli strumenti. */}
+        {/* Promemoria piano Pro (solo admin non abbonati) — subito sotto l'header. */}
         <ProUpsell />
 
-        {/* ── Strumenti ───────────────────────── */}
-        {/* Renderizzata subito, PRIMA dei banner qui sotto: i banner dipendono
-            da `items` (caricato in modo asincrono da Firestore) e comparendo
-            in ritardo spostano verso il basso tutto ciò che sta sotto — se il
-            tap su una tile capita proprio in quel momento, il primo tocco
-            "sparisce" perché il bottone non è più sotto il dito. Tenendo la
-            griglia sopra, la sua posizione è stabile fin dal primo render. */}
-        <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:12 }}>
-          {t('dashboard.toolsSection')}
-        </p>
-        <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, marginBottom:20 }}>
-          {tools.map((tool) => {
-            return (
-              <button
-                key={tool.path}
-                className="dash-tool-tile"
-                onClick={() => navigate(tool.path)}
-                style={{
-                  position:'relative',
-                  background: 'var(--card3)',
-                  border:'1px solid var(--dash-pill-border)',
-                  borderRadius:20,
-                  padding:'20px 8px 16px',
-                  display:'flex',
-                  flexDirection:'column',
-                  alignItems:'center',
-                  gap:10,
-                }}
-              >
-                {tool.badge !== null && (
-                  <span style={{
-                    position:'absolute', top:-9, right:-9,
-                    minWidth:28, height:28, padding:'0 7px',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    background:'var(--accent)', color:'white',
-                    borderRadius:14,
-                    fontSize:13, fontWeight:800, boxShadow:'0 2px 5px rgba(0,0,0,0.3)',
-                  }}>{tool.badge}</span>
-                )}
-                <span style={{ color: 'var(--dash-title)' }}>{tool.icon}</span>
-                <span style={{ fontSize:13, fontWeight:700, color: 'var(--dash-title)' }}>{tool.label}</span>
+        {/* Computer: quattro numeri in alto, ognuno apre la pagina relativa. */}
+        {!isMobile && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:14, marginBottom:28 }}>
+            {stats.map(st => (
+              <button key={st.label} type="button" className="btn-no-anim dash-stat" onClick={() => navigate(st.path, st.state ? { state: st.state } : undefined)}
+                style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding:'18px 20px', display:'flex', alignItems:'center', gap:14, textAlign:'left' }}>
+                <span style={{ width:46, height:46, borderRadius:14, background:st.tint, color:st.fg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{st.icon}</span>
+                <span style={{ minWidth:0 }}>
+                  <span style={{ display:'block', fontSize:28, fontWeight:800, letterSpacing:'-0.6px', lineHeight:1, color:'var(--c-ink)', fontVariantNumeric:'tabular-nums' }}>{st.value}</span>
+                  <span style={{ display:'block', fontSize:12.5, fontWeight:600, color:'var(--c-ink2)', marginTop:5 }}>{st.label}</span>
+                </span>
               </button>
-            )
-          })}
+            ))}
+          </div>
+        )}
+
+        <div style={isMobile ? { display:'flex', flexDirection:'column' } : { display:'grid', gridTemplateColumns:'minmax(0, 1.8fr) minmax(340px, 1fr)', gap:36, alignItems:'start' }}>
+
+          {/* Colonna principale (computer) — su telefono tutto in fila */}
+          <div style={{ order: isMobile ? 2 : 1, minWidth:0 }}>
+            {todayEvents.length > 0 && (
+              <>
+                <p style={sectionLabel}>{t('dashboard.todaySection')}</p>
+                <div style={{ marginBottom:32 }}>{todayEvents.map(renderEventCard)}</div>
+              </>
+            )}
+            {isMobile && attentionBlock}
+            {upcomingBlock}
+          </div>
+
+          {/* Colonna laterale (computer): strumenti e avvisi. Su telefono gli
+              strumenti stanno SOPRA a tutto (fila compatta, posizione stabile
+              prima dei dati asincroni), gli avvisi dopo "Oggi". */}
+          <div style={{ order: isMobile ? 1 : 2, minWidth:0 }}>
+            {toolsBlock}
+            {!isMobile && attentionBlock}
+          </div>
         </div>
-
-        {/* ── Alert: oggetti rotti ─────────────── */}
-        {brokenItems.length > 0 && (
-          <div style={{
-            background:'#fff1f2',
-            borderRadius:16,
-            padding:'13px 16px',
-            display:'flex',
-            justifyContent:'space-between',
-            alignItems:'center',
-            marginBottom:10,
-            border:'1px solid #fecdd3',
-          }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <span style={{ color:'#e11d48', flexShrink:0 }}><IconAlert /></span>
-              <p style={{ fontSize:14, fontWeight:700, color:'#9f1239' }}>
-                {t('dashboard.brokenAlert', { count: totalBroken })}
-              </p>
-            </div>
-            <button onClick={() => navigate('/inventory', { state: { filter: 'broken' } })} className="btn-no-anim" style={{
-              background:'transparent', color:'#e11d48', fontSize:13, fontWeight:700,
-              display:'flex', alignItems:'center', gap:2,
-            }}>
-              {t('dashboard.view')} <IconChevron />
-            </button>
-          </div>
-        )}
-
-        {/* ── Alert: consumabili da riordinare ── */}
-        {reorderItems.length > 0 && (
-          <div style={{
-            background:'#eff6ff',
-            borderRadius:16,
-            padding:'13px 16px',
-            display:'flex',
-            justifyContent:'space-between',
-            alignItems:'center',
-            marginBottom:10,
-            border:'1px solid #bfdbfe',
-          }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <span style={{ color:'#1d6fce', flexShrink:0 }}><IconCart /></span>
-              <p style={{ fontSize:14, fontWeight:700, color:'#1e3a5f' }}>
-                {reorderItems.length === 1
-                  ? t('dashboard.reorderSingle', { name: reorderItems[0].name })
-                  : t('dashboard.reorderMultiple', { count: reorderItems.length })}
-              </p>
-            </div>
-            <button onClick={() => navigate('/inventory', { state:{ filter:'reorder' } })} className="btn-no-anim" style={{
-              background:'transparent', color:'#1d6fce', fontSize:13, fontWeight:700,
-              display:'flex', alignItems:'center', gap:2,
-            }}>
-              {t('dashboard.view')} <IconChevron />
-            </button>
-          </div>
-        )}
-
-        {/* ── Prossimi eventi ──────────────────── */}
-        <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'1.2px', color:'var(--dash-muted)', marginBottom:14 }}>
-          {t('dashboard.upcomingEvents')}
-        </p>
-
-        {upcoming.length === 0 ? (
-          <button
-            type="button"
-            onClick={() => navigate('/events', { state: { openNewEvent: true } })}
-            className="btn-no-anim"
-            style={{ width:'100%', background:'var(--dash-card)', border:'1.5px dashed var(--dash-pill-border)', borderRadius:20, padding:'28px 20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:10, cursor:'pointer', font:'inherit', color:'inherit' }}
-          >
-            <div style={{ width:52, height:52, borderRadius:'50%', background:'var(--dash-pill-bg)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--dash-muted)' }}>
-              <IconCalendarEmpty />
-            </div>
-            <div>
-              <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', marginBottom:4 }}>
-                {t('dashboard.noUpcomingEventsTitle')}
-              </p>
-              <p style={{ fontSize:12.5, color:'var(--dash-muted)', maxWidth:260 }}>
-                {t('dashboard.noUpcomingEventsDesc')}
-              </p>
-            </div>
-            <span style={{ marginTop:6, display:'inline-flex', alignItems:'center', gap:6, padding:'10px 18px', borderRadius:14, background:'var(--accent)', color:'white', fontWeight:700, fontSize:13 }}>
-              <IconPlusSm /> {t('dashboard.createFirstEvent')}
-            </span>
-          </button>
-        ) : (
-          <>
-            {upcoming.map(ev => {
-              // Evento normale: oggi è dentro il suo range (serve personale
-              // ogni giorno). Rent/install: solo inizio/fine/fasi contano,
-              // tranne se è scaduto — in quel caso un colore tutto suo.
-              const isToday = isRelevantToday(ev)
-              const overdue = isOverdueRent(ev)
-              const iconGradient = overdue
-                ? 'linear-gradient(135deg,#ea580c,#f59e0b)'
-                : isToday
-                ? 'linear-gradient(135deg,#dc2626,#9333ea)'
-                : 'linear-gradient(135deg,#9ca3af,#6b7280)'
-              const cardBorder = isToday ? '1.5px solid #fca5a5' : '1.5px solid var(--dash-card-border)'
-              const cardClass = overdue ? 'evt-card evt-overdue' : isToday ? 'evt-card evt-today' : 'evt-card evt-soft'
-              const dateLabel = ev.date
-                ? formatDate(ev.date+'T12:00:00', {weekday:'long',day:'numeric',month:'long'}, i18n.language)
-                : ''
-              const dateEndLabel = ev.dateEnd && ev.dateEnd !== ev.date
-                ? ' — ' + formatDate(ev.dateEnd+'T12:00:00', {day:'numeric',month:'long'}, i18n.language)
-                : ''
-
-              return (
-                <button
-                  type="button"
-                  key={ev.id}
-                  onClick={() => navigate(`/events/${ev.id}`)}
-                  aria-label={t('events.openEventAria', { name: ev.name })}
-                  className={`btn-no-anim ${cardClass}`}
-                  style={{ width:'100%', marginBottom:10, background:'var(--dash-card)', border: isToday ? '1.5px solid transparent' : cardBorder, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 14px 10px 10px', gap:12, cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', transition:'transform 0.18s ease,box-shadow 0.18s ease', textAlign:'left', font:'inherit', color:'inherit' }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow='0 3px 10px rgba(0,0,0,0.07)' }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)' }}
-                >
-                  {/* Icona gradiente con data */}
-                  <div style={{ position:'relative', width:52, height:52, flexShrink:0 }}>
-                    <div style={{ width:52, height:52, borderRadius:13, background:iconGradient, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
-                      <span style={{ fontSize:20, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>
-                      <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>
-                        {ev.date ? formatDate(ev.date+'T12:00:00', {month:'short'}, i18n.language) : ''}
-                      </span>
-                    </div>
-                    {ev.seriesId && (
-                      <span style={{ position:'absolute', bottom:-5, right:-5, background:'#2563eb', borderRadius:7, width:22, height:22, display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid var(--dash-card)' }}>
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-                        </svg>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Testo */}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3, minWidth:0 }}>
-                      <p style={{ fontWeight:700, fontSize:15, color:'var(--dash-title)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0 }}>{ev.name}</p>
-                      {overdue && (
-                        <span style={{ flexShrink:0, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'#ea580c', background:'rgba(234,88,12,0.12)', border:'1px solid rgba(234,88,12,0.35)', borderRadius:7, padding:'2px 7px' }}>
-                          {t('dashboard.overdueRentBadge')}
-                        </span>
-                      )}
-                    </div>
-                    <p style={{ fontSize:12, fontWeight:500, color:'var(--dash-muted)' }}>{dateLabel}{dateEndLabel}</p>
-                    {ev.location && <p style={{ fontSize:11, color:'var(--dash-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
-                  </div>
-                </button>
-              )
-            })}
-
-            <button
-              onClick={() => navigate('/events')}
-              style={{
-                width:'100%',
-                padding:'13px',
-                borderRadius:14,
-                background:'var(--dash-pill-bg)',
-                border:'1.5px solid var(--dash-pill-border)',
-                color:'var(--dash-muted)',
-                fontWeight:700,
-                fontSize:13,
-                marginTop:4,
-                display:'flex',
-                alignItems:'center',
-                justifyContent:'center',
-                gap:4,
-              }}
-            >
-              {t('dashboard.viewAllEvents')} <IconChevron />
-            </button>
-          </>
-        )}
       </div>
 
       <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        @keyframes dashOrb1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-20px,16px) scale(1.1)} }
-        @keyframes dashOrb2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(22px,-14px) scale(0.92)} }
-        @keyframes dashStarTwinkle { 0%,100%{opacity:0.85;transform:scale(1)} 50%{opacity:0.15;transform:scale(0.5)} }
-        @keyframes dashCloudDrift  { from{transform:translateX(0)} to{transform:translateX(130vw)} }
-        @keyframes dashRainFall    { from{transform:translateY(-10px)} to{transform:translateY(180px)} }
-        @keyframes dashSnowFall    { 0%{transform:translateY(-10px) translateX(0)} 50%{transform:translateY(90px) translateX(12px)} 100%{transform:translateY(190px) translateX(0)} }
-        @keyframes dashLightning   { 0%,86%,100%{opacity:0} 88%{opacity:1} 89%{opacity:0} 91%{opacity:0.5} 92%{opacity:0} }
-
-        /* ── Bordo gradiente rotante sulle card evento ── */
-        @property --evtAngle {
-          syntax: '<angle>';
-          initial-value: 0deg;
-          inherits: false;
-        }
-        @keyframes evtSpin { to { --evtAngle: 360deg; } }
-
-        .evt-card { position: relative; }
-        /* Bordo nitido (anello sottile) */
-        .evt-card::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: 20px;
-          padding: 1.5px;
-          pointer-events: none;
-          z-index: 1;
-          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-                  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-                  mask-composite: exclude;
-        }
-        /* Glow tenue, aderente al bordo rotante */
-        .evt-card::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: 20px;
-          z-index: -1;
-          filter: blur(3.5px);
-          pointer-events: none;
-        }
-        .evt-today::before, .evt-today::after {
-          background: conic-gradient(from var(--evtAngle),
-            #dc2626, #f59e0b, #9333ea, #4f46e5, #06b6d4, #dc2626);
-          animation: evtSpin 4s linear infinite;
-        }
-        .evt-today::after { opacity: 0.3; }
-        .evt-soft::before, .evt-soft::after {
-          background: conic-gradient(from var(--evtAngle),
-            rgba(37,99,235,0.55), rgba(148,163,184,0.12), rgba(37,99,235,0.55));
-          animation: evtSpin 10s linear infinite;
-        }
-        .evt-soft::after { opacity: 0.18; }
-        /* Rent scaduto e non ancora chiuso: colore proprio (arancio), mai
-           confuso col rosso/viola di "oggi" — deve saltare all'occhio che
-           è un caso diverso, non solo un altro evento di oggi. */
-        .evt-overdue::before, .evt-overdue::after {
-          background: conic-gradient(from var(--evtAngle), #ea580c, #f59e0b, #ea580c);
-          animation: evtSpin 4s linear infinite;
-        }
-        .evt-overdue::after { opacity: 0.35; }
-
-        @media (prefers-reduced-motion:reduce){
-          [style*="animation:dash"]{animation:none!important}
-          .evt-card::before, .evt-card::after { animation:none!important }
-        }
+        .dash-tool-tile { transition: background-color 0.15s ease; }
+        .dash-tool-tile:active { background: var(--c-fill-hover) !important; }
+        .dash-stat, .dash-tool-tile { transition: border-color 0.15s ease, background-color 0.15s ease; }
+        @media (hover: hover) { .dash-stat:hover { border-color: var(--c-dash) !important; } }
       `}</style>
 
-      {showProfile && <Profile onClose={() => setShowProfile(false)} />}
+      {showProfile && <Profile onClose={() => setShowProfile(false)} showLogout />}
 
       {!showOverlay && !showRecapBanner && !showRecapModal && <TutorialModal role="admin" />}
 
@@ -802,15 +569,15 @@ export default function Dashboard({ toggleTheme, theme }) {
             onClick={e => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation:'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)' }}
+            style={{ background:'var(--c-surface)', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation:'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)' }}
           >
             <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(2,132,199,0.12)', color:'#0284c7' }}>
               <IconClipboard />
             </div>
-            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{t('dashboard.weeklyRecapTitle')}</h3>
-            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>{t('dashboard.weeklyRecapPrompt')}</p>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'var(--c-ink)', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{t('dashboard.weeklyRecapTitle')}</h3>
+            <p style={{ fontSize:14, color:'var(--c-ink2)', margin:0, lineHeight:1.45 }}>{t('dashboard.weeklyRecapPrompt')}</p>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
-              <button onClick={skipRecap} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none', cursor:'pointer' }}>
+              <button onClick={skipRecap} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'var(--c-fill)', color:'var(--c-ink2)', border:'none', cursor:'pointer' }}>
                 {t('dashboard.weeklyRecapSkip')}
               </button>
               <button onClick={openRecap} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#0284c7', color:'#fff', border:'none', cursor:'pointer' }}>
@@ -835,16 +602,16 @@ export default function Dashboard({ toggleTheme, theme }) {
             onClick={e => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 22px', width:'100%', maxWidth:380, maxHeight:'82dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: recapClosing ? 'recapPopOut 0.15s ease forwards' : 'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)', position:'relative' }}
+            style={{ background:'var(--c-surface)', borderRadius:24, padding:'26px 22px 22px', width:'100%', maxWidth:380, maxHeight:'82dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: recapClosing ? 'recapPopOut 0.15s ease forwards' : 'recapPopIn 0.24s cubic-bezier(0.32,0.72,0,1)', position:'relative' }}
           >
-            <button onClick={closeRecap} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'#f3f4f6', color:'#6b7280', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>✕</button>
+            <button onClick={closeRecap} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:28, height:28, borderRadius:'50%', background:'var(--c-fill)', color:'var(--c-ink2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>✕</button>
 
             <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(2,132,199,0.12)', color:'#0284c7' }}>
               <IconClipboard />
             </div>
-            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 4px', letterSpacing:'-0.3px', textAlign:'center' }}>{t('dashboard.weeklyRecapTitle')}</h3>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'var(--c-ink)', margin:'0 0 4px', letterSpacing:'-0.3px', textAlign:'center' }}>{t('dashboard.weeklyRecapTitle')}</h3>
             {recapWeek && (
-              <p style={{ color:'#6b7280', fontSize:13, textAlign:'center', margin:'0 0 20px' }}>
+              <p style={{ color:'var(--c-ink2)', fontSize:13, textAlign:'center', margin:'0 0 20px' }}>
                 {formatDate(recapWeek.monday+'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
                 {' — '}
                 {formatDate(recapWeek.sunday+'T12:00:00', { day:'numeric', month:'long' }, i18n.language)}
@@ -854,14 +621,14 @@ export default function Dashboard({ toggleTheme, theme }) {
             <div style={{ textAlign:'left', marginBottom:18 }}>
               <p style={recapSectionLabel}>{t('dashboard.weeklyRecapEvents', { count: weekEvents.length })}</p>
               {weekEvents.length === 0 ? (
-                <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoEvents')}</p>
+                <p style={{ color:'var(--c-ink2)', fontSize:13 }}>{t('dashboard.weeklyRecapNoEvents')}</p>
               ) : (
                 weekEvents.map(ev => (
                   <button type="button" key={ev.id} className="btn-no-anim" onClick={() => { setShowRecapModal(false); navigate(`/events/${ev.id}`) }}
                     aria-label={t('events.openEventAria', { name: ev.name })}
-                    style={{ width:'100%', background:'transparent', border:'none', font:'inherit', color:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer', textAlign:'left' }}>
-                    <span style={{ fontSize:13.5, fontWeight:600, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</span>
-                    <span style={{ fontSize:12, color:'#6b7280', flexShrink:0 }}>{formatDate(ev.date+'T12:00:00', { weekday:'short', day:'numeric' }, i18n.language)}</span>
+                    style={{ width:'100%', background:'transparent', border:'none', font:'inherit', color:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid var(--c-line)', cursor:'pointer', textAlign:'left' }}>
+                    <span style={{ fontSize:13.5, fontWeight:600, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.name}</span>
+                    <span style={{ fontSize:12, color:'var(--c-ink2)', flexShrink:0 }}>{formatDate(ev.date+'T12:00:00', { weekday:'short', day:'numeric' }, i18n.language)}</span>
                   </button>
                 ))
               )}
@@ -870,12 +637,12 @@ export default function Dashboard({ toggleTheme, theme }) {
             <div style={{ textAlign:'left', marginBottom:18 }}>
               <p style={recapSectionLabel}>{t('dashboard.weeklyRecapAbsences')}</p>
               {weekAbsences.length === 0 ? (
-                <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoAbsences')}</p>
+                <p style={{ color:'var(--c-ink2)', fontSize:13 }}>{t('dashboard.weeklyRecapNoAbsences')}</p>
               ) : (
                 weekAbsences.map(u => (
-                  <div key={u.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid #f0f0f0' }}>
-                    <span style={{ fontSize:13.5, fontWeight:600, color:'#111827' }}>{u.workerName}</span>
-                    <span style={{ fontSize:12, color:'#6b7280', flexShrink:0 }}>
+                  <div key={u.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:'1px solid var(--c-line)' }}>
+                    <span style={{ fontSize:13.5, fontWeight:600, color:'var(--c-ink)' }}>{u.workerName}</span>
+                    <span style={{ fontSize:12, color:'var(--c-ink2)', flexShrink:0 }}>
                       {formatDate(u.startDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language)}
                       {u.endDate !== u.startDate ? ' — ' + formatDate(u.endDate+'T12:00:00', { day:'numeric', month:'short' }, i18n.language) : ''}
                     </span>
@@ -887,15 +654,15 @@ export default function Dashboard({ toggleTheme, theme }) {
             <div style={{ textAlign:'left' }}>
               <p style={recapSectionLabel}>{t('dashboard.weeklyRecapTasks', { count: openTasks.length })}</p>
               {openTasks.length === 0 ? (
-                <p style={{ color:'#6b7280', fontSize:13 }}>{t('dashboard.weeklyRecapNoTasks')}</p>
+                <p style={{ color:'var(--c-ink2)', fontSize:13 }}>{t('dashboard.weeklyRecapNoTasks')}</p>
               ) : (
                 <>
                   {openTasks.slice(0, 5).map(task => (
                     <button type="button" key={task.id} className="btn-no-anim" onClick={() => { setShowRecapModal(false); navigate('/tasks') }}
                       aria-label={t('dashboard.openTaskAria', { title: task.title })}
-                      style={{ width:'100%', background:'transparent', border:'none', font:'inherit', color:'inherit', display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:'1px solid #f0f0f0', cursor:'pointer', textAlign:'left' }}>
+                      style={{ width:'100%', background:'transparent', border:'none', font:'inherit', color:'inherit', display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:'1px solid var(--c-line)', cursor:'pointer', textAlign:'left' }}>
                       <span style={{ width:7, height:7, borderRadius:'50%', flexShrink:0, background: RECAP_TASK_DOT[task.priority] || RECAP_TASK_DOT.media }} />
-                      <span style={{ fontSize:13.5, fontWeight:600, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{task.title}</span>
+                      <span style={{ fontSize:13.5, fontWeight:600, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{task.title}</span>
                     </button>
                   ))}
                   {openTasks.length > 5 && (

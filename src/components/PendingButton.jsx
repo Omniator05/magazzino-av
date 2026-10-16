@@ -10,15 +10,24 @@ import { useState, useRef, useEffect } from 'react'
 // bottoni "azione" (applica, elimina, sposta...) dove la schermata cambia da
 // sola a operazione finita. L'etichetta resta nel layout (solo invisibile)
 // sotto lo spinner, così il bottone non cambia larghezza.
-export default function PendingButton({ onClick, disabled, className, style, children, ...rest }) {
-  const [busy, setBusy] = useState(false)
+// `busy` (opzionale): se passato il bottone è CONTROLLATO dal chiamante — lo spinner
+// compare solo quando `busy` è true, non per tutta la durata della promessa. Serve
+// alle azioni che prima chiedono conferma (popup "sei sicuro?"): durante la domanda
+// non c'è nulla da aspettare, lo spinner parte solo dopo il sì.
+export default function PendingButton({ onClick, disabled, className, style, children, busy: busyProp, ...rest }) {
+  const [ownBusy, setBusy] = useState(false)
+  const controlled = typeof busyProp === 'boolean'
+  const busy = controlled ? busyProp : ownBusy
   const alive = useRef(true)
-  useEffect(() => () => { alive.current = false }, [])
+  // Riportato a true ad ogni montaggio: in StrictMode (sviluppo) il cleanup gira una
+  // volta subito dopo il primo montaggio, e senza questo il bottone restava
+  // bloccato sullo spinner per sempre.
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
 
   const handleClick = async (e) => {
     if (busy || disabled) return
     const result = onClick?.(e)
-    if (result && typeof result.then === 'function') {
+    if (!controlled && result && typeof result.then === 'function') {
       setBusy(true)
       try { await result } finally { if (alive.current) setBusy(false) }
     }

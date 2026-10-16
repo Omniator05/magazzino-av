@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
 import { List } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import FabButton from '../components/FabButton'
 
 const ICONS = {
@@ -101,16 +101,10 @@ export default function Templates() {
   )
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-          <BackHomeButton />
-          <h1>{t('templates.title')}</h1>
-        </div>
-        <p style={{ marginTop:4, textAlign:'right' }}>{t('templates.savedCount', { count: templates.length })}</p>
-      </div>
+    <div className="page" style={{ background:'var(--surface)' }}>
+      <PageHeader title={t('templates.title')} subtitle={t('templates.savedCount', { count: templates.length })} backTo="/" />
 
-      <div style={{ padding:'16px 0' }}>
+      <div style={{ padding:'18px 0' }}>
         {templates.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><List size={40} /></p>
@@ -118,11 +112,11 @@ export default function Templates() {
             <p>{t('templates.emptyDesc')}</p>
           </div>
         ) : templates.map(tpl => (
-          <div key={tpl.id} style={{ margin:'0 16px 12px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden' }}>
-            <div style={{ padding:'14px 16px' }}>
+          <div key={tpl.id} style={{ margin:'0 18px 12px', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, overflow:'hidden' }}>
+            <div style={{ padding:'15px 16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontWeight:700, fontSize:16, marginBottom:4, display:'flex', alignItems:'center', gap:7 }}><List size={16} /> {tpl.name}</p>
+                  <p style={{ fontWeight:800, fontSize:16, marginBottom:6, display:'flex', alignItems:'center', gap:7 }}><List size={16} /> {tpl.name}</p>
                   {tpl.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:8 }}>{tpl.notes}</p>}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                     {(tpl.components||[]).slice(0,6).map((c,i) => (
@@ -151,7 +145,7 @@ export default function Templates() {
 
       {showModal && (
         <div className={`modal-overlay${tplDrag.closing ? ' closing' : ''}`} onClick={tplDrag.onOverlayClick}>
-          <div className={`modal${tplDrag.jiggling ? ' modal-jiggle' : ''}${tplDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'calc(100dvh - 96px)', display:'flex', flexDirection:'column', padding:0, overflow:'hidden' }} {...tplDrag.props}>
+          <div className={`modal rc-sheet${tplDrag.jiggling ? ' modal-jiggle' : ''}${tplDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'calc(100dvh - 96px)', display:'flex', flexDirection:'column', padding:0, overflow:'hidden' }} {...tplDrag.props}>
             {/* Header */}
             <div style={{ padding:'20px 20px 14px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button className="close-btn" onClick={tplDrag.close}>✕</button>
@@ -164,8 +158,8 @@ export default function Templates() {
 
             {/* Componenti selezionati */}
             {components.length > 0 && (
-              <div style={{ borderBottom:'1px solid var(--border)', background:'rgba(79,195,247,0.04)', flexShrink:0 }}>
-                <p style={{ color:'var(--blue)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', padding:'10px 16px 6px' }}>
+              <div style={{ borderBottom:'1px solid var(--border)', background:'var(--c-alt)', flexShrink:0 }}>
+                <p style={{ color:'var(--c-ink3)', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', padding:'10px 16px 6px' }}>
                   {t('templates.listCount', { count: components.length })}
                 </p>
                 <div style={{ overflowY:'auto', maxHeight:220, padding:'0 16px 10px' }}>

@@ -8,7 +8,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, orderBy, serverTimestamp } from 'firebase/firestore'
 import { Check, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import DeleteButton from '../components/DeleteButton'
 import EditButton from '../components/EditButton'
 import SaveButton from '../components/SaveButton'
@@ -269,12 +269,7 @@ export default function SettingsWorkHoursWorker() {
   if (workerLoaded && !worker) {
     return (
       <div className="page">
-        <div className="page-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <BackHomeButton to="/admin/settings/work-hours" />
-            <h1>{t('workHours.workerNotFoundTitle')}</h1>
-          </div>
-        </div>
+        <PageHeader title={t('workHours.workerNotFoundTitle')} backTo="/admin/settings/work-hours" />
       </div>
     )
   }
@@ -282,12 +277,7 @@ export default function SettingsWorkHoursWorker() {
   return (
     <div className="page">
       <Toast message={toast} />
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <BackHomeButton to="/admin/settings/work-hours" />
-          <h1 style={{ textAlign: 'right' }}>{workerName}</h1>
-        </div>
-      </div>
+      <PageHeader title={workerName} backTo="/admin/settings/work-hours" />
 
       {/* Ore complessive: totale su tutta la storia, indipendente dal
           filtro periodo qui sotto (che riguarda solo l'elenco voci). Il

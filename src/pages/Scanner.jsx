@@ -6,7 +6,7 @@ import { db } from '../firebase'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { Pin, Check, Warn } from '../components/Icon'
 import { parseScannedCode } from '../utils/generateCode'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 
 export default function Scanner() {
@@ -103,7 +103,7 @@ export default function Scanner() {
   useEffect(() => () => { if (html5QrCodeRef.current) { try { html5QrCodeRef.current.stop() } catch(e) {} } }, [])
 
   return (
-    <div className="page">
+    <div className="page" style={{ background:'var(--surface)' }}>
 
       {/* Popup centrale post-scansione */}
       {scanToast && (
@@ -136,16 +136,10 @@ export default function Scanner() {
           </div>
         </div>
       )}
-      <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-          <BackHomeButton />
-          <h1>{t('scanner.title')}</h1>
-        </div>
-        <p style={{ marginTop:4, textAlign:'right' }}>{t('scanner.subtitle')}</p>
-      </div>
+      <PageHeader title={t('scanner.title')} subtitle={t('scanner.subtitle')} backTo="/" />
 
-      <div style={{ padding:'20px 16px' }}>
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', overflow:'hidden', marginBottom:16 }}>
+      <div style={{ padding:'22px 18px' }}>
+        <div style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, overflow:'hidden', marginBottom:16 }}>
           {!scanning ? (
             <div style={{ padding:'16px' }}>
               <p style={{ color:'var(--text2)', marginBottom:14, fontSize:14, textAlign:'center' }}>
@@ -153,7 +147,7 @@ export default function Scanner() {
               </p>
               <button onClick={startScanner} style={{
                 width:'100%', padding:'40px 16px', borderRadius:14,
-                background:'rgba(79,195,247,0.08)', border:'2px dashed rgba(79,195,247,0.3)',
+                background:'var(--c-alt)', border:'1.5px dashed var(--c-dash)',
                 display:'flex', flexDirection:'column', alignItems:'center', gap:10,
               }}>
                 <span style={{ fontSize:36 }}>📷</span>
@@ -186,8 +180,8 @@ export default function Scanner() {
           </div>
         )}
 
-        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'16px' }}>
-          <p style={{ fontWeight:700, marginBottom:12, fontSize:15 }}>{t('scanner.manualEntry')}</p>
+        <div style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding:'18px' }}>
+          <p style={{ fontWeight:800, marginBottom:12, fontSize:15 }}>{t('scanner.manualEntry')}</p>
           <div style={{ display:'flex', gap:10 }}>
             <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder={t('scanner.manualCodePlaceholder')}
               onKeyDown={e => { if (e.key === 'Enter') submitCode(manualCode) }}

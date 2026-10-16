@@ -22,10 +22,10 @@ export function TaskSummaryBody({ block, workers }) {
     .filter(Boolean)
 
   const Row = ({ icon, label, children }) => (
-    <div style={{ display:'flex', gap:12, padding:'12px 0', borderBottom:'1px solid #e0ddd6' }}>
-      <span style={{ flexShrink:0, color:'#9a9a9a', display:'flex', marginTop:2 }}>{icon}</span>
+    <div style={{ display:'flex', gap:12, padding:'12px 0', borderBottom:'1px solid var(--c-line)' }}>
+      <span style={{ flexShrink:0, color:'var(--c-ink3)', display:'flex', marginTop:2 }}>{icon}</span>
       <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontSize:11, fontWeight:800, color:'#9a9a9a', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>{label}</p>
+        <p style={{ fontSize:11, fontWeight:800, color:'var(--c-ink3)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>{label}</p>
         {children}
       </div>
     </div>
@@ -34,34 +34,34 @@ export function TaskSummaryBody({ block, workers }) {
   return (
     <>
       <Row icon={<Calendar size={15} />} label={t('eventDetail.dateFieldLabel')}>
-        <p style={{ fontSize:14, fontWeight:600, color:'#1a1a1a' }}>
+        <p style={{ fontSize:14, fontWeight:600, color:'var(--c-ink)' }}>
           {capitalize(formatDate(block.date + 'T12:00:00', { weekday:'long', day:'numeric', month:'long', year:'numeric' }, i18n.language))}
         </p>
       </Row>
       <Row icon={<Clock size={15} />} label={t('eventSummary.timeLabel')}>
-        <p style={{ fontSize:14, fontWeight:600, color:'#1a1a1a' }}>{block.startTime} – {block.endTime}</p>
+        <p style={{ fontSize:14, fontWeight:600, color:'var(--c-ink)' }}>{block.startTime} – {block.endTime}</p>
       </Row>
       <Row icon={<User size={15} />} label={t('eventSummary.assignedLabel')}>
         {assignedNames.length > 0 ? (
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             {assignedNames.map(name => (
-              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#fff', border:'1px solid #e0ddd6', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'#1a1a1a' }}>
+              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--c-ink)' }}>
                 <User size={11} /> {name}
               </span>
             ))}
           </div>
         ) : (
-          <p style={{ fontSize:13, color:'#9a9a9a', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
+          <p style={{ fontSize:13, color:'var(--c-ink3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
         )}
       </Row>
       {block.note && (
         <Row icon={<FileText size={15} />} label={t('staffTimeline.personNoteLabel')}>
-          <p style={{ fontSize:14, color:'#1a1a1a', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.note}</p>
+          <p style={{ fontSize:14, color:'var(--c-ink)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.note}</p>
         </Row>
       )}
       {block.description && (
         <Row icon={<FileText size={15} />} label={t('staffTimeline.taskDescriptionLabel')}>
-          <p style={{ fontSize:14, color:'#1a1a1a', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.description}</p>
+          <p style={{ fontSize:14, color:'var(--c-ink)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.description}</p>
         </Row>
       )}
       {block.linkedEventId && (

@@ -15,17 +15,17 @@ import EventManagerField from './EventManagerField'
 // smontaggio, Riferimento e responsabile): si sa cosa contengono senza aprirle,
 // e luogo e note restano vicini ai campi che si usano sempre.
 const PHASE_CONFIG = [
-  { key: 'montaggio', labelKey: 'calendar.legendAssembly', color: '#2563eb', bg: '#dbeafe' },
-  { key: 'smontaggio', labelKey: 'calendar.legendDisassembly', color: '#ea580c', bg: '#ffedd5' },
+  { key: 'montaggio', labelKey: 'calendar.legendAssembly', color: '#2563eb', bg: 'var(--c-blue-bg)' },
+  { key: 'smontaggio', labelKey: 'calendar.legendDisassembly', color: '#ea580c', bg: 'var(--c-orange-bg)' },
 ]
 
-export const fieldLabel = { display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '0.4px', color: '#6b6b6b', textTransform: 'uppercase', marginBottom: 6 }
+export const fieldLabel = { display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '0.4px', color: 'var(--c-ink2)', textTransform: 'uppercase', marginBottom: 6 }
 
 export function Switch({ on, onChange, label }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className="btn-no-anim"
-      style={{ width: 40, height: 24, borderRadius: 12, background: on ? '#e63946' : '#d6d3cb', border: 'none', padding: 3, display: 'flex', alignItems: 'center', justifyContent: on ? 'flex-end' : 'flex-start', transition: 'background 0.18s ease', flexShrink: 0 }}>
-      <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
+      style={{ width: 40, height: 24, borderRadius: 12, background: on ? '#e63946' : 'var(--c-dash)', border: 'none', padding: 3, display: 'flex', alignItems: 'center', justifyContent: on ? 'flex-end' : 'flex-start', transition: 'background 0.18s ease', flexShrink: 0 }}>
+      <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--c-surface)', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
     </button>
   )
 }
@@ -34,12 +34,12 @@ export function Switch({ on, onChange, label }) {
 // contiene qualcosa), freccia che ruota. Il contenuto si apre sotto.
 function FormRow({ label, summary, hasValue, open, onToggle, children, last }) {
   return (
-    <div style={{ borderBottom: last ? 'none' : '1px solid #eceae6' }}>
+    <div style={{ borderBottom: last ? 'none' : '1px solid var(--c-fill)' }}>
       <button type="button" onClick={onToggle} aria-expanded={open} className="btn-no-anim"
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '13px 14px', background: 'transparent', border: 'none', textAlign: 'left' }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a', flexShrink: 0 }}>{label}</span>
-        <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 13, fontWeight: 600, color: hasValue ? '#1a1a1a' : '#9a9a9a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>
-        <span style={{ color: '#9a9a9a', display: 'flex', flexShrink: 0, transition: 'transform 0.2s ease', transform: open ? 'rotate(90deg)' : 'none' }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-ink)', flexShrink: 0 }}>{label}</span>
+        <span style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 13, fontWeight: 600, color: hasValue ? 'var(--c-ink)' : 'var(--c-ink3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>
+        <span style={{ color: 'var(--c-ink3)', display: 'flex', flexShrink: 0, transition: 'transform 0.2s ease', transform: open ? 'rotate(90deg)' : 'none' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
         </span>
       </button>
@@ -75,13 +75,13 @@ export default function EventFormFields({ form, setForm, idp, teamId, showType, 
   return (
     <>
       {showType && (
-        <div style={{ display: 'flex', gap: 8, background: '#eceae6', borderRadius: 12, padding: 4 }}>
+        <div style={{ display: 'flex', gap: 8, background: 'var(--c-fill)', borderRadius: 12, padding: 4 }}>
           <button type="button" onClick={() => set({ type: 'event' })} aria-pressed={!isInstall}
-            style={{ flex: 1, padding: 8, borderRadius: 9, fontWeight: 700, fontSize: 12.5, background: !isInstall ? '#fff' : 'transparent', color: !isInstall ? '#1a1a1a' : '#6b6b6b', border: 'none' }}>
+            style={{ flex: 1, padding: 8, borderRadius: 9, fontWeight: 700, fontSize: 12.5, background: !isInstall ? 'var(--c-surface)' : 'transparent', color: !isInstall ? 'var(--c-ink)' : 'var(--c-ink2)', border: 'none' }}>
             {t('events.typeEvent')}
           </button>
           <button type="button" onClick={() => set({ type: 'installation', recurrence: 'never', endDate: '', customDates: [] })} aria-pressed={isInstall}
-            style={{ flex: 1, padding: 8, borderRadius: 9, fontWeight: 700, fontSize: 12.5, background: isInstall ? '#ede9fe' : 'transparent', color: isInstall ? '#5b4fcf' : '#6b6b6b', border: 'none' }}>
+            style={{ flex: 1, padding: 8, borderRadius: 9, fontWeight: 700, fontSize: 12.5, background: isInstall ? 'var(--c-violet-bg)' : 'transparent', color: isInstall ? '#5b4fcf' : 'var(--c-ink2)', border: 'none' }}>
             {t('events.typeInstallation')}
           </button>
         </div>
@@ -100,7 +100,7 @@ export default function EventFormFields({ form, setForm, idp, teamId, showType, 
       {/* Quando: date e orario nello stesso riquadro, in due righe */}
       <div>
         <span style={fieldLabel}>{t('calendar.whenLabel')}</span>
-        <div style={{ border: '1px solid #e0ddd6', borderRadius: 14, background: '#fff' }}>
+        <div style={{ border: '1px solid var(--c-line)', borderRadius: 14, background: 'var(--c-surface)' }}>
           {useRange ? (
             <div style={{ padding: '10px 12px' }}>
               <DateRangeField start={form.date} end={form.dateEnd || form.date} onChange={(st, en) => set({ date: st, dateEnd: en === st ? '' : en })} />
@@ -110,19 +110,19 @@ export default function EventFormFields({ form, setForm, idp, teamId, showType, 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <DateField value={form.date || ''} onChange={v => set({ date: v, dateEnd: form.dateEnd && form.dateEnd < v ? '' : form.dateEnd })} />
               </div>
-              <span aria-hidden="true" style={{ color: '#9a9a9a', fontWeight: 700 }}>→</span>
+              <span aria-hidden="true" style={{ color: 'var(--c-ink3)', fontWeight: 700 }}>→</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <DateRangeField endOnly start={form.date} end={form.dateEnd || form.date} placeholder={t('calendar.endPlaceholder')} singleDayLabel={t('calendar.singleDay')}
                   onChange={(st, en) => set({ dateEnd: en === st ? '' : en })} />
               </div>
             </div>
           )}
-          <div style={{ borderTop: '1px solid #eceae6', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a', flex: form.allDay !== false ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
+          <div style={{ borderTop: '1px solid var(--c-fill)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-ink)', flex: form.allDay !== false ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
             {form.allDay === false && (
               <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ flex: 1, minWidth: 0 }}><TimeField value={form.timeStart || ''} onChange={v => set({ timeStart: v })} compact /></div>
-                <span aria-hidden="true" style={{ color: '#9a9a9a' }}>–</span>
+                <span aria-hidden="true" style={{ color: 'var(--c-ink3)' }}>–</span>
                 <div style={{ flex: 1, minWidth: 0 }}><TimeField value={form.timeEnd || ''} onChange={v => set({ timeEnd: v })} clearable compact /></div>
               </div>
             )}
@@ -136,7 +136,7 @@ export default function EventFormFields({ form, setForm, idp, teamId, showType, 
         <textarea id={`${idp}-notes`} value={form.notes || ''} onChange={e => set({ notes: e.target.value })} placeholder={t('events.notesPlaceholder')} rows={2} />
       </div>
 
-      <div style={{ border: '1px solid #e0ddd6', borderRadius: 14, background: '#fff' }}>
+      <div style={{ border: '1px solid var(--c-line)', borderRadius: 14, background: 'var(--c-surface)' }}>
         {showRecurrence && (
           <FormRow label={t('events.repeatLabel')} summary={repeatSummary} hasValue={recurrence !== 'never'} open={open.repeat} onToggle={() => toggle('repeat')}>
             <Picker value={recurrence} options={recurrenceOptions} ariaLabel={t('events.repeatLabel')} onChange={v => set({ recurrence: v, endDate: '', customDates: [] })} />
@@ -154,7 +154,7 @@ export default function EventFormFields({ form, setForm, idp, teamId, showType, 
             {futureDates.length > 0 && (
               <div style={{ background: 'rgba(79,195,247,0.08)', border: '1px solid rgba(79,195,247,0.2)', borderRadius: 10, padding: '10px 14px' }}>
                 <p style={{ color: 'var(--blue)', fontSize: 13, fontWeight: 700 }}>{t('events.totalEventsCount', { count: futureDates.length + 1 })}</p>
-                <p style={{ color: '#6b6b6b', fontSize: 12, marginTop: 3 }}>
+                <p style={{ color: 'var(--c-ink2)', fontSize: 12, marginTop: 3 }}>
                   {t('workerCalendar.dateRange', {
                     start: formatDate([form.date, ...futureDates].sort().at(0) + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }, i18n.language),
                     end: formatDate([form.date, ...futureDates].sort().at(-1) + 'T12:00:00', { day: 'numeric', month: 'long', year: 'numeric' }, i18n.language),

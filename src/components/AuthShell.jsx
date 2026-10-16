@@ -133,7 +133,7 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
           font-weight:700;
         }
         .auth-hero-brand .auth-hero-brand-road { color:rgba(255,255,255,0.7); }
-        .auth-hero-brand .auth-hero-brand-case { color:#1a1a1a; }
+        .auth-hero-brand .auth-hero-brand-case { color:var(--c-ink); }
         .auth-hero-title {
           color:white;
           font-size:clamp(30px, 4vw, 40px);

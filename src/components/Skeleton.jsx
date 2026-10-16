@@ -6,7 +6,7 @@ export function Bar({ w = '100%', h = 12, r = 7, style }) {
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg, #e9e9e6 25%, #f3f3f0 50%, #e9e9e6 75%)',
+      background: 'linear-gradient(90deg, var(--c-fill) 25%, var(--c-fill2) 50%, var(--c-fill) 75%)',
       backgroundSize: '200% auto',
       animation: 'shimmer 1.4s linear infinite',
       ...style,

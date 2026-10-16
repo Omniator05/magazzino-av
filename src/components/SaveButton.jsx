@@ -49,7 +49,7 @@ export default function SaveButton({ onSave, onDone, onError, disabled, classNam
     >
       {state === 'saving' ? (
         <>
-          <span style={{ width:15, height:15, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid #fff', borderRadius:'50%', animation:'saveBtnSpin 0.7s linear infinite', flexShrink:0 }} />
+          <span style={{ width:15, height:15, border:'2px solid rgba(255,255,255,0.4)', borderTop:'2px solid var(--c-surface)', borderRadius:'50%', animation:'saveBtnSpin 0.7s linear infinite', flexShrink:0 }} />
           <style>{`@keyframes saveBtnSpin { to { transform: rotate(360deg); } }`}</style>
         </>
       ) : state === 'success' ? (

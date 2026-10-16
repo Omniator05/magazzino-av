@@ -112,7 +112,15 @@
     "weeklyRecapNoAbsences": "No one is off this week.",
     "weeklyRecapTasks_one": "{{count}} open task",
     "weeklyRecapTasks_other": "{{count}} open tasks",
-    "weeklyRecapNoTasks": "No open tasks."
+    "weeklyRecapNoTasks": "No open tasks.",
+    "todaySection": "Today",
+    "attentionSection": "Needs attention",
+    "stats": {
+      "items": "Items in stock",
+      "events": "Upcoming events",
+      "tasks": "Open tasks",
+      "broken": "Broken items"
+    }
   },
   "todayReminder": {
     "title": "What needs prepping today",
@@ -236,7 +244,8 @@
     "nDates_one": "{{count}} date",
     "nDates_other": "{{count}} dates",
     "singleDay": "Single day",
-    "absenceWhoLabel": "For"
+    "absenceWhoLabel": "For",
+    "viewTimeline": "Timeline"
   },
   "staffTimeline": {
     "prevWeekAria": "Previous week",
@@ -1644,7 +1653,11 @@
     "languageEnglish": "English",
     "chooseAvatar": "Choose avatar",
     "removeAvatar": "Remove — use name initial",
-    "selectAvatarAria": "Select {{emoji}} as avatar"
+    "selectAvatarAria": "Select {{emoji}} as avatar",
+    "sectionAppearance": "Appearance",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "Auto"
   },
   "workHours": {
     "title": "Work hours",

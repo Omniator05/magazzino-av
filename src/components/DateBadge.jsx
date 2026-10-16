@@ -3,7 +3,7 @@ export default function DateBadge({ dateStr, dateEndStr, location, today }) {
   const d = new Date(dateStr + 'T12:00:00')
   const isToday = dateStr === today
   const isPast  = dateStr < today
-  const monthBg = isToday ? '#dc2626' : isPast ? '#ea580c' : '#7c3aed'
+  const monthBg = isToday ? 'var(--c-danger)' : isPast ? '#ea580c' : '#7c3aed'
   const month = d.toLocaleDateString('it-IT', { month:'short' }).toUpperCase()
   const day   = d.getDate()
   const long  = d.toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'long', year:'numeric' })

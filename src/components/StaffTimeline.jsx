@@ -9,6 +9,8 @@ import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
 import StaffAssignPanel from './StaffAssignPanel'
+import ArchiveEventDetail from './ArchiveEventDetail'
+import { TaskSummaryBody } from './TaskSummaryModal'
 import { toMin, eventTimeForDay, phaseTimeFor } from '../utils/assignmentTimes'
 import { Plus, Wrench, Search } from './Icon'
 
@@ -171,7 +173,7 @@ function finishItem(item, { winStart, winEnd, geoStartMin, geoEndMin, anchor }) 
 // aspetto su ogni browser — rimosso al tick successivo, non serve a altro.
 function makeDragGhost({ label, dotColor, dashed }) {
   const el = document.createElement('div')
-  el.style.cssText = `position:fixed; top:-200px; left:-200px; display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:20px; background:#fff; border:${dashed ? '1.5px dashed #e0ddd6' : '1px solid #e0ddd6'}; font-family:inherit; font-size:12.5px; font-weight:700; color:${dashed ? '#6b6b6b' : '#1a1a1a'}; white-space:nowrap;`
+  el.style.cssText = `position:fixed; top:-200px; left:-200px; display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:20px; background:var(--c-surface); border:${dashed ? '1.5px dashed var(--c-line)' : '1px solid var(--c-line)'}; font-family:inherit; font-size:12.5px; font-weight:700; color:${dashed ? 'var(--c-ink2)' : 'var(--c-ink)'}; white-space:nowrap;`
   if (dotColor) {
     const dot = document.createElement('span')
     dot.style.cssText = `width:7px; height:7px; border-radius:50%; flex-shrink:0; background:${dotColor};`
@@ -200,7 +202,9 @@ const PHASE_COLORS = { montaggio: '#2563eb', smontaggio: '#ea580c' }
 // persona assegnata. Colonne giorno in flex con min-width responsive:
 // desktop i 7 giorni affiancati e larghi, mobile si scorre/snappa un
 // giorno alla volta — nessuna logica JS di breakpoint.
-export default function StaffTimeline({ teamId, events, workers, unavailability, user, focusAssign, onFocusAssignConsumed }) {
+// readOnly: vista per i magazzinieri — stessa timeline ma niente assegnazioni né
+// creazione; un tocco su una card apre i dettagli (e la lista di carico) in una colonna.
+export default function StaffTimeline({ teamId, events, workers, unavailability, user, focusAssign, onFocusAssignConsumed, readOnly = false }) {
   const { t, i18n } = useTranslation()
   const confirm = useConfirm()
   // Settimana e filtri ricordati tra una visita e l'altra (sessionStorage,
@@ -233,9 +237,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const [gridMaxH, setGridMaxH] = useState(null)
   const measureGridRef = useRef(null)
   // Modalità creazione: spenta all'apertura della pagina. Si accende col pulsante
-  // "Crea attività" sopra la griglia o con il primo clic su uno spazio libero (che
-  // crea subito l'attività); da lì l'anteprima segue il mouse. Esc o tasto destro
-  // sulla griglia la spengono.
+  // "Crea attività" sopra la griglia o con il primo clic su uno spazio libero; da
+  // lì l'anteprima segue il mouse e il clic successivo crea l'attività e spegne
+  // la modalità. Esc o tasto destro sulla griglia la spengono senza creare.
   const [createOn, setCreateOn] = useState(false)
   const [hoverCell, setHoverCell] = useState(null) // {date, hour, lane, occupied} — cella libera sotto il mouse: mostra l'anteprima della nuova attività
   const [dragOverKey, setDragOverKey] = useState(null) // item.key sotto il drag di una persona
@@ -794,15 +798,21 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setPanel({ key: `tk${taskGroupId}`, date, isNew: true })
   }
 
-  // Un tocco su una cella libera crea subito l'attività (di un'ora, dall'ora
-  // toccata) e apre la colonna per dare nome, orario esatto e persone — niente
-  // più selezione a due tocchi: durata e giorno (anche a cavallo di
-  // mezzanotte) si cambiano dalla colonna.
+  // Creazione a due passi. Modalità spenta: un clic su uno spazio libero la
+  // ACCENDE soltanto (compare l'anteprima in quel punto, niente viene creato).
+  // Modalità accesa: il clic conferma — crea l'attività di un'ora dall'ora
+  // cliccata, apre la colonna per nome/orario/persone e ESCE da sola dalla
+  // modalità (Esc o tasto destro la spengono prima della conferma).
   const handleGridClick = (e, date) => {
-    if (selectedPerson || e.target !== e.currentTarget) return
-    setCreateOn(true)
+    if (readOnly || selectedPerson || e.target !== e.currentTarget) return
     const rect = e.currentTarget.getBoundingClientRect()
     const hour = hourSlotFromClientX(e.clientX, rect)
+    if (!createOn) {
+      setCreateOn(true)
+      setHoverCell({ date, hour, lane: previewLane(date, hour), occupied: false })
+      return
+    }
+    setCreateOn(false)
     setHoverCell(null)
     createTaskAndOpen(date, hourToTime(TIMELINE_START_HOUR + hour), hourToTime(TIMELINE_START_HOUR + hour + 1))
   }
@@ -823,22 +833,23 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           colonna laterale per scrivere il nome) e i risultati compaiono
           su una riga a parte, sotto. Sopra alla navigazione settimana —
           così la settimana resta vicina alla griglia che controlla. */}
-      <p style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>
+      {!readOnly && (<>
+      <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--c-ink)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>
         {t('staffTimeline.peopleLabel')}
-        <span style={{ marginLeft: 8, fontWeight: 600, color: '#9a9a9a', textTransform: 'none', letterSpacing: 0 }}>
+        <span style={{ marginLeft: 8, fontWeight: 600, color: 'var(--c-ink3)', textTransform: 'none', letterSpacing: 0 }}>
           {selectedPerson ? t('staffTimeline.peopleHint') : t('staffTimeline.searchHint')}
         </span>
       </p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-          <span style={{ position: 'absolute', left: 10, display: 'flex', color: '#9a9a9a', pointerEvents: 'none' }}><Search size={15} /></span>
+          <span style={{ position: 'absolute', left: 10, display: 'flex', color: 'var(--c-ink3)', pointerEvents: 'none' }}><Search size={15} /></span>
           <input
             value={peopleQuery}
             onChange={e => setPeopleQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') { setPeopleQuery(''); e.target.blur() } }}
             placeholder={t('staffTimeline.searchPlaceholder')}
             aria-label={t('staffTimeline.searchPlaceholder')}
-            style={{ width: '100%', background: '#eceae6', border: 'none', borderRadius: 10, padding: '8px 10px 8px 32px', fontSize: 12.5, color: '#1a1a1a' }}
+            style={{ width: '100%', background: 'var(--c-fill)', border: 'none', borderRadius: 10, padding: '8px 10px 8px 32px', fontSize: 12.5, color: 'var(--c-ink)' }}
           />
         </div>
         {(() => {
@@ -858,8 +869,8 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                 flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
                 padding: '5px 12px 5px 9px', borderRadius: 20,
                 background: isQuickSelected ? 'rgba(230,57,70,0.1)' : 'transparent',
-                border: `1.5px dashed ${isQuickSelected ? '#e63946' : '#e0ddd6'}`,
-                fontSize: 12.5, fontWeight: 700, color: isQuickSelected ? '#e63946' : '#6b6b6b',
+                border: `1.5px dashed ${isQuickSelected ? '#e63946' : 'var(--c-line)'}`,
+                fontSize: 12.5, fontWeight: 700, color: isQuickSelected ? '#e63946' : 'var(--c-ink2)',
                 cursor: 'grab', whiteSpace: 'nowrap',
               }}
             >
@@ -871,9 +882,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       {/* Riga risultati — altezza minima fissa, altrimenti la griglia sotto
           salterebbe ogni volta che compare/sparisce un risultato. */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', minHeight: 34, margin: '10px 0 14px' }}>
-        {people.length === 0 && <p style={{ fontSize: 13, color: '#9a9a9a', fontStyle: 'italic' }}>{t('calendar.noActiveWorkers')}</p>}
+        {people.length === 0 && <p style={{ fontSize: 13, color: 'var(--c-ink3)', fontStyle: 'italic' }}>{t('calendar.noActiveWorkers')}</p>}
         {people.length > 0 && peopleQ && visiblePeople.length === 0 && (
-          <p style={{ fontSize: 12.5, color: '#9a9a9a' }}>{t('staffTimeline.searchNoResults')}</p>
+          <p style={{ fontSize: 12.5, color: 'var(--c-ink3)' }}>{t('staffTimeline.searchNoResults')}</p>
         )}
         {visiblePeople.map(p => {
           const isSelected = selectedPerson?.id === p.id && selectedPerson?.kind === p.kind
@@ -893,17 +904,17 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7,
                   padding: '3px 11px 3px 3px', borderRadius: 20,
-                  background: isSelected ? 'rgba(230,57,70,0.1)' : '#fff',
-                  border: isSelected ? '1.5px solid #e63946' : '1.5px solid #e0ddd6',
+                  background: isSelected ? 'rgba(230,57,70,0.1)' : 'var(--c-surface)',
+                  border: isSelected ? '1.5px solid #e63946' : '1.5px solid var(--c-line)',
                   boxShadow: isSelected ? '0 0 0 3px rgba(230,57,70,0.12)' : 'none',
-                  fontSize: 12.5, fontWeight: 700, color: isSelected ? '#e63946' : '#1a1a1a',
+                  fontSize: 12.5, fontWeight: 700, color: isSelected ? '#e63946' : 'var(--c-ink)',
                   cursor: 'grab', whiteSpace: 'nowrap',
                 }}
               >
                 <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, background: personColor(p.id), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(p.name)}</span>
                 {p.name}
                 {p.kind === 'external' && (
-                  <span style={{ fontSize: 9.5, fontWeight: 800, color: '#9a9a9a', background: '#eceae6', borderRadius: 5, padding: '1px 5px', marginLeft: 1 }}>
+                  <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px', marginLeft: 1 }}>
                     {t('staffTimeline.externalTag')}
                   </span>
                 )}
@@ -914,7 +925,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                   aria-label={t('staffTimeline.removeExternalChipAria', { name: p.name })}
                   style={{
                     position: 'absolute', top: -6, right: -6, width: 17, height: 17, borderRadius: '50%',
-                    background: '#9a9a9a', color: '#fff', border: '1.5px solid #fff',
+                    background: 'var(--c-ink3)', color: '#fff', border: '1.5px solid var(--c-surface)',
                     fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
                   }}
                 >
@@ -926,27 +937,29 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         })}
       </div>
 
+      </>)}
+
       {/* Navigazione settimana — stesso idioma della navigazione mese nella
           vista "Calendario" (frecce leggere senza sfondo, "Oggi" sotto la
           data che diventa rosso solo sulla settimana corrente). Subito
           sopra alla griglia che controlla. */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginBottom: 14 }}>
-        <button type="button" className="btn-no-anim" onClick={() => { setCreateOn(v => !v); setHoverCell(null) }} aria-pressed={createOn} title={t('staffTimeline.createToggleHint')}
+        {!readOnly && <button type="button" className="btn-no-anim" onClick={() => { setCreateOn(v => !v); setHoverCell(null) }} aria-pressed={createOn} title={t('staffTimeline.createToggleHint')}
           style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', padding: '6px 13px', borderRadius: 20, fontSize: 12, fontWeight: 800,
-            border: `1.5px solid ${createOn ? '#e63946' : '#e0ddd6'}`, background: createOn ? 'rgba(230,57,70,0.1)' : '#fff', color: createOn ? '#e63946' : '#9a9a9a' }}>
+            border: `1.5px solid ${createOn ? '#e63946' : 'var(--c-line)'}`, background: createOn ? 'rgba(230,57,70,0.1)' : 'var(--c-surface)', color: createOn ? '#e63946' : 'var(--c-ink3)' }}>
           {createOn ? t('staffTimeline.createExit') : `+ ${t('staffTimeline.createToggle')}`}
-        </button>
+        </button>}
         <button onClick={() => setWeekStart(w => addDays(w, -7))} aria-label={t('staffTimeline.prevWeekAria')} className="btn-no-anim"
-          style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', color: '#9a9a9a', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+          style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', color: 'var(--c-ink3)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
         <button className="btn-no-anim staff-nav-today" onClick={() => setWeekStart(startOfWeek(new Date()))} style={{ textAlign: 'center', background: 'none', border: 'none', padding: '2px 10px', borderRadius: 9 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#1a1a1a', whiteSpace: 'nowrap' }}>{capitalize(weekRangeLabel)}</div>
-          <div className="staff-nav-today-label" style={{ fontSize: 11, fontWeight: 800, marginTop: 1, color: isCurrentWeek ? '#e63946' : '#6b6b6b' }}>{t('calendar.today')}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--c-ink)', whiteSpace: 'nowrap' }}>{capitalize(weekRangeLabel)}</div>
+          <div className="staff-nav-today-label" style={{ fontSize: 11, fontWeight: 800, marginTop: 1, color: isCurrentWeek ? '#e63946' : 'var(--c-ink2)' }}>{t('calendar.today')}</div>
         </button>
         <button onClick={() => setWeekStart(w => addDays(w, 7))} aria-label={t('staffTimeline.nextWeekAria')} className="btn-no-anim"
-          style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', color: '#9a9a9a', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+          style={{ width: 22, height: 22, borderRadius: 6, background: 'transparent', color: 'var(--c-ink3)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
       </div>
 
-      <div ref={gridBoxRef} style={{ display: 'flex', border: '1px solid #e0ddd6', borderRadius: 16, overflow: 'hidden', background: '#faf9f7' }}>
+      <div ref={gridBoxRef} style={{ display: 'flex', border: '1px solid var(--c-line)', borderRadius: 16, overflow: 'hidden', background: 'var(--c-alt)' }}>
         <div ref={gridScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', maxHeight: gridMaxH || undefined, WebkitOverflowScrolling: 'touch' }}>
           <div style={{ display: 'flex', minWidth: '100%' }}>
             {weekDates.map(date => {
@@ -960,9 +973,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
               const ghost = createOn && !selectedPerson && hoverCell?.date === date && !hoverCell.occupied ? hoverCell : null
               const ghostGeo = ghost ? cardGeometry(ghost.hour * 60, (ghost.hour + 1) * 60) : null
               return (
-                <div key={date} style={{ flex: '1 1 0', minWidth: 'min(90vw, 230px)', borderRight: '1px solid #e0ddd6' }}>
-                  <div style={{ height: 36, position: 'sticky', top: 0, zIndex: 6, background: '#fff', borderBottom: isToday ? '2px solid #e63946' : '1px solid #e0ddd6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: 11, fontWeight: isToday ? 800 : 700, color: isToday ? '#e63946' : '#9a9a9a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                <div key={date} style={{ flex: '1 1 0', minWidth: 'min(90vw, 230px)', borderRight: '1px solid var(--c-line)' }}>
+                  <div style={{ height: 36, position: 'sticky', top: 0, zIndex: 6, background: 'var(--c-surface)', borderBottom: isToday ? '2px solid #e63946' : '1px solid var(--c-line)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: 11, fontWeight: isToday ? 800 : 700, color: isToday ? '#e63946' : 'var(--c-ink3)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                       {capitalize(formatDate(d, { weekday: 'short' }, i18n.language))} {d.getDate()}
                     </span>
                   </div>
@@ -998,7 +1011,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                         background: 'rgba(255,255,255,0.94)', border: '1.5px dashed #b5b2ab', borderRadius: 10, boxShadow: '4px 2px 14px -2px rgba(0,0,0,0.16)', zIndex: 4,
                         pointerEvents: 'none', padding: `${CARD_PAD}px 10px`, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: ROW_GAP,
                       }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#9a9a9a', height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, whiteSpace: 'nowrap' }}>+ {t('staffTimeline.newTaskGhost')}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-ink3)', height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, whiteSpace: 'nowrap' }}>+ {t('staffTimeline.newTaskGhost')}</span>
                         <span style={{ fontSize: 9.5, fontWeight: 600, color: '#b5b2ab', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{hourToTime(TIMELINE_START_HOUR + ghost.hour)}–{hourToTime(TIMELINE_START_HOUR + ghost.hour + 1)}</span>
                       </div>
                     )}
@@ -1014,6 +1027,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                       // identifica la card per la colonna laterale.
                       const isPanelOpen = panel?.key === item.key && panel?.date === item.date
                       const openOrAssign = () => {
+                        if (readOnly) { setPanel({ key: item.key, date: item.date, isNew: false }); return }
                         if (selectedPerson) { handleDropOrTap(item, selectedPerson); return }
                         requestPanel({ key: item.key, date: item.date, isNew: false })
                       }
@@ -1027,11 +1041,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                           onDrop={e => { e.preventDefault(); setDragOverKey(null); handleDropOrTap(item, draggedPerson); setDraggedPerson(null) }}
                           style={{
                             position: 'absolute', top: laneTop[lane] + ITEM_MARGIN, height: item.contentHeight, left: `${item.geoLeft * 100}%`, width: `${item.geoWidth * 100}%`,
-                            background: '#fff', color: isPast ? '#9a9a9a' : '#1a1a1a', borderRadius: 10, padding: `${CARD_PAD}px 12px ${CARD_PAD}px 10px`,
+                            background: 'var(--c-surface)', color: isPast ? 'var(--c-ink3)' : 'var(--c-ink)', borderRadius: 10, padding: `${CARD_PAD}px 12px ${CARD_PAD}px 10px`,
                             display: 'flex', flexDirection: 'column', gap: ROW_GAP,
                             overflow: 'hidden', cursor: 'pointer',
-                            boxShadow: isDragOver ? '0 0 0 2px #1a1a1a, 6px 3px 16px rgba(0,0,0,0.18)'
-                              : isPanelOpen ? '0 0 0 2px #1a1a1a, 6px 3px 14px rgba(0,0,0,0.14)'
+                            boxShadow: isDragOver ? '0 0 0 2px var(--c-ink), 6px 3px 16px rgba(0,0,0,0.18)'
+                              : isPanelOpen ? '0 0 0 2px var(--c-ink), 6px 3px 14px rgba(0,0,0,0.14)'
                               : '5px 2px 12px -1px rgba(0,0,0,0.13), 1px 0 2px rgba(0,0,0,0.05)',
                             transition: 'box-shadow 0.12s ease',
                           }}
@@ -1042,7 +1056,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                             style={{ fontSize: 11, fontWeight: 700, height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                             {item.type === 'event' && item.event.type === 'installation' && <Wrench size={11} />}{title}
                           </span>
-                          <span style={{ fontSize: 9.5, fontWeight: 600, color: '#9a9a9a', height: SUBTITLE_ROW_H, lineHeight: `${SUBTITLE_ROW_H}px`, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--c-ink3)', height: SUBTITLE_ROW_H, lineHeight: `${SUBTITLE_ROW_H}px`, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                             {timeLabel}
                           </span>
                           {/* Persone assegnate: avatar sovrapposti, sempre su UNA riga così
@@ -1063,18 +1077,18 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                                     const differs = left > 0.005 || width < 0.995
                                     return (
                                       <span key={a.id} title={`${name} · ${a.startTime}–${a.endTime}`}
-                                        style={{ position: 'relative', width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: '50%', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, background: isPast ? '#9a9a9a' : personColor(personId), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px #fff', zIndex: shownBars.length - i }}>
+                                        style={{ position: 'relative', width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: '50%', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, background: isPast ? '#9a9a9a' : personColor(personId), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px var(--c-surface)', zIndex: shownBars.length - i }}>
                                         {initials(name)}
-                                        {differs && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#ea580c', boxShadow: '0 0 0 1.5px #fff' }} />}
+                                        {differs && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#ea580c', boxShadow: '0 0 0 1.5px var(--c-surface)' }} />}
                                       </span>
                                     )
                                   })}
                                   {extra > 0 && (
                                     <span title={people_.slice(shownBars.length).map(b => nameOf(b.a)).join(', ')}
-                                      style={{ marginLeft: -6, height: AVATAR_SIZE, minWidth: AVATAR_SIZE, padding: '0 6px', boxSizing: 'border-box', borderRadius: AVATAR_SIZE / 2, flexShrink: 0, background: '#eceae6', color: '#6b6b6b', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px #fff' }}>+{extra}</span>
+                                      style={{ marginLeft: -6, height: AVATAR_SIZE, minWidth: AVATAR_SIZE, padding: '0 6px', boxSizing: 'border-box', borderRadius: AVATAR_SIZE / 2, flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px var(--c-surface)' }}>+{extra}</span>
                                   )}
                                   {people_.length === 1 && (
-                                    <span style={{ marginLeft: 7, minWidth: 0, fontSize: 10.5, fontWeight: 700, color: isPast ? '#9a9a9a' : '#6b6b6b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(people_[0].a)}</span>
+                                    <span style={{ marginLeft: 7, minWidth: 0, fontSize: 10.5, fontWeight: 700, color: isPast ? 'var(--c-ink3)' : 'var(--c-ink2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(people_[0].a)}</span>
                                   )}
                                 </>
                               )
@@ -1095,13 +1109,13 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           rent/install e fasi montaggio-smontaggio spesso non vanno assegnati
           a nessuno, quindi si tolgono dalla vista senza perdere il resto. */}
       <div ref={filterRowRef} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#9a9a9a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('staffTimeline.filterLabel')}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c-ink3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t('staffTimeline.filterLabel')}</span>
         <button type="button" className="btn-no-anim" onClick={() => setShowEvents(v => !v)} aria-pressed={showEvents}
           style={{
             padding: '5px 12px', borderRadius: 20,
-            border: `1.5px solid ${showEvents ? '#e63946' : '#e0ddd6'}`,
-            background: showEvents ? 'rgba(230,57,70,0.1)' : '#fff',
-            color: showEvents ? '#e63946' : '#9a9a9a',
+            border: `1.5px solid ${showEvents ? '#e63946' : 'var(--c-line)'}`,
+            background: showEvents ? 'rgba(230,57,70,0.1)' : 'var(--c-surface)',
+            color: showEvents ? '#e63946' : 'var(--c-ink3)',
             fontSize: 12, fontWeight: 700, textDecoration: showEvents ? 'none' : 'line-through',
           }}>
           {t('staffTimeline.filterEvents')}
@@ -1109,9 +1123,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         <button type="button" className="btn-no-anim" onClick={() => setShowInstallations(v => !v)} aria-pressed={showInstallations}
           style={{
             padding: '5px 12px', borderRadius: 20,
-            border: `1.5px solid ${showInstallations ? '#7c6fcd' : '#e0ddd6'}`,
-            background: showInstallations ? '#7c6fcd18' : '#fff',
-            color: showInstallations ? '#7c6fcd' : '#9a9a9a',
+            border: `1.5px solid ${showInstallations ? '#7c6fcd' : 'var(--c-line)'}`,
+            background: showInstallations ? '#7c6fcd18' : 'var(--c-surface)',
+            color: showInstallations ? '#7c6fcd' : 'var(--c-ink3)',
             fontSize: 12, fontWeight: 700, textDecoration: showInstallations ? 'none' : 'line-through',
           }}>
           {t('staffTimeline.filterInstallations')}
@@ -1119,9 +1133,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         <button type="button" className="btn-no-anim" onClick={() => setShowPhases(v => !v)} aria-pressed={showPhases}
           style={{
             padding: '5px 12px', borderRadius: 20,
-            border: `1.5px solid ${showPhases ? PHASE_COLORS.montaggio : '#e0ddd6'}`,
-            background: showPhases ? `${PHASE_COLORS.montaggio}18` : '#fff',
-            color: showPhases ? PHASE_COLORS.montaggio : '#9a9a9a',
+            border: `1.5px solid ${showPhases ? PHASE_COLORS.montaggio : 'var(--c-line)'}`,
+            background: showPhases ? `${PHASE_COLORS.montaggio}18` : 'var(--c-surface)',
+            color: showPhases ? PHASE_COLORS.montaggio : 'var(--c-ink3)',
             fontSize: 12, fontWeight: 700, textDecoration: showPhases ? 'none' : 'line-through',
           }}>
           {t('staffTimeline.filterPhases')}
@@ -1130,7 +1144,32 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
 
       </div>
 
-      {panelItem && (
+      {panelItem && readOnly && (
+        <aside key={`${panel.key}-${panel.date}`} className="rc-sidebar-swap" style={{ width: 460, flexShrink: 0, alignSelf: 'flex-start', position: 'sticky', top: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 76px)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '20px 28px 8px', flexShrink: 0 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--c-ink)', letterSpacing: '-0.3px', overflowWrap: 'anywhere' }}>
+              {panelItem.type === 'task' ? (panelItem.block.label || t('staffTimeline.untitledTask')) : panelItem.type === 'phase' ? `${PHASE_META[panelItem.phaseKey].label} · ${panelItem.event.name}` : panelItem.event.name}
+            </h2>
+            <button onClick={() => setPanel(null)} className="btn-no-anim" aria-label={t('common.close')}
+              style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 20px' }}>
+            {panelItem.type === 'task'
+              ? <TaskSummaryBody block={{ ...panelItem.block, startTime: panelItem.startTime, endTime: panelItem.endTime, assigned: panelItem.assigned }} workers={workers} />
+              : <ArchiveEventDetail event={panelItem.event} workers={workers} blocks={blocks.filter(b => b.eventId === panelItem.event.id)} vehicles={[]} loadListsOn />}
+          </div>
+          {panelItem.type !== 'task' && (
+            <div className="rc-side-footer">
+              <button onClick={() => navigate(`/events/${panelItem.event.id}`)} className="btn-no-anim"
+                style={{ width: '100%', padding: '14px 16px', borderRadius: 13, background: '#e63946', color: '#fff', fontSize: 15, fontWeight: 800 }}>
+                {t('eventSummary.goToLoadList')}
+              </button>
+            </div>
+          )}
+        </aside>
+      )}
+
+      {panelItem && !readOnly && (
         <StaffAssignPanel
           key={`${panel.key}-${panel.date}-${panelItem.event?.dayTimes?.[panel.date] ? 'o' : 'n'}-${panelItem.phaseKey && panelItem.event?.phaseTimes?.[panelItem.phaseKey] ? 'p' : 'q'}`}
           item={panelItem}

@@ -838,6 +838,9 @@ export default function EventDetail() {
   // valori di setItemVehicle ('v:'/'e:'/''/'__none__'). `value` esplicito per
   // il popup telefono (un tap = scelta + applica, niente stato intermedio da
   // aspettare) — senza, usa bulkVehicleId come il select su computer.
+  // Azione di gruppo in corso ('delete' | 'veh:<valore>'): lo spinner dei bottoni parte
+  // solo DOPO l'eventuale conferma, e si ferma se si annulla.
+  const [bulkBusy, setBulkBusy] = useState(null)
   const applyBulkVehicle = async (value) => {
     const chosen = value !== undefined ? value : bulkVehicleId
     if (bulkSelectedIds.size === 0 || !chosen) return
@@ -859,9 +862,12 @@ export default function EventDetail() {
       })
       if (!ok) return
     }
-    await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId, externalVehicleId, externalVehicleName } : i))
-    setShowBulkVehiclePicker(false)
-    exitSelectMode()
+    setBulkBusy(`veh:${chosen}`)
+    try {
+      await updateEventItems(current => current.map(i => bulkSelectedIds.has(i.id) ? { ...i, vehicleId, externalVehicleId, externalVehicleName } : i))
+      setShowBulkVehiclePicker(false)
+      exitSelectMode()
+    } finally { setBulkBusy(null) }
   }
 
   // Sposta tutti gli oggetti selezionati in un'altra lista GIÀ ESISTENTE, in
@@ -909,19 +915,22 @@ export default function EventDetail() {
       danger: true,
     })
     if (!ok) return
-    await updateEventItems(current => current.filter(i => !bulkSelectedIds.has(i.id)))
-    for (const item of stillOut) {
-      await syncKitAwareInventory({
+    setBulkBusy('delete')
+    try {
+      await updateEventItems(current => current.filter(i => !bulkSelectedIds.has(i.id)))
+      for (const item of stillOut) {
+        await syncKitAwareInventory({
+          catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+          isBundle: item.isBundle, category: item.category, qty: item.qty, sign: 1,
+        })
+      }
+      toDelete.forEach(item => logItemActivity({
+        teamId, eventId, eventName: event?.name, itemId: item.id, itemName: item.name,
         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-        isBundle: item.isBundle, category: item.category, qty: item.qty, sign: 1,
-      })
-    }
-    toDelete.forEach(item => logItemActivity({
-      teamId, eventId, eventName: event?.name, itemId: item.id, itemName: item.name,
-      catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-      listId: rowListId(item), action: 'removed', profile, userId: user?.uid,
-    }))
-    exitSelectMode()
+        listId: rowListId(item), action: 'removed', profile, userId: user?.uid,
+      }))
+      exitSelectMode()
+    } finally { setBulkBusy(null) }
   }
 
   // Imposta uno stato ASSOLUTO (non un toggle come lo scanner) su tutti i
@@ -1351,7 +1360,7 @@ export default function EventDetail() {
           .filter(sec => sec.rows.length > 0)
           .map(sec => `<div class="listtitle">${esc(listLabel(sec.l))}<span>${sec.rows.length} voci · ${sec.rows.reduce((n, i) => n + (i.qty || 1), 0)} pezzi</span></div><table>${tableHead}<tbody>${renderRows(sec.rows)}</tbody></table>`)
           .join('')
-      : `<table>${tableHead}<tbody>${renderRows(list) || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px;">Nessun articolo nella lista</td></tr>'}</tbody></table>`
+      : `<table>${tableHead}<tbody>${renderRows(list) || '<tr><td colspan="4" style="text-align:center;color:#9a9a9a;padding:24px;">Nessun articolo nella lista</td></tr>'}</tbody></table>`
 
     const metaRow = (label, val) => val ? `<div class="mrow"><span class="mlabel">${label}</span><span class="mval">${esc(val)}</span></div>` : ''
 
@@ -1761,8 +1770,8 @@ export default function EventDetail() {
             {event.phases && ['montaggio','smontaggio'].some(k => event.phases[k]) && (
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
                 {[
-                  { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'#dbeafe' },
-                  { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'#ffedd5' },
+                  { key:'montaggio',  label:t('calendar.legendAssembly'),    color:'#2563eb', bg:'var(--c-blue-bg)' },
+                  { key:'smontaggio', label:t('calendar.legendDisassembly'), color:'#ea580c', bg:'var(--c-orange-bg)' },
                 ].filter(p => event.phases[p.key]).map(p => {
                   const isToday = event.phases[p.key] === today
                   return (
@@ -1786,7 +1795,7 @@ export default function EventDetail() {
                 const ini = (p.name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
                 return (
                   <span key={p.key} title={`${p.name}${p.hours ? ` · ${p.hours}` : ''}`}
-                    style={{ width:28, height:28, borderRadius:'50%', background: personColor(p.id || p.name), color:'#fff', fontSize:10.5, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow: unavail ? '0 0 0 2px #fff, 0 0 0 4px #e63946' : 'none' }}>
+                    style={{ width:28, height:28, borderRadius:'50%', background: personColor(p.id || p.name), color:'#fff', fontSize:10.5, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow: unavail ? '0 0 0 2px var(--c-surface), 0 0 0 4px #e63946' : 'none' }}>
                     {ini}
                   </span>
                 )
@@ -1797,7 +1806,7 @@ export default function EventDetail() {
                   da mantenere invece di due sistemi paralleli. */}
               <button
                 onClick={() => (isMobile ? setShowAssignSheet(true) : navigate('/calendar', { state: { assignEventId: event.id, assignDate: event.date } }))}
-                className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eceae6', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'#6b6b6b' }}
+                className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-fill)', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'var(--c-ink2)' }}
               >
                 {t('eventDetail.assign')}
               </button>
@@ -1810,9 +1819,9 @@ export default function EventDetail() {
               aria-pressed={showEventNotes}
               style={{
                 flexShrink:0, width:30, height:30, borderRadius:'50%', marginTop:4,
-                background: showEventNotes ? '#1a1a1a' : '#eceae6',
+                background: showEventNotes ? '#1a1a1a' : 'var(--c-fill)',
                 border:'none',
-                color: showEventNotes ? 'white' : '#6b6b6b',
+                color: showEventNotes ? 'white' : 'var(--c-ink2)',
                 fontWeight:900, fontSize:14,
                 display:'flex', alignItems:'center', justifyContent:'center',
               }}
@@ -1972,7 +1981,7 @@ export default function EventDetail() {
         })
         // Chip del pannello furgoni (computer): stessa forma dei bottoni stato,
         // un tap sceglie E applica a tutti i selezionati.
-        const bulkBigBtn = { flex:'1 1 120px', minHeight:52, padding:'12px 16px', borderRadius:14, fontSize:15, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center' }
+        const bulkBigBtn = { flex:'0 1 auto', minHeight:40, padding:'8px 18px', borderRadius:12, fontSize:13.5, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center' }
         const vehicleChipStyle = { ...bulkBigBtn, flex:'0 1 auto', whiteSpace:'nowrap', background:'var(--card2)', color:'var(--text)', border:'1px solid var(--border)' }
         // Chip delle azioni — stessa fila su telefono e computer, solo la
         // cornice che la contiene cambia posizione (vedi sotto). "Elimina"
@@ -1987,7 +1996,7 @@ export default function EventDetail() {
             )}
             <button onClick={() => setListModal({ mode:'moveSelected', name:'' })} style={chipStyle(false)}>{t('eventDetail.moveToListNew')}</button>
             <button onClick={() => setBulkAction(a => a === 'status' ? null : 'status')} aria-pressed={bulkAction === 'status'} style={chipStyle(bulkAction === 'status')}>{t('eventDetail.bulkStatusAction')}</button>
-            <PendingButton onClick={applyBulkDelete} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
+            <PendingButton onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
           </div>
         )
         // Select "sposta in lista esistente" — unico tra i pannelli ancora
@@ -2013,11 +2022,11 @@ export default function EventDetail() {
         const actionPanel = bulkAction && (
           <div>
             {bulkAction === 'vehicle' && (
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                 {vehicles.filter(v => v.active !== false).map(v => {
                   const conflict = vehicleConflictEvent(v.id, event, otherEvents)
                   return (
-                    <PendingButton key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)} style={vehicleChipStyle}>
+                    <PendingButton key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)} busy={bulkBusy === `veh:v:${v.id}`} style={vehicleChipStyle}>
                       {v.emoji ? v.emoji + ' ' : ''}{v.name}
                       {conflict && <span style={{ fontWeight:600, fontSize:11.5, color:'#ea580c', marginLeft:6 }}>{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
                     </PendingButton>
@@ -2026,7 +2035,7 @@ export default function EventDetail() {
                 {externalVehicles.map(v => {
                   const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
                   return (
-                    <PendingButton key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)} style={vehicleChipStyle}>
+                    <PendingButton key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)} busy={bulkBusy === `veh:e:${v.id}`} style={vehicleChipStyle}>
                       🚐 {v.name}
                       {conflict && <span style={{ fontWeight:600, fontSize:11.5, color:'#ea580c', marginLeft:6 }}>{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
                     </PendingButton>
@@ -2036,7 +2045,7 @@ export default function EventDetail() {
                   style={{ ...vehicleChipStyle, background:'transparent', border:'1.5px dashed var(--accent)', color:'var(--accent)' }}>
                   + {t('eventDetail.externalShort')}
                 </button>
-                <PendingButton onClick={() => applyBulkVehicle('__none__')}
+                <PendingButton onClick={() => applyBulkVehicle('__none__')} busy={bulkBusy === 'veh:__none__'}
                   style={{ ...vehicleChipStyle, background:'transparent', color:'var(--text2)' }}>
                   {t('eventDetail.noVehicleRemove')}
                 </PendingButton>
@@ -2044,7 +2053,7 @@ export default function EventDetail() {
             )}
             {bulkAction === 'moveExisting' && moveExistingPanel}
             {bulkAction === 'status' && (
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                 <PendingButton onClick={() => applyBulkStatus('pending')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.statusPending')}</PendingButton>
                 <PendingButton onClick={() => applyBulkStatus('pronto')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.statusActionReady')}</PendingButton>
                 <PendingButton onClick={() => applyBulkStatus('loaded')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.loadedButton')}</PendingButton>
@@ -2153,7 +2162,7 @@ export default function EventDetail() {
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
                     <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'7px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)', whiteSpace:'nowrap' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <PendingButton onClick={applyBulkDelete} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
+                      <PendingButton onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
                       <button onClick={toggleMobileMore} aria-expanded={mobileMoreOpen || !!bulkAction}
                         style={{ ...chipStyle(mobileMoreOpen || !!bulkAction), padding:'8px 16px', fontSize:18, lineHeight:1, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>⋯</button>
                     </div>
@@ -2177,7 +2186,7 @@ export default function EventDetail() {
       {loadListsOn && (
         <div style={{ margin:'12px 16px 0', opacity: selectMode ? 0 : 1, pointerEvents: selectMode ? 'none' : 'auto', transition:'opacity 0.2s ease' }}>
           <button type="button" className="btn-no-anim" onClick={() => setListModal({ mode:'new', name:'' })}
-            style={{ width:'100%', padding:'11px 14px', borderRadius:14, background:'transparent', border:'1.5px dashed #d6d3cb', color:'#6b6b6b', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            style={{ width:'100%', padding:'11px 14px', borderRadius:14, background:'transparent', border:'1.5px dashed var(--c-dash)', color:'var(--c-ink2)', fontSize:13, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
             + {t('eventDetail.newList')}
           </button>
         </div>
@@ -2246,7 +2255,7 @@ export default function EventDetail() {
               {vehicles.filter(v => v.active !== false).map(v => {
                 const conflict = vehicleConflictEvent(v.id, event, otherEvents)
                 return (
-                  <PendingButton key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)}
+                  <PendingButton key={v.id} onClick={() => applyBulkVehicle(`v:${v.id}`)} busy={bulkBusy === `veh:v:${v.id}`}
                     style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15 }}>
                     {v.emoji ? v.emoji + ' ' : ''}{v.name}
                     {conflict && <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>&nbsp;{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
@@ -2256,7 +2265,7 @@ export default function EventDetail() {
               {externalVehicles.map(v => {
                 const conflict = externalVehicleConflictEvent(v.id, event, otherEvents)
                 return (
-                  <PendingButton key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)}
+                  <PendingButton key={v.id} onClick={() => applyBulkVehicle(`e:${v.id}`)} busy={bulkBusy === `veh:e:${v.id}`}
                     style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15 }}>
                     🚐 {v.name}
                     {conflict && <span style={{ fontWeight:600, fontSize:12.5, color:'var(--text2)' }}>&nbsp;{t('eventDetail.vehicleBusySuffix', { eventName: conflict.name })}</span>}
@@ -2267,7 +2276,7 @@ export default function EventDetail() {
                 style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'var(--card2)', border:'1px dashed var(--border)', textAlign:'left', fontWeight:700, fontSize:15, color:'var(--accent)' }}>
                 {t('eventDetail.addExternalVehicle')}
               </button>
-              <PendingButton onClick={() => applyBulkVehicle('__none__')}
+              <PendingButton onClick={() => applyBulkVehicle('__none__')} busy={bulkBusy === 'veh:__none__'}
                 style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderRadius:12, background:'transparent', border:'1px solid var(--border)', textAlign:'left', fontWeight:700, fontSize:15, color:'var(--text2)' }}>
                 {t('eventDetail.noVehicleRemove')}
               </PendingButton>
@@ -2278,16 +2287,16 @@ export default function EventDetail() {
 
       {showDiscardCart && (
         <div onClick={() => setShowDiscardCart(false)} style={{ position:'fixed', inset:0, zIndex:10001, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
-          <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:320, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background:'var(--c-surface)', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:320, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
             <div style={{ width:54, height:54, borderRadius:'50%', margin:'0 auto 14px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(234,88,12,0.12)', color:'#ea580c' }}>
               <Warn size={26} />
             </div>
-            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{t('eventDetail.discardTitle')}</h3>
-            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'var(--c-ink)', margin:'0 0 6px', letterSpacing:'-0.3px' }}>{t('eventDetail.discardTitle')}</h3>
+            <p style={{ fontSize:14, color:'var(--c-ink2)', margin:0, lineHeight:1.45 }}>
               {t('eventDetail.discardMessage', { count: cart.length })}
             </p>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
-              <button onClick={() => setShowDiscardCart(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#f3f4f6', color:'#374151', border:'none' }}>{t('eventDetail.continue')}</button>
+              <button onClick={() => setShowDiscardCart(false)} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'var(--c-fill)', color:'var(--c-ink2)', border:'none' }}>{t('eventDetail.continue')}</button>
               <button onClick={() => { setShowDiscardCart(false); setCart([]); setShowAddItem(false) }} style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'#ea580c', color:'#fff', border:'none' }}>{t('eventDetail.exit')}</button>
             </div>
           </div>
@@ -2345,7 +2354,7 @@ export default function EventDetail() {
                     <button
                       className="btn-no-anim"
                       onClick={() => setListModal({ mode:'new', name:'' })}
-                      className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'#eceae6', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'#6b6b6b' }}
+                      className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-fill)', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'var(--c-ink2)' }}
                     >
                       + {t('eventDetail.newList')}
                     </button>

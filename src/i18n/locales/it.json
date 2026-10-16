@@ -112,7 +112,15 @@
     "weeklyRecapNoAbsences": "Nessuno assente questa settimana.",
     "weeklyRecapTasks_one": "{{count}} task aperta",
     "weeklyRecapTasks_other": "{{count}} task aperte",
-    "weeklyRecapNoTasks": "Nessuna task aperta."
+    "weeklyRecapNoTasks": "Nessuna task aperta.",
+    "todaySection": "Oggi",
+    "attentionSection": "Da vedere",
+    "stats": {
+      "items": "Oggetti in magazzino",
+      "events": "Eventi in programma",
+      "tasks": "Attività aperte",
+      "broken": "Oggetti rotti"
+    }
   },
   "todayReminder": {
     "title": "Cosa c'è da preparare oggi",
@@ -236,7 +244,8 @@
     "nDates_one": "{{count}} data",
     "nDates_other": "{{count}} date",
     "singleDay": "Solo un giorno",
-    "absenceWhoLabel": "Per chi"
+    "absenceWhoLabel": "Per chi",
+    "viewTimeline": "Timeline"
   },
   "staffTimeline": {
     "prevWeekAria": "Settimana precedente",
@@ -1644,7 +1653,11 @@
     "languageEnglish": "English",
     "chooseAvatar": "Scegli avatar",
     "removeAvatar": "Rimuovi — usa iniziale del nome",
-    "selectAvatarAria": "Seleziona {{emoji}} come avatar"
+    "selectAvatarAria": "Seleziona {{emoji}} come avatar",
+    "sectionAppearance": "Aspetto",
+    "themeLight": "Chiaro",
+    "themeDark": "Scuro",
+    "themeAuto": "Automatico"
   },
   "workHours": {
     "title": "Ore di lavoro",

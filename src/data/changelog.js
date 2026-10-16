@@ -6,6 +6,109 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-16',
+    date: '2026-10-16',
+    title: { it: 'Tema scuro, nuove home, Archivio e calendario anche per i magazzinieri', en: 'Dark mode, new home pages, Archive and a calendar for warehouse workers too' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: 'Tema scuro', en: 'Dark mode' },
+        text: {
+          it: 'Dal Profilo, nel nuovo gruppo "Aspetto", puoi scegliere Chiaro, Scuro o Automatico (segue il tema del telefono o del computer, ed è quello predefinito). Vale per tutta l\'app, dalla barra di navigazione alla schermata di caricamento.',
+          en: 'From your Profile, in the new "Appearance" group, you can pick Light, Dark or Automatic (it follows your phone or computer, and is the default). It applies to the whole app, from the navigation bar to the loading screen.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Nuove home per admin e magazzinieri', en: 'New home pages for admins and warehouse workers' },
+        text: {
+          it: 'Header bianco con il cielo che cambia durante la giornata (sole o luna e meteo), sezioni "Oggi", "Da vedere" e "Prossimi", strumenti in una fila compatta e, su computer, i numeri chiave in alto. L\'uscita dall\'app ora sta in fondo al Profilo, e un pallino rosso sull\'avatar segnala le novità.',
+          en: 'A white header with a sky that follows the day (sun or moon and weather), "Today", "Needs attention" and "Upcoming" sections, tools in a compact row and, on desktop, key numbers at the top. Logging out is now at the bottom of the Profile, and a red dot on the avatar flags what\'s new.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Calendario e timeline anche per i magazzinieri su computer', en: 'Calendar and timeline for warehouse workers on desktop' },
+        text: {
+          it: 'Chi usa un computer fisso vede il calendario del mese con la colonna dei dettagli (eventi, lista di carico, persone assegnate) e la timeline della settimana, in sola lettura. Le proprie assenze si segnalano e si modificano da lì.',
+          en: 'On a desktop computer workers get the month calendar with a details column (events, loading list, assigned people) and the weekly timeline, read-only. They can report and edit their own absences there.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Archivio rifatto', en: 'Archive redesigned' },
+        text: {
+          it: 'Le card mostrano data, nome e luogo; un tocco apre tutti i dettagli e la lista di carico, con "Elimina" e "Usa lista" sempre in vista: in una colonna a destra su computer, in un foglio a scorrimento su telefono.',
+          en: 'Cards show date, name and place; a tap opens every detail and the loading list, with "Delete" and "Use list" always in view: in a column on the right on desktop, in a scrollable sheet on phones.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Creazione e modifica eventi più ordinate', en: 'Tidier event creation and editing' },
+        text: {
+          it: 'Stesso modulo su computer e telefono: nome, luogo, "Quando" con inizio, fine e orario in un riquadro solo, note, e righe a comparsa per Ripeti, Montaggio/smontaggio e Riferimento. Scegliendo la data di fine il calendario parte dall\'inizio e mostra la durata mentre scorri.',
+          en: 'One form on desktop and phone: name, place, a single "When" box with start, end and time, notes, and collapsible rows for Repeat, Setup/teardown and Reference. When you pick the end date the calendar starts from the start date and shows the duration as you hover.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Assenze: l\'admin le gestisce per tutti', en: 'Absences: admins manage them for everyone' },
+        text: {
+          it: 'Dalla colonna del Calendario l\'admin può registrare un\'assenza per un\'altra persona ("Per chi"), modificarla o eliminarla. Ogni assenza mostra tipo, date, orari e motivo.',
+          en: 'From the Calendar column admins can record an absence for someone else ("For"), edit it or delete it. Each absence shows type, dates, hours and reason.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Timeline più ordinata', en: 'A tidier timeline' },
+        text: {
+          it: 'Le card hanno tutte la stessa altezza, con gli avatar delle persone assegnate (un puntino arancione segnala un orario diverso). Per creare un\'attività premi su uno spazio libero: compare l\'anteprima, un secondo clic conferma ed esce dalla creazione; Esc o tasto destro annullano.',
+          en: 'Cards all have the same height, with avatars of assigned people (an orange dot flags a different time). To create a task click an empty spot: a preview appears, a second click confirms and leaves creation; Esc or right-click cancels.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Liste di carico: Seleziona più comodo', en: 'Loading lists: easier selection' },
+        text: {
+          it: 'Furgoni e stati si scelgono con bottoni dedicati (con "+ Esterno"), una spunta seleziona una lista intera, ogni bottone mostra subito un caricamento, e nei campi quantità puoi scrivere ad esempio 6x5 per ottenere 30.',
+          en: 'Vehicles and statuses are picked with dedicated buttons (including "+ External"), one tick selects a whole list, every button shows progress right away, and in quantity fields you can type e.g. 6x5 to get 30.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Task, Scanner, Furgoni, Template, Impostazioni e Magazzino', en: 'Tasks, Scanner, Vehicles, Templates, Settings and Warehouse' },
+        text: {
+          it: 'Tutte le pagine hanno lo stesso header, le stesse card e gli stessi fogli, compresa la vista Magazzino per chi non può modificarlo. Sul telefono dei magazzinieri la barra di navigazione sparisce nella lista di carico, per distrarre meno.',
+          en: 'All these pages share the same header, cards and sheets, including the read-only Warehouse view. On warehouse workers\' phones the navigation bar hides inside the loading list, to be less distracting.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Notifiche non più doppie', en: 'No more duplicate notifications' },
+        text: {
+          it: 'Nuovo evento, lista modificata e montaggio assegnato arrivano ora una volta sola.',
+          en: 'New event, edited list and assigned setup now arrive only once.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Rent futuri e orari delle persone', en: 'Future rentals and people\'s hours' },
+        text: {
+          it: 'Un rent in programma più avanti non compare più tra gli eventi di oggi. Le persone aggiunte a un\'attività prendono l\'orario dell\'attività e lo seguono se lo modifichi.',
+          en: 'A rental scheduled for later no longer shows among today\'s events. People added to a task take the task\'s hours and follow them if you change them.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Pulsanti che restavano in caricamento', en: 'Buttons stuck on loading' },
+        text: {
+          it: 'Premendo "Annulla" dopo "Elimina" in Seleziona, il pulsante non resta più bloccato. Il caricamento parte solo dopo la tua conferma.',
+          en: 'Pressing "Cancel" after "Delete" in Select no longer leaves the button stuck. Loading only starts after you confirm.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-10-14',
     date: '2026-10-14',
     title: { it: 'Nuova "Assegna personale", colonna laterale nel Calendario e sezione "Oggi"', en: 'New "Assign staff", Calendar side column and a "Today" section' },

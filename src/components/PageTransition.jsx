@@ -34,7 +34,7 @@ function FlapName({ text, startDelay = 450 }) {
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             minWidth: '0.6em',
-            color: s.settled ? 'var(--text)' : 'rgba(17,24,39,0.28)',
+            color: s.settled ? 'var(--text)' : 'color-mix(in srgb, var(--text) 28%, transparent)',
           }}
         >
           {s.ch || ' '}
@@ -121,7 +121,7 @@ export default function PageTransition() {
           100% { background-position: 15% 20%; }
         }
         .pt-gradient-bg {
-          background-image: linear-gradient(120deg, #ffffff 0%, #ffd9d6 15%, #f28b86 32%, #ffffff 48%, #b9d2f5 64%, #6f9fe6 80%, #ffffff 100%);
+          background-image: linear-gradient(120deg, var(--c-surface) 0%, var(--ov-1) 15%, var(--ov-2) 32%, var(--c-surface) 48%, var(--ov-3) 64%, var(--ov-4) 80%, var(--c-surface) 100%);
           background-size: 280% 280%;
           animation: ptGradientShift 15s ease-in-out infinite;
         }
@@ -212,7 +212,7 @@ export default function PageTransition() {
             }} />
             <div style={{
               position: 'relative', width: '100%', height: '100%', borderRadius: 32,
-              background: '#fff', border: '1px solid rgba(17,24,39,0.06)',
+              background: '#ffffff', border: '1px solid rgba(17,24,39,0.06)',
               boxShadow: '0 20px 46px rgba(230,57,70,0.14), 0 4px 14px rgba(17,24,39,0.06)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22,
             }}>

@@ -132,7 +132,7 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
       {!editing && slot.artistId ? (
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           {slot.logoUrl && (
-            <img src={slot.logoUrl} alt={slot.artistName} style={{ width:44, height:44, objectFit:'contain', background:'#fff', borderRadius:8, border:'1px solid var(--border)' }} />
+            <img src={slot.logoUrl} alt={slot.artistName} style={{ width:44, height:44, objectFit:'contain', background:'var(--c-surface)', borderRadius:8, border:'1px solid var(--border)' }} />
           )}
           <div style={{ flex:1, minWidth:0 }}>
             <p style={{ fontWeight:700, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.artistName}</p>
@@ -143,7 +143,7 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
       ) : pendingFile ? (
         <div>
           <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10 }}>
-            <img src={pendingPreviewUrl} alt="" style={{ width:44, height:44, objectFit:'contain', background:'#fff', borderRadius:8, border:'1px solid var(--border)', flexShrink:0 }} />
+            <img src={pendingPreviewUrl} alt="" style={{ width:44, height:44, objectFit:'contain', background:'var(--c-surface)', borderRadius:8, border:'1px solid var(--border)', flexShrink:0 }} />
             <p style={{ fontSize:12, color:'var(--text2)', lineHeight:1.4 }}>Dai un nome a questo artista prima di salvarlo, così lo ritrovi facilmente in futuro.</p>
           </div>
           <input
@@ -182,7 +182,7 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
                     onClick={() => pickArtist(a)}
                     style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:10, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 10px', textAlign:'left' }}
                   >
-                    <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'#fff', borderRadius:5, flexShrink:0 }} />
+                    <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'var(--c-surface)', borderRadius:5, flexShrink:0 }} />
                     <span style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
                   </button>
                   <button
@@ -206,7 +206,7 @@ export default function ArtistSlotPicker({ slot, label, artists, onChange, onRem
                     onClick={() => pickArtist(a)}
                     style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:10, background:'var(--card)', border:'1px solid var(--border)', borderRadius:8, padding:'8px 10px', textAlign:'left' }}
                   >
-                    <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'#fff', borderRadius:5, flexShrink:0 }} />
+                    <img src={a.logoUrl} alt={a.name} style={{ width:28, height:28, objectFit:'contain', background:'var(--c-surface)', borderRadius:5, flexShrink:0 }} />
                     <span style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</span>
                   </button>
                   <button

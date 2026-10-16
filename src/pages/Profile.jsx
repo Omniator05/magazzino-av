@@ -7,25 +7,10 @@ import { reauthenticateWithCredential, EmailAuthProvider, updatePassword as fbUp
 import { useCenteredModal } from '../hooks/useCenteredModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import SegmentedControl from '../components/SegmentedControl'
+import LogoutButton from '../components/LogoutButton'
+import { getThemePref, setThemePref } from '../utils/theme'
 import { hasUnseenWhatsNew } from '../utils/whatsNew'
 import { isPushAvailable, isPushEnabled, enablePushNotifications, disablePushNotifications } from '../utils/pushNotifications'
-
-const AVATARS = [
-  // Espressioni — le più usate come avatar
-  '😊','😎','😄','🤓','😏','🤠','🥳','😤',
-  // Energia / personalità
-  '💪','🔥','⚡','⭐','🏆','🎯','🚀','🌟',
-  // Lavoro & settore AV
-  '👷','🔧','🎚️','🔊','📦','🚛','🛠️','🎛️',
-  // Due un po' giocosi + classici da avatar
-  '🤖','🦄','🦁','🐻','🦊','☕','🎸','🎵',
-]
-
-const IconPencil = () => (
-  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-  </svg>
-)
 
 const IconCheck = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -65,13 +50,13 @@ function Switch({ enabled, onClick, disabled, label }) {
       disabled={disabled}
       style={{
         width: 46, height: 26, borderRadius: 13, flexShrink: 0, position: 'relative',
-        background: enabled ? 'var(--accent)' : 'var(--border)',
+        background: enabled ? '#e63946' : 'var(--c-dash)',
         opacity: disabled ? 0.6 : 1,
       }}
     >
       <span style={{
         position: 'absolute', top: 3, left: enabled ? 23 : 3,
-        width: 20, height: 20, borderRadius: '50%', background: '#fff',
+        width: 20, height: 20, borderRadius: '50%', background: 'var(--c-surface)',
         boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.15s ease',
       }} />
     </button>
@@ -84,7 +69,7 @@ function Switch({ enabled, onClick, disabled, label }) {
 // Popup centrato (stile dialogo, come il tutorial o la conferma di logout)
 // invece di bottom-sheet: le impostazioni non sono un'azione rapida da un
 // contesto, meritano la stessa "finestra" delle altre schermate di sistema.
-export default function Profile({ onClose }) {
+export default function Profile({ onClose, showLogout }) {
   const { t, i18n } = useTranslation()
   const { profile, user, updateProfileData } = useAuth()
   const navigate = useNavigate()
@@ -92,12 +77,10 @@ export default function Profile({ onClose }) {
   const modal = useCenteredModal(onClose)
   useModalScrollLock(true)
 
+  const [themePref, setThemePrefState] = useState(getThemePref)
   const [name, setName]           = useState(profile?.name || '')
   const [savingName, setSavingName] = useState(false)
   const [nameOk, setNameOk]       = useState(false)
-
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const emojiModal = useCenteredModal(() => setShowEmojiPicker(false))
 
   const [currentPwd,  setCurrentPwd]  = useState('')
   const [newPwd,      setNewPwd]      = useState('')
@@ -137,7 +120,6 @@ export default function Profile({ onClose }) {
     }
   }
 
-  const avatar  = profile?.avatar || null
   const initial = (profile?.name || profile?.username || '?').charAt(0).toUpperCase()
   const role    = profile?.role === 'admin' ? t('profile.roleAdmin') : t('profile.roleWorker')
 
@@ -149,16 +131,6 @@ export default function Profile({ onClose }) {
       setNameOk(true)
       setTimeout(() => setNameOk(false), 2500)
     } finally { setSavingName(false) }
-  }
-
-  const selectEmoji = async (emoji) => {
-    await updateProfileData({ avatar: emoji })
-    setShowEmojiPicker(false)
-  }
-
-  const removeEmoji = async () => {
-    await updateProfileData({ avatar: null })
-    setShowEmojiPicker(false)
   }
 
   const changePassword = async () => {
@@ -206,7 +178,8 @@ export default function Profile({ onClose }) {
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 22px 24px', width:'100%', maxWidth:400, maxHeight:'85dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: modal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
+        className="rc-ev-form"
+        style={{ position:'relative', background:'var(--c-sheet)', borderRadius:24, padding:'22px 20px 20px', width:'100%', maxWidth:400, maxHeight:'85dvh', overflowY:'auto', boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: modal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
       >
         {/* Il nome/password salvati e l'errore di password sono solo visivi
             (testo del bottone che cambia, o un paragrafo rosso) — senza
@@ -215,49 +188,15 @@ export default function Profile({ onClose }) {
           {nameOk ? t('profile.saved') : ''}{pwdOk ? ` ${t('profile.passwordChanged')}` : ''}
         </div>
         <div aria-live="assertive" role="alert" style={srOnlyStyle}>{pwdError}</div>
-        <button onClick={modal.close} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:44, height:44, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
-        <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20, letterSpacing:'-0.3px' }}>{t('profile.title')}</h2>
+        <button onClick={modal.close} aria-label={t('common.close')} className="btn-no-anim"
+          style={{ position:'absolute', top:16, right:16, width:32, height:32, borderRadius:10, background:'var(--c-fill2)', color:'var(--c-ink2)', fontSize:15, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
 
-        {/* Riga identità — orizzontale, non più un hero centrato */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 0 20px' }}>
-          <button
-            onClick={() => setShowEmojiPicker(true)}
-            aria-label={t('profile.chooseAvatar')}
-            style={{
-              position: 'relative', width: 60, height: 60, borderRadius: 18, flexShrink: 0,
-              background: 'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: avatar ? 30 : 24, color: 'white', fontWeight: 800,
-              boxShadow: '0 6px 18px rgba(34,44,66,0.28)', border: 'none', cursor: 'pointer',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            {avatar || initial}
-            <span style={{
-              position: 'absolute', bottom: -3, right: -3,
-              width: 22, height: 22, borderRadius: '50%',
-              background: 'var(--accent)', color: 'white',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '2px solid var(--bg)',
-              boxShadow: '0 2px 6px rgba(230,57,70,0.4)',
-            }}>
-              <IconPencil />
-            </span>
-          </button>
-
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {profile?.name || profile?.username}
-            </p>
-            <span style={{
-              display: 'inline-block', marginTop: 5,
-              background: profile?.role === 'admin' ? 'rgba(37,99,235,0.10)' : 'rgba(5,150,105,0.10)',
-              color:      profile?.role === 'admin' ? '#2563eb' : '#059669',
-              border:    `1px solid ${profile?.role === 'admin' ? 'rgba(37,99,235,0.22)' : 'rgba(5,150,105,0.22)'}`,
-              borderRadius: 20, padding: '3px 12px', fontSize: 11.5, fontWeight: 700,
-            }}>
-              {role}
-            </span>
+        {/* Identità: iniziale in un cerchio, nome e ruolo */}
+        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 40px 22px 0' }}>
+          <div aria-hidden="true" style={{ width:58, height:58, borderRadius:'50%', flexShrink:0, background:'#e63946', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, fontWeight:800 }}>{initial}</div>
+          <div style={{ minWidth:0, flex:1 }}>
+            <h2 style={{ fontSize:19, fontWeight:800, margin:0, letterSpacing:'-0.3px', color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{profile?.name || profile?.username}</h2>
+            <span style={{ display:'inline-block', marginTop:5, background:'var(--c-fill2)', color:'var(--c-ink2)', borderRadius:20, padding:'3px 11px', fontSize:11.5, fontWeight:700 }}>{role}</span>
           </div>
         </div>
 
@@ -299,6 +238,21 @@ export default function Profile({ onClose }) {
               value={profile?.language || 'it'}
               onChange={selectLanguage}
               disabled={savingLang}
+            />
+          </div>
+        </GroupCard>
+
+        {/* Gruppo: Aspetto — chiaro, scuro o automatico (segue il sistema) */}
+        <GroupCard label={t('profile.sectionAppearance')}>
+          <div style={{ padding: 14 }}>
+            <SegmentedControl
+              options={[
+                { value: 'light', label: t('profile.themeLight') },
+                { value: 'dark', label: t('profile.themeDark') },
+                { value: 'auto', label: t('profile.themeAuto') },
+              ]}
+              value={themePref}
+              onChange={v => { setThemePrefState(v); setThemePref(v) }}
             />
           </div>
         </GroupCard>
@@ -400,49 +354,11 @@ export default function Profile({ onClose }) {
           </GroupCard>
         )}
 
-        {/* Emoji picker — stesso stile popup centrato, sopra al popup Profilo */}
-        {showEmojiPicker && (
-          <div
-            onClick={emojiModal.close}
-            style={{ position:'fixed', inset:0, zIndex:10060, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24, animation: emojiModal.closing ? 'profFadeOut 0.2s ease forwards' : 'profFadeIn 0.15s ease' }}
-          >
-            <div
-              onClick={e => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              style={{ position:'relative', background:'var(--card)', borderRadius:24, padding:'26px 22px 24px', width:'100%', maxWidth:380, boxShadow:'0 24px 70px rgba(0,0,0,0.35)', animation: emojiModal.closing ? 'profPopOut 0.2s ease forwards' : 'profPopIn 0.28s cubic-bezier(0.32,0.72,0,1)' }}
-            >
-              <button onClick={emojiModal.close} aria-label={t('common.close')} style={{ position:'absolute', top:16, right:16, width:44, height:44, borderRadius:'50%', background:'var(--card2)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, border:'none' }}>✕</button>
-              <h2 style={{ fontSize:20, fontWeight:700, marginBottom:20, letterSpacing:'-0.3px' }}>{t('profile.chooseAvatar')}</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: avatar ? 14 : 0 }}>
-                {AVATARS.map(em => (
-                  <button
-                    key={em}
-                    onClick={() => selectEmoji(em)}
-                    aria-label={t('profile.selectAvatarAria', { emoji: em })}
-                    aria-pressed={avatar === em}
-                    style={{
-                      fontSize: 26, padding: '8px 0', minHeight: 40, borderRadius: 10, cursor: 'pointer',
-                      background: avatar === em ? 'rgba(230,57,70,0.10)' : 'var(--card2)',
-                      border: avatar === em ? '2px solid var(--accent)' : '2px solid transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    {em}
-                  </button>
-                ))}
-              </div>
-              {avatar && (
-                <button
-                  onClick={removeEmoji}
-                  style={{ width: '100%', marginTop: 4, padding: '10px', borderRadius: 10, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text2)', fontSize: 13, fontWeight: 600 }}
-                >
-                  {t('profile.removeAvatar')}
-                </button>
-              )}
-            </div>
-          </div>
+        {/* Uscita: nella Dashboard non c'è più il pulsante in alto, sta qui in fondo. */}
+        {showLogout && (
+          <LogoutButton name={profile?.name} style={{ width: '100%', padding: '13px 16px', borderRadius: 13, background: 'var(--c-surface)', border: '1px solid var(--c-line)', color: 'var(--c-danger)', fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }} />
         )}
+
       </div>
       <style>{`
         @keyframes profFadeIn  { from{opacity:0} to{opacity:1} }
@@ -454,8 +370,8 @@ export default function Profile({ onClose }) {
   )
 }
 
-const rowLabelStyle = { display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }
-const nameInputStyle = { border: '1.5px solid var(--border)', background: 'var(--card2)', borderRadius: 10, padding: '9px 12px', fontSize: 15.5, fontWeight: 600, color: 'var(--text)', width: '100%' }
+const rowLabelStyle = { display: 'block', fontSize: 11, fontWeight: 800, color: 'var(--c-ink2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }
+const nameInputStyle = { width: '100%' }
 
 // Stile "lista raggruppata" (come le impostazioni di iOS/Android): un unico
 // card per gruppo, righe separate da un filo invece di più card impilate —
@@ -463,8 +379,8 @@ const nameInputStyle = { border: '1.5px solid var(--border)', background: 'var(-
 function GroupCard({ label, children }) {
   return (
     <div style={{ padding: '0 0 20px' }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 10 }}>{label}</p>
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+      <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-ink3)', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px 2px' }}>{label}</p>
+      <div style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 16, overflow: 'hidden' }}>
         {children}
       </div>
     </div>
@@ -476,7 +392,7 @@ function Row({ children, first }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, minHeight: 48,
       padding: '12px 16px',
-      borderTop: first ? 'none' : '1px solid var(--border)',
+      borderTop: first ? 'none' : '1px solid var(--c-fill)',
     }}>
       {children}
     </div>

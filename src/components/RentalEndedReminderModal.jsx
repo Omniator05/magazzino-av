@@ -73,7 +73,7 @@ export default function RentalEndedReminderModal({ events, today, navigate }) {
         <h3 style={{ fontSize:18, fontWeight:800, color:'var(--text)', margin:'0 0 4px', letterSpacing:'-0.3px', textAlign:'center', display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
           {t('rentalEndedReminder.title')}
           {expiredRents.length > 1 && (
-            <span style={{ background:'#fed7aa', borderRadius:10, padding:'1px 8px', fontSize:13, fontWeight:700, color:'#9a3412' }}>{expiredRents.length}</span>
+            <span style={{ background:'#fed7aa', borderRadius:10, padding:'1px 8px', fontSize:13, fontWeight:700, color:'var(--c-orange-ink)' }}>{expiredRents.length}</span>
           )}
         </h3>
         <p style={{ color:'var(--text2)', fontSize:13, textAlign:'center', margin:'0 0 16px' }}>{t('rentalEndedReminder.desc')}</p>
@@ -85,7 +85,7 @@ export default function RentalEndedReminderModal({ events, today, navigate }) {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
                   <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{inst.name}</p>
-                  <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+                  <span style={{ background:'var(--c-violet-bg)', color:'#5b4fcf', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
                 </div>
                 {inst.location && <p style={{ fontSize:11.5, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:3 }}><Pin size={11} /> {inst.location}</p>}
               </div>

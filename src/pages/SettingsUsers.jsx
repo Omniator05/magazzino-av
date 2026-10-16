@@ -13,7 +13,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, order
 import { Check, Save, Trash, Edit, User, Warn, Box, Mail } from '../components/Icon'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
 import {
@@ -490,7 +490,7 @@ export default function SettingsUsers() {
           color: roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)',
           fontWeight: 800, fontSize: 18,
         }}>
-          {u.avatar || (u.name || u.username || '?').charAt(0).toUpperCase()}
+          {(u.name || u.username || '?').charAt(0).toUpperCase()}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</p>
@@ -519,13 +519,7 @@ export default function SettingsUsers() {
     <div className="page users-page">
       <Toast message={toast} />
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-        <BackHomeButton to="/admin/settings" />
-        <div style={{ textAlign:'right' }}>
-          <h1>{t('adminUsers.title')}</h1>
-          <p>{t('adminUsers.totalAccounts', { count: users.length })}</p>
-        </div>
-      </div>
+      <PageHeader title={t('adminUsers.title')} subtitle={t('adminUsers.totalAccounts', { count: users.length })} backTo="/admin/settings" />
 
       <FabButton onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} ariaLabel={t('adminUsers.newButton')} />
 
@@ -695,7 +689,7 @@ export default function SettingsUsers() {
                   background: showDetail.role === 'admin' ? 'rgba(233,69,96,0.15)' : showDetail.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.12)',
                   color: showDetail.role === 'admin' ? 'var(--accent)' : showDetail.active !== false ? 'var(--blue)' : 'var(--text2)',
                 }}>
-                  {showDetail.avatar || (showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
+                  {(showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
                 </div>
                 <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
                 {showDetail.username && (

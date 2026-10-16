@@ -12,13 +12,13 @@ const PHASE_META = {
   smontaggio: { color: '#ea580c', labelKey: 'calendar.legendDisassembly' },
 }
 
-const sectionLabel = { margin: 0, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#9a9a9a' }
-const valueStyle = { margin: 0, fontSize: 14, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.4 }
+const sectionLabel = { margin: 0, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--c-ink3)' }
+const valueStyle = { margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--c-ink)', lineHeight: 1.4 }
 
 function Row({ icon, label, children }) {
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '11px 0', borderBottom: '1px solid #eceae6' }}>
-      <span style={{ flexShrink: 0, color: '#9a9a9a', display: 'flex', marginTop: 2 }}>{icon}</span>
+    <div style={{ display: 'flex', gap: 12, padding: '11px 0', borderBottom: '1px solid var(--c-fill)' }}>
+      <span style={{ flexShrink: 0, color: 'var(--c-ink3)', display: 'flex', marginTop: 2 }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ ...sectionLabel, marginBottom: 3 }}>{label}</p>
         {children}
@@ -87,7 +87,7 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
   return (
     <div>
       {event.type === 'installation' && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#ede9fe', color: '#5b4fcf', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--c-violet-bg)', color: '#5b4fcf', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
           <Wrench size={12} /> {t('events.installLabel')}
         </span>
       )}
@@ -110,7 +110,7 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
               <p key={p.key} style={{ ...valueStyle, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
                 <span style={{ color: p.color, fontWeight: 800 }}>{t(p.labelKey)}</span>
-                <span style={{ color: '#6b6b6b', fontWeight: 600 }}>{fmt(p.date, { weekday: 'short', day: 'numeric', month: 'short' })}{p.time ? ` · ${p.time}` : ''}</span>
+                <span style={{ color: 'var(--c-ink2)', fontWeight: 600 }}>{fmt(p.date, { weekday: 'short', day: 'numeric', month: 'short' })}{p.time ? ` · ${p.time}` : ''}</span>
               </p>
             ))}
           </div>
@@ -119,8 +119,8 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
       {hasManager && (
         <Row icon={<User size={15} />} label={t('eventSummary.managerLabel')}>
           {manager.name && <p style={valueStyle}>{manager.name}</p>}
-          {manager.phone && <p style={{ margin: '3px 0 0', fontSize: 13 }}><a href={`tel:${manager.phone.replace(/\s+/g, '')}`} style={{ color: '#1a1a1a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><Phone size={12} /> {manager.phone}</a></p>}
-          {manager.email && <p style={{ margin: '3px 0 0', fontSize: 13 }}><a href={`mailto:${manager.email}`} style={{ color: '#1a1a1a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><Mail size={12} /> {manager.email}</a></p>}
+          {manager.phone && <p style={{ margin: '3px 0 0', fontSize: 13 }}><a href={`tel:${manager.phone.replace(/\s+/g, '')}`} style={{ color: 'var(--c-ink)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><Phone size={12} /> {manager.phone}</a></p>}
+          {manager.email && <p style={{ margin: '3px 0 0', fontSize: 13 }}><a href={`mailto:${manager.email}`} style={{ color: 'var(--c-ink)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, textDecoration: 'none' }}><Mail size={12} /> {manager.email}</a></p>}
         </Row>
       )}
       {people.length > 0 && (
@@ -130,7 +130,7 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
               <p key={p.key} style={{ ...valueStyle, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                 {p.name}
                 {(p.hours || (showPeopleDate && p.date)) && (
-                  <span style={{ color: '#6b6b6b', fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ color: 'var(--c-ink2)', fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {showPeopleDate && p.date ? fmt(p.date, { day: 'numeric', month: 'short' }) : ''}{showPeopleDate && p.date && p.hours ? ' · ' : ''}{p.hours || ''}
                   </span>
                 )}
@@ -157,30 +157,30 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
             <p style={sectionLabel}>{t('archive.loadingListTitle')}</p>
             {total > 0 && (
-              <span style={{ fontSize: 12, fontWeight: 700, color: allBack ? '#15803d' : '#ea580c' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: allBack ? 'var(--c-green)' : '#ea580c' }}>
                 {t('archive.itemsCount', { count: total })} · {allBack ? t('archive.allReturned') : t('archive.partialReturned', { returned, total })}
               </span>
             )}
           </div>
           {total === 0 ? (
-            <p style={{ margin: 0, fontSize: 13, color: '#9a9a9a', fontStyle: 'italic' }}>{t('archive.noItems')}</p>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--c-ink3)', fontStyle: 'italic' }}>{t('archive.noItems')}</p>
           ) : (
-            <div style={{ background: '#faf9f7', border: '1px solid #e0ddd6', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ background: 'var(--c-alt)', border: '1px solid var(--c-line)', borderRadius: 14, overflow: 'hidden' }}>
               {lists.map(l => {
                 const rows = items.filter(i => rowListId(i) === l.id)
                 if (rows.length === 0) return null
                 return (
                   <div key={l.id}>
                     {multiList && (
-                      <p style={{ ...sectionLabel, padding: '11px 14px 5px', background: '#f4f3ef', borderTop: '1px solid #eceae6' }}>{listName(l)} · {rows.length}</p>
+                      <p style={{ ...sectionLabel, padding: '11px 14px 5px', background: 'var(--c-sheet)', borderTop: '1px solid var(--c-fill)' }}>{listName(l)} · {rows.length}</p>
                     )}
                     {rows.map((item, i) => (
-                      <div key={item.id || i} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 14px', borderTop: i > 0 ? '1px solid #eceae6' : 'none' }}>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: '#1a1a1a', overflowWrap: 'anywhere' }}>
+                      <div key={item.id || i} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 14px', borderTop: i > 0 ? '1px solid var(--c-fill)' : 'none' }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--c-ink)', overflowWrap: 'anywhere' }}>
                           {item.name}
                           {item.loaded && !item.returned && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 800, color: '#ea580c' }}>{t('archive.notReturned')}</span>}
                         </span>
-                        <span style={{ flexShrink: 0, fontSize: 14, fontWeight: 800, color: '#6b6b6b', fontVariantNumeric: 'tabular-nums' }}>×{item.qty || 1}</span>
+                        <span style={{ flexShrink: 0, fontSize: 14, fontWeight: 800, color: 'var(--c-ink2)', fontVariantNumeric: 'tabular-nums' }}>×{item.qty || 1}</span>
                       </div>
                     ))}
                   </div>

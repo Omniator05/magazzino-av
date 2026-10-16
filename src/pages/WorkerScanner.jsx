@@ -245,7 +245,7 @@ export default function WorkerScanner() {
   const fireConfetti = () => {
     const duration = 4000
     const load = () => {
-      const colors = ['#7c3aed','#a78bfa','#34d399','#fbbf24','#f472b6','#60a5fa','#fb923c','#fff','#f87171']
+      const colors = ['#7c3aed','#a78bfa','#34d399','#fbbf24','#f472b6','#60a5fa','#fb923c','#ffffff','#f87171']
       const end = Date.now() + duration
 
       // Prima salva: esplosione dai due lati in basso
@@ -1043,16 +1043,16 @@ export default function WorkerScanner() {
           style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
         >
           <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true"
-            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
-            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>
+            style={{ background:'var(--c-surface)', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'var(--c-ink)', margin:'0 0 6px', letterSpacing:'-0.3px' }}>
               {t('workerScanner.consumableReturnTitle')}
             </h3>
-            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
+            <p style={{ fontSize:14, color:'var(--c-ink2)', margin:0, lineHeight:1.45 }}>
               {t('workerScanner.consumableReturnMessage', { name: consumableConfirm.name })}
             </p>
             <div style={{ display:'flex', gap:10, marginTop:20 }}>
               <button onClick={() => resolveConsumableConfirm(false)}
-                style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'rgba(220,38,38,0.1)', color:'#dc2626', border:'none', cursor:'pointer' }}>
+                style={{ flex:1, padding:12, borderRadius:13, fontSize:14, fontWeight:700, background:'rgba(220,38,38,0.1)', color:'var(--c-danger)', border:'none', cursor:'pointer' }}>
                 {t('workerScanner.consumableReturnConsumed')}
               </button>
               <button onClick={() => resolveConsumableConfirm(true)}
@@ -1075,11 +1075,11 @@ export default function WorkerScanner() {
           style={{ position:'fixed', inset:0, zIndex:10050, background:'rgba(10,12,18,0.5)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}
         >
           <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true"
-            style={{ background:'#fff', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
-            <h3 style={{ fontSize:18, fontWeight:800, color:'#111827', margin:'0 0 6px', letterSpacing:'-0.3px' }}>
+            style={{ background:'var(--c-surface)', borderRadius:24, padding:'26px 22px 20px', width:'100%', maxWidth:330, textAlign:'center', boxShadow:'0 24px 70px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ fontSize:18, fontWeight:800, color:'var(--c-ink)', margin:'0 0 6px', letterSpacing:'-0.3px' }}>
               {t('workerScanner.loadConflictTitle')}
             </h3>
-            <p style={{ fontSize:14, color:'#6b7280', margin:0, lineHeight:1.45 }}>
+            <p style={{ fontSize:14, color:'var(--c-ink2)', margin:0, lineHeight:1.45 }}>
               {t(loadConflict.reason === 'broken' ? 'workerScanner.loadConflictBrokenMessage' : 'workerScanner.loadConflictLoadedMessage', { name: loadConflict.name })}
             </p>
             <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:20 }}>

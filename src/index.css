@@ -795,44 +795,105 @@ button.rc-action-btn:not(:disabled):active {
   --dash-card-border:  #e5e7eb;
   --dash-pill-bg:      #f3f4f6;
   --dash-pill-border:  #e5e7eb;
+  color-scheme: light;
+  /* Token "rc" (nuovo linguaggio grafico): superfici, righe, pillole, testi. */
+  --c-surface: #ffffff;  --c-line: #e0ddd6;   --c-fill: #eceae6;   --c-fill2: #e8e5df; --c-fill-hover: #e3e0da;
+  --c-ink: #1a1a1a;      --c-ink2: #6b6b6b;   --c-ink3: #9a9a9a;
+  --c-sheet: #f4f3ef;    --c-alt: #faf9f7;    --c-dash: #d6d3cb;
+  --c-green: #15803d;    --c-amber: #b45309;  --c-danger: #dc2626;  --c-orange-ink: #9a3412;
+  --c-violet-bg: #ede9fe; --c-blue-bg: #dbeafe; --c-orange-bg: #ffedd5;
+  --c-t-red: #fdecee;    --c-t-blue: #eaf1fb; --c-t-amber: #fbf1dc;  --c-t-green: #e9f5ec;
+  --tab-shadow: rgba(34,44,66,0.18);
+  --ov-1: #ffd9d6; --ov-2: #f28b86; --ov-3: #b9d2f5; --ov-4: #6f9fe6;
 }
 
-[data-theme="light"] body,
-[data-theme="light"] html,
-[data-theme="light"] #root {
+
+/* ── TEMA SCURO ──────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:      #121211;
+  --bg2:     #1a1a18;
+  --bg3:     #232321;
+  --card:    #1c1c1a;
+  --card2:   #262624;
+  --card3:   #2f2f2c;
+
+  --text:    #f2f0ea;
+  --text2:   #a8a59d;
+  --text3:   #7b7870;
+
+  --border:  rgba(255,255,255,0.09);
+  --border2: rgba(255,255,255,0.14);
+
+  --glow-accent: rgba(230,57,70,0.20);
+  --glow-blue:   rgba(90,169,230,0.16);
+  --glow-green:  rgba(62,207,142,0.14);
+
+  --accent:  #e63946;
+  --accent2: #f0a53a;
+  --blue:    #5aa9e6;
+  --green:   #3ecf8e;
+  --red:     #ff6b6b;
+  --btn-primary: #22c55e;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.45);
+  --shadow:    0 4px 20px rgba(0,0,0,0.55);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.65);
+
+  --surface:           #121211;
+  --dash-title:        #f2f0ea;
+  --dash-muted:        #a8a59d;
+  --dash-card:         #1c1c1a;
+  --dash-card-border:  #33322e;
+  --dash-pill-bg:      #262624;
+  --dash-pill-border:  #33322e;
+
+  --c-surface: #1c1c1a;  --c-line: #34332f;   --c-fill: #2a2927;   --c-fill2: #33322e; --c-fill-hover: #3b3a36;
+  --c-ink: #f2f0ea;      --c-ink2: #a8a59d;   --c-ink3: #7b7870;
+  --c-sheet: #171715;    --c-alt: #181816;    --c-dash: #44423d;
+  --c-green: #4ade80;    --c-amber: #fbbf24;  --c-danger: #f87171;  --c-orange-ink: #fdba74;
+  --c-violet-bg: rgba(124,111,205,0.24); --c-blue-bg: rgba(37,99,235,0.26); --c-orange-bg: rgba(234,88,12,0.24);
+  --c-t-red: rgba(230,57,70,0.18);  --c-t-blue: rgba(37,99,235,0.20); --c-t-amber: rgba(245,166,35,0.17); --c-t-green: rgba(62,207,142,0.15);
+  --tab-shadow: rgba(0,0,0,0.55);
+  --ov-1: #32191c; --ov-2: #5b2a30; --ov-3: #1a2740; --ov-4: #28446c;
+}
+
+[data-theme] body,
+[data-theme] html,
+[data-theme] #root {
   background: var(--bg);
   color: var(--text);
 }
 
-[data-theme="light"] .tab-bar {
-  background: rgba(245,245,243,0.90);
-  border-top: 1px solid rgba(0,0,0,0.08);
+[data-theme] .tab-bar {
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  border-top: 1px solid var(--border);
 }
 
-[data-theme="light"] .modal {
+[data-theme] .modal {
   background: var(--bg2);
   border-top: 1px solid var(--border2);
 }
 
-[data-theme="light"] input,
-[data-theme="light"] textarea,
-[data-theme="light"] select {
-  background: #ffffff;
-  border-color: rgba(0,0,0,0.15);
+[data-theme] input,
+[data-theme] textarea,
+[data-theme] select {
+  background: var(--c-surface);
+  border-color: var(--border2);
   color: var(--text);
 }
 
-[data-theme="light"] .search-bar {
-  background: rgba(245,245,243,0.92);
+[data-theme] .search-bar {
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
 }
 
-[data-theme="light"] .event-card,
-[data-theme="light"] .card {
+[data-theme] .event-card,
+[data-theme] .card {
   background: var(--card);
   box-shadow: var(--shadow-sm);
 }
 
-[data-theme="light"] .item-row:active { background: var(--card2); }
+[data-theme] .item-row:active { background: var(--card2); }
 
 /* ── BB8 THEME TOGGLE ─────────────────────────── */
 .bb8-switch {
@@ -1213,41 +1274,41 @@ button.rc-action-btn:not(:disabled):active {
 .kit-components-panel .kit-comp-row:nth-child(8) { transition-delay: 0.04s; }
 .kit-comp-row:last-child { border-bottom: none; }
 /* ── Restyling "Magazzino" — stesso linguaggio del nuovo Calendario ───────────
-   Superfici bianche, righe sottili #e0ddd6, pillole #eceae6, testo #1a1a1a,
+   Superfici bianche, righe sottili var(--c-line), pillole var(--c-fill), testo var(--c-ink),
    accento #e63946. Classi aggiunte SOLO dalla pagina Magazzino (Inventory.jsx
    e LinkedItemsEditor.jsx): il resto dell'app non cambia. I selettori
-   [data-theme="light"] servono a battere le regole globali di input/modal. */
-.rc-page-header { background: #fff; border-bottom: 1px solid #e0ddd6; padding: 56px 20px 14px; }
-.rc-page-header h1 { font-size: 26px; letter-spacing: -0.5px; color: #1a1a1a; }
-.rc-page-header p { color: #9a9a9a; }
+   [data-theme] servono a battere le regole globali di input/modal. */
+.rc-page-header { background: var(--c-surface); border-bottom: 1px solid var(--c-line); padding: 56px 20px 14px; }
+.rc-page-header h1 { font-size: 26px; letter-spacing: -0.5px; color: var(--c-ink); }
+.rc-page-header p { color: var(--c-ink3); }
 @media (min-width: 768px) {
   .rc-page-header { padding: 18px 32px 14px; }
   .rc-page-header h1 { font-size: 24px; }
 }
 button.rc-pill-btn {
-  background: #eceae6; color: #6b6b6b; border: none; border-radius: 10px;
+  background: var(--c-fill); color: var(--c-ink2); border: none; border-radius: 10px;
   font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
 }
-button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: none; box-shadow: none; transform: none; background: #e3e0da; }
-[data-theme="light"] .search-bar.rc-inv-search { background: rgba(245,245,243,0.92); border-bottom: none; }
-[data-theme="light"] .rc-inv-search input { background: #eceae6; border: 1px solid transparent; border-radius: 10px; font-size: 14px; }
-[data-theme="light"] .rc-inv-search input:focus { background: #fff; border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
-.rc-inv-card .item-row { border-bottom-color: #eceae6; padding: 13px 16px; }
-.rc-inv-card .item-row:active { background: #faf9f7; }
-.rc-inv-card .item-icon { background: #eceae6; border-radius: 12px; }
+button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: none; box-shadow: none; transform: none; background: var(--c-fill-hover); }
+[data-theme] .search-bar.rc-inv-search { background: color-mix(in srgb, var(--bg) 92%, transparent); border-bottom: none; }
+[data-theme] .rc-inv-search input { background: var(--c-fill); border: 1px solid transparent; border-radius: 10px; font-size: 14px; }
+[data-theme] .rc-inv-search input:focus { background: var(--c-surface); border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+.rc-inv-card .item-row { border-bottom-color: var(--c-fill); padding: 13px 16px; }
+.rc-inv-card .item-row:active { background: var(--c-alt); }
+.rc-inv-card .item-icon { background: var(--c-fill); border-radius: 12px; }
 
 /* Fogli (modal) del Magazzino */
-[data-theme="light"] .modal.rc-sheet { background: #f4f3ef; border-top: none; border-radius: 24px 24px 0 0; padding: 8px 22px 40px; }
-.modal.rc-sheet::before { background: #d9d6cf; margin: 10px auto 16px; }
-.modal.rc-sheet h2 { font-size: 18px; font-weight: 800; margin-bottom: 18px; color: #1a1a1a; padding-right: 44px; }
-.modal.rc-sheet .close-btn { top: 20px; right: 20px; width: 30px; height: 30px; border-radius: 10px; background: #e8e5df; color: #6b6b6b; font-size: 15px; }
-.rc-sheet .form-group label { font-size: 11px; font-weight: 800; letter-spacing: 0.4px; color: #6b6b6b; margin-bottom: 6px; }
-[data-theme="light"] .rc-sheet input,
-[data-theme="light"] .rc-sheet textarea,
-[data-theme="light"] .rc-sheet select { background: #fbfaf8; border: 1px solid #e0ddd6; border-radius: 10px; padding: 11px 13px; font-size: 14.5px; }
-[data-theme="light"] .rc-sheet input:focus,
-[data-theme="light"] .rc-sheet textarea:focus,
-[data-theme="light"] .rc-sheet select:focus { background: #fff; border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+[data-theme] .modal.rc-sheet { background: var(--c-sheet); border-top: none; border-radius: 24px 24px 0 0; padding: 8px 22px 40px; }
+.modal.rc-sheet::before { background: var(--c-dash); margin: 10px auto 16px; }
+.modal.rc-sheet h2 { font-size: 18px; font-weight: 800; margin-bottom: 18px; color: var(--c-ink); padding-right: 44px; }
+.modal.rc-sheet .close-btn { top: 20px; right: 20px; width: 30px; height: 30px; border-radius: 10px; background: var(--c-fill2); color: var(--c-ink2); font-size: 15px; }
+.rc-sheet .form-group label { font-size: 11px; font-weight: 800; letter-spacing: 0.4px; color: var(--c-ink2); margin-bottom: 6px; }
+[data-theme] .rc-sheet input,
+[data-theme] .rc-sheet textarea,
+[data-theme] .rc-sheet select { background: var(--c-alt); border: 1px solid var(--c-line); border-radius: 10px; padding: 11px 13px; font-size: 14.5px; }
+[data-theme] .rc-sheet input:focus,
+[data-theme] .rc-sheet textarea:focus,
+[data-theme] .rc-sheet select:focus { background: var(--c-surface); border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
 
 /* Colonna laterale dell'Archivio (desktop): larga 0 finché non c'è una
    selezione, poi si apre da destra verso sinistra spingendo la lista. Il
@@ -1261,13 +1322,13 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
 
 /* Form evento nella colonna laterale del Calendario: campi bianchi con bordo
    sottile (invece del grigio), stesso linguaggio delle card. I selettori
-   [data-theme="light"] battono le regole globali degli input. */
-[data-theme="light"] .rc-ev-form input:not([type="checkbox"]):not(.tf-input),
-[data-theme="light"] .rc-ev-form textarea { background: #fff; border: 1px solid #e0ddd6; border-radius: 10px; font-size: 14px; padding: 10px 12px; }
-[data-theme="light"] .rc-ev-form input:not([type="checkbox"]):focus,
-[data-theme="light"] .rc-ev-form textarea:focus { border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
-.rc-ev-form .df-trigger, .rc-ev-form .tf-trigger { background: #fff !important; }
+   [data-theme] battono le regole globali degli input. */
+[data-theme] .rc-ev-form input:not([type="checkbox"]):not(.tf-input),
+[data-theme] .rc-ev-form textarea { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 10px; font-size: 14px; padding: 10px 12px; }
+[data-theme] .rc-ev-form input:not([type="checkbox"]):focus,
+[data-theme] .rc-ev-form textarea:focus { border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+.rc-ev-form .df-trigger, .rc-ev-form .tf-trigger { background: var(--c-surface) !important; }
 /* Pulsanti fissi in fondo alla colonna. Sotto ~1520px di larghezza la tab bar
    fluttuante (600px al centro) arriva fino alla colonna: più spazio sotto. */
-.rc-side-footer { flex-shrink: 0; padding: 14px 28px 22px; border-top: 1px solid #e0ddd6; background: #fff; }
+.rc-side-footer { flex-shrink: 0; padding: 14px 28px 22px; border-top: 1px solid var(--c-line); background: var(--c-surface); }
 @media (max-width: 1520px) { .rc-side-footer { padding-bottom: 104px; } }

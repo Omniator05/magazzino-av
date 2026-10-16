@@ -111,7 +111,7 @@ export default function TodayReminderModal({ events, today, navigate }) {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0, flexWrap:'wrap' }}>
                       <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{inst.name}</p>
-                      <span style={{ background:'#ede9fe', color:'#5b4fcf', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
+                      <span style={{ background:'var(--c-violet-bg)', color:'#5b4fcf', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
                       {phaseLabel && (
                         <span style={{ background:'var(--card2)', color:'var(--text2)', borderRadius:6, padding:'1px 6px', fontSize:9.5, fontWeight:800, flexShrink:0 }}>{phaseLabel}</span>
                       )}

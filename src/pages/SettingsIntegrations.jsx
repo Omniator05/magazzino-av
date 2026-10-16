@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { startGoogleCalendarConnect, disconnectGoogleCalendar, syncGoogleCalendarNow } from '../utils/googleCalendar'
 import { Check } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 
 // Sotto-pagina "Integrazioni" di Impostazioni — oggi solo Google Calendar.
 // Sync vera lato server (vedi api/google-oauth.js, .../callback.js,
@@ -95,10 +95,7 @@ export default function SettingsIntegrations() {
         </div>
       )}
 
-      <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-        <BackHomeButton to="/admin/settings" />
-        <h1 style={{ textAlign:'right' }}>{t('adminUsers.integrationsTitle')}</h1>
-      </div>
+      <PageHeader title={t('adminUsers.integrationsTitle')} backTo="/admin/settings" />
 
       <div style={{ margin:'0 16px 16px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
         <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.googleCalendarTitle')}</p>
@@ -106,7 +103,7 @@ export default function SettingsIntegrations() {
         {gError && <p style={{ color:'var(--red)', fontSize:12, marginBottom:10, fontWeight:600 }}>{gError}</p>}
         {team?.googleCalendarId ? (
           <>
-            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:4, color:'#15803d', fontSize:13, fontWeight:700 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:4, color:'var(--c-green)', fontSize:13, fontWeight:700 }}>
               <Check size={16} /> {t('adminUsers.googleCalendarConnected')}
             </div>
             {team.googleCalendarConnectedEmail && (

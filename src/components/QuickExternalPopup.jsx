@@ -27,9 +27,9 @@ export default function QuickExternalPopup({ onConfirm, onCancel, title, descrip
 
   return (
     <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 10050, background: 'rgba(10,12,18,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background: '#fff', borderRadius: 20, padding: '22px 20px', width: '100%', maxWidth: 320, boxShadow: '0 24px 70px rgba(0,0,0,0.35)' }}>
-        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginBottom: 4 }}>{title || t('staffTimeline.quickExternalTitle')}</h3>
-        <p style={{ fontSize: 12.5, color: '#6b7280', marginBottom: 12 }}>{description || t('staffTimeline.quickExternalDesc')}</p>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ background: 'var(--c-surface)', borderRadius: 20, padding: '22px 20px', width: '100%', maxWidth: 320, boxShadow: '0 24px 70px rgba(0,0,0,0.35)' }}>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--c-ink)', marginBottom: 4 }}>{title || t('staffTimeline.quickExternalTitle')}</h3>
+        <p style={{ fontSize: 12.5, color: 'var(--c-ink2)', marginBottom: 12 }}>{description || t('staffTimeline.quickExternalDesc')}</p>
         <input ref={inputRef} value={name} onChange={e => setName(e.target.value)}
           placeholder={placeholder || t('staffTimeline.externalPlaceholder')}
           onKeyDown={e => { if (e.key === 'Enter') confirm() }} />

@@ -33,6 +33,13 @@ const WorkerHome = lazy(() => import('./pages/WorkerHome'))
 const WorkerScanner = lazy(() => import('./pages/WorkerScanner'))
 const WorkerInventory = lazy(() => import('./pages/WorkerInventory'))
 const WorkerCalendar = lazy(() => import('./pages/WorkerCalendar'))
+// Magazziniere: su telefono il calendario a misura di pollice (WorkerCalendar),
+// su computer la stessa pagina dell'admin (griglia + colonna + timeline) ma in
+// sola lettura — vedi `readOnly` in Calendar.jsx.
+function WorkerCalendarRoute() {
+  const isMobile = useIsMobile()
+  return isMobile ? <WorkerCalendar /> : <Calendar />
+}
 const Brasserie = lazy(() => import('./pages/Brasserie'))
 const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
 const NotFound = lazy(() => import('./pages/NotFound'))
@@ -44,6 +51,8 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const CookiePolicy = lazy(() => import('./pages/CookiePolicy'))
 import TabBar from './components/TabBar'
+import { applyTheme, watchSystemTheme } from './utils/theme'
+import { useIsMobile } from './hooks/useIsMobile'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
 import OnboardingReveal from './components/OnboardingReveal'
@@ -205,7 +214,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
               <Route path="/inventory/:itemId/history" element={<InventoryItemHistory />} />
             )}
             <Route path="/tasks" element={<Tasks />} />
-            <Route path="/calendar" element={<WorkerCalendar />} />
+            <Route path="/calendar" element={<WorkerCalendarRoute />} />
             <Route path="/work-hours" element={<WorkHours />} />
             <Route path="/novita" element={<Novita />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
@@ -303,13 +312,13 @@ function PrivateRoutes({ toggleTheme, theme }) {
 }
 
 export default function App() {
-  // Tema fisso chiaro (toggle modalità notturna rimosso) — l'attributo
-  // data-theme="light" è impostato direttamente in index.html, non più qui:
-  // impostarlo a runtime lasciava un istante, prima del primo mount React,
-  // in cui valevano i token :root di default (scuri) invece di quelli
-  // [data-theme="light"], con un flash scuro prima del primo paint utile.
+  // Il tema (chiaro/scuro/automatico) lo imposta PRIMA del primo paint lo
+  // script in index.html (altrimenti ci sarebbe un lampo dei token di default);
+  // qui si riallinea e si segue il sistema se la scelta è "automatico". Il
+  // cambio manuale avviene dal Profilo (utils/theme.js).
   const theme = 'light'
   const toggleTheme = () => {}
+  useEffect(() => { applyTheme(); return watchSystemTheme() }, [])
 
   return (
     <AuthProvider>

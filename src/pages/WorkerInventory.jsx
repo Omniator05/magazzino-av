@@ -250,20 +250,20 @@ export default function WorkerInventory() {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <div className="page-header rc-page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <h1>{t('inventory.title')}</h1>
             <p>{t('inventory.itemsCount', { count: items.length })}</p>
           </div>
-          <button onClick={openScanner} className="btn btn-secondary" style={{ padding:'10px 14px', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+          <button onClick={openScanner} className="rc-pill-btn" style={{ padding:'9px 14px', fontSize:13, gap:6 }}>
             {t('workerInventory.scan')}
           </button>
         </div>
       </div>
 
       {/* Barra ricerca + filtri avanzati */}
-      <div className="search-bar" style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
+      <div className="search-bar rc-inv-search" style={{ position:'relative', display:'flex', alignItems:'center', gap:8, marginTop:14 }}>
         <div style={{ flex:1, minWidth:0 }}>
           <svg className="search-icon" viewBox="0 0 24 24" fill="var(--text2)" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} />
@@ -282,8 +282,8 @@ export default function WorkerInventory() {
               setShowFilterMenu(v => !v)
             }}
             aria-label={t('inventory.filterButtonLabel')}
-            className="btn btn-secondary"
-            style={{ position:'relative', width:44, height:44, padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+            className="rc-pill-btn"
+            style={{ position:'relative', width:44, height:44, padding:0, flexShrink:0 }}
           >
             <Filter size={17} />
             {advancedFiltersActive && (
@@ -433,7 +433,7 @@ export default function WorkerInventory() {
       </div>
 
       {/* Filtri - scrollabili */}
-      <div style={{ overflowX:'auto', background:'var(--bg2)', borderBottom:'1px solid var(--border)', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+      <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
         <div style={{ display:'flex', gap:8, padding:'10px 16px', width:'max-content', minWidth:'100%' }}>
         {[
           { key:'all',    label:t('inventory.filterAll'),      count: items.length },
@@ -441,29 +441,23 @@ export default function WorkerInventory() {
           { key:'broken',  label:t('inventory.filterBroken'),         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
           { key:'reorder', label:t('inventory.filterReorder'), count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)}
+          <button key={f.key} onClick={() => setFilter(f.key)} aria-pressed={filter === f.key}
             style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:700,
-              background: filter === f.key ? (f.bg || 'var(--accent)') : 'var(--card2)',
-              color: filter === f.key ? (f.color || '#fff') : 'var(--text2)',
-              border: `1px solid ${filter === f.key ? (f.border || 'var(--accent)') : 'var(--border)'}`,
+              background: filter === f.key ? (f.bg || '#e63946') : 'var(--c-fill)',
+              color: filter === f.key ? (f.color || '#fff') : 'var(--c-ink2)',
+              border: `1px solid ${filter === f.key ? (f.border || '#e63946') : 'transparent'}`,
               display:'flex', alignItems:'center', gap:5 }}>
             {f.label}
-            {f.count > 0 && <span style={{ background: filter === f.key ? 'rgba(0,0,0,0.15)' : 'var(--card3)', borderRadius:10, padding:'1px 6px', fontSize:11 }}>{f.count}</span>}
+            {f.count > 0 && <span style={{ background: filter === f.key ? 'rgba(0,0,0,0.12)' : 'var(--c-line)', borderRadius:10, padding:'1px 6px', fontSize:11 }}>{f.count}</span>}
           </button>
         ))}
         </div>
       </div>
 
-      {/* Lista */}
-      <div style={{ paddingBottom:8 }}>
-        {displayItems.length === 0
-          ? <div className="empty-state">
-              <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('workerInventory.emptyTitle')}</h3>
-              {/* Stesso motivo dell'omologa in Inventory.jsx: solo a
-                  magazzino davvero vuoto, non su un filtro senza risultati. */}
-              {items.length === 0 && <DailyQuip quips={t('inventory.emptyQuips', { returnObjects:true })} />}
-            </div>
-          : displayItems.map(item => {
+      {/* Lista — a schede per categoria (come il Magazzino dell'admin); con
+          ordinamento/filtri avanzati attivi, un'unica scheda piatta. */}
+      {(() => {
+        const renderRow = item => {
             const avail = item.availableQty ?? item.totalQty
             const isBroken = (item.brokenQty || 0) > 0
             const isOut    = avail < item.totalQty && !isBroken
@@ -488,14 +482,41 @@ export default function WorkerInventory() {
                 </div>
               </div>
             )
-          })
         }
-      </div>
+        const card = (key, label, list) => (
+          <div key={key} className="rc-inv-card" style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
+            {label && (
+              <div style={{ padding:'7px 14px', background:'var(--c-alt)', borderBottom:'1px solid var(--c-line)', display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontWeight:800, fontSize:12, color:'var(--c-ink)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</span>
+                <span style={{ fontSize:12, color:'var(--text3)', marginLeft:'auto' }}>{list.length}</span>
+              </div>
+            )}
+            {list.map(renderRow)}
+          </div>
+        )
+        if (displayItems.length === 0) {
+          return (
+            <div className="rc-inv-card" style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
+              <div className="empty-state">
+                <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('workerInventory.emptyTitle')}</h3>
+                {/* Stesso motivo dell'omologa in Inventory.jsx: solo a
+                    magazzino davvero vuoto, non su un filtro senza risultati. */}
+                {items.length === 0 && <DailyQuip quips={t('inventory.emptyQuips', { returnObjects:true })} />}
+              </div>
+            </div>
+          )
+        }
+        if (advancedFiltersActive) return card('flat', null, displayItems)
+        const groups = {}
+        displayItems.forEach(it => { (groups[it.category || '—'] ||= []).push(it) })
+        return Object.keys(groups).sort((x, y) => x.localeCompare(y)).map(cat => card(cat, cat, groups[cat]))
+      })()}
+      <div style={{ height:8 }} />
 
       {/* Scanner: trova un oggetto trovato/disperso tramite il suo codice */}
       {showScanner && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && closeScanner()}>
-          <div className="modal" style={{ position:'relative' }}>
+          <div className="modal rc-sheet" style={{ position:'relative' }}>
             <button className="close-btn" onClick={closeScanner}>✕</button>
             <h2>{t('workerInventory.scanModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>
@@ -508,7 +529,7 @@ export default function WorkerInventory() {
             {!scanning && (
               <button onClick={startInventoryScanner} style={{
                 width:'100%', padding:'40px 16px', borderRadius:14,
-                background:'rgba(79,195,247,0.08)', border:'2px dashed rgba(79,195,247,0.3)',
+                background:'var(--c-alt)', border:'1.5px dashed var(--c-dash)',
                 display:'flex', flexDirection:'column', alignItems:'center', gap:10,
               }}>
                 <span style={{ fontSize:36 }}>📷</span>
@@ -535,8 +556,8 @@ export default function WorkerInventory() {
       {/* Dettaglio articolo */}
       {detail && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDetail(null)}>
-          <div className="modal" style={{ position:'relative' }}>
-            <button className="close-btn" onClick={() => setDetail(null)}>x</button>
+          <div className="modal rc-sheet" style={{ position:'relative' }}>
+            <button className="close-btn" onClick={() => setDetail(null)}>✕</button>
             <div style={{ textAlign:'center', marginBottom:16 }}>
               <div style={{ fontSize:48, marginBottom:8 }}>{ICONS[detail.category] || '📦'}</div>
               <h2 style={{ fontSize:20 }}>{detail.name}</h2>
@@ -544,7 +565,7 @@ export default function WorkerInventory() {
             </div>
 
             {/* Disponibilità */}
-            <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px 16px', marginBottom:16 }}>
+            <div style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:14, padding:'14px 16px', marginBottom:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                 <span style={{ color:'var(--text2)', fontSize:14 }}>{t('inventory.detailAvailable')}</span>
                 <span style={{ fontWeight:800, fontSize:18 }}>{detail.availableQty}/{detail.totalQty}</span>

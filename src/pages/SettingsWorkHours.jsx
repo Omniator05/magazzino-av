@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore'
 import { Clock, Download, ChevronLeft, ChevronRight } from '../components/Icon'
-import BackHomeButton from '../components/BackHomeButton'
+import PageHeader from '../components/PageHeader'
 import Picker from '../components/Picker'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { timeStr, fmtHours, monthKeyOf, monthKey, capStatus, CAP_COLOR } from '../utils/workHours'
@@ -206,12 +206,7 @@ export default function SettingsWorkHours() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <BackHomeButton to="/admin/settings" />
-          <h1 style={{ textAlign: 'right' }}>{t('workHours.reportTitle')}</h1>
-        </div>
-      </div>
+      <PageHeader title={t('workHours.reportTitle')} backTo="/admin/settings" />
 
       {/* Periodo: frecce per scorrere i mesi + elenco per saltare a uno
           preciso (o a tutto lo storico) senza premere la freccia dieci volte. */}

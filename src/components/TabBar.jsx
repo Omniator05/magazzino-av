@@ -46,14 +46,12 @@ const WORK_HOURS_TAB = { path:'/work-hours', label:'Ore', icon:ICON_WORK_HOURS }
 const PHONE = { H: 60, D: 58, ring: 5, fillet: 6, cy: 5, dip: 9, icon: 32, padX: 28, rc: 14, bottom: 28, slot: 52 }
 const DESKTOP = { H: 70, D: 68, ring: 6, fillet: 10, cy: 5, dip: 10, icon: 34, padX: 40, rc: 24, bottom: 22, width: 600 }
 const DURATION = 480      // ms
-const TAB_GREY = '#6b7280'
+const TAB_GREY = 'var(--c-ink2)'
 
-// Colore dell'icona: grigio → bianco man mano che il cerchio le passa sotto.
+// Colore dell'icona: dal grigio del tema → bianco man mano che il cerchio le
+// passa sotto (color-mix, così il grigio di partenza segue chiaro/scuro).
 function mixColor(k) {
-  const c = v => Math.round(107 + (255 - 107) * v)
-  const d = v => Math.round(114 + (255 - 114) * v)
-  const e = v => Math.round(128 + (255 - 128) * v)
-  return `rgb(${c(k)},${d(k)},${e(k)})`
+  return `color-mix(in srgb, #ffffff ${Math.round(k * 100)}%, ${TAB_GREY})`
 }
 
 // Contorno della barra: rettangolo (angoli opzionali) con una tacca circolare
@@ -237,14 +235,14 @@ export default function TabBar() {
     }}>
       <div style={{ position:'relative', height: m.H }}>
         <svg width={barW} height={m.H} aria-hidden="true"
-          style={{ position:'absolute', left:0, top:0, overflow:'visible', filter:'drop-shadow(0 8px 22px rgba(34,44,66,0.18))' }}>
-          <path ref={pathRef} fill="#fff" />
+          style={{ position:'absolute', left:0, top:0, overflow:'visible', filter:'drop-shadow(0 8px 22px var(--tab-shadow))' }}>
+          <path ref={pathRef} fill="var(--c-surface)" />
           {/* Dentro la tacca la pagina sotto (testo che scorre) darebbe
               fastidio: un disco del colore dello sfondo, limitato alla
               fascia della barra, la nasconde — sopra il bordo il cerchio
               resta libero, solo con la sua ombra. */}
           <clipPath id="ftab-clip"><rect x="0" y="0" width={barW} height={m.H} /></clipPath>
-          <circle ref={holeRef} fill="#f5f5f3" clipPath="url(#ftab-clip)" />
+          <circle ref={holeRef} fill="var(--surface)" clipPath="url(#ftab-clip)" />
         </svg>
         <span ref={circleRef} aria-hidden="true" style={{
           position:'absolute', left:0, top:0, width: m.D, height: m.D, borderRadius:'50%', zIndex:2, pointerEvents:'none',
@@ -298,7 +296,7 @@ export default function TabBar() {
           background: var(--accent); color: #fff; border-radius: 10px;
           font-size: 10.5px; font-weight: 800; min-width: 18px; height: 18px;
           display: flex; align-items: center; justify-content: center;
-          padding: 0 4px; line-height: 1; border: 1.5px solid #fff; box-sizing: border-box;
+          padding: 0 4px; line-height: 1; border: 1.5px solid var(--c-surface); box-sizing: border-box;
         }
       `}</style>
     </nav>
