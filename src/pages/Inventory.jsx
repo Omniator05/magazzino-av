@@ -45,12 +45,12 @@ const ACTIVITY_COLORS = {
 // oggetto" del modal parte aperta o chiusa (vedi sotto).
 const DETAIL_FIELDS = ['weightKg', 'peakPowerW', 'loadCapacityKg', 'widthM', 'lengthM', 'heightM', 'serialNumber']
 const emptyItemForm = () => ({
-  name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, minStock:0, consumableUnit:'pezzi',
+  name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, defectQty:0, brokenNote:'', defectNote:'', minStock:0, consumableUnit:'pezzi',
   weightKg:'', peakPowerW:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[], deadlines:[],
 })
 const itemToForm = item => ({
   name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'',
-  brokenQty:item.brokenQty||0, minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
+  brokenQty:item.brokenQty||0, defectQty:item.defectQty||0, brokenNote:item.brokenNote||'', defectNote:item.defectNote||'', minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
   weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', loadCapacityKg:item.loadCapacityKg ?? '',
   widthM:item.widthM ?? '', lengthM:item.lengthM ?? '', heightM:item.heightM ?? '', serialNumber:item.serialNumber || '',
   linkedItems:getLinkedItems(item), deadlines:item.deadlines || [],
@@ -349,14 +349,22 @@ export default function Inventory() {
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
       const deadlines = await syncDeadlineEvents(selected.deadlines || [], form.deadlines || [], { subjectName: form.name, teamId, userId: user.uid })
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
       // Solo admin, solo quando aumenta (non quando si segna "riparato"): è
       // l'unico verso che segnala davvero un problema da gestire.
       if (broken > prevBroken) {
         notifyTeamPush({
           title: t('inventory.pushBrokenTitle'),
-          body: form.name,
+          body: [form.name, (form.brokenNote || '').trim()].filter(Boolean).join(' — '),
           url: '/inventory?filter=broken',
+          audience: { type: 'admins' },
+        })
+      }
+      if ((parseInt(form.defectQty)||0) > (selected.defectQty || 0)) {
+        notifyTeamPush({
+          title: t('inventory.pushDefectTitle'),
+          body: [form.name, (form.defectNote || '').trim()].filter(Boolean).join(' — '),
+          url: '/inventory?filter=defect',
           audience: { type: 'admins' },
         })
       }
@@ -364,7 +372,7 @@ export default function Inventory() {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
-        brokenQty:broken, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
+        brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes, ...details, ...linkedItemsToFields(form.linkedItems),
         deadlines:[], teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
@@ -542,6 +550,7 @@ export default function Inventory() {
     if (!matchSearch) return false
     if (activeFilter === 'out')     return (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)
     if (activeFilter === 'broken')  return (i.brokenQty || 0) > 0
+    if (activeFilter === 'defect')  return (i.defectQty || 0) > 0
     if (activeFilter === 'reorder') return i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock
     return true
   })
@@ -562,6 +571,7 @@ export default function Inventory() {
 
   const countOut    = items.filter(i => (i.availableQty ?? i.totalQty) < i.totalQty && !(i.brokenQty > 0)).length
   const countBroken = items.filter(i => (i.brokenQty || 0) > 0).length
+  const countDefect = items.filter(i => (i.defectQty || 0) > 0).length
   const countReorder = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock).length
 
   // Filtri avanzati (menu filtri): si combinano con ricerca testo + chip
@@ -862,6 +872,7 @@ export default function Inventory() {
           { key:'all',    label:t('inventory.filterAll'), count: items.length },
           { key:'out',     label:t('inventory.filterOut'),         count: countOut,    color:'var(--accent2)', bg:'rgba(245,166,35,0.12)', border:'rgba(245,166,35,0.3)' },
           { key:'broken',  label:t('inventory.filterBroken'),         count: countBroken, color:'var(--red)',     bg:'rgba(248,113,113,0.12)', border:'rgba(248,113,113,0.3)' },
+          ...(countDefect > 0 || activeFilter === 'defect' ? [{ key:'defect', label:t('inventory.filterDefect'), count: countDefect, color:'#b45309', bg:'rgba(217,119,6,0.14)', border:'rgba(217,119,6,0.35)' }] : []),
           { key:'reorder', label:t('inventory.filterReorder'), count: countReorder,color:'var(--blue)',    bg:'rgba(79,195,247,0.12)',  border:'rgba(79,195,247,0.3)' },
         ].map(f => (
           <button key={f.key} onClick={() => setActiveFilter(f.key)} aria-pressed={activeFilter === f.key}
@@ -997,7 +1008,7 @@ export default function Inventory() {
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
-                  <Stepper value={form.qty} min={1} onChange={qty => setForm({...form, qty, brokenQty: Math.min(form.brokenQty, qty)})}
+                  <Stepper value={form.qty} min={1} onChange={qty => setForm({...form, qty, brokenQty: Math.min(form.brokenQty, qty), defectQty: Math.min(form.defectQty || 0, qty)})}
                     decAria={t('eventDetail.decreaseQtyAria')} incAria={t('eventDetail.increaseQtyAria')} />
                 </div>
                 <div className="form-group">
@@ -1011,6 +1022,27 @@ export default function Inventory() {
               {form.brokenQty > 0 && (
                 <div style={{ background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', borderRadius:10, padding:'9px 12px', marginBottom:12, fontSize:13, fontWeight:600, color:'#e63946', display:'flex', alignItems:'center', gap:6 }}>
                   <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
+                </div>
+              )}
+              {form.brokenQty > 0 && (
+                <div className="form-group">
+                  <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
+                  <textarea value={form.brokenNote || ''} onChange={e => setForm({...form, brokenNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
+                </div>
+              )}
+              {/* "Con difetto": ancora utilizzabile (resta nei disponibili) ma con un problema da sistemare */}
+              <div className="form-group">
+                <label style={{ color: (form.defectQty || 0) > 0 ? '#d97706' : undefined }}>
+                  {t('inventory.defectLabel')} {(form.defectQty || 0) > 0 && <span style={{ fontWeight:800 }}>({form.defectQty})</span>}
+                  <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}> · {t('inventory.defectHint')}</span>
+                </label>
+                <Stepper tone="amber" value={form.defectQty || 0} min={0} max={form.qty} onChange={defectQty => setForm({...form, defectQty})}
+                  decAria={t('inventory.decreaseDefectAria')} incAria={t('inventory.increaseDefectAria')} />
+              </div>
+              {(form.defectQty || 0) > 0 && (
+                <div className="form-group">
+                  <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
+                  <textarea value={form.defectNote || ''} onChange={e => setForm({...form, defectNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
                 </div>
               )}
               <div className="form-group"><label>{t('inventory.locationLabel')}</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('inventory.locationPlaceholder')} /></div>
@@ -1176,6 +1208,9 @@ export default function Inventory() {
                   {showDetail.brokenQty > 0 && (
                     <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: showDetail.brokenQty })}</span>
                   )}
+                  {showDetail.defectQty > 0 && (
+                    <span style={{ fontSize:12, color:'#d97706' }}>● {t('inventory.defectCount', { count: showDetail.defectQty })}</span>
+                  )}
                 </div>
               </div>
               {hasFullHistory ? (
@@ -1201,6 +1236,26 @@ export default function Inventory() {
               )}
             </div>
 
+            {/* Descrizioni dei problemi segnalati (rotto / con difetto) */}
+            {((showDetail.brokenQty||0) > 0 && showDetail.brokenNote) && (
+              <p style={{ margin:'0 0 10px', padding:'10px 12px', borderRadius:10, background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', color:'var(--c-ink)', fontSize:13, lineHeight:1.45 }}>
+                <strong style={{ color:'#e63946' }}>{t('inventory.brokenLabel')}:</strong> {showDetail.brokenNote}
+              </p>
+            )}
+            {((showDetail.defectQty||0) > 0) && (
+              <div style={{ margin:'0 0 10px', padding:'10px 12px', borderRadius:10, background:'rgba(217,119,6,0.08)', border:'1px solid rgba(217,119,6,0.3)', fontSize:13, lineHeight:1.45, color:'var(--c-ink)' }}>
+                <p style={{ margin:0 }}><strong style={{ color:'#b45309' }}>{t('inventory.defectLabel')}:</strong> {showDetail.defectNote || t('inventory.defectNoNote')}</p>
+                <button
+                  onClick={async () => {
+                    const newDefect = Math.max(0, (showDetail.defectQty || 0) - 1)
+                    const upd = { defectQty: newDefect, ...(newDefect === 0 ? { defectNote: '' } : {}) }
+                    await updateDoc(doc(db, 'items', showDetail.id), upd)
+                    setShowDetail(d => ({ ...d, ...upd }))
+                  }}
+                  className="btn-no-anim" style={{ marginTop:8, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:10, padding:'8px 12px', fontWeight:800, fontSize:13 }}
+                >{t('inventory.defectFixedButton')}</button>
+              </div>
+            )}
             {/* Tasto riparato - appare SOLO se ci sono pezzi rotti */}
             {(showDetail.brokenQty||0) > 0 && (
               <button
@@ -1209,8 +1264,9 @@ export default function Inventory() {
                   const newBroken = Math.max(0, currentBroken - 1)
                   const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
                   const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
-                  await updateDoc(doc(db, 'items', showDetail.id), { brokenQty: newBroken, availableQty: newAvailable })
-                  setShowDetail(d => ({ ...d, brokenQty: newBroken, availableQty: newAvailable }))
+                  const upd = { brokenQty: newBroken, availableQty: newAvailable, ...(newBroken === 0 ? { brokenNote: '' } : {}) }
+                  await updateDoc(doc(db, 'items', showDetail.id), upd)
+                  setShowDetail(d => ({ ...d, ...upd }))
                 }}
                 className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
               >
@@ -1712,19 +1768,20 @@ export default function Inventory() {
 // tone="red" per i pezzi rotti (si tinge di rosso quando > 0).
 function Stepper({ value, onChange, min = 0, max, tone, decAria, incAria }) {
   const clamp = v => Math.min(max ?? Infinity, Math.max(min, v))
-  const red = tone === 'red' && value > 0
+  const red = (tone === 'red' || tone === 'amber') && value > 0
+  const toneColor = tone === 'amber' ? '#d97706' : '#e63946'
   const btn = {
-    width:40, height:40, borderRadius:9, background:'var(--c-surface)', color: tone === 'red' ? '#e63946' : 'var(--c-ink)',
+    width:40, height:40, borderRadius:9, background:'var(--c-surface)', color: tone === 'red' ? '#e63946' : tone === 'amber' ? '#d97706' : 'var(--c-ink)',
     fontSize:19, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
     boxShadow:'0 1px 2px rgba(0,0,0,0.08)',
   }
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:4, background: red ? 'rgba(230,57,70,0.10)' : 'var(--c-fill2)', borderRadius:12, padding:3 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:4, background: red ? (tone === 'amber' ? 'rgba(217,119,6,0.12)' : 'rgba(230,57,70,0.10)') : 'var(--c-fill2)', borderRadius:12, padding:3 }}>
       <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value - 1))} aria-label={decAria} style={btn}>−</button>
       <input type="number" min={min} max={max} value={value}
         onChange={e => onChange(clamp(parseInt(e.target.value, 10) || min))}
         onFocus={e => e.target.select()}
-        style={{ flex:1, minWidth:0, textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 2px', border:'none', background:'transparent', boxShadow:'none', color: red ? '#e63946' : 'var(--c-ink)' }} />
+        style={{ flex:1, minWidth:0, textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 2px', border:'none', background:'transparent', boxShadow:'none', color: red ? toneColor : 'var(--c-ink)' }} />
       <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value + 1))} aria-label={incAria} style={btn}>+</button>
     </div>
   )
@@ -1769,6 +1826,13 @@ function ItemRow({ item, onOpen, t, outEvents }) {
           <div style={{ marginTop:4 }}>
             <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
               <Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}
+            </span>
+          </div>
+        )}
+        {item.defectQty > 0 && (
+          <div style={{ marginTop:4 }}>
+            <span style={{ background:'rgba(217,119,6,0.15)', color:'#b45309', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
+              <Warn size={11} /> {t('inventory.defectCount', { count: item.defectQty })}
             </span>
           </div>
         )}

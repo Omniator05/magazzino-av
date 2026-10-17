@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "check:hooks": "node scripts/check-hooks.mjs",
+    "prebuild": "node scripts/check-hooks.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

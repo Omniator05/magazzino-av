@@ -45,7 +45,18 @@ async function tokensForTeam(db, teamId, userIds) {
   return results.flatMap(snap => snap.docs)
 }
 
-async function sendToTokenDocs(admin, db, tokenDocs, { title, body, url }) {
+// Chi apre l'app anche da `localhost` (sviluppo) si ritrova un secondo token
+// per lo stesso dispositivo e riceve ogni notifica due volte. Se una persona ha
+// almeno un token dell'app pubblicata, quelli di localhost vengono saltati.
+// (I token vecchi senza `origin` contano come pubblicati.)
+const isLocalOrigin = o => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o || '')
+function skipLocalDuplicates(tokenDocs) {
+  const hasDeployed = new Set(tokenDocs.filter(d => !isLocalOrigin(d.data().origin)).map(d => d.data().userId))
+  return tokenDocs.filter(d => !isLocalOrigin(d.data().origin) || !hasDeployed.has(d.data().userId))
+}
+
+async function sendToTokenDocs(admin, db, allTokenDocs, { title, body, url }) {
+  const tokenDocs = skipLocalDuplicates(allTokenDocs)
   if (tokenDocs.length === 0) return 0
   const tokens = tokenDocs.map(d => d.id)
   // Messaggio SOLO "data" (niente campo `notification`): con `notification` l'SDK
@@ -84,6 +95,7 @@ async function registerToken(req, res, db, teamId, uid) {
   } else {
     await tokenRef.set({
       teamId, userId: uid,
+      origin: req.headers?.origin || '',
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true })
   }

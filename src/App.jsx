@@ -53,6 +53,7 @@ const CookiePolicy = lazy(() => import('./pages/CookiePolicy'))
 import TabBar from './components/TabBar'
 import { applyTheme, watchSystemTheme } from './utils/theme'
 import { useIsMobile } from './hooks/useIsMobile'
+import ErrorBoundary from './components/ErrorBoundary'
 import LoadingBar from './components/LoadingBar'
 import PageTransition from './components/PageTransition'
 import OnboardingReveal from './components/OnboardingReveal'
@@ -331,6 +332,7 @@ export default function App() {
           {/* Un solo confine Suspense in cima basta: cattura il caricamento
               lazy di QUALSIASI pagina, anche quelle annidate nelle <Routes>
               interne di PrivateRoutes più sotto — non serve ripeterlo lì. */}
+          <ErrorBoundary>
           <Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
               <Route path="/login" element={<Auth initialMode="login" />} />
@@ -344,6 +346,7 @@ export default function App() {
               <Route path="/*" element={<PrivateRoutes toggleTheme={toggleTheme} theme={theme} />} />
             </Routes>
           </Suspense>
+          </ErrorBoundary>
         </BrowserRouter>
       </ConfirmProvider>
     </AuthProvider>

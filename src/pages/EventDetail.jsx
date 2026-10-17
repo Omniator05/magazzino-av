@@ -156,6 +156,10 @@ export default function EventDetail() {
   // subito, niente "Applica" separato. Il select rimane così com'era su
   // computer (vedi actionPanel più sotto).
   const [showBulkVehiclePicker, setShowBulkVehiclePicker] = useState(false)
+  // Azione di gruppo in corso ('delete' | 'veh:<valore>'): lo spinner dei bottoni parte
+  // solo DOPO l'eventuale conferma, e si ferma se si annulla. (Dichiarato QUI, prima
+  // del return anticipato `if (!event)`: gli hook non possono stare dopo.)
+  const [bulkBusy, setBulkBusy] = useState(null)
   const bulkVehiclePickerDrag = useModalDrag(() => setShowBulkVehiclePicker(false))
   // Ultimo oggetto toccato con un tap semplice: àncora per lo shift+click
   // "seleziona l'intervallo" su computer (stesso pattern tap-tap del
@@ -838,9 +842,6 @@ export default function EventDetail() {
   // valori di setItemVehicle ('v:'/'e:'/''/'__none__'). `value` esplicito per
   // il popup telefono (un tap = scelta + applica, niente stato intermedio da
   // aspettare) — senza, usa bulkVehicleId come il select su computer.
-  // Azione di gruppo in corso ('delete' | 'veh:<valore>'): lo spinner dei bottoni parte
-  // solo DOPO l'eventuale conferma, e si ferma se si annulla.
-  const [bulkBusy, setBulkBusy] = useState(null)
   const applyBulkVehicle = async (value) => {
     const chosen = value !== undefined ? value : bulkVehicleId
     if (bulkSelectedIds.size === 0 || !chosen) return

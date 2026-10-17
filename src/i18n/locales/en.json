@@ -557,10 +557,24 @@
       "yes": "Yes",
       "no": "No"
     },
-    "pushBrokenTitle": "Item broken",
+    "pushBrokenTitle": "Item marked as broken",
     "linkedQtyLabel": "Quantity",
     "linkModePerUnitHint": "For every piece added to the list (10 platforms × 4 legs = 40).",
-    "linkModeOnceHint": "Added once per event, whatever the number of pieces."
+    "linkModeOnceHint": "Added once per event, whatever the number of pieces.",
+    "pushDefectTitle": "Item marked with a defect",
+    "defectLabel": "With a defect",
+    "defectHint": "Still usable, but has a problem",
+    "brokenHint": "No longer usable",
+    "defectCount_one": "{{count}} with a defect",
+    "defectCount_other": "{{count}} with a defect",
+    "defectNoNote": "no description",
+    "filterDefect": "With a defect",
+    "issueNoteLabel": "Description",
+    "issueNotePlaceholder": "E.g. the door doesn't work",
+    "decreaseDefectAria": "Decrease items with a defect",
+    "increaseDefectAria": "Increase items with a defect",
+    "defectFixedButton": "Defect fixed",
+    "brokenNoteTitle": "Broken"
   },
   "eventDetail": {
     "loading": "Loading...",
@@ -1284,7 +1298,9 @@
     "lowStock": "Low stock — needs reordering",
     "reportProblem": "Report a problem",
     "markBroken": "Mark broken",
-    "markRepaired": "Mark repaired"
+    "markRepaired": "Mark repaired",
+    "markDefect": "Mark defect",
+    "markDefectFixed": "Defect fixed"
   },
   "workerCalendar": {
     "title": "My calendar",
@@ -1738,5 +1754,10 @@
     "filterAll": "All",
     "emptyFilter": "No entries of this kind yet.",
     "badgeNew": "New"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "This page ran into a problem. Reload to try again — if it keeps happening, let us know.",
+    "reload": "Reload"
   }
 }

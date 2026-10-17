@@ -557,10 +557,24 @@
       "yes": "Sì",
       "no": "No"
     },
-    "pushBrokenTitle": "Oggetto rotto",
+    "pushBrokenTitle": "Oggetto segnato come rotto",
     "linkedQtyLabel": "Quantità",
     "linkModePerUnitHint": "Per ogni pezzo aggiunto alla lista (10 pedane × 4 gambe = 40).",
-    "linkModeOnceHint": "Si aggiunge una volta sola per evento, qualunque sia il numero di pezzi."
+    "linkModeOnceHint": "Si aggiunge una volta sola per evento, qualunque sia il numero di pezzi.",
+    "pushDefectTitle": "Oggetto segnato con difetto",
+    "defectLabel": "Con difetto",
+    "defectHint": "Si può ancora usare, ma ha un problema",
+    "brokenHint": "Non è più utilizzabile",
+    "defectCount_one": "{{count}} con difetto",
+    "defectCount_other": "{{count}} con difetto",
+    "defectNoNote": "nessuna descrizione",
+    "filterDefect": "Con difetto",
+    "issueNoteLabel": "Descrizione",
+    "issueNotePlaceholder": "Es. la porta non funziona",
+    "decreaseDefectAria": "Diminuisci gli oggetti con difetto",
+    "increaseDefectAria": "Aumenta gli oggetti con difetto",
+    "defectFixedButton": "Difetto sistemato",
+    "brokenNoteTitle": "Rotto"
   },
   "eventDetail": {
     "loading": "Caricamento...",
@@ -1284,7 +1298,9 @@
     "lowStock": "Scorta bassa — da riordinare",
     "reportProblem": "Segnala problema",
     "markBroken": "Segna rotto",
-    "markRepaired": "Segna riparato"
+    "markRepaired": "Segna riparato",
+    "markDefect": "Segna difetto",
+    "markDefectFixed": "Difetto sistemato"
   },
   "workerCalendar": {
     "title": "Il mio calendario",
@@ -1738,5 +1754,10 @@
     "filterAll": "Tutto",
     "emptyFilter": "Nessuna voce di questo tipo per ora.",
     "badgeNew": "Nuovo"
+  },
+  "errorBoundary": {
+    "title": "Qualcosa è andato storto",
+    "message": "Questa pagina ha avuto un problema. Ricarica per riprovare: se succede ancora, avvisaci.",
+    "reload": "Ricarica"
   }
 }
