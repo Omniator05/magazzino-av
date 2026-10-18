@@ -1,6 +1,7 @@
 import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore'
 import { db } from '../firebase'
 import { deleteEventFromGoogle } from './googleCalendar'
+import { todayStr } from './workHours'
 
 // Aggiorna la giacenza (availableQty) al cambio di stato carico/rientro di
 // una riga evento. Se l'oggetto è un kit/bundle, aggiorna anche ogni
@@ -117,7 +118,12 @@ export const itemCommittedElsewhere = (catalogItemId, event, otherEvents) => {
     const stillOut = rows.some(i => i.loaded && !i.returned)
     const oStart = other.date
     const oEnd = other.dateEnd && other.dateEnd >= other.date ? other.dateEnd : other.date
-    const overlaps = stillOut ? evEnd >= oStart : (evStart <= oEnd && evEnd >= oStart)
+    // Caricato vuol dire già fuori dal magazzino, anche se l'evento inizia più
+    // avanti (montaggio anticipato, es. venerdì per un evento di lunedì): da
+    // quel momento e fino al rientro il pezzo non c'è, quindi l'impegno parte
+    // da OGGI se il suo giorno nominale non è ancora arrivato.
+    const outSince = stillOut && oStart > todayStr() ? todayStr() : oStart
+    const overlaps = stillOut ? evEnd >= outSince : (evStart <= oEnd && evEnd >= oStart)
     if (!overlaps) return
     const rowQty = rows.reduce((s, i) => s + (i.qty || 1), 0)
     if (rowQty > 0) {

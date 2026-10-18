@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { personColor } from '../utils/assignmentBlocks'
+import { assigneesOnDay } from '../utils/workerAssignment'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { generateDates } from '../utils/recurrence'
@@ -44,7 +45,7 @@ const SIDEBAR_MAX_HEIGHT = 'calc(100vh - 76px)'
 // ricorrenza/fasi/template/responsabile restano nel modal completo,
 // raggiungibile comunque dopo creando l'evento e aprendolo).
 export default function CalendarSidePanel({
-  absencesOnDate, todayStr, selectedDate, selectedDayEvents, selectedDayPhases = [], selectedDayTasks, user, isWorker, workers, teamId,
+  absencesOnDate, todayStr, selectedDate, selectedDayEvents, selectedDayPhases = [], selectedDayTasks, assignmentBlocks = [], user, isWorker, workers, teamId,
   readOnly, onOpenEvent, eventDetail, eventBlocks, onCloseEvent, onOpenEventPage,
   onOpenTask, taskDetail, onCloseTask, onAddAbsence, onEditEvent, creating, onCancelCreate, onEventCreated,
   reportMode, rangeStart, onCancelReportMode,
@@ -353,7 +354,13 @@ export default function CalendarSidePanel({
               const loadedN = items.filter(it => it.loaded).length
               const returnedN = items.filter(it => it.returned).length
               const assignedIds = ev.assignedWorkers || []
-              const assignedWorkers = assignedIds.map(id => workers.find(w => w.id === id)).filter(Boolean)
+              // Solo chi lavora su QUESTO giorno (vedi assigneesOnDay): in un evento
+              // lungo, montaggio e giorni dopo hanno persone diverse.
+              const dayPeople = assigneesOnDay(ev, selectedDate, assignmentBlocks).map(a => {
+                const w = a.workerId ? workers.find(x => x.id === a.workerId) : null
+                const name = w?.name || a.name
+                return name ? { key: a.key, id: w?.id || a.key, name, hours: a.hours, external: !w } : null
+              }).filter(Boolean)
               const isAssigned = assignedIds.includes(user?.uid)
               const mgr = ev.eventManager
               const durationLabel = ev.allDay === false && ev.timeStart ? `${ev.timeStart}–${ev.timeEnd || ''}` : t('events.allDayLabel')
@@ -422,13 +429,13 @@ export default function CalendarSidePanel({
                         oggi non ha ancora un orario per-persona). */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8 }}>
                       <div style={{ display: 'flex', gap: 5 }}>
-                        {assignedWorkers.map(w => (
-                          <span key={w.id} className="rc-cal-avatar" aria-label={`${w.name} · ${durationLabel}`}
+                        {dayPeople.map(w => (
+                          <span key={w.key} className="rc-cal-avatar" aria-label={`${w.name} · ${w.hours || durationLabel}`}
                             style={{ position: 'relative', width: 24, height: 24, borderRadius: '50%', background: personColor(w.id), color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, pointerEvents: 'auto' }}>
                             {initials(w.name)}
                             <span className="rc-cal-avatar-tooltip">
                               <strong>{w.name}</strong>
-                              <span>{durationLabel}</span>
+                              <span>{w.hours || durationLabel}</span>
                             </span>
                           </span>
                         ))}

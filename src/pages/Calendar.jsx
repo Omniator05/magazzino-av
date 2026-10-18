@@ -29,6 +29,7 @@ import { awaitIfOnline } from '../utils/offlineSave'
 import SegmentedControl from '../components/SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
 import CalendarSidePanel from '../components/CalendarSidePanel'
+import { assigneesOnDay } from '../utils/workerAssignment'
 
 // Lun→Dom a partire da un lunedì noto: dà le iniziali dei giorni nella lingua attiva
 const WEEKDAY_ANCHOR = new Date(2024, 0, 1)
@@ -875,19 +876,21 @@ export default function Calendar() {
                     }),
                   ].sort((a, b) => a.rank - b.rank)
                   if (titleRows.length === 0) return null
+                  // Cella alta come prima: su computer entrano 3 card per giorno, su telefono 2.
+                  const maxRows = isMobile ? 2 : 3
                   return (
                     <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>
-                      {titleRows.slice(0, 2).map(row => (
+                      {titleRows.slice(0, maxRows).map(row => (
                         <span key={row.key} style={{
-                          display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.35,
+                          display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.3,
                           padding:'1.5px 4px', borderRadius:4, maxWidth:'100%',
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                           background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.split ? `linear-gradient(90deg, ${row.split[0]} 50%, ${row.split[1]} 50%)` : row.color,
                           color: row.isReminder ? 'var(--text3)' : '#fff',
                         }}>{row.name}</span>
                       ))}
-                      {titleRows.length > 2 && (
-                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - 2}</span>
+                      {titleRows.length > maxRows && (
+                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - maxRows}</span>
                       )}
                     </div>
                   )
@@ -945,7 +948,7 @@ export default function Calendar() {
       {!isMobile && (
         <CalendarSidePanel
           absencesOnDate={absencesOnDate} workers={workers} teamId={teamId}
-          todayStr={todayStr} selectedDate={selectedDate} selectedDayEvents={selectedEvents} selectedDayPhases={selectedDayPhases} selectedDayTasks={selectedTasks}
+          todayStr={todayStr} selectedDate={selectedDate} selectedDayEvents={selectedEvents} selectedDayPhases={selectedDayPhases} selectedDayTasks={selectedTasks} assignmentBlocks={assignmentBlocks}
           user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} taskDetail={!isMobile ? summaryTask : null} onCloseTask={() => setSummaryTask(null)}
           readOnly={readOnly} onOpenEvent={ev => { setSummaryTask(null); setDetailEvent(ev) }} eventDetail={!isMobile && readOnly ? detailEvent : null} eventBlocks={detailEvent ? assignmentBlocks.filter(b => b.eventId === detailEvent.id) : []} onCloseEvent={() => setDetailEvent(null)} onOpenEventPage={ev => navigate(`/events/${ev.id}`)} onEditEvent={(e, ev) => openEdit(e, ev)}
           onAddAbsence={() => { if (reportMode) { cancelReportMode() } else { setSidebarCreating(false); setEditingEvent(null); startReportMode() } }}
@@ -1040,7 +1043,7 @@ export default function Calendar() {
                   )
                 }
 
-                const assignedNames = (ev.assignedWorkers || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean)
+                const assignedNames = assigneesOnDay(ev, selectedDate, assignmentBlocks).map(a => a.workerId ? workers.find(w => w.id === a.workerId)?.name : a.name).filter(Boolean)
                 // Promemoria scadenza (vedi utils/deadlines.js): non è una vera
                 // lista di carico, non si apre e non si modifica/cancella da
                 // qui — si cambia dalla scheda furgone/oggetto che l'ha

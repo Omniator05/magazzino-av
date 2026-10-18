@@ -103,7 +103,14 @@ export default function InventoryItemHistory() {
   const { qty: committedQty, events: committedEvents } = (item && checkRangeValid)
     ? itemCommittedElsewhere(item.id, { id: null, date: checkStart, dateEnd: checkEnd }, events)
     : { qty: 0, events: [] }
-  const freeQty = Math.max(0, maxAvail - committedQty)
+  // Giacenza ATTUALE in magazzino (availableQty: tolti rotti e pezzi già
+  // caricati/fuori): se il periodo controllato include oggi vale anche questa,
+  // non solo la programmazione degli eventi — un pezzo fuori adesso non è
+  // libero oggi anche se nessun evento "copre" la data.
+  const includesToday = checkRangeValid && checkStart <= todayStr() && checkEnd >= todayStr()
+  const stockNow = item ? Math.max(0, Math.min(maxAvail, item.availableQty ?? item.totalQty ?? 0)) : 0
+  const freeByEvents = Math.max(0, maxAvail - committedQty)
+  const freeQty = includesToday ? Math.min(freeByEvents, stockNow) : freeByEvents
 
   // Riga pronta per un evento nuovo, stessa forma di rowsToAdd in
   // EventDetail.jsx/confirmCart — niente baule fisico assegnato in
@@ -194,23 +201,32 @@ export default function InventoryItemHistory() {
             placeholder={t('inventory.availabilityCheckPeriodPlaceholder')}
           />
           {checkRangeValid && maxAvail > 0 && (() => {
-            const state = committedQty === 0 ? 'free' : freeQty > 0 ? 'partial' : 'none'
+            const state = freeQty >= maxAvail ? 'free' : freeQty > 0 ? 'partial' : 'none'
             const color = state === 'free' ? 'var(--green)' : state === 'partial' ? 'var(--accent2)' : 'var(--red)'
             const bg = state === 'free' ? 'rgba(52,211,153,0.10)' : state === 'partial' ? 'rgba(245,166,35,0.10)' : 'rgba(248,113,113,0.10)'
             const border = state === 'free' ? 'rgba(52,211,153,0.3)' : state === 'partial' ? 'rgba(245,166,35,0.3)' : 'rgba(248,113,113,0.3)'
             return (
               <div style={{ marginTop:12, display:'flex', alignItems:'flex-start', gap:9, borderRadius:10, padding:'10px 12px', background:bg, border:`1px solid ${border}` }}>
                 <span style={{ color, flexShrink:0, marginTop:1 }}>{state === 'free' ? <Check size={14} /> : <Warn size={14} />}</span>
-                <p style={{ fontSize:13, fontWeight:700, color, lineHeight:1.4 }}>
-                  {state === 'free'
-                    ? t('inventory.availabilityCheckFree', { free: maxAvail, total: maxAvail })
-                    : t(state === 'partial' ? 'inventory.availabilityCheckPartial' : 'inventory.availabilityCheckNone', {
-                        free: freeQty, total: maxAvail, committed: committedQty,
-                        eventName: committedEvents[0]?.name || '',
-                        extra: committedEvents.length > 1 ? t('eventDetail.availabilityConflictMore', { count: committedEvents.length - 1 }) : '',
-                      })
-                  }
-                </p>
+                <div>
+                  <p style={{ fontSize:13, fontWeight:700, color, lineHeight:1.4, margin:0 }}>
+                    {state === 'free'
+                      ? t('inventory.availabilityCheckFree', { free: maxAvail, total: maxAvail })
+                      : committedQty > 0
+                        ? t(state === 'partial' ? 'inventory.availabilityCheckPartial' : 'inventory.availabilityCheckNone', {
+                            free: freeQty, total: maxAvail, committed: committedQty,
+                            eventName: committedEvents[0]?.name || '',
+                            extra: committedEvents.length > 1 ? t('eventDetail.availabilityConflictMore', { count: committedEvents.length - 1 }) : '',
+                          })
+                        : t(state === 'partial' ? 'inventory.availabilityCheckStockPartial' : 'inventory.availabilityCheckStockNone', { free: freeQty, total: maxAvail })
+                    }
+                  </p>
+                  {includesToday && (
+                    <p style={{ fontSize:12, fontWeight:600, color:'var(--text2)', lineHeight:1.4, margin:'3px 0 0' }}>
+                      {t('inventory.availabilityCheckStockNow', { available: stockNow, total: maxAvail })}
+                    </p>
+                  )}
+                </div>
               </div>
             )
           })()}

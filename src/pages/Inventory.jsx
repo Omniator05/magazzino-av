@@ -29,6 +29,7 @@ import { getLinkedItems, linkedItemsToFields } from '../utils/linkedItems'
 import { QrCode, Barcode } from '../components/Icon'
 import DeadlinesField from '../components/DeadlinesField'
 import { syncDeadlineEvents } from '../utils/deadlines'
+import { addIssue, removeIssueById, dropLastIssue, trimIssues, sortedIssues, countIssues } from '../utils/itemIssues'
 
 // Colori pallino per la sezione Cronologia (dettaglio oggetto) — stessa
 // mappa azione→colore usata nel modale modifica riga di EventDetail.jsx.
@@ -45,12 +46,12 @@ const ACTIVITY_COLORS = {
 // oggetto" del modal parte aperta o chiusa (vedi sotto).
 const DETAIL_FIELDS = ['weightKg', 'peakPowerW', 'loadCapacityKg', 'widthM', 'lengthM', 'heightM', 'serialNumber']
 const emptyItemForm = () => ({
-  name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, defectQty:0, brokenNote:'', defectNote:'', minStock:0, consumableUnit:'pezzi',
+  name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, defectQty:0, brokenNote:'', defectNote:'', issues:[], minStock:0, consumableUnit:'pezzi',
   weightKg:'', peakPowerW:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[], deadlines:[],
 })
 const itemToForm = item => ({
   name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'',
-  brokenQty:item.brokenQty||0, defectQty:item.defectQty||0, brokenNote:item.brokenNote||'', defectNote:item.defectNote||'', minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
+  brokenQty:item.brokenQty||0, defectQty:item.defectQty||0, brokenNote:item.brokenNote||'', defectNote:item.defectNote||'', issues:item.issues||[], minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
   weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', loadCapacityKg:item.loadCapacityKg ?? '',
   widthM:item.widthM ?? '', lengthM:item.lengthM ?? '', heightM:item.heightM ?? '', serialNumber:item.serialNumber || '',
   linkedItems:getLinkedItems(item), deadlines:item.deadlines || [],
@@ -152,6 +153,9 @@ export default function Inventory() {
   const [itemActivityLog, setItemActivityLog] = useState([])
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [showPrintPopup, setShowPrintPopup] = useState(false)
+  // Menu rapido "Segnala": rotti / con difetto / pezzi ancora fuori (rientro parziale)
+  const [showStatusMenu, setShowStatusMenu] = useState(false)
+  const [statusDraft, setStatusDraft] = useState({ broken: 0, defect: 0, out: 0, note: '', issues: [], addOpen: false, addType: 'broken', addUnit: '', addNote: '' })
   // Formato scelto per il download etichetta corrente — null finché non si
   // sceglie (solo se la squadra ha impostato "entrambi"; altrimenti è già
   // deciso dall'impostazione, vedi il click che apre il popup più sotto).
@@ -164,19 +168,30 @@ export default function Inventory() {
   const [form, setForm] = useState(emptyItemForm)
   const [linkedSearch, setLinkedSearch] = useState('')
   // Override manuale apertura/chiusura delle sezioni secondarie nel modal
-  // oggetto (Dettagli/Scadenze/Collegati) — per default una sezione si apre
+  // oggetto (Dettagli/Scadenze/Collegati, Rotto) — per default una sezione si apre
   // da sola solo se ha già qualcosa dentro, altrimenti resta chiusa per
   // tenere il modal corto; un tap sull'intestazione vince sempre sul
   // default. Azzerato a ogni apertura del modal (openAdd/openEdit) così un
   // oggetto non eredita le sezioni aperte/chiuse di quello aperto prima.
   const [modalSectionToggle, setModalSectionToggle] = useState({})
+  // Sezione del modal oggetto da portare in vista dopo l'apertura (es. dal
+  // pulsante "Segnala rotto o difetto" del dettaglio).
+  const [scrollToSection, setScrollToSection] = useState(null)
+  useEffect(() => {
+    if (!scrollToSection || !showModal) return
+    const id = setTimeout(() => {
+      document.getElementById(`rc-section-${scrollToSection}`)?.scrollIntoView({ block:'center', behavior:'smooth' })
+      setScrollToSection(null)
+    }, 380)
+    return () => clearTimeout(id)
+  }, [scrollToSection, showModal])
   const myDrag      = useModalDrag(() => setShowModal(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
   const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
   const kitDrag     = useModalDrag(() => setShowKitModal(false))
   const importModal = useCenteredModal(() => setShowImportModal(false))
-  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showImportModal)
+  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showStatusMenu || showImportModal)
   // Kit form: nome + componenti
 
   // Menu filtri: resta montato durante il fade out (invece di sparire di
@@ -281,8 +296,88 @@ export default function Inventory() {
     })
   }, [items.length]) // solo quando cambia il numero di articoli
 
+  // "Risolto" su una singola segnalazione del dettaglio: toglie quel pezzo da
+  // rotti / con difetto (e per i rotti lo rimette tra i disponibili).
+  const resolveIssue = async (issue) => {
+    const it = showDetail
+    const issues = removeIssueById(it.issues, issue.id)
+    let upd
+    if (issue.type === 'broken') {
+      const newBroken = Math.max(0, (it.brokenQty || 0) - 1)
+      const prevOut = (it.totalQty || 0) - (it.availableQty || 0) - (it.brokenQty || 0)
+      upd = { issues, brokenQty: newBroken, availableQty: Math.max(0, it.totalQty - newBroken - prevOut), ...(newBroken === 0 ? { brokenNote: '' } : {}) }
+    } else {
+      const newDefect = Math.max(0, (it.defectQty || 0) - 1)
+      upd = { issues, defectQty: newDefect, ...(newDefect === 0 ? { defectNote: '' } : {}) }
+    }
+    await updateDoc(doc(db, 'items', it.id), upd)
+    setShowDetail(cur => ({ ...cur, ...upd }))
+  }
+
+  const openStatusMenu = () => {
+    const it = showDetail
+    const prevOut = Math.max(0, (it.totalQty||0) - (it.availableQty||0) - (it.brokenQty||0))
+    setStatusDraft({ broken: it.brokenQty || 0, defect: it.defectQty || 0, out: prevOut, note: '', issues: it.issues || [], addOpen: false, addType: 'broken', addUnit: '', addNote: '' })
+    setShowStatusMenu(true)
+  }
+  // Segnalazioni per pezzo nel menu Segnala: aggiungere o togliere una voce
+  // sposta di conseguenza i contatori rotti/con difetto.
+  const applyDraftIssues = (issues) => setStatusDraft(d => {
+    const total = showDetail?.totalQty || 0
+    const clamp = v => Math.min(total, Math.max(0, v))
+    return {
+      ...d, issues,
+      broken: clamp(d.broken + countIssues(issues, 'broken') - countIssues(d.issues, 'broken')),
+      defect: clamp(d.defect + countIssues(issues, 'defect') - countIssues(d.issues, 'defect')),
+    }
+  })
+  const addDraftIssue = () => {
+    const total = showDetail?.totalQty || 1
+    let unit = total > 1 ? parseInt(statusDraft.addUnit, 10) : null
+    if (total > 1 && (!unit || unit < 1 || unit > total)) return
+    const next = addIssue(statusDraft.issues, { type: statusDraft.addType, unit, note: statusDraft.addNote })
+    applyDraftIssues(next)
+    setStatusDraft(d => ({ ...d, addUnit: '', addNote: '', addOpen: false }))
+  }
+  // Applica in un colpo rotti / difetti / rientro parziale. availableQty si
+  // ricalcola come nel salvataggio dell'oggetto: totale - rotti - ancora fuori.
+  const saveStatusMenu = async () => {
+    const it = showDetail
+    const d = statusDraft
+    const total = it.totalQty || 0
+    const prevBroken = it.brokenQty || 0
+    const prevDefect = it.defectQty || 0
+    const prevOut = Math.max(0, total - (it.availableQty || 0) - prevBroken)
+    const broken = Math.min(total, Math.max(0, d.broken))
+    const defect = Math.min(total, Math.max(0, d.defect))
+    const out = Math.min(prevOut, Math.max(0, d.out))
+    const note = d.note.trim()
+    const manualRaised = (cnt, type, prev) => (cnt - countIssues(d.issues, type)) > (prev - countIssues(it.issues, type))
+    const upd = {
+      brokenQty: broken,
+      availableQty: Math.max(0, total - broken - out),
+      defectQty: defect,
+      brokenNote: broken === 0 ? '' : (manualRaised(broken, 'broken', prevBroken) && note ? note : (it.brokenNote || '')),
+      defectNote: defect === 0 ? '' : (manualRaised(defect, 'defect', prevDefect) && note ? note : (it.defectNote || '')),
+      issues: trimIssues(d.issues, broken, defect),
+    }
+    // Segnalazioni nuove per il testo della notifica ("n° 7: la porta non funziona")
+    const knownIds = new Set((it.issues || []).map(i => i.id))
+    const describe = type => upd.issues.filter(i => i.type === type && !knownIds.has(i.id))
+      .map(i => (i.unit ? `n° ${i.unit}` : '') + (i.note ? `${i.unit ? ': ' : ''}${i.note}` : '')).filter(Boolean)
+    await updateDoc(doc(db, 'items', it.id), upd)
+    setShowDetail(cur => ({ ...cur, ...upd }))
+    if (broken > prevBroken) {
+      notifyTeamPush({ title: t('inventory.pushBrokenTitle'), body: [it.name, ...describe('broken'), note].filter(Boolean).join(' — '), url: '/inventory?filter=broken', audience: { type: 'admins' } })
+    }
+    if (defect > prevDefect) {
+      notifyTeamPush({ title: t('inventory.pushDefectTitle'), body: [it.name, ...describe('defect'), note].filter(Boolean).join(' — '), url: '/inventory?filter=defect', audience: { type: 'admins' } })
+    }
+    return true
+  }
+
   const openAdd = () => { setSelected(null); setForm(emptyItemForm()); setLinkedSearch(''); setModalSectionToggle({}); setShowModal(true) }
-  const openEdit = item => {
+  const openEdit = (item, focusSection = null) => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
       setEditingKit(item)
@@ -293,7 +388,7 @@ export default function Inventory() {
       setKitLinkedSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm(itemToForm(item)); setLinkedSearch(''); setModalSectionToggle({}); setShowModal(true)
+      setSelected(item); setForm(itemToForm(item)); setLinkedSearch(''); setModalSectionToggle(focusSection ? { [focusSection]: true } : {}); setScrollToSection(focusSection); setShowModal(true)
     }
   }
 
@@ -349,7 +444,7 @@ export default function Inventory() {
       const prevOut = (selected.totalQty||0) - (selected.availableQty||0) - prevBroken
       const newAvailable = Math.max(0, qty - broken - prevOut)
       const deadlines = await syncDeadlineEvents(selected.deadlines || [], form.deadlines || [], { subjectName: form.name, teamId, userId: user.uid })
-      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
+      await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', issues: trimIssues(form.issues, broken, Math.min(parseInt(form.defectQty)||0, qty)), brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
       // Solo admin, solo quando aumenta (non quando si segna "riparato"): è
       // l'unico verso che segnala davvero un problema da gestire.
       if (broken > prevBroken) {
@@ -372,7 +467,7 @@ export default function Inventory() {
       const broken = Math.min(parseInt(form.brokenQty)||0, qty)
       const ref = await addDoc(collection(db, 'items'), {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
-        brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
+        brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', issues: trimIssues(form.issues, broken, Math.min(parseInt(form.defectQty)||0, qty)), consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes, ...details, ...linkedItemsToFields(form.linkedItems),
         deadlines:[], teamId, createdAt:serverTimestamp(), createdBy: user.uid
       })
@@ -948,11 +1043,14 @@ export default function Inventory() {
         const detailsOpen = modalSectionToggle.details === true
         const deadlinesOpen = modalSectionToggle.deadlines === true
         const linkedOpen = modalSectionToggle.linked === true
+        // Rotto / con difetto: si apre da sola se c'è già un problema segnalato
+        const issuesCount = (form.brokenQty || 0) + (form.defectQty || 0)
+        const issuesOpen = modalSectionToggle.issues ?? issuesCount > 0
         // Sezioni a scomparsa come schede arrotondate (stesso linguaggio della
         // colonna del Calendario): intestazione sempre visibile, contenuto
         // dentro la scheda quando è aperta.
         const section = (key, label, open, count, body) => (
-          <div style={{ border:'1px solid var(--c-line)', borderRadius:14, background:'var(--c-alt)', overflow:'hidden' }}>
+          <div id={`rc-section-${key}`} style={{ border:'1px solid var(--c-line)', borderRadius:14, background:'var(--c-alt)', overflow:'hidden' }}>
             <button type="button" className="btn-no-anim" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
               aria-expanded={open}
               style={{ width:'100%', padding:'13px 14px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left', borderBottom: open ? '1px solid var(--c-line)' : 'none' }}>
@@ -1006,45 +1104,10 @@ export default function Inventory() {
                 <div className="form-group"><label>{t('inventory.brandLabel')}</label><input value={form.brand} onChange={e => setForm({...form,brand:e.target.value})} placeholder={t('inventory.brandPlaceholder')} /></div>
                 <div className="form-group"><label>{t('inventory.modelLabel')}</label><input value={form.model} onChange={e => setForm({...form,model:e.target.value})} placeholder={t('inventory.modelPlaceholder')} /></div>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
-                  <Stepper value={form.qty} min={1} onChange={qty => setForm({...form, qty, brokenQty: Math.min(form.brokenQty, qty), defectQty: Math.min(form.defectQty || 0, qty)})}
-                    decAria={t('eventDetail.decreaseQtyAria')} incAria={t('eventDetail.increaseQtyAria')} />
-                </div>
-                <div className="form-group">
-                  <label style={{ color: form.brokenQty > 0 ? '#e63946' : undefined }}>
-                    {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
-                  </label>
-                  <Stepper tone="red" value={form.brokenQty} min={0} max={form.qty} onChange={brokenQty => setForm({...form, brokenQty})}
-                    decAria={t('inventory.decreaseBrokenAria')} incAria={t('inventory.increaseBrokenAria')} />
-                </div>
+              <div className="form-group"><label>{form.category === 'Consumabili' ? t(`inventory.totalQtyLabel_${form.consumableUnit}`) : t('inventory.totalQtyLabel')}</label>
+                <Stepper value={form.qty} min={1} onChange={qty => setForm({...form, qty, brokenQty: Math.min(form.brokenQty, qty), defectQty: Math.min(form.defectQty || 0, qty)})}
+                  decAria={t('eventDetail.decreaseQtyAria')} incAria={t('eventDetail.increaseQtyAria')} />
               </div>
-              {form.brokenQty > 0 && (
-                <div style={{ background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', borderRadius:10, padding:'9px 12px', marginBottom:12, fontSize:13, fontWeight:600, color:'#e63946', display:'flex', alignItems:'center', gap:6 }}>
-                  <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
-                </div>
-              )}
-              {form.brokenQty > 0 && (
-                <div className="form-group">
-                  <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
-                  <textarea value={form.brokenNote || ''} onChange={e => setForm({...form, brokenNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
-                </div>
-              )}
-              {/* "Con difetto": ancora utilizzabile (resta nei disponibili) ma con un problema da sistemare */}
-              <div className="form-group">
-                <label style={{ color: (form.defectQty || 0) > 0 ? '#d97706' : undefined }}>
-                  {t('inventory.defectLabel')} {(form.defectQty || 0) > 0 && <span style={{ fontWeight:800 }}>({form.defectQty})</span>}
-                  <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}> · {t('inventory.defectHint')}</span>
-                </label>
-                <Stepper tone="amber" value={form.defectQty || 0} min={0} max={form.qty} onChange={defectQty => setForm({...form, defectQty})}
-                  decAria={t('inventory.decreaseDefectAria')} incAria={t('inventory.increaseDefectAria')} />
-              </div>
-              {(form.defectQty || 0) > 0 && (
-                <div className="form-group">
-                  <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
-                  <textarea value={form.defectNote || ''} onChange={e => setForm({...form, defectNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
-                </div>
-              )}
               <div className="form-group"><label>{t('inventory.locationLabel')}</label><input value={form.location} onChange={e => setForm({...form,location:e.target.value})} placeholder={t('inventory.locationPlaceholder')} /></div>
               <div className="form-group"><label>{t('inventory.notesLabel')}</label><textarea value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} rows={2} /></div>
               {/* Soglia scorta minima — solo per Consumabili */}
@@ -1059,6 +1122,44 @@ export default function Inventory() {
             </div>
 
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:8 }}>
+              {section('issues', t('inventory.issuesSectionTitle'), issuesOpen, issuesCount, (
+                <div style={{ paddingBottom:14 }}>
+                  <div className="form-group">
+                    <label style={{ color: form.brokenQty > 0 ? '#e63946' : undefined }}>
+                      {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
+                      <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}> · {t('inventory.brokenHint')}</span>
+                    </label>
+                    <Stepper tone="red" value={form.brokenQty} min={0} max={form.qty} onChange={brokenQty => setForm({...form, brokenQty})}
+                      decAria={t('inventory.decreaseBrokenAria')} incAria={t('inventory.increaseBrokenAria')} />
+                  </div>
+                  {form.brokenQty > 0 && (
+                    <div style={{ background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', borderRadius:10, padding:'9px 12px', marginBottom:12, fontSize:13, fontWeight:600, color:'#e63946', display:'flex', alignItems:'center', gap:6 }}>
+                      <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
+                    </div>
+                  )}
+                  {form.brokenQty > 0 && (
+                    <div className="form-group">
+                      <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
+                      <textarea value={form.brokenNote || ''} onChange={e => setForm({...form, brokenNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
+                    </div>
+                  )}
+                  {/* "Con difetto": ancora utilizzabile (resta nei disponibili) ma con un problema da sistemare */}
+                  <div className="form-group">
+                    <label style={{ color: (form.defectQty || 0) > 0 ? '#d97706' : undefined }}>
+                      {t('inventory.defectLabel')} {(form.defectQty || 0) > 0 && <span style={{ fontWeight:800 }}>({form.defectQty})</span>}
+                      <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}> · {t('inventory.defectHint')}</span>
+                    </label>
+                    <Stepper tone="amber" value={form.defectQty || 0} min={0} max={form.qty} onChange={defectQty => setForm({...form, defectQty})}
+                      decAria={t('inventory.decreaseDefectAria')} incAria={t('inventory.increaseDefectAria')} />
+                  </div>
+                  {(form.defectQty || 0) > 0 && (
+                    <div className="form-group">
+                      <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
+                      <textarea value={form.defectNote || ''} onChange={e => setForm({...form, defectNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
+                    </div>
+                  )}
+                </div>
+              ))}
               {section('details', t('inventory.detailsPageTitle'), detailsOpen, detailsFilledCount, (
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                   <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
@@ -1206,10 +1307,10 @@ export default function Inventory() {
                     <span style={{ fontSize:12, color:'var(--accent2)' }}>● {outCount} {t('inventory.out')}</span>
                   )}
                   {showDetail.brokenQty > 0 && (
-                    <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: showDetail.brokenQty })}</span>
+                    <span style={{ fontSize:12, color:'var(--red)' }}>● {brokenText(showDetail, t)}</span>
                   )}
                   {showDetail.defectQty > 0 && (
-                    <span style={{ fontSize:12, color:'#d97706' }}>● {t('inventory.defectCount', { count: showDetail.defectQty })}</span>
+                    <span style={{ fontSize:12, color:'#d97706' }}>● {defectText(showDetail, t)}</span>
                   )}
                 </div>
               </div>
@@ -1236,6 +1337,26 @@ export default function Inventory() {
               )}
             </div>
 
+            {/* Pezzi segnalati con numero e difetto, ognuno risolvibile da solo */}
+            {(showDetail.issues || []).length > 0 && (
+              <div style={{ margin:'0 0 10px', padding:'8px 10px', borderRadius:10, background:'var(--c-alt)', border:'1px solid var(--c-line)' }}>
+                <p style={{ margin:'0 0 6px', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink3)' }}>{t('inventory.issuesPiecesTitle')}</p>
+                {sortedIssues(showDetail.issues).map(i => (
+                  <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
+                    <span style={{ fontSize:12, fontWeight:800, whiteSpace:'nowrap', color: i.type === 'broken' ? '#e63946' : '#b45309' }}>
+                      {i.unit ? t('inventory.issuePieceNumber', { n: i.unit }) : t('inventory.issuePieceNoNumber')}
+                    </span>
+                    <span style={{ flex:1, minWidth:0, fontSize:13, color:'var(--c-ink)', overflowWrap:'anywhere' }}>
+                      <strong>{i.type === 'broken' ? t('inventory.brokenSingle') : t('inventory.defectSingle')}</strong>{i.note ? ` — ${i.note}` : ''}
+                    </span>
+                    <button type="button" className="btn-no-anim" onClick={() => resolveIssue(i)}
+                      style={{ flexShrink:0, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:8, padding:'6px 10px', fontSize:12, fontWeight:800 }}>
+                      {t('inventory.issueResolved')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Descrizioni dei problemi segnalati (rotto / con difetto) */}
             {((showDetail.brokenQty||0) > 0 && showDetail.brokenNote) && (
               <p style={{ margin:'0 0 10px', padding:'10px 12px', borderRadius:10, background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', color:'var(--c-ink)', fontSize:13, lineHeight:1.45 }}>
@@ -1248,7 +1369,7 @@ export default function Inventory() {
                 <button
                   onClick={async () => {
                     const newDefect = Math.max(0, (showDetail.defectQty || 0) - 1)
-                    const upd = { defectQty: newDefect, ...(newDefect === 0 ? { defectNote: '' } : {}) }
+                    const upd = { defectQty: newDefect, issues: dropLastIssue(showDetail.issues, 'defect'), ...(newDefect === 0 ? { defectNote: '' } : {}) }
                     await updateDoc(doc(db, 'items', showDetail.id), upd)
                     setShowDetail(d => ({ ...d, ...upd }))
                   }}
@@ -1264,7 +1385,7 @@ export default function Inventory() {
                   const newBroken = Math.max(0, currentBroken - 1)
                   const prevOut = (showDetail.totalQty||0) - (showDetail.availableQty||0) - currentBroken
                   const newAvailable = Math.max(0, showDetail.totalQty - newBroken - prevOut)
-                  const upd = { brokenQty: newBroken, availableQty: newAvailable, ...(newBroken === 0 ? { brokenNote: '' } : {}) }
+                  const upd = { brokenQty: newBroken, availableQty: newAvailable, issues: dropLastIssue(showDetail.issues, 'broken'), ...(newBroken === 0 ? { brokenNote: '' } : {}) }
                   await updateDoc(doc(db, 'items', showDetail.id), upd)
                   setShowDetail(d => ({ ...d, ...upd }))
                 }}
@@ -1273,34 +1394,145 @@ export default function Inventory() {
                 <Wrench size={15} /> {t('inventory.repairOneButton')}
               </button>
             )}
-            {/* Tasto ripristina giacenza — appare solo se risultano articoli "fuori" */}
-            {outCount > 0 && (
-              <button
-                onClick={async () => {
-                  const newAvailable = (showDetail.totalQty||0) - (showDetail.brokenQty||0)
-                  await updateDoc(doc(db, 'items', showDetail.id), { availableQty: newAvailable })
-                  setShowDetail(d => ({ ...d, availableQty: newAvailable }))
-                }}
-                className="btn-no-anim" style={{ width:'100%', marginBottom:10, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:12, padding:'12px', fontWeight:800, fontSize:14 }}
-              >
-                {t('inventory.restoreStock', { count: outCount })}
-              </button>
-            )}
             {showDetail.notes && <p style={{ color:'var(--c-ink2)', fontSize:13, marginBottom:14, padding:'10px 12px', background:'var(--c-alt)', border:'1px solid var(--c-line)', borderRadius:10 }}>{showDetail.notes}</p>}
 
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            {/* Tre azioni sempre su una riga (anche da telefono): etichetta,
+                menu rapido Segnala (rotto / difetto / rientro), modifica. */}
+            <div style={{ display:'grid', gridTemplateColumns: showDetail.isBundle ? '1fr 1fr' : '1fr 1fr 1fr', gap:8 }}>
               <button
                 onClick={() => {
                   const display = getCodeDisplay(team)
                   setPrintFormat(display === 'both' ? null : display)
                   setShowPrintPopup(true)
                 }}
-                className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
-              ><Download size={15} /> {t('inventory.downloadLabel')}</button>
-              <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}><Edit size={15} /> {t('inventory.edit')}</button>
+                className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'12px 6px', fontSize:13.5, whiteSpace:'nowrap' }}
+              ><Download size={15} /> {t('inventory.downloadShort')}</button>
+              {!showDetail.isBundle && (
+                <button onClick={openStatusMenu} aria-label={t('inventory.reportIssueButton')}
+                  className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'12px 6px', fontSize:13.5, whiteSpace:'nowrap' }}
+                ><Warn size={15} /> {t('inventory.reportShort')}</button>
+              )}
+              <button onClick={() => { setShowDetail(null); openEdit(showDetail) }} className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'12px 6px', fontSize:13.5, whiteSpace:'nowrap' }}><Edit size={15} /> {t('inventory.edit')}</button>
             </div>
           </div>
         </div>
+        )
+      })()}
+
+      {/* Menu rapido "Segnala": rotti, con difetto e rientro parziale in un
+          unico riquadro centrato (stesso stile del popup di stampa). */}
+      {showStatusMenu && showDetail && (() => {
+        const total = showDetail.totalQty || 0
+        const prevOut = Math.max(0, total - (showDetail.availableQty || 0) - (showDetail.brokenQty || 0))
+        // La descrizione generica serve solo per i rotti/difetti aggiunti coi +/− (quelli
+        // aggiunti come "pezzo" hanno la propria descrizione).
+        const manual = (cnt, issuesList, type) => cnt - countIssues(issuesList, type)
+        const raised = manual(statusDraft.broken, statusDraft.issues, 'broken') > manual(showDetail.brokenQty || 0, showDetail.issues, 'broken')
+          || manual(statusDraft.defect, statusDraft.issues, 'defect') > manual(showDetail.defectQty || 0, showDetail.issues, 'defect')
+        const rowLabel = { fontSize:13, fontWeight:800, margin:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }
+        const rowHint = { fontSize:12, color:'var(--c-ink2)', margin:'1px 0 7px' }
+        return (
+          <div onClick={() => setShowStatusMenu(false)}
+            style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+            <div onClick={e => e.stopPropagation()} role="dialog" aria-label={t('inventory.statusMenuTitle')}
+              style={{ position:'relative', width:'100%', maxWidth:340, maxHeight:'88dvh', overflowY:'auto', background:'var(--card)', borderRadius:16, padding:'20px 18px 18px', boxShadow:'0 12px 40px rgba(0,0,0,0.3)' }}>
+              <button onClick={() => setShowStatusMenu(false)} aria-label={t('common.close')} className="btn-no-anim"
+                style={{ position:'absolute', top:6, right:6, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+              <h2 style={{ margin:'0 40px 2px 0', fontSize:17 }}>{t('inventory.statusMenuTitle')}</h2>
+              <p style={{ margin:'0 0 16px', fontSize:13, color:'var(--c-ink2)' }}>{showDetail.name}</p>
+
+              <div style={{ marginBottom:14 }}>
+                <p style={{ ...rowLabel, color:'#e63946' }}>{t('inventory.brokenLabel')}</p>
+                <p style={rowHint}>{t('inventory.brokenHint')}</p>
+                <Stepper tone="red" value={statusDraft.broken} min={0} max={total} onChange={broken => setStatusDraft(d => ({ ...d, broken }))}
+                  decAria={t('inventory.decreaseBrokenAria')} incAria={t('inventory.increaseBrokenAria')} />
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <p style={{ ...rowLabel, color:'#b45309' }}>{t('inventory.defectLabel')}</p>
+                <p style={rowHint}>{t('inventory.defectHint')}</p>
+                <Stepper tone="amber" value={statusDraft.defect} min={0} max={total} onChange={defect => setStatusDraft(d => ({ ...d, defect }))}
+                  decAria={t('inventory.decreaseDefectAria')} incAria={t('inventory.increaseDefectAria')} />
+              </div>
+              {/* Pezzi segnalati: numero esatto + difetto, per non prendere proprio quello */}
+              <div style={{ marginBottom:14 }}>
+                <p style={{ ...rowLabel, color:'var(--c-ink)' }}>
+                  {t('inventory.issuesPiecesTitle')}
+                  <button type="button" className="btn-no-anim" onClick={() => setStatusDraft(d => ({ ...d, addOpen: !d.addOpen }))}
+                    style={{ background:'transparent', color:'#e63946', fontWeight:800, fontSize:12.5, padding:'2px 0' }}>
+                    {statusDraft.addOpen ? t('common.cancel') : t('inventory.issuesAddPiece')}
+                  </button>
+                </p>
+                <p style={rowHint}>{total > 1 ? t('inventory.issuesPiecesHint') : t('inventory.issuesPiecesHintSingle')}</p>
+                {sortedIssues(statusDraft.issues).map(i => (
+                  <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', marginBottom:6, borderRadius:10, background: i.type === 'broken' ? 'rgba(230,57,70,0.08)' : 'rgba(217,119,6,0.10)' }}>
+                    <span style={{ fontSize:12, fontWeight:800, color: i.type === 'broken' ? '#e63946' : '#b45309', whiteSpace:'nowrap' }}>
+                      {i.unit ? t('inventory.issuePieceNumber', { n: i.unit }) : t('inventory.issuePieceNoNumber')}
+                    </span>
+                    <span style={{ flex:1, minWidth:0, fontSize:12.5, color:'var(--c-ink)', overflowWrap:'anywhere' }}>
+                      <strong>{i.type === 'broken' ? t('inventory.brokenSingle') : t('inventory.defectSingle')}</strong>{i.note ? ` — ${i.note}` : ''}
+                    </span>
+                    <button type="button" className="btn-no-anim" aria-label={t('inventory.issueRemoveAria')} onClick={() => applyDraftIssues(removeIssueById(statusDraft.issues, i.id))}
+                      style={{ background:'transparent', color:'var(--c-ink3)', fontSize:15, width:28, height:28, flexShrink:0 }}>✕</button>
+                  </div>
+                ))}
+                {statusDraft.addOpen && (
+                  <div style={{ padding:10, borderRadius:12, border:'1px solid var(--c-line)', background:'var(--c-alt)', display:'flex', flexDirection:'column', gap:8 }}>
+                    <div style={{ display:'flex', gap:6 }}>
+                      {['broken', 'defect'].map(k => (
+                        <button key={k} type="button" className="btn-no-anim" aria-pressed={statusDraft.addType === k} onClick={() => setStatusDraft(d => ({ ...d, addType: k }))}
+                          style={{ flex:1, minHeight:38, borderRadius:10, fontSize:13, fontWeight:800,
+                            background: statusDraft.addType === k ? (k === 'broken' ? '#e63946' : '#d97706') : 'var(--c-fill)',
+                            color: statusDraft.addType === k ? '#fff' : 'var(--c-ink2)', border:'none' }}>
+                          {k === 'broken' ? t('inventory.brokenSingle') : t('inventory.defectSingle')}
+                        </button>
+                      ))}
+                    </div>
+                    {total > 1 && (
+                      <input type="number" inputMode="numeric" min={1} max={total} value={statusDraft.addUnit} onChange={e => setStatusDraft(d => ({ ...d, addUnit: e.target.value }))}
+                        placeholder={t('inventory.issuePieceNumberPlaceholder', { total })} aria-label={t('inventory.issuePieceNumberLabel')} style={{ fontSize:14 }} />
+                    )}
+                    <input value={statusDraft.addNote} onChange={e => setStatusDraft(d => ({ ...d, addNote: e.target.value }))}
+                      placeholder={t('inventory.issueNotePlaceholder')} aria-label={t('inventory.issueNoteLabel')} style={{ fontSize:14 }} />
+                    <button type="button" className="btn btn-secondary" onClick={addDraftIssue}
+                      disabled={total > 1 && !(parseInt(statusDraft.addUnit, 10) >= 1 && parseInt(statusDraft.addUnit, 10) <= total)}
+                      style={{ minHeight:40, fontSize:13.5, opacity: (total > 1 && !(parseInt(statusDraft.addUnit, 10) >= 1 && parseInt(statusDraft.addUnit, 10) <= total)) ? 0.5 : 1 }}>
+                      {t('inventory.issuesAddConfirm')}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {prevOut > 0 && (
+                <div style={{ marginBottom:14 }}>
+                  <p style={{ ...rowLabel, color:'var(--c-ink)' }}>
+                    {t('inventory.outStillLabel')}
+                    {statusDraft.out > 0 && (
+                      <button type="button" className="btn-no-anim" onClick={() => setStatusDraft(d => ({ ...d, out: 0 }))}
+                        style={{ background:'transparent', color:'#e63946', fontWeight:800, fontSize:12.5, padding:'2px 0' }}>{t('inventory.allReturned')}</button>
+                    )}
+                  </p>
+                  <p style={rowHint}>{t('inventory.partialReturnHint')}</p>
+                  <Stepper value={statusDraft.out} min={0} max={prevOut} onChange={out => setStatusDraft(d => ({ ...d, out }))}
+                    decAria={t('inventory.decreaseOutAria')} incAria={t('inventory.increaseOutAria')} />
+                </div>
+              )}
+              {raised && (
+                <div style={{ marginBottom:14 }}>
+                  <label htmlFor="rc-status-note" style={{ display:'block', fontSize:12.5, fontWeight:800, color:'var(--c-ink2)', marginBottom:6 }}>
+                    {t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500 }}>{t('common.optional')}</span>
+                  </label>
+                  <textarea id="rc-status-note" rows={2} value={statusDraft.note} onChange={e => setStatusDraft(d => ({ ...d, note: e.target.value }))} placeholder={t('inventory.issueNotePlaceholder')} />
+                </div>
+              )}
+              <SaveButton onSave={saveStatusMenu} onDone={() => setShowStatusMenu(false)} className="btn btn-primary" style={{ width:'100%' }}>
+                <Save size={16} /> {t('inventory.save')}
+              </SaveButton>
+              <button type="button" className="btn-no-anim"
+                onClick={() => { const it = showDetail; setShowStatusMenu(false); setShowDetail(null); openEdit(it, 'issues') }}
+                style={{ width:'100%', marginTop:8, background:'transparent', color:'var(--c-ink2)', fontWeight:700, fontSize:13, padding:'10px 0' }}>
+                {t('inventory.moreInEdit')}
+              </button>
+            </div>
+          </div>
         )
       })()}
 
@@ -1502,121 +1734,17 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* Kit Builder */}
-      {/* ── Kit Edit Modal ─────────────────────── */}
+      {/* Baule (kit): un solo foglio a schede per creare e modificare —
+          Contenuto (dati + componenti), Stato bauli (solo modifica), Collegati. */}
       {showKitEditModal && editingKit && (
-        <div className={`modal-overlay${kitEditDrag.closing ? ' closing' : ''}`} onClick={kitEditDrag.onOverlayClick}>
-          <div className={`modal rc-sheet${kitEditDrag.jiggling ? ' modal-jiggle' : ''}${kitEditDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitEditDrag.props}>
-            <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={kitEditDrag.close} aria-label={t("common.close")}>✕</button>
-              <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.editKitTitle')}</h2>
-              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholder')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
-              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholder')} style={{ fontSize:13, marginBottom:10 }} />
-              <div style={{ marginBottom:10 }}>
-                <Picker
-                  value={kitForm.category || 'Altro'}
-                  onChange={category => setKitForm({...kitForm, category})}
-                  ariaLabel={t('inventory.categoryLabel')}
-                  options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
-                />
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button type="button" onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                  <input type="number" min="1" value={kitForm.qty} onChange={e => setKitForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))} style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }} />
-                  <button type="button" onClick={() => setKitForm(f => ({...f, qty:f.qty+1}))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                </div>
-              </div>
-            </div>
-            {/* Un solo scroll per tutto il contenuto centrale (componenti, stato
-                bauli, ricerca + risultati): prima queste erano sezioni fisse
-                separate, e con più bauli/componenti la ricerca finiva spinta
-                fuori dalla modale, irraggiungibile. Header e bottoni restano
-                fissi (flexShrink:0), solo questo blocco scorre. */}
-            <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
-              {kitEditComponents.length > 0 && (
-                <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', background:'rgba(245,166,35,0.04)' }}>
-                  <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.componentsCount', { count: kitEditComponents.length })}</p>
-                  {kitEditComponents.map(comp => (
-                    <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                      <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{comp.name}</span>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                        <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
-                        <button onClick={() => setKitEditComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:c.qty+1} : c))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                      </div>
-                      <button onClick={() => setKitEditComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} aria-label={t('inventory.removeComponentAria', { name: comp.name })} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'8px 6px', minHeight:32 }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {kitEditComponents.length > 0 && (
-                <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
-                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, marginBottom:2, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.kitInstancesTitle')}</p>
-                  <p style={{ color:'var(--text3)', fontSize:11.5, marginBottom:8, lineHeight:1.4 }}>{t('inventory.kitInstancesHint')}</p>
-                  {ensureInstanceList(kitEditInstances, kitForm.qty).map(inst => {
-                    const hasBroken = (inst.brokenComponents || []).length > 0
-                    return (
-                      <div key={inst.number} style={{ marginBottom:8, padding:'8px 10px', borderRadius:8, background: hasBroken ? 'rgba(248,113,113,0.06)' : 'var(--card2)', border: hasBroken ? '1px solid rgba(248,113,113,0.25)' : '1px solid var(--border)' }}>
-                        <p style={{ fontSize:12.5, fontWeight:800, color: hasBroken ? 'var(--red)' : 'var(--text)', marginBottom:6, display:'flex', alignItems:'center', gap:5 }}>
-                          {hasBroken && <Warn size={12} />} {t('inventory.kitInstanceLabel', { number: inst.number })}
-                        </p>
-                        {kitEditComponents.map(comp => {
-                          const brokenQty = (inst.brokenComponents || []).find(b => b.itemId === comp.itemId)?.qty || 0
-                          return (
-                            <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                              <span style={{ flex:1, fontSize:12.5, color:'var(--text2)' }}>{comp.name}</span>
-                              <button
-                                onClick={() => toggleInstanceBroken(inst.number, comp.itemId, comp.qty, -1)}
-                                disabled={brokenQty === 0}
-                                aria-label={t('inventory.decreaseBrokenComponentAria', { name: comp.name, number: inst.number })}
-                                style={{ width:28, height:28, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty === 0 ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                              <span style={{ fontSize:12, fontWeight:800, minWidth:36, textAlign:'center', color: brokenQty > 0 ? 'var(--red)' : 'var(--text2)' }}>
-                                {brokenQty > 0 ? t('inventory.kitInstanceMissingCount', { count: brokenQty }) : '✓'}
-                              </span>
-                              <button
-                                onClick={() => toggleInstanceBroken(inst.number, comp.itemId, comp.qty, 1)}
-                                disabled={brokenQty >= comp.qty}
-                                aria-label={t('inventory.increaseBrokenComponentAria', { name: comp.name, number: inst.number })}
-                                style={{ width:28, height:28, borderRadius:5, background:'var(--card3)', border:'1px solid var(--border)', fontSize:12, opacity: brokenQty >= comp.qty ? 0.4 : 1, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
-                <div style={{ maxHeight:280, overflowY:'auto' }}>
-                  <label>{t('inventory.linkedItemsLabel')}</label>
-                  <LinkedItemsEditor
-                    items={items} selfId={editingKit?.id}
-                    value={kitForm.linkedItems} onChange={links => setKitForm({...kitForm, linkedItems:links})}
-                    search={kitLinkedSearch} onSearchChange={setKitLinkedSearch}
-                  />
-                </div>
-              </div>
-              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
-                <input value={kitEditSearch} onChange={e => setKitEditSearch(e.target.value)} placeholder={t('inventory.addComponentPlaceholder')} style={{ fontSize:13 }} />
-              </div>
-              {items
-                .filter(i => !i.isBundle && !kitEditComponents.some(c => c.itemId===i.id))
-                .filter(i => !kitEditSearch || i.name?.toLowerCase().includes(kitEditSearch.toLowerCase()))
-                .map(item => (
-                  <button type="button" key={item.id} className="item-row" onClick={() => { setKitEditComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitEditSearch('') }} aria-label={t('inventory.addComponentAria', { name: item.name })}>
-                    <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-                      <p style={{ color:'var(--text2)', fontSize:12 }}>{t('inventory.availableShort', { count: item.availableQty??item.totalQty })}</p>
-                    </div>
-                    <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
-                  </button>
-                ))
-              }
-            </div>
-            <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)', display:'flex', gap:10 }}>
+        <KitSheet mode="edit" drag={kitEditDrag} t={t} items={items} selfId={editingKit.id}
+          form={kitForm} setForm={setKitForm}
+          components={kitEditComponents} setComponents={setKitEditComponents}
+          instances={kitEditInstances} onToggleBroken={toggleInstanceBroken}
+          search={kitEditSearch} setSearch={setKitEditSearch}
+          linkedSearch={kitLinkedSearch} setLinkedSearch={setKitLinkedSearch}
+          footer={(
+            <div style={{ display:'flex', gap:10 }}>
               <button
                 onClick={async () => {
                   if (!(await confirm({ title: t('inventory.deleteKit'), message: t('inventory.confirmDeleteKitMessage', { name: editingKit.name }), confirmLabel: t('inventory.delete'), danger: true }))) return
@@ -1653,109 +1781,229 @@ export default function Inventory() {
                 <Save size={16} /> {t('inventory.saveChanges')}
               </button>
             </div>
-          </div>
-        </div>
+          )} />
       )}
 
       {showKitModal && (
-        <div className={`modal-overlay${kitDrag.closing ? ' closing' : ''}`} onClick={kitDrag.onOverlayClick}>
-          <div className={`modal rc-sheet${kitDrag.jiggling ? ' modal-jiggle' : ''}${kitDrag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...kitDrag.props}>
-            <div style={{ padding:'20px 20px 12px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button className="close-btn" onClick={kitDrag.close} aria-label={t("common.close")}>✕</button>
-              <h2 style={{ marginBottom:14, display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {t('inventory.newKitTitle')}</h2>
-              <input value={kitForm.name} onChange={e => setKitForm({...kitForm,name:e.target.value})} placeholder={t('inventory.kitNamePlaceholderNew')} style={{ marginBottom:8, fontWeight:600, fontSize:16 }} />
-              <input value={kitForm.location} onChange={e => setKitForm({...kitForm,location:e.target.value})} placeholder={t('inventory.kitLocationPlaceholderNew')} style={{ fontSize:13, marginBottom:10 }} />
-              <div style={{ marginBottom:10 }}>
-                <Picker
-                  value={kitForm.category}
-                  onChange={category => setKitForm({...kitForm, category})}
-                  ariaLabel={t('inventory.categoryLabel')}
-                  options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
-                />
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <p style={{ fontSize:13, color:'var(--text2)', fontWeight:600, whiteSpace:'nowrap' }}>{t('inventory.howManyKits')}</p>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <button onClick={() => setKitForm(f => ({...f, qty:Math.max(1,f.qty-1)}))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                  <input type="number" min="1" value={kitForm.qty} onChange={e => setKitForm(f => ({...f, qty:Math.max(1,parseInt(e.target.value)||1)}))} style={{ width:52, textAlign:'center', fontWeight:800, fontSize:16, padding:'4px 6px' }} />
-                  <button onClick={() => setKitForm(f => ({...f, qty:f.qty+1}))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:44, height:44, borderRadius:8, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                </div>
-              </div>
-            </div>
-            {kitComponents.length > 0 && (
-              <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'rgba(245,166,35,0.04)' }}>
-                <p style={{ color:'var(--accent2)', fontSize:12, fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('inventory.kitContents')}</p>
-                {kitComponents.map(comp => (
-                  <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                    <span style={{ flex:1, fontSize:14, fontWeight:600, color:'var(--text)' }}>{comp.name}</span>
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.max(1,c.qty-1)} : c))} aria-label={t('eventDetail.decreaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>-</button>
-                      <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center' }}>{comp.qty}</span>
-                      <button onClick={() => setKitComponents(prev => prev.map(c => c.itemId===comp.itemId ? {...c,qty:Math.min(c.maxQty,c.qty+1)} : c))} aria-label={t('eventDetail.increaseQtyAria')} style={{ width:32, height:32, borderRadius:6, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
-                    </div>
-                    <button onClick={() => setKitComponents(prev => prev.filter(c => c.itemId !== comp.itemId))} aria-label={t('inventory.removeComponentAria', { name: comp.name })} style={{ background:'transparent', color:'var(--text2)', fontSize:16, padding:'8px 6px', minHeight:32 }}>x</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <div style={{ maxHeight:280, overflowY:'auto' }}>
-                  <label>{t('inventory.linkedItemsLabel')}</label>
-                  <LinkedItemsEditor
-                    items={items} selfId={null}
-                    value={kitForm.linkedItems} onChange={links => setKitForm({...kitForm, linkedItems:links})}
-                    search={kitLinkedSearch} onSearchChange={setKitLinkedSearch}
-                  />
-                </div>
-            </div>
-            <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <input value={kitSearch} onChange={e => setKitSearch(e.target.value)} placeholder={t('inventory.searchItemToAdd')} style={{ fontSize:13 }} />
-            </div>
-            <div style={{ overflowY:'auto', flex:1 }}>
-              {items.filter(i => !i.isBundle && !kitComponents.some(c => c.itemId===i.id)).filter(i => !kitSearch || i.name?.toLowerCase().includes(kitSearch.toLowerCase())).map(item => (
-                <button type="button" key={item.id} className="item-row" onClick={() => { setKitComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty||1 }]); setKitSearch('') }} aria-label={t('inventory.addComponentAria', { name: item.name })}>
-                  <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category]||'📦'}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
-                    <p style={{ color:'var(--text2)', fontSize:12 }}>{item.availableQty??item.totalQty} disp.</p>
-                  </div>
-                  <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
-                </button>
-              ))}
-            </div>
-            <div style={{ padding:'14px 16px', borderTop:'1px solid var(--border)', flexShrink:0, background:'var(--bg2)' }}>
-              <SaveButton
-                onSave={async () => {
-                  if (!kitForm.name.trim() || kitComponents.length === 0) return false
-                  const warehouseCap = warehouseLimit(team)
-                  if (items.length >= warehouseCap) {
-                    await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
-                    return false
-                  }
-                  const kitQty = kitForm.qty || 1
-                  const ref = await addDoc(collection(db, 'items'), {
-                    name: kitForm.name.trim(), location: kitForm.location.trim(),
-                    category: kitForm.category || 'Altro', isBundle: true,
-                    components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
-                    totalQty: kitQty, availableQty: kitQty,
-                    instances: ensureInstanceList([], kitQty),
-                    ...linkedItemsToFields(kitForm.linkedItems),
-                    teamId, createdAt: serverTimestamp(), createdBy: user.uid,
-                  })
-                  await updateDoc(ref, { code: generateItemCode(ref.id) })
-                  return true
-                }}
-                onDone={kitDrag.close}
-                onError={kitDrag.triggerJiggle}
-                className="btn btn-primary btn-full"
-                disabled={!kitForm.name.trim() || kitComponents.length === 0}
-                style={{ opacity: !kitForm.name.trim() || kitComponents.length === 0 ? 0.4 : 1 }}>
-                {t('inventory.createKit', { prefix: kitForm.qty > 1 ? `${kitForm.qty}x ` : '', count: kitComponents.length })}
-              </SaveButton>
-            </div>
+        <KitSheet mode="new" drag={kitDrag} t={t} items={items} selfId={null}
+          form={kitForm} setForm={setKitForm}
+          components={kitComponents} setComponents={setKitComponents}
+          search={kitSearch} setSearch={setKitSearch}
+          linkedSearch={kitLinkedSearch} setLinkedSearch={setKitLinkedSearch}
+          footer={(
+            <SaveButton
+              onSave={async () => {
+                if (!kitForm.name.trim() || kitComponents.length === 0) return false
+                const warehouseCap = warehouseLimit(team)
+                if (items.length >= warehouseCap) {
+                  await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
+                  return false
+                }
+                const kitQty = kitForm.qty || 1
+                const ref = await addDoc(collection(db, 'items'), {
+                  name: kitForm.name.trim(), location: kitForm.location.trim(),
+                  category: kitForm.category || 'Altro', isBundle: true,
+                  components: kitComponents.map(c => ({ itemId:c.itemId, name:c.name, qty:c.qty })),
+                  totalQty: kitQty, availableQty: kitQty,
+                  instances: ensureInstanceList([], kitQty),
+                  ...linkedItemsToFields(kitForm.linkedItems),
+                  teamId, createdAt: serverTimestamp(), createdBy: user.uid,
+                })
+                await updateDoc(ref, { code: generateItemCode(ref.id) })
+                return true
+              }}
+              onDone={kitDrag.close}
+              onError={kitDrag.triggerJiggle}
+              className="btn btn-primary btn-full"
+              disabled={!kitForm.name.trim() || kitComponents.length === 0}
+              style={{ opacity: !kitForm.name.trim() || kitComponents.length === 0 ? 0.4 : 1 }}>
+              {t('inventory.createKit', { prefix: kitForm.qty > 1 ? `${kitForm.qty}x ` : '', count: kitComponents.length })}
+            </SaveButton>
+          )} />
+      )}
+    </div>
+  )
+}
+
+// Foglio per creare e modificare un baule (kit). Prima era un unico scroll che
+// mescolava dati, componenti, stato dei singoli bauli, oggetti collegati e
+// l'intero elenco del magazzino; ora tre schede con un'unica cosa per scheda:
+//  · Contenuto — dati del kit e cosa c'è dentro (aggiunta componenti a richiesta)
+//  · Stato bauli — solo in modifica: pezzi mancanti/rotti baule per baule
+//  · Collegati — oggetti da portare insieme
+function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, setComponents, instances, onToggleBroken, search, setSearch, linkedSearch, setLinkedSearch, footer }) {
+  const isEdit = mode === 'edit'
+  const [tab, setTab] = useState('content')
+  const [addOpen, setAddOpen] = useState(components.length === 0)
+  const instanceList = isEdit ? ensureInstanceList(instances, form.qty) : []
+  const incomplete = instanceList.filter(i => (i.brokenComponents || []).length > 0).length
+  const tabs = [
+    { key:'content', label:t('inventory.kitTabContent'), count: components.length },
+    ...(isEdit ? [{ key:'state', label:t('inventory.kitTabState'), count: incomplete, alert: true }] : []),
+    { key:'linked', label:t('inventory.kitTabLinked'), count: (form.linkedItems || []).length },
+  ]
+  const sectionLabel = { margin:0, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink3)' }
+  const miniBtn = { width:34, height:34, borderRadius:9, background:'var(--c-surface)', color:'var(--c-ink)', fontSize:18, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 1px 2px rgba(0,0,0,0.08)', flexShrink:0 }
+  const card = { border:'1px solid var(--c-line)', borderRadius:14, background:'var(--c-alt)', overflow:'hidden' }
+  const candidates = items.filter(i => !i.isBundle && !components.some(c => c.itemId === i.id))
+    .filter(i => !search || i.name?.toLowerCase().includes(search.toLowerCase()))
+
+  return (
+    <div className={`modal-overlay${drag.closing ? ' closing' : ''}`} onClick={drag.onOverlayClick}>
+      <div className={`modal rc-sheet${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...drag.props}>
+        <div style={{ padding:'20px 20px 0', flexShrink:0 }}>
+          <button className="close-btn" onClick={drag.close} aria-label={t('common.close')}>✕</button>
+          <h2 style={{ margin:'0 0 12px', display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {isEdit ? t('inventory.editKitTitle') : t('inventory.newKitTitle')}</h2>
+          <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} aria-label={t('inventory.nameLabel')}
+            placeholder={isEdit ? t('inventory.kitNamePlaceholder') : t('inventory.kitNamePlaceholderNew')} style={{ fontWeight:600, fontSize:16, marginBottom:12 }} />
+          <div role="tablist" style={{ display:'flex', gap:3, padding:3, borderRadius:12, background:'var(--c-fill)' }}>
+            {tabs.map(tb => (
+              <button key={tb.key} type="button" role="tab" aria-selected={tab === tb.key} className="btn-no-anim" onClick={() => setTab(tb.key)}
+                style={{ flex:1, minWidth:0, minHeight:38, padding:'6px 4px', borderRadius:9, fontSize:12.5, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:5,
+                  background: tab === tb.key ? 'var(--c-surface)' : 'transparent', color: tab === tb.key ? 'var(--c-ink)' : 'var(--c-ink2)',
+                  boxShadow: tab === tb.key ? '0 1px 3px rgba(0,0,0,0.10)' : 'none' }}>
+                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tb.label}</span>
+                {tb.count > 0 && (
+                  <span style={{ fontSize:11, fontWeight:800, borderRadius:20, padding:'1px 7px', flexShrink:0,
+                    background: tb.alert ? 'rgba(230,57,70,0.14)' : 'var(--c-fill)', color: tb.alert ? '#e63946' : 'var(--c-ink2)' }}>{tb.count}</span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
-      )}
+
+        <div style={{ flex:1, overflowY:'auto', minHeight:0, padding:'16px 16px 18px' }}>
+          {tab === 'content' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="form-group" style={{ margin:0 }}>
+                  <label>{t('inventory.categoryLabel')}</label>
+                  <Picker value={form.category || 'Altro'} onChange={category => setForm({ ...form, category })} ariaLabel={t('inventory.categoryLabel')}
+                    options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))} />
+                </div>
+                <div className="form-group" style={{ margin:0 }}>
+                  <label>{t('inventory.howManyKits')}</label>
+                  <Stepper value={form.qty} min={1} onChange={qty => setForm(f => ({ ...f, qty }))}
+                    decAria={t('eventDetail.decreaseQtyAria')} incAria={t('eventDetail.increaseQtyAria')} />
+                </div>
+              </div>
+              <div className="form-group" style={{ margin:0 }}>
+                <label>{t('inventory.locationLabel')}</label>
+                <input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder={isEdit ? t('inventory.kitLocationPlaceholder') : t('inventory.kitLocationPlaceholderNew')} />
+              </div>
+
+              <div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom:8 }}>
+                  <p style={sectionLabel}>{t('inventory.componentsCount', { count: components.length })}</p>
+                  <button type="button" className="btn-no-anim" onClick={() => setAddOpen(o => !o)} aria-expanded={addOpen}
+                    style={{ background:'transparent', color:'#e63946', fontWeight:800, fontSize:13, padding:'4px 0' }}>
+                    {addOpen ? t('inventory.kitAddDone') : t('inventory.kitAddComponent')}
+                  </button>
+                </div>
+                {components.length === 0 ? (
+                  <p style={{ margin:0, padding:'14px 12px', borderRadius:12, border:'1.5px dashed var(--c-dash)', color:'var(--c-ink2)', fontSize:13, textAlign:'center' }}>{t('inventory.kitNoComponents')}</p>
+                ) : (
+                  <div style={card}>
+                    {components.map((comp, i) => (
+                      <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderTop: i > 0 ? '1px solid var(--c-line)' : 'none' }}>
+                        <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:'var(--c-ink)', overflowWrap:'anywhere' }}>{comp.name}</span>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, background:'var(--c-fill2)', borderRadius:11, padding:2 }}>
+                          <button type="button" className="btn-no-anim" style={miniBtn} aria-label={t('eventDetail.decreaseQtyAria')}
+                            onClick={() => setComponents(prev => prev.map(c => c.itemId === comp.itemId ? { ...c, qty: Math.max(1, c.qty - 1) } : c))}>−</button>
+                          <span style={{ fontWeight:800, fontSize:15, minWidth:22, textAlign:'center', color:'var(--c-ink)' }}>{comp.qty}</span>
+                          <button type="button" className="btn-no-anim" style={miniBtn} aria-label={t('eventDetail.increaseQtyAria')}
+                            onClick={() => setComponents(prev => prev.map(c => c.itemId === comp.itemId ? { ...c, qty: Math.min(c.maxQty ?? Infinity, c.qty + 1) } : c))}>+</button>
+                        </div>
+                        <button type="button" className="btn-no-anim" aria-label={t('inventory.removeComponentAria', { name: comp.name })}
+                          onClick={() => setComponents(prev => prev.filter(c => c.itemId !== comp.itemId))}
+                          style={{ background:'transparent', color:'var(--c-ink3)', fontSize:16, width:32, height:32, flexShrink:0 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {addOpen && (
+                  <div style={{ ...card, marginTop:10 }}>
+                    <div style={{ padding:10, borderBottom:'1px solid var(--c-line)' }}>
+                      <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('inventory.searchItemToAdd')} aria-label={t('inventory.searchItemToAdd')} style={{ fontSize:14 }} autoFocus={components.length > 0} />
+                    </div>
+                    <div style={{ maxHeight:260, overflowY:'auto' }}>
+                      {candidates.length === 0 ? (
+                        <p style={{ margin:0, padding:'14px 12px', fontSize:13, color:'var(--c-ink3)', textAlign:'center' }}>{t('inventory.kitNoResults')}</p>
+                      ) : candidates.map(item => (
+                        <button type="button" key={item.id} className="item-row" aria-label={t('inventory.addComponentAria', { name: item.name })}
+                          onClick={() => { setComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty || 1 }]); setSearch('') }}>
+                          <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category] || '📦'}</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
+                            <p style={{ color:'var(--c-ink2)', fontSize:12 }}>{t('inventory.availableShort', { count: item.availableQty ?? item.totalQty })}</p>
+                          </div>
+                          <span style={{ color:'var(--accent)', fontSize:20, padding:'0 8px' }}>+</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'state' && isEdit && (
+            <div>
+              <p style={{ margin:'0 0 12px', fontSize:13, color:'var(--c-ink2)', lineHeight:1.45 }}>{t('inventory.kitInstancesHint')}</p>
+              {components.length === 0 ? (
+                <p style={{ margin:0, padding:'14px 12px', borderRadius:12, border:'1.5px dashed var(--c-dash)', color:'var(--c-ink2)', fontSize:13, textAlign:'center' }}>{t('inventory.kitStateNeedsComponents')}</p>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  {instanceList.map(inst => {
+                    const missing = (inst.brokenComponents || []).reduce((n, b) => n + (b.qty || 0), 0)
+                    return (
+                      <div key={inst.number} style={{ ...card, background: missing ? 'rgba(230,57,70,0.05)' : 'var(--c-alt)', borderColor: missing ? 'rgba(230,57,70,0.28)' : 'var(--c-line)' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderBottom:'1px solid var(--c-line)' }}>
+                          <span style={{ fontSize:14, fontWeight:800, color:'var(--c-ink)' }}>{t('inventory.kitInstanceLabel', { number: inst.number })}</span>
+                          <span style={{ marginLeft:'auto', fontSize:12, fontWeight:800, borderRadius:20, padding:'2px 10px',
+                            background: missing ? 'rgba(230,57,70,0.12)' : 'rgba(34,197,94,0.14)', color: missing ? '#e63946' : 'var(--c-green)' }}>
+                            {missing ? t('inventory.kitInstanceMissingTotal', { count: missing }) : t('inventory.kitInstanceComplete')}
+                          </span>
+                        </div>
+                        {components.map(comp => {
+                          const brokenQty = (inst.brokenComponents || []).find(b => b.itemId === comp.itemId)?.qty || 0
+                          return (
+                            <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px' }}>
+                              <span style={{ flex:1, minWidth:0, fontSize:13.5, color:'var(--c-ink)', overflowWrap:'anywhere' }}>{comp.name}{comp.qty > 1 ? <span style={{ color:'var(--c-ink3)' }}> ×{comp.qty}</span> : null}</span>
+                              <div style={{ display:'flex', alignItems:'center', gap:4, background:'var(--c-fill2)', borderRadius:11, padding:2 }}>
+                                <button type="button" className="btn-no-anim" disabled={brokenQty === 0} style={{ ...miniBtn, opacity: brokenQty === 0 ? 0.4 : 1 }}
+                                  aria-label={t('inventory.decreaseBrokenComponentAria', { name: comp.name, number: inst.number })}
+                                  onClick={() => onToggleBroken(inst.number, comp.itemId, comp.qty, -1)}>−</button>
+                                <span style={{ fontSize:13, fontWeight:800, minWidth:38, textAlign:'center', color: brokenQty > 0 ? '#e63946' : 'var(--c-green)' }}>
+                                  {brokenQty > 0 ? t('inventory.kitInstanceMissingCount', { count: brokenQty }) : '✓'}
+                                </span>
+                                <button type="button" className="btn-no-anim" disabled={brokenQty >= comp.qty} style={{ ...miniBtn, opacity: brokenQty >= comp.qty ? 0.4 : 1 }}
+                                  aria-label={t('inventory.increaseBrokenComponentAria', { name: comp.name, number: inst.number })}
+                                  onClick={() => onToggleBroken(inst.number, comp.itemId, comp.qty, 1)}>+</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'linked' && (
+            <div>
+              <p style={{ margin:'0 0 12px', fontSize:13, color:'var(--c-ink2)', lineHeight:1.45 }}>{t('inventory.kitLinkedHint')}</p>
+              <LinkedItemsEditor items={items} selfId={selfId} value={form.linkedItems} onChange={links => setForm({ ...form, linkedItems: links })}
+                search={linkedSearch} onSearchChange={setLinkedSearch} />
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding:'14px 16px', borderTop:'1px solid var(--c-line)', flexShrink:0, background:'var(--c-surface)' }}>{footer}</div>
+      </div>
     </div>
   )
 }
@@ -1786,6 +2034,10 @@ function Stepper({ value, onChange, min = 0, max, tone, decAria, incAria }) {
     </div>
   )
 }
+
+// Un solo pezzo in totale: "Rotto" / "Difettoso" invece di "1 rotto" / "1 con difetto".
+const brokenText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.brokenSingle') : t('inventory.brokenCount', { count: item.brokenQty })
+const defectText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.defectSingle') : t('inventory.defectCount', { count: item.defectQty })
 
 function ItemRow({ item, onOpen, t, outEvents }) {
   return (
@@ -1825,14 +2077,14 @@ function ItemRow({ item, onOpen, t, outEvents }) {
         {item.brokenQty > 0 && (
           <div style={{ marginTop:4 }}>
             <span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
-              <Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}
+              <Wrench size={11} /> {brokenText(item, t)}
             </span>
           </div>
         )}
         {item.defectQty > 0 && (
           <div style={{ marginTop:4 }}>
             <span style={{ background:'rgba(217,119,6,0.15)', color:'#b45309', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}>
-              <Warn size={11} /> {t('inventory.defectCount', { count: item.defectQty })}
+              <Warn size={11} /> {defectText(item, t)}
             </span>
           </div>
         )}

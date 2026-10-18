@@ -12,6 +12,8 @@ import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
+import { notifyTeamPush } from '../utils/pushNotifications'
+import { useLongPress } from '../hooks/useLongPress'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow, isScanCandidate } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -228,6 +230,31 @@ export default function WorkerScanner() {
   const [showCloseInstallModal, setShowCloseInstallModal] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [showEventNotes, setShowEventNotes] = useState(false)
+  // Selezione multipla (stessa idea di EventDetail per gli admin): un bottone
+  // "Seleziona" o una pressione lunga su una riga permettono di segnalare più
+  // oggetti insieme come mancanti, rientrati in parte o rientrati rotti.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulkDialog, setBulkDialog] = useState(null) // null | 'partial' | 'broken'
+  const [bulkDraft, setBulkDraft] = useState({ qtys: {}, note: '' })
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [selectMenuOpen, setSelectMenuOpen] = useState(false) // elenco azioni (⋯), come in EventDetail
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setBulkDialog(null); setSelectMenuOpen(false) }
+  const toggleSelected = itemId => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(itemId) ? next.delete(itemId) : next.add(itemId)
+    return next
+  })
+  const enterSelectModeWith = itemId => { setSelectMode(true); setSelectedIds(new Set([itemId])) }
+  useEffect(() => {
+    if (!selectMode) return
+    const onKeyDown = e => { if (e.key === 'Escape') exitSelectMode() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectMode])
+  // Cambiando fase (pronto/carico/rientro) le azioni disponibili cambiano: la
+  // selezione si chiude invece di restare appesa a righe non più valide.
+  useEffect(() => { setSelectMode(false); setSelectedIds(new Set()); setBulkDialog(null); setSelectMenuOpen(false) }, [mode])
   // "tutto pronto"/"tutto caricato" guardano l'INTERO evento (tutte le
   // liste), non solo quella in vista — vedi allPrepared/allLoaded più sotto:
   // con liste separate, finire solo quella attiva non deve bastare a far
@@ -990,6 +1017,175 @@ export default function WorkerScanner() {
 
   if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p></div>
 
+  // Rientro parziale di UNA riga: dividerla in "già rientrati" e "ancora fuori"
+  // (vedi _onPartialReturn in buildItemProps e la selezione multipla).
+  const partialReturnRow = async (item, splitQty) => {
+    const totalQty = item.qty || 1
+    if (item.isBundle || !splitQty || splitQty <= 0 || splitQty >= totalQty) return
+    const remainingQty = totalQty - splitQty
+    const returnedRowId = `${item.id}_ret_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    setOptimistic(item.id, { qty: remainingQty })
+    let itm
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(eventRef)
+        if (!snap.exists()) return
+        const evItems = snap.data().items || []
+        const current = evItems.find(i => i.id === item.id)
+        if (!current?.loaded || current.returned || (current.qty || 1) <= splitQty) return
+        itm = current
+        const returnedRow = {
+          id: returnedRowId, itemRef: current.itemRef || current.id,
+          name: current.name, category: current.category, location: current.location || '',
+          isKit: current.isKit || false, kitSize: current.kitSize || null,
+          isBundle: false, components: null,
+          qty: splitQty, pronto: true, loaded: true, returned: true, returnedConsumed: false,
+          mancante: false,
+          ...(current.listId ? { listId: current.listId } : {}),
+        }
+        tx.update(eventRef, {
+          items: evItems.flatMap(i => i.id !== item.id ? [i] : [{ ...i, qty: (i.qty || 1) - splitQty }, returnedRow]),
+        })
+      })
+    } catch (e) {
+      setSaveError(t('workerScanner.saveErrorMessage'))
+      clearOptimistic(item.id, ['qty'])
+      return
+    }
+    if (!itm) { clearOptimistic(item.id, ['qty']); return }
+    await syncKitAwareInventory({
+      catalogItemId: itm.itemRef || item.id, isBundle: false, category: itm.category,
+      qty: splitQty, sign: 1,
+    })
+    logItemActivity({
+      teamId, eventId: id, eventName: event?.name, itemId: returnedRowId, itemName: item.name,
+      catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+      listId: rowListId(item), action: 'returned', profile, userId: user?.uid,
+    })
+  }
+
+  // Pezzi di una riga rientrati ROTTI: salgono i rotti in magazzino e la
+  // giacenza resta com'è (prima erano "fuori", ora sono "rotti": nessun +N ai
+  // disponibili). Se sono tutti i pezzi la riga si chiude, altrimenti si divide
+  // come nel rientro parziale. La descrizione è facoltativa.
+  const brokenReturnRow = async (item, brokenN, note) => {
+    const rowQty = item.qty || 1
+    const n = Math.min(rowQty, Math.max(1, brokenN))
+    const catalogId = item.itemRef || item.id
+    const whole = n >= rowQty
+    const brokenRowId = `${item.id}_brk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    setOptimistic(item.id, whole ? { returned: true, returnedBroken: true } : { qty: rowQty - n })
+    const rollbackKeys = whole ? ['returned', 'returnedBroken'] : ['qty']
+    let done = false
+    try {
+      await runTransaction(db, async (tx) => {
+        const itemRef = doc(db, 'items', catalogId)
+        const [evSnap, catSnap] = await Promise.all([tx.get(eventRef), tx.get(itemRef)])
+        if (!evSnap.exists() || !catSnap.exists()) return
+        const evItems = evSnap.data().items || []
+        const current = evItems.find(i => i.id === item.id)
+        if (!current?.loaded || current.returned || (current.qty || 1) < n) return
+        const cat = catSnap.data()
+        tx.update(itemRef, {
+          brokenQty: Math.min(cat.totalQty || 0, (cat.brokenQty || 0) + n),
+          ...(note ? { brokenNote: [cat.brokenNote, note].filter(Boolean).join(' · ') } : {}),
+        })
+        const brokenRow = {
+          id: brokenRowId, itemRef: current.itemRef || current.id,
+          name: current.name, category: current.category, location: current.location || '',
+          isKit: current.isKit || false, kitSize: current.kitSize || null,
+          isBundle: false, components: null,
+          qty: n, pronto: true, loaded: true, returned: true, returnedConsumed: false, returnedBroken: true,
+          mancante: false,
+          ...(current.listId ? { listId: current.listId } : {}),
+        }
+        tx.update(eventRef, {
+          items: whole
+            ? evItems.map(i => i.id !== item.id ? i : { ...i, returned: true, returnedConsumed: false, returnedBroken: true })
+            : evItems.flatMap(i => i.id !== item.id ? [i] : [{ ...i, qty: (i.qty || 1) - n }, brokenRow]),
+        })
+        done = true
+      })
+    } catch (e) {
+      setSaveError(t('workerScanner.saveErrorMessage'))
+      clearOptimistic(item.id, rollbackKeys)
+      return false
+    }
+    if (!done) { clearOptimistic(item.id, rollbackKeys); return false }
+    logItemActivity({
+      teamId, eventId: id, eventName: event?.name, itemId: whole ? item.id : brokenRowId, itemName: item.name,
+      catalogItemId: item.itemRef || item.id,
+      listId: rowListId(item), action: 'returned', profile, userId: user?.uid,
+    })
+    notifyTeamPush({
+      title: t('inventory.pushBrokenTitle'),
+      body: [item.name, note].filter(Boolean).join(' — '),
+      url: '/inventory?filter=broken',
+      audience: { type: 'admins' },
+    })
+    return true
+  }
+
+  // Quali righe selezionate può toccare ogni azione di gruppo:
+  // - mancante: qualsiasi riga non ancora rientrata
+  // - rientro parziale: riga semplice già caricata e non rientrata, con più pezzi
+  // - rotto: oggetto di magazzino (non kit/extra/consumabile) già caricato e non rientrato
+  // (valgono in ogni fase: conta lo stato della riga, non la scheda Pronto/Carico/Scarico)
+  const selectedRows = allEventItems.filter(i => selectedIds.has(i.id))
+  const missingRows = selectedRows.filter(i => !i.returned)
+  const partialRows = selectedRows.filter(i => !i.isBundle && (i.qty || 1) > 1 && i.loaded && !i.returned && !i.mancante)
+  const brokenRows = selectedRows.filter(i => !i.isBundle && !i.isExtra && i.category !== 'Consumabili' && i.loaded && !i.returned && !i.mancante)
+  const allSelectedMissing = missingRows.length > 0 && missingRows.every(i => i.mancante)
+
+  const applyBulkMissing = async () => {
+    if (missingRows.length === 0) return
+    const target = !allSelectedMissing
+    const ids = new Set(missingRows.map(i => i.id))
+    setBulkSaving(true)
+    missingRows.forEach(i => setOptimistic(i.id, { mancante: target }))
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(eventRef)
+        if (!snap.exists()) return
+        tx.update(eventRef, { items: (snap.data().items || []).map(i => ids.has(i.id) ? { ...i, mancante: target } : i) })
+      })
+    } catch (e) {
+      setSaveError(t('workerScanner.saveErrorMessage'))
+      missingRows.forEach(i => clearOptimistic(i.id, ['mancante']))
+      setBulkSaving(false)
+      return
+    }
+    missingRows.forEach(i => logItemActivity({
+      teamId, eventId: id, eventName: event?.name, itemId: i.id, itemName: i.name,
+      catalogItemId: i.isExtra ? null : (i.itemRef || i.id),
+      listId: rowListId(i), action: target ? 'missing' : 'unmissing', profile, userId: user?.uid,
+    }))
+    setBulkSaving(false)
+    exitSelectMode()
+  }
+
+  const openBulkDialog = kind => {
+    const rows = kind === 'partial' ? partialRows : brokenRows
+    setBulkDraft({ qtys: Object.fromEntries(rows.map(r => [r.id, 1])), note: '' })
+    setBulkDialog(kind)
+  }
+
+  const applyBulkDialog = async () => {
+    const rows = bulkDialog === 'partial' ? partialRows : brokenRows
+    if (rows.length === 0) return
+    setBulkSaving(true)
+    try {
+      for (const row of rows) {
+        const n = bulkDraft.qtys[row.id] || 1
+        if (bulkDialog === 'partial') await partialReturnRow(row, n)
+        else await brokenReturnRow(row, n, bulkDraft.note.trim())
+      }
+    } finally {
+      setBulkSaving(false)
+    }
+    exitSelectMode()
+  }
+
   const scanResult = {
     pronto:           { bg:'rgba(79,195,247,0.15)',  border:'rgba(79,195,247,0.4)',  color:'var(--blue)',    icon:'📋', title:t('workerScanner.prontoTitle'), msg: i => t('workerScanner.prontoMsg', { name: i?.name }) },
     already_pronto:   { bg:'rgba(79,195,247,0.1)',   border:'rgba(79,195,247,0.3)',  color:'var(--blue)',    icon:'ℹ️', title:t('workerScanner.alreadyPreparedTitle'), msg: i => t('workerScanner.alreadyPreparedMsg', { name: i?.name }) },
@@ -1460,7 +1656,8 @@ export default function WorkerScanner() {
             {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
           </p>
           {items.length > 0 && (
-            <div style={{ position:'relative', display:'flex', alignItems:'center', marginTop:8, marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, marginBottom:16 }}>
+            <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, minWidth:0 }}>
               <svg style={{ position:'absolute', left:10, pointerEvents:'none' }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
               <label htmlFor="ws-item-search" style={srOnlyStyle}>{t('workerScanner.searchItemsPlaceholder')}</label>
               <input id="ws-item-search" value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
@@ -1470,6 +1667,13 @@ export default function WorkerScanner() {
                 <button onClick={() => setItemListSearch('')} aria-label={t('common.close')}
                   style={{ position:'absolute', right:6, width:26, height:26, borderRadius:6, background:'var(--card3)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
               )}
+            </div>
+            {/* Stesso bottone "Seleziona" di EventDetail (admin): sulla riga della ricerca, diventa "Annulla" in selezione */}
+            <button type="button" className="btn-no-anim" aria-pressed={selectMode}
+              onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              style={{ background: selectMode ? 'var(--card2)' : 'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+              {selectMode ? t('common.cancel') : t('workerScanner.selectButton')}
+            </button>
             </div>
           )}
 
@@ -1542,6 +1746,10 @@ export default function WorkerScanner() {
                   const buildItemProps = (item, vehicleColor) => ({
                     ...item,
                     _vehicleColor: vehicleColor || null,
+                    _selectMode: selectMode,
+                    _selected: selectedIds.has(item.id),
+                    _onSelectToggle: toggleSelected,
+                    _onLongPressSelect: enterSelectModeWith,
                     _details: itemDetails[item.itemRef || item.id] || null,
                     // Campi/azione ancora in volo verso Firestore (bottone già
                     // "fatto" per il tocco immediato, ma non ancora confermato
@@ -1653,6 +1861,8 @@ export default function WorkerScanner() {
                     // consumabili "consumati", ma disponibile per QUALSIASI
                     // categoria e senza dover rispondere al popup.
                     _onToggleReturned: async (itemId, forceOut = false) => {
+                      // Rientrato rotto: i pezzi sono già usciti dai disponibili, annullare il rientro sfalserebbe la giacenza
+                      if (item.returnedBroken) return
                       const newReturnedGuess = !item.returned
                       // Per i consumabili il rientro non è mai scontato al
                       // 100%: chiediamo se è tornato intero PRIMA di segnare,
@@ -1735,50 +1945,7 @@ export default function WorkerScanner() {
                     // quantità restituita — stesso schema delle righe
                     // duplicate già usato per gli oggetti "mancante" in
                     // EventDetail.jsx (stesso itemRef, id proprio).
-                    _onPartialReturn: async (itemId, splitQty) => {
-                      const totalQty = item.qty || 1
-                      if (item.isBundle || !splitQty || splitQty <= 0 || splitQty >= totalQty) return
-                      const remainingQty = totalQty - splitQty
-                      const returnedRowId = `${itemId}_ret_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-                      setOptimistic(itemId, { qty: remainingQty })
-                      let itm
-                      try {
-                        await runTransaction(db, async (tx) => {
-                          const snap = await tx.get(eventRef)
-                          if (!snap.exists()) return
-                          const evItems = snap.data().items || []
-                          const current = evItems.find(i => i.id === itemId)
-                          if (!current?.loaded || current.returned || (current.qty || 1) <= splitQty) return
-                          itm = current
-                          const returnedRow = {
-                            id: returnedRowId, itemRef: current.itemRef || current.id,
-                            name: current.name, category: current.category, location: current.location || '',
-                            isKit: current.isKit || false, kitSize: current.kitSize || null,
-                            isBundle: false, components: null,
-                            qty: splitQty, pronto: true, loaded: true, returned: true, returnedConsumed: false,
-                            mancante: false,
-                            ...(current.listId ? { listId: current.listId } : {}),
-                          }
-                          tx.update(eventRef, {
-                            items: evItems.flatMap(i => i.id !== itemId ? [i] : [{ ...i, qty: (i.qty || 1) - splitQty }, returnedRow]),
-                          })
-                        })
-                      } catch (e) {
-                        setSaveError(t('workerScanner.saveErrorMessage'))
-                        clearOptimistic(itemId, ['qty'])
-                        return
-                      }
-                      if (!itm) { clearOptimistic(itemId, ['qty']); return }
-                      await syncKitAwareInventory({
-                        catalogItemId: itm.itemRef || itemId, isBundle: false, category: itm.category,
-                        qty: splitQty, sign: 1,
-                      })
-                      logItemActivity({
-                        teamId, eventId: id, eventName: event?.name, itemId: returnedRowId, itemName: item.name,
-                        catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        listId: rowListId(item), action: 'returned', profile, userId: user?.uid,
-                      })
-                    },
+                    _onPartialReturn: (itemId, splitQty) => partialReturnRow(item, splitQty),
                     _onTogglePronto: async (itemId) => {
                       const newPronto = !item.pronto
                       // Stesso controllo di _onToggleLoaded: segnare "pronto" senza
@@ -1957,8 +2124,104 @@ export default function WorkerScanner() {
             style={{ width:'100%', marginTop:10, background:'rgba(245,166,35,0.10)', border:'1px solid rgba(245,166,35,0.35)', color:'var(--accent2)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}>
             {t('workerScanner.addExtraItem')}
           </button>
+          {selectMode && <div aria-hidden="true" style={{ height:130 }} />}
         </div>
       </div>
+
+      {/* Selezione multipla — stessa barra flottante di EventDetail (admin):
+          contatore a sinistra, "Annulla" e "⋯" a destra; "⋯" apre verso l'alto
+          l'elenco delle azioni, con un velo scuro dietro (tocca per chiudere). */}
+      {selectMode && createPortal((() => {
+        const pillShadow = '0 4px 14px rgba(0,0,0,0.10)'
+        const chipStyle = { flexShrink:0, whiteSpace:'nowrap', padding:'8px 14px', borderRadius:20, fontSize:13, fontWeight:700, background:'var(--card2)', color:'var(--text2)', border:'1px solid var(--border)', boxShadow:pillShadow }
+        const menuRowStyle = (enabled) => ({ display:'flex', alignItems:'center', whiteSpace:'nowrap', minHeight:48, padding:'13px 20px', borderRadius:24, background:'var(--card2)', border:'1px solid var(--border)', color: enabled ? 'var(--text)' : 'var(--text3)', fontSize:15, fontWeight:700, boxShadow:pillShadow, opacity: enabled ? 1 : 0.5 })
+        const pick = (fn) => { setSelectMenuOpen(false); fn() }
+        return (
+          <>
+            {selectMenuOpen && (
+              <div onClick={() => setSelectMenuOpen(false)} style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
+            )}
+            <div role="toolbar" aria-label={t('workerScanner.selectToolbarAria')}
+              style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 20px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
+              {selectMenuOpen && (
+                <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+                    <button type="button" disabled={missingRows.length === 0 || bulkSaving} onClick={() => pick(applyBulkMissing)} style={menuRowStyle(missingRows.length > 0)}>
+                      {allSelectedMissing ? t('workerScanner.bulkNotMissing') : t('workerScanner.bulkMissing')}
+                    </button>
+                    <button type="button" disabled={partialRows.length === 0 || bulkSaving} onClick={() => pick(() => openBulkDialog('partial'))} style={menuRowStyle(partialRows.length > 0)}>
+                      {t('workerScanner.bulkPartial')}
+                    </button>
+                    <button type="button" disabled={brokenRows.length === 0 || bulkSaving} onClick={() => pick(() => openBulkDialog('broken'))} style={menuRowStyle(brokenRows.length > 0)}>
+                      {t('workerScanner.bulkBroken')}
+                    </button>
+                    {partialRows.length === 0 && brokenRows.length === 0 && (
+                      <p style={{ margin:'2px 0 0', maxWidth:270, textAlign:'left', fontSize:12, lineHeight:1.4, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'8px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('workerScanner.bulkNeedsLoaded')}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'7px 12px', boxShadow:pillShadow, whiteSpace:'nowrap' }}>{t('workerScanner.selectedCount', { count: selectedIds.size })}</span>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <button type="button" onClick={exitSelectMode} style={chipStyle}>{t('common.cancel')}</button>
+                  <button type="button" onClick={() => setSelectMenuOpen(o => !o)} aria-expanded={selectMenuOpen} aria-label={t('workerScanner.selectMoreAria')}
+                    style={{ ...chipStyle, background: selectMenuOpen ? 'var(--accent)' : 'var(--card2)', color: selectMenuOpen ? '#fff' : 'var(--text2)', border: `1px solid ${selectMenuOpen ? 'var(--accent)' : 'var(--border)'}`, padding:'8px 16px', fontSize:18, lineHeight:1 }}>⋯</button>
+                </div>
+              </div>
+            </div>
+          </>
+        )
+      })(), document.body)}
+
+      {/* Rientro parziale / rientrato rotto per più righe */}
+      {bulkDialog && (() => {
+        const rows = bulkDialog === 'partial' ? partialRows : brokenRows
+        const maxFor = r => bulkDialog === 'partial' ? (r.qty || 1) - 1 : (r.qty || 1)
+        const skipped = selectedRows.length - rows.length
+        const setQty = (r, v) => setBulkDraft(d => ({ ...d, qtys: { ...d.qtys, [r.id]: Math.min(maxFor(r), Math.max(1, v)) } }))
+        const stepBtn = { width:40, height:40, borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:19, fontWeight:700, flexShrink:0 }
+        return (
+          <div onClick={() => !bulkSaving && setBulkDialog(null)}
+            style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+            <div onClick={e => e.stopPropagation()} role="dialog" aria-label={bulkDialog === 'partial' ? t('workerScanner.bulkPartialTitle') : t('workerScanner.bulkBrokenTitle')}
+              style={{ width:'100%', maxWidth:360, maxHeight:'86dvh', overflowY:'auto', background:'var(--card)', borderRadius:18, padding:20 }}>
+              <h3 style={{ fontSize:16, fontWeight:800, color:'var(--text)', margin:'0 0 4px' }}>{bulkDialog === 'partial' ? t('workerScanner.bulkPartialTitle') : t('workerScanner.bulkBrokenTitle')}</h3>
+              <p style={{ fontSize:13, color:'var(--text2)', margin:'0 0 14px', lineHeight:1.45 }}>{bulkDialog === 'partial' ? t('workerScanner.bulkPartialHint') : t('workerScanner.bulkBrokenHint')}</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:14 }}>
+                {rows.map(r => (
+                  <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ margin:0, fontWeight:700, fontSize:14, color:'var(--text)', overflowWrap:'anywhere' }}>{r.name}</p>
+                      <p style={{ margin:0, fontSize:12, color:'var(--text2)' }}>{t('workerScanner.bulkOutOf', { count: r.qty || 1 })}</p>
+                    </div>
+                    <button type="button" className="btn-no-anim" style={stepBtn} aria-label={t('eventDetail.decreaseQtyAria')} disabled={bulkSaving} onClick={() => setQty(r, (bulkDraft.qtys[r.id] || 1) - 1)}>−</button>
+                    <span style={{ minWidth:26, textAlign:'center', fontWeight:900, fontSize:18, color:'var(--text)' }}>{bulkDraft.qtys[r.id] || 1}</span>
+                    <button type="button" className="btn-no-anim" style={stepBtn} aria-label={t('eventDetail.increaseQtyAria')} disabled={bulkSaving} onClick={() => setQty(r, (bulkDraft.qtys[r.id] || 1) + 1)}>+</button>
+                  </div>
+                ))}
+              </div>
+              {skipped > 0 && <p style={{ fontSize:12, color:'var(--text3)', margin:'0 0 12px' }}>{t('workerScanner.bulkSkipped', { count: skipped })}</p>}
+              {bulkDialog === 'broken' && (
+                <div style={{ marginBottom:14 }}>
+                  <label htmlFor="ws-bulk-note" style={{ display:'block', fontSize:12.5, fontWeight:800, color:'var(--text2)', marginBottom:6 }}>
+                    {t('inventory.issueNoteLabel')} <span style={{ color:'var(--text3)', fontWeight:500 }}>{t('common.optional')}</span>
+                  </label>
+                  <textarea id="ws-bulk-note" rows={2} value={bulkDraft.note} onChange={e => setBulkDraft(d => ({ ...d, note: e.target.value }))} placeholder={t('inventory.issueNotePlaceholder')} />
+                </div>
+              )}
+              <div style={{ display:'flex', gap:10 }}>
+                <button type="button" className="btn-no-anim" disabled={bulkSaving} onClick={() => setBulkDialog(null)}
+                  style={{ flex:1, padding:12, borderRadius:12, background:'var(--card2)', color:'var(--text2)', fontWeight:700, fontSize:13.5 }}>{t('common.cancel')}</button>
+                <button type="button" disabled={bulkSaving || rows.length === 0} onClick={applyBulkDialog} className="btn btn-primary"
+                  style={{ flex:1, padding:12, borderRadius:12, fontWeight:700, fontSize:13.5 }}>
+                  {bulkSaving ? t('common.saving') : t('workerScanner.bulkConfirm')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Popup tutto pronto — passa in automatico al carico */}
       {showAllPreparedPopup && (
@@ -2087,6 +2350,12 @@ function ChecklistRow({ item, mode }) {
   const [showPartialReturn, setShowPartialReturn] = useState(false)
   const [partialQty, setPartialQty] = useState(1)
   const [partialSaving, setPartialSaving] = useState(false)
+  // Pressione prolungata sulla riga: entra in selezione multipla con questa riga
+  // già scelta (stessa idea di EventDetail); in selezione il tap alterna la spunta.
+  const longPress = useLongPress(
+    () => { if (!item._selectMode) item._onLongPressSelect?.(item.id) },
+    () => { if (item._selectMode) item._onSelectToggle?.(item.id) },
+  )
   const canPartialReturn = mode === 'return' && !item.isBundle && (item.qty || 1) > 1 && item.loaded && !item.returned
   // Tenere premuto il bottone "Carico" segna l'oggetto mancante/rotto invece
   // di caricarlo — evita un quarto bottone dedicato solo a un caso raro. La
@@ -2207,14 +2476,23 @@ function ChecklistRow({ item, mode }) {
 
   return (
     <>
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: (showInfo || noteVisible) ? 'none' : '1px solid var(--border)', background: item.mancante ? 'rgba(234,88,12,0.04)' : item._vehicleColor ? `${item._vehicleColor}10` : 'transparent', borderLeft: item.mancante ? '3px solid #ea580c' : item._vehicleColor ? `3px solid ${item._vehicleColor}` : '3px solid transparent' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item._phaseDone ? 0.45 : 1, transition:'opacity 0.3s' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 16px', borderBottom: (showInfo || noteVisible) ? 'none' : '1px solid var(--border)', background: item._selected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : item._vehicleColor ? `${item._vehicleColor}10` : 'transparent', borderLeft: item._selected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : item._vehicleColor ? `3px solid ${item._vehicleColor}` : '3px solid transparent' }}>
+        <div {...longPress} role={item._selectMode ? 'checkbox' : undefined} aria-checked={item._selectMode ? !!item._selected : undefined}
+          style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0, opacity: item._phaseDone && !item._selectMode ? 0.45 : 1, transition:'opacity 0.3s', cursor: item._selectMode ? 'pointer' : 'default',
+            // Senza questo la pressione lunga apre il menu Copia/Incolla nativo invece della selezione
+            WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none' }}>
+        {item._selectMode && (
+          <span aria-hidden="true" style={{ width:22, height:22, borderRadius:6, flexShrink:0, border:`2px solid ${item._selected ? 'var(--accent)' : 'var(--border)'}`, background: item._selected ? 'var(--accent)' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:14, fontWeight:900 }}>
+            {item._selected ? '✓' : ''}
+          </span>
+        )}
         <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>
             {item.isExtra && <span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', border:'1px solid rgba(245,166,35,0.35)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>EXTRA</span>}
             {item.mancante && <span style={{ background:'rgba(234,88,12,0.12)', color:'#ea580c', border:'1px solid rgba(234,88,12,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>⚠️ MANCA</span>}
+            {item.returnedBroken && <span style={{ background:'rgba(255,82,82,0.15)', color:'var(--red)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('workerScanner.returnedBrokenBadge')}</span>}
             {isForgottenReturn && (
               <span style={{ background:'rgba(255,82,82,0.15)', color:'var(--red)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:6, padding:'1px 6px', fontSize:10, fontWeight:800, flexShrink:0 }}>{t('workerScanner.leftOutBadge')}</span>
             )}
@@ -2229,7 +2507,7 @@ function ChecklistRow({ item, mode }) {
                 {damagedInstances.length > 0 ? '⚠️ ' : ''}{t('workerScanner.kitInstancesBadge', { numbers: item.instanceNumbers.join(', ') })}
               </span>
             )}
-            {hasInfo && (
+            {hasInfo && !item._selectMode && (
               <button onClick={() => setShowInfo(s => !s)}
                 aria-label={t('workerScanner.itemInfoToggle')}
                 aria-pressed={showInfo}
@@ -2253,7 +2531,7 @@ function ChecklistRow({ item, mode }) {
             <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
             <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{qtyUnitLabel}</span>
           </div>
-          {canPartialReturn && (
+          {canPartialReturn && !item._selectMode && (
             <button type="button" className="btn-no-anim" onClick={() => { setPartialQty(1); setShowPartialReturn(true) }}
               style={{ display:'block', marginTop:4, background:'transparent', color:'var(--blue)', fontSize:11.5, fontWeight:700, textDecoration:'underline', padding:0 }}>
               {t('workerScanner.partialReturnTrigger')}
@@ -2269,7 +2547,8 @@ function ChecklistRow({ item, mode }) {
           )}
         </div>
         </div>
-        {/* Bottoni touch-friendly - grandi abbastanza per il dito */}
+        {/* Bottoni touch-friendly - grandi abbastanza per il dito (nascosti in selezione multipla) */}
+        {!item._selectMode && (
         <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>
           {item.mancante ? (
             <button
@@ -2380,6 +2659,7 @@ function ChecklistRow({ item, mode }) {
             </span>
           </button>
         </div>
+        )}
       </div>
       {/* Nota sempre visibile (non più dietro al tasto "i") finché la riga non
           è fatta per la fase corrente — scompare da sola appena segnata

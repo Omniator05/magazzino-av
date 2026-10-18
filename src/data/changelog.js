@@ -6,6 +6,61 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-18',
+    date: '2026-10-18',
+    title: { it: 'Oggetti con difetto, selezione per i magazzinieri, nuovo foglio dei bauli', en: 'Items with defects, selection for warehouse workers, new case sheet' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: 'Oggetti "Con difetto" e pezzi numerati', en: 'Items "With a defect" and numbered pieces' },
+        text: {
+          it: 'Oltre a "rotto" ora c\'è "con difetto": l\'oggetto resta utilizzabile ma ha un problema. Dal tasto "Segnala" del dettaglio scegli quanti pezzi sono rotti o difettosi, aggiungi una descrizione e, per gli oggetti con più pezzi (es. 24 pointe), il numero esatto del pezzo: così sai quale non prendere. Ogni segnalazione si chiude da sola con "Risolto". Gli admin ricevono una notifica con nome, numero e descrizione.',
+          en: 'Besides "broken" there is now "with a defect": the item stays usable but has a problem. From the "Report" button in the details, choose how many pieces are broken or defective, add a description and, for items with many pieces (e.g. 24 moving heads), the exact piece number so you know which one not to take. Each report is closed on its own with "Resolved". Admins get a notification with name, number and description.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Seleziona anche per i magazzinieri', en: 'Select for warehouse workers too' },
+        text: {
+          it: 'Nella lista di carico, "Seleziona" (o una pressione lunga su un oggetto) permette di segnare più oggetti insieme come mancanti, rientrati in parte o rientrati rotti, con la stessa barra degli admin. Per i rotti puoi aggiungere una descrizione.',
+          en: 'In the loading list, "Select" (or a long press on an item) lets you mark several items at once as missing, partly returned or returned broken, with the same bar admins have. You can add a description for broken items.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Nuovo foglio dei bauli', en: 'New case (kit) sheet' },
+        text: {
+          it: 'Creare o modificare un baule è più chiaro: tre schede, Contenuto (dati e componenti), Stato (pezzi mancanti baule per baule) e Collegati.',
+          en: 'Creating or editing a case is clearer: three tabs, Contents (details and components), Status (missing pieces case by case) and Linked.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Calendario: ogni giorno la sua squadra', en: 'Calendar: each day has its own crew' },
+        text: {
+          it: 'Negli eventi di più giorni la card di un giorno mostra solo le persone assegnate a quel giorno, con il loro orario. Su computer ogni giorno della griglia mostra fino a 3 eventi.',
+          en: 'On multi-day events, a day\'s card shows only the people assigned to that day, with their hours. On desktop each day in the grid shows up to 3 events.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Disponibilità più precisa', en: 'More accurate availability' },
+        text: {
+          it: 'Il controllo disponibilità dello Storico tiene conto anche di cosa è già fuori dal magazzino: un pezzo caricato per un evento futuro (montaggio anticipato) non risulta più libero oggi. Il risultato ora dice "n disponibili" invece di "n/n".',
+          en: 'The availability check in History now also considers what is already out of the warehouse: a piece loaded for a later event (early setup) is no longer shown as free today. The result now reads "n available" instead of "n/n".',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Pagina evento più stabile', en: 'More stable event page' },
+        text: {
+          it: 'Corretto un errore che poteva bloccare la pagina di un evento; se una pagina ha un problema ora compare un messaggio con "Ricarica" invece di una schermata bianca.',
+          en: 'Fixed an error that could block an event page; if a page has a problem you now see a message with "Reload" instead of a blank screen.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-10-16',
     date: '2026-10-16',
     title: { it: 'Tema scuro, nuove home, Archivio e calendario anche per i magazzinieri', en: 'Dark mode, new home pages, Archive and a calendar for warehouse workers too' },

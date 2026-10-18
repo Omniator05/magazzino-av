@@ -2950,7 +2950,9 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
   const vehicleBusy = !!vehicleConflict
   // Stato di sola lettura pronto/carico/rientro — si aggiorna dallo scanner
   // (Avvia carico), qui è solo un riepilogo, non un controllo.
-  const itemStatus = item.returned
+  const itemStatus = item.returned && item.returnedBroken
+    ? { label: t('workerScanner.returnedBrokenBadge'), bg:'rgba(255,82,82,0.15)', color:'var(--red)' }
+    : item.returned
     ? { label: t('eventDetail.returnedButton'), bg:'rgba(105,240,174,0.15)', color:'var(--green)' }
     : item.loaded
     ? { label: t('eventDetail.loadedButton'), bg:'rgba(245,166,35,0.15)', color:'var(--accent2)' }

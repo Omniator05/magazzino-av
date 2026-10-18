@@ -9,6 +9,7 @@ import { Pin, Cart, Box, Wrench, Warn, Check, Filter, Kit } from '../components/
 import { parseScannedCode } from '../utils/generateCode'
 import DailyQuip from '../components/DailyQuip'
 import { notifyTeamPush } from '../utils/pushNotifications'
+import { addIssue, removeIssueById, dropLastIssue, sortedIssues } from '../utils/itemIssues'
 
 // Stessa lista di Inventory.jsx (vista admin) — usata qui solo per il
 // filtro categoria del menu filtri avanzati, vedi sotto.
@@ -36,6 +37,10 @@ const ICONS = {
   'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
   'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
 }
+
+// Un solo pezzo in totale: "Rotto" / "Difettoso" invece di "1 rotto" / "1 con difetto".
+const brokenText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.brokenSingle') : t('inventory.brokenCount', { count: item.brokenQty })
+const defectText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.defectSingle') : t('inventory.defectCount', { count: item.defectQty })
 
 export default function WorkerInventory() {
   const { t } = useTranslation()
@@ -137,7 +142,14 @@ export default function WorkerInventory() {
   // Descrizione facoltativa di un problema (es. "la porta non funziona"), scritta nel
   // foglio dell'oggetto: vale per il prossimo "Segna rotto" / "Segna difetto".
   const [issueNote, setIssueNote] = useState('')
-  useEffect(() => { setIssueNote('') }, [detail?.id])
+  // Numero esatto del pezzo (es. pointe n° 7 di 24), solo per oggetti con più pezzi.
+  const [issueUnit, setIssueUnit] = useState('')
+  useEffect(() => { setIssueNote(''); setIssueUnit('') }, [detail?.id])
+  const unitNum = item => {
+    const n = parseInt(issueUnit, 10)
+    return (item.totalQty || 0) > 1 && n >= 1 && n <= item.totalQty ? n : null
+  }
+  const unitText = (n, note) => [n ? `n° ${n}` : '', note].filter(Boolean).join(': ')
 
   // Rotto = non utilizzabile (esce dai disponibili).
   const markBroken = async (item, delta) => {
@@ -146,14 +158,16 @@ export default function WorkerInventory() {
     const prevBroken = item.brokenQty || 0
     const prevOut = (item.totalQty||0) - (item.availableQty||0) - prevBroken
     const newAvailable = Math.max(0, item.totalQty - newBroken - prevOut)
-    const brokenNote = newBroken === 0 ? '' : (delta > 0 && note ? note : (item.brokenNote || ''))
-    await updateDoc(doc(db, 'items', item.id), { brokenQty: newBroken, availableQty: newAvailable, brokenNote })
-    setDetail(d => d?.id === item.id ? { ...d, brokenQty: newBroken, availableQty: newAvailable, brokenNote } : d)
-    if (delta > 0) setIssueNote('')
+    const unit = unitNum(item)
+    const brokenNote = newBroken === 0 ? '' : (delta > 0 && note && !unit ? note : (item.brokenNote || ''))
+    const issues = delta > 0 ? addIssue(item.issues, { type: 'broken', unit, note }) : dropLastIssue(item.issues, 'broken')
+    await updateDoc(doc(db, 'items', item.id), { brokenQty: newBroken, availableQty: newAvailable, brokenNote, issues })
+    setDetail(d => d?.id === item.id ? { ...d, brokenQty: newBroken, availableQty: newAvailable, brokenNote, issues } : d)
+    if (delta > 0) { setIssueNote(''); setIssueUnit('') }
     if (newBroken > prevBroken) {
       notifyTeamPush({
         title: t('inventory.pushBrokenTitle'),
-        body: [item.name, note].filter(Boolean).join(' — '),
+        body: [item.name, unitText(unit, note)].filter(Boolean).join(' — '),
         url: '/inventory?filter=broken',
         audience: { type: 'admins' },
       })
@@ -165,18 +179,36 @@ export default function WorkerInventory() {
     const note = issueNote.trim()
     const prevDefect = item.defectQty || 0
     const newDefect = Math.max(0, Math.min(item.totalQty, prevDefect + delta))
-    const defectNote = newDefect === 0 ? '' : (delta > 0 && note ? note : (item.defectNote || ''))
-    await updateDoc(doc(db, 'items', item.id), { defectQty: newDefect, defectNote })
-    setDetail(d => d?.id === item.id ? { ...d, defectQty: newDefect, defectNote } : d)
-    if (delta > 0) setIssueNote('')
+    const unit = unitNum(item)
+    const defectNote = newDefect === 0 ? '' : (delta > 0 && note && !unit ? note : (item.defectNote || ''))
+    const issues = delta > 0 ? addIssue(item.issues, { type: 'defect', unit, note }) : dropLastIssue(item.issues, 'defect')
+    await updateDoc(doc(db, 'items', item.id), { defectQty: newDefect, defectNote, issues })
+    setDetail(d => d?.id === item.id ? { ...d, defectQty: newDefect, defectNote, issues } : d)
+    if (delta > 0) { setIssueNote(''); setIssueUnit('') }
     if (newDefect > prevDefect) {
       notifyTeamPush({
         title: t('inventory.pushDefectTitle'),
-        body: [item.name, note].filter(Boolean).join(' — '),
+        body: [item.name, unitText(unit, note)].filter(Boolean).join(' — '),
         url: '/inventory?filter=defect',
         audience: { type: 'admins' },
       })
     }
+  }
+
+  // "Risolto" su un singolo pezzo segnalato (rotto o con difetto).
+  const resolveIssue = async (item, issue) => {
+    const issues = removeIssueById(item.issues, issue.id)
+    let upd
+    if (issue.type === 'broken') {
+      const newBroken = Math.max(0, (item.brokenQty || 0) - 1)
+      const prevOut = (item.totalQty || 0) - (item.availableQty || 0) - (item.brokenQty || 0)
+      upd = { issues, brokenQty: newBroken, availableQty: Math.max(0, item.totalQty - newBroken - prevOut), ...(newBroken === 0 ? { brokenNote: '' } : {}) }
+    } else {
+      const newDefect = Math.max(0, (item.defectQty || 0) - 1)
+      upd = { issues, defectQty: newDefect, ...(newDefect === 0 ? { defectNote: '' } : {}) }
+    }
+    await updateDoc(doc(db, 'items', item.id), upd)
+    setDetail(d => d?.id === item.id ? { ...d, ...upd } : d)
   }
 
   // Aggiusta la qty di un consumabile (es. bombole usate)
@@ -504,8 +536,8 @@ export default function WorkerInventory() {
                   <span style={{ fontWeight:800, fontSize:15, color: avail === item.totalQty ? 'var(--green)' : avail === 0 ? 'var(--red)' : 'var(--accent2)' }}>
                     {avail}/{item.totalQty}{item.category === 'Consumabili' ? ` ${t(`inventory.unitShort_${item.consumableUnit || 'pezzi'}`)}` : ''}
                   </span>
-                  {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Wrench size={11} /> {t('inventory.brokenCount', { count: item.brokenQty })}</span></div>}
-                  {(item.defectQty || 0) > 0 && <div style={{ marginTop:4 }}><span style={{ background:'rgba(217,119,6,0.15)', color:'#b45309', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Warn size={11} /> {t('inventory.defectCount', { count: item.defectQty })}</span></div>}
+                  {isBroken && <div style={{ marginTop:4 }}><span style={{ background:'rgba(248,113,113,0.15)', color:'var(--red)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Wrench size={11} /> {brokenText(item, t)}</span></div>}
+                  {(item.defectQty || 0) > 0 && <div style={{ marginTop:4 }}><span style={{ background:'rgba(217,119,6,0.15)', color:'#b45309', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Warn size={11} /> {defectText(item, t)}</span></div>}
                   {isOut    && <div style={{ marginTop:4 }}><span style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700 }}>{t('inventory.out')}</span></div>}
                   {item.category === 'Consumabili' && item.minStock > 0 && avail <= item.minStock && (
                     <div style={{ marginTop:4 }}><span style={{ background:'rgba(79,195,247,0.15)', color:'var(--blue)', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:700, display:'inline-flex', alignItems:'center', gap:4 }}><Cart size={11} /> {t('inventory.toReorder')}</span></div>
@@ -609,8 +641,8 @@ export default function WorkerInventory() {
               <div style={{ display:'flex', gap:12, marginTop:8, flexWrap:'wrap' }}>
                 <span style={{ fontSize:12, color:'var(--green)' }}>● {detail.availableQty} {t('inventory.available')}</span>
                 {((detail.totalQty||0)-(detail.availableQty||0)-(detail.brokenQty||0)) > 0 && <span style={{ fontSize:12, color:'var(--accent2)' }}>● {(detail.totalQty||0)-(detail.availableQty||0)-(detail.brokenQty||0)} {t('inventory.out')}</span>}
-                {(detail.defectQty||0) > 0 && <span style={{ fontSize:12, color:'#d97706' }}>● {t('inventory.defectCount', { count: detail.defectQty })}</span>}
-                {(detail.brokenQty||0) > 0 && <span style={{ fontSize:12, color:'var(--red)' }}>● {t('inventory.brokenCount', { count: detail.brokenQty })}</span>}
+                {(detail.defectQty||0) > 0 && <span style={{ fontSize:12, color:'#d97706' }}>● {defectText(detail, t)}</span>}
+                {(detail.brokenQty||0) > 0 && <span style={{ fontSize:12, color:'var(--red)' }}>● {brokenText(detail, t)}</span>}
               </div>
             </div>
 
@@ -621,6 +653,25 @@ export default function WorkerInventory() {
             )}
             {detail.notes && <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, padding:'10px 12px', background:'var(--bg3)', borderRadius:8 }}>{detail.notes}</p>}
 
+            {(detail.issues || []).length > 0 && (
+              <div style={{ margin:'0 0 12px', padding:'8px 10px', borderRadius:10, background:'var(--c-alt)', border:'1px solid var(--c-line)' }}>
+                <p style={{ margin:'0 0 6px', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink3)' }}>{t('inventory.issuesPiecesTitle')}</p>
+                {sortedIssues(detail.issues).map(i => (
+                  <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
+                    <span style={{ fontSize:12, fontWeight:800, whiteSpace:'nowrap', color: i.type === 'broken' ? 'var(--red)' : '#b45309' }}>
+                      {i.unit ? t('inventory.issuePieceNumber', { n: i.unit }) : t('inventory.issuePieceNoNumber')}
+                    </span>
+                    <span style={{ flex:1, minWidth:0, fontSize:13, color:'var(--c-ink)', overflowWrap:'anywhere' }}>
+                      <strong>{i.type === 'broken' ? t('inventory.brokenSingle') : t('inventory.defectSingle')}</strong>{i.note ? ` — ${i.note}` : ''}
+                    </span>
+                    <button type="button" onClick={() => resolveIssue(detail, i)}
+                      style={{ flexShrink:0, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:8, padding:'6px 10px', fontSize:12, fontWeight:800 }}>
+                      {t('inventory.issueResolved')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {(detail.brokenQty||0) > 0 && detail.brokenNote && (
               <p style={{ margin:'0 0 12px', padding:'10px 12px', borderRadius:10, background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.3)', fontSize:13, lineHeight:1.45, color:'var(--c-ink)' }}>
                 <strong style={{ color:'var(--red)' }}>{t('inventory.brokenNoteTitle')}:</strong> {detail.brokenNote}
@@ -662,7 +713,16 @@ export default function WorkerInventory() {
                   descrizione è facoltativa e vale per il prossimo segnale. */}
               {detail.category !== 'Consumabili' && (
                 <div>
-                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>{t('workerInventory.reportProblem')}</p>
+                  <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:10 }}>{t('inventory.issuesSectionTitle')}</p>
+                  {(detail.totalQty || 0) > 1 && (
+                    <div style={{ marginBottom:12 }}>
+                      <label htmlFor="wi-issue-unit" style={{ display:'block', fontSize:12, fontWeight:700, color:'var(--c-ink2)', marginBottom:6 }}>
+                        {t('inventory.issuePieceNumberLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500 }}>{t('common.optional')}</span>
+                      </label>
+                      <input id="wi-issue-unit" type="number" inputMode="numeric" min={1} max={detail.totalQty} value={issueUnit} onChange={e => setIssueUnit(e.target.value)}
+                        placeholder={t('inventory.issuePieceNumberPlaceholder', { total: detail.totalQty })} style={{ fontSize:14 }} />
+                    </div>
+                  )}
                   <label htmlFor="wi-issue-note" style={{ display:'block', fontSize:12, fontWeight:700, color:'var(--c-ink2)', marginBottom:6 }}>
                     {t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500 }}>{t('common.optional')}</span>
                   </label>

@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-18',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Oggetti "Con difetto" e pezzi numerati: dal tasto Segnala indichi rotti, difetti e il numero esatto del pezzo (es. pointe n° 7), con descrizione',
+        'Magazzinieri: Seleziona (o pressione lunga) nella lista di carico per segnare più oggetti mancanti, rientrati in parte o rotti',
+        'Nuovo foglio dei bauli a schede: Contenuto, Stato e Collegati',
+        'Calendario: negli eventi di più giorni ogni card mostra solo chi lavora quel giorno; su computer fino a 3 eventi per giorno',
+        'Disponibilità nello Storico più precisa: conta anche i pezzi già fuori dal magazzino',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Items "With a defect" and numbered pieces: use Report to set broken, defects and the exact piece number (e.g. moving head no. 7), with a description',
+        'Warehouse workers: Select (or long press) in the loading list to mark several items missing, partly returned or broken',
+        'New tabbed case sheet: Contents, Status and Linked',
+        'Calendar: on multi-day events each card shows only who works that day; up to 3 events per day on desktop',
+        'More accurate availability in History: it also counts pieces already out of the warehouse',
+      ],
+    },
+  },
+  {
     version: '2026-10-16',
     it: {
       title: 'Novità di oggi',

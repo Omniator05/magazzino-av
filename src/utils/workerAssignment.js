@@ -74,3 +74,25 @@ export function externalVehicleConflictEvent(externalVehicleId, event, otherEven
   })
   return hit ? { id: hit.id, name: hit.name } : null
 }
+
+// Chi lavora su un evento in UN giorno preciso, per le card del Calendario.
+// Le assegnazioni per giorno stanno in `assignmentBlocks` (Assegna personale):
+// quelle di una fase (montaggio/smontaggio) hanno la loro card, qui restano le
+// altre di quel giorno — stessa regola di StaffTimeline. Un evento senza nessun
+// blocco (assegnato col vecchio elenco unico `assignedWorkers`) mostra ancora
+// tutti, perché non c'è altro modo di sapere i giorni.
+// Ritorna [{ key, workerId, name, hours }]: `name` è solo per il personale
+// esterno; `hours` unisce gli orari se la stessa persona ha più blocchi.
+export function assigneesOnDay(event, date, blocks) {
+  const own = (blocks || []).filter(b => b.eventId === event.id)
+  if (own.length === 0) return (event.assignedWorkers || []).map(id => ({ key: id, workerId: id, name: null, hours: null }))
+  const byPerson = new Map()
+  own.filter(b => b.date === date && !b.phase).forEach(b => {
+    const key = b.workerId || `ext:${b.externalWorkerId || b.externalWorkerName}`
+    const hours = b.startTime && b.endTime ? `${b.startTime}–${b.endTime}` : null
+    const prev = byPerson.get(key)
+    if (prev) { if (hours) prev.hours = prev.hours ? `${prev.hours}, ${hours}` : hours; return }
+    byPerson.set(key, { key, workerId: b.workerId || null, name: b.workerId ? null : (b.externalWorkerName || null), hours })
+  })
+  return [...byPerson.values()]
+}
