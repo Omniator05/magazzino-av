@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { collection, query, where, onSnapshot, doc, updateDoc, deleteField } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useConfirm } from '../context/ConfirmProvider'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
+import GuestInvitePrompt from './GuestInvitePrompt'
+import { isInvitePromptMuted, muteInvitePrompt } from '../utils/guestLinks'
 import StaffAssignPanel from './StaffAssignPanel'
 import ArchiveEventDetail from './ArchiveEventDetail'
 import { TaskSummaryBody } from './TaskSummaryModal'
@@ -218,6 +220,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const [weekStart, setWeekStart] = useState(() => startOfWeek(savedView?.weekStart ? new Date(savedView.weekStart + 'T12:00:00') : new Date()))
   const [blocks, setBlocks] = useState([])
   const [externalWorkers, setExternalWorkers] = useState([])
+  // Domanda "Utente esterno inserito, vuoi invitarlo?" dopo il Salva della colonna;
+  // promptedExternalIds = già chiesto in questa sessione (non si ripete a ogni salvataggio).
+  const [invitePrompt, setInvitePrompt] = useState(null) // [{ id, name }] | null
+  const promptedExternalIds = useRef(new Set())
   const [shownExternalIds, setShownExternalIds] = useState([])
   const [selectedPerson, setSelectedPerson] = useState(null) // {id, kind, name} — tap-tap mobile
   const [peopleQuery, setPeopleQuery] = useState('')
@@ -326,10 +332,12 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   }, [blocks, weekDates])
 
   const activeWorkers = workers.filter(w => w.active !== false)
+  const peopleQ = peopleQuery.trim().toLowerCase()
   const people = [
     ...activeWorkers.map(w => ({ id: w.id, name: w.name || t('common.noName'), kind: 'worker' })),
     ...externalWorkers
-      .filter(w => weekBlockExternalIds.has(w.id) || shownExternalIds.includes(w.id))
+      // Con una ricerca in corso compaiono TUTTI gli esterni che corrispondono, non solo quelli già in uso questa settimana
+      .filter(w => weekBlockExternalIds.has(w.id) || shownExternalIds.includes(w.id) || (peopleQ && (w.name || '').toLowerCase().includes(peopleQ)))
       .map(w => ({ id: w.id, name: w.name, kind: 'external' })),
   ]
 
@@ -337,7 +345,6 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // nome e compaiono solo i risultati. La persona selezionata (tap-tap)
   // resta visibile anche a ricerca svuotata, altrimenti non si saprebbe
   // più chi si sta per assegnare.
-  const peopleQ = peopleQuery.trim().toLowerCase()
   // Più utilizzati = più assegnazioni in assoluto (tutti i blocchi della
   // squadra, non solo la settimana mostrata): compaiono da subito sotto la
   // barra, così le persone di sempre sono a un tap senza dover cercare. Con
@@ -672,18 +679,19 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     if (!(await confirmAvailability(person, item.date, eventName))) return
     if (item.type === 'task') {
       const placeholder = item.group.find(b => !b.workerId && !b.externalWorkerId)
-      if (placeholder) { await updateAssignmentBlock(placeholder.id, placeholder, { ...personFields(person), startTime: st, endTime: et, taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId }, blocksCtx()); return }
-      await createAssignmentBlock({
+      if (placeholder) { await updateAssignmentBlock(placeholder.id, placeholder, { ...personFields(person), ...(times?.note ? { note: times.note } : {}), startTime: st, endTime: et, taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId }, blocksCtx()); return placeholder.id }
+      return createAssignmentBlock({
         teamId, date: item.date, startTime: st, endTime: et,
         ...personFields(person),
+        ...(times?.note ? { note: times.note } : {}),
         eventId: null, taskGroupId: item.taskGroupId, label: item.block.label || '', description: item.block.description || '',
         taskStart: item.startTime, taskEnd: item.endTime, linkedEventId: item.linkedEventId, linkedListId: item.linkedListId, createdBy: user.uid,
       }, blocksCtx())
-      return
     }
-    await createAssignmentBlock({
+    return createAssignmentBlock({
       teamId, date: item.date, startTime: st, endTime: et,
       ...personFields(person),
+      ...(times?.note ? { note: times.note } : {}),
       eventId: item.event.id, label: '', ...(item.type === 'phase' ? { phase: item.phaseKey } : {}), createdBy: user.uid,
     }, blocksCtx())
   }
@@ -723,18 +731,35 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setSelectedPerson(null)
   }
 
+  // ✕ sul chip di un utente temporaneo: lo elimina dall'anagrafica (con conferma).
+  // Le assegnazioni già fatte restano nel calendario con il suo nome; il suo link
+  // ospite smette di funzionare (il server controlla che la persona esista ancora).
+  const deleteExternal = async (p) => {
+    const ok = await confirm({
+      title: t('guest.tempDeleteTitle', { name: p.name }),
+      message: t('guest.tempDeleteMessage'),
+      confirmLabel: t('common.delete'),
+      danger: true,
+    })
+    if (!ok) return
+    await deleteDoc(doc(db, 'externalWorkers', p.id))
+    setShownExternalIds(ids => ids.filter(id => id !== p.id))
+    if (selectedPerson?.id === p.id) setSelectedPerson(null)
+  }
+
   // Aggiunta dalla colonna (campo di ricerca): un nome nuovo diventa un
   // esterno salvato in anagrafica e riusabile.
   const addFromPanel = async (person, times) => {
-    if (!panelItem) return
+    if (!panelItem) return null
     let resolved = person
     if (person.kind === 'external' && !person.id) {
       const id = await getOrCreateExternalWorker(teamId, person.name, user.uid, externalWorkers)
-      if (!id) return
+      if (!id) return null
       setShownExternalIds(ids => (ids.includes(id) ? ids : [...ids, id]))
       resolved = { ...person, id }
     }
-    await addPersonToItem(panelItem, resolved, times)
+    const blockId = await addPersonToItem(panelItem, resolved, times)
+    return { id: resolved.id, name: resolved.name, blockId }
   }
 
   // Salva la bozza della colonna: orari/note di ogni persona + (per un task)
@@ -769,6 +794,28 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       }
     }
     setPanel(p => (p ? { ...p, isNew: false } : p))
+
+    // Esterni appena salvati senza ancora un link ospite: chiede se invitarli
+    // (una volta per persona a sessione, salvo "non mostrare più").
+    if (!isInvitePromptMuted()) {
+      const toAsk = []
+      // Esterno appena scritto nella card "?": non è ancora nell'elenco locale
+      ;(payload.newExternals || []).forEach(w => {
+        if (w.id && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name })
+      })
+      payload.rows.forEach(r => {
+        const b = blocks.find(x => x.id === r.blockId)
+        const w = b?.externalWorkerId && externalWorkers.find(x => x.id === b.externalWorkerId)
+        if (w && !w.guestLinkActive && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name })
+      })
+      if (toAsk.length > 0) {
+        toAsk.forEach(w => promptedExternalIds.current.add(w.id))
+        setInvitePrompt(toAsk)
+        // La colonna si chiude dietro il popup: uscendo dal popup si resta sulla timeline.
+        panelDirtyRef.current = false
+        setPanel(null)
+      }
+    }
   }
 
   const deleteTaskFromPanel = async () => {
@@ -921,7 +968,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
               </button>
               {p.kind === 'external' && (
                 <button type="button" className="btn-no-anim"
-                  onClick={() => setShownExternalIds(ids => ids.filter(id => id !== p.id))}
+                  onClick={() => deleteExternal(p)}
                   aria-label={t('staffTimeline.removeExternalChipAria', { name: p.name })}
                   style={{
                     position: 'absolute', top: -6, right: -6, width: 17, height: 17, borderRadius: '50%',
@@ -1181,7 +1228,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           unavailability={unavailability}
           focusAddToken={panel.focusToken}
           draggedPerson={draggedPerson}
-          onDropPerson={person => { setDraggedPerson(null); if (person.kind !== 'quick-external') addFromPanel(person) }}
+          onDropPerson={person => { setDraggedPerson(null); if (person.kind === 'quick-external') setPanel(p => (p ? { ...p, focusToken: Date.now() } : p)); else addFromPanel(person) }}
           onClose={closePanel}
           onAddPerson={addFromPanel}
           onRemoveBlock={b => removeBlockFromItem(panelItem, b)}
@@ -1191,6 +1238,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           onOpenEvent={() => navigate(`/events/${panelItem.event.id}`)}
           onDirtyChange={d => { panelDirtyRef.current = d }}
         />
+      )}
+      {invitePrompt && (
+        <GuestInvitePrompt count={invitePrompt.length}
+          onGo={dontShow => { if (dontShow) muteInvitePrompt(); const ids = invitePrompt.map(p => p.id); setInvitePrompt(null); navigate('/admin/settings/users', { state: { highlightExternalIds: ids } }) }}
+          onClose={dontShow => { if (dontShow) muteInvitePrompt(); setInvitePrompt(null) }} />
       )}
     </div>
   )

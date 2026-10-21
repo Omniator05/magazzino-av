@@ -149,7 +149,8 @@ export default function TabBar() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [wide])
-  const barW = measuredW || (wide ? m.width : Math.min(vw - 48, n * m.slot + 2 * m.padX))
+  // Mai negativa: con la finestra larga 1px (ridimensionamento, riquadro nascosto) `vw - 48` andava sotto zero e l'SVG dava errore in console.
+  const barW = Math.max(0, measuredW || (wide ? m.width : Math.min(vw - 48, n * m.slot + 2 * m.padX)))
   // Margine interno scelto perché la tacca della prima/ultima tab non tocchi
   // gli angoli arrotondati nemmeno sugli schermi più stretti.
   const off = Math.sqrt((m.D / 2 + m.ring + m.fillet) ** 2 - (m.fillet - m.cy) ** 2) // mezza larghezza della tacca

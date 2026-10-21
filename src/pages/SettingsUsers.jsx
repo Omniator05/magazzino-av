@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
 import { adminLimit, workerLimit, promptLimitReached } from '../utils/planLimits'
@@ -9,11 +9,13 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
+import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
 import { Check, Save, Trash, Edit, User, Warn, Box, Mail } from '../components/Icon'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import PageHeader from '../components/PageHeader'
+import GuestInviteModal from '../components/GuestInviteModal'
+import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
 import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
 import {
@@ -116,12 +118,34 @@ export default function SettingsUsers() {
   const { user, teamId, team } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
+  // Arrivando dal popup "Utente esterno inserito" l'utente temporaneo va portato
+  // al centro e messo in evidenza per un momento.
+  const { state: navState } = useLocation()
+  const [highlightIds, setHighlightIds] = useState([])
+  // Modifica di un utente temporaneo (rinomina / elimina): { id, name } | null
+  const [tempEdit, setTempEdit] = useState(null)
+  const [tempError, setTempError] = useState('')
+  const tempDrag = useModalDrag(() => setTempEdit(null))
   const [users, setUsers]             = useState([])
+  // Utenti temporanei (personale esterno senza account): elenco, nuovo e link ospite
+  const [externalWorkers, setExternalWorkers] = useState([])
+  const [inviteForId, setInviteForId]   = useState(null)
+  useEffect(() => {
+    const ids = navState?.highlightExternalIds
+    if (!ids?.length || externalWorkers.length === 0 || !externalWorkers.some(w => ids.includes(w.id))) return
+    setHighlightIds(ids)
+    window.history.replaceState({}, '')
+    const first = externalWorkers.find(w => ids.includes(w.id))
+    setTimeout(() => document.getElementById(`temp-row-${first.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80)
+    const off = setTimeout(() => setHighlightIds([]), 3500)
+    return () => clearTimeout(off)
+  }, [navState, externalWorkers])
+  useEffect(() => watchExternalWorkers(teamId, list => setExternalWorkers(list.sort((a, b) => (a.name || '').localeCompare(b.name || '')))), [teamId])
   const [showCreate, setShowCreate]   = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
   const createDrag = useModalDrag(() => setShowCreate(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
-  useModalScrollLock(showCreate || !!showDetail)
+  useModalScrollLock(showCreate || !!showDetail || !!tempEdit)
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
   const [newPw, setNewPw]             = useState('')
@@ -164,6 +188,43 @@ export default function SettingsUsers() {
   // Ritorna true solo se l'account è stato davvero creato — SaveButton
   // mostra la spunta e chiude solo in quel caso, mai sui rami di validazione/
   // limite piano gratuito che si fermano prima.
+  // Rinomina un utente temporaneo: aggiorna l'anagrafica e anche il nome già
+  // scritto sulle sue assegnazioni, così il calendario resta coerente.
+  const saveTempName = async () => {
+    const name = (tempEdit?.name || '').trim()
+    if (!name) { setTempError(t('adminUsers.errorFillAllFields')); return false }
+    if (externalWorkers.some(x => x.id !== tempEdit.id && (x.name || '').trim().toLowerCase() === name.toLowerCase())) {
+      setTempError(t('guest.tempNameTaken')); return false
+    }
+    setTempError('')
+    await updateDoc(doc(db, 'externalWorkers', tempEdit.id), { name, nameLower: name.toLowerCase() })
+    const blocks = await getDocs(query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId), where('externalWorkerId', '==', tempEdit.id)))
+    await Promise.all(blocks.docs.map(d => updateDoc(d.ref, { externalWorkerName: name })))
+    return true
+  }
+
+  const deleteTemp = async () => {
+    const w = tempEdit
+    if (!w) return
+    const ok = await confirm({ title: t('guest.tempDeleteTitle', { name: w.name }), message: t('guest.tempDeleteMessage'), confirmLabel: t('common.delete'), danger: true })
+    if (!ok) return
+    await deleteDoc(doc(db, 'externalWorkers', w.id))
+    tempDrag.close()
+  }
+
+  // Utente temporaneo (personale esterno, senza account): si crea solo con il
+  // nome e subito si propone il link ospite. Stesso elenco degli "Esterni" di
+  // Assegna personale (collection externalWorkers).
+  const createTemp = async () => {
+    const name = form.name.trim()
+    if (!name) { setError(t('adminUsers.errorFillAllFields')); return false }
+    const id = await getOrCreateExternalWorker(teamId, name, user.uid, externalWorkers)
+    if (!id) return false
+    setForm(f => ({ ...f, name: '', role: 'worker' }))
+    setInviteForId(id)
+    return true
+  }
+
   const createAccount = async () => {
     if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
       setError(t('adminUsers.errorFillAllFields')); return false
@@ -515,6 +576,29 @@ export default function SettingsUsers() {
     )
   }
 
+  // Utente temporaneo nell'elenco: al posto di "Attivo" ha il tag "Temporaneo" e
+  // accanto il bottone "Invita" (o "Link" se ne ha già uno attivo) per il link ospite.
+  const TempRow = ({ w }) => (
+    <div id={`temp-row-${w.id}`} className="item-row" onClick={() => { setTempEdit({ id: w.id, name: w.name || '' }); setTempError('') }}
+      style={{ cursor:'pointer', transition:'background 0.4s ease', background: highlightIds.includes(w.id) ? 'rgba(230,57,70,0.10)' : undefined, boxShadow: highlightIds.includes(w.id) ? 'inset 3px 0 0 #e63946' : 'none' }}>
+      <div className="item-icon" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontWeight:800, fontSize:18 }}>
+        {(w.name || '?').charAt(0).toUpperCase()}
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.name}</p>
+        <p style={{ color:'var(--text2)', fontSize:13 }}>{w.guestLinkActive ? t('guest.tempLinkActive') : t('guest.tempNoAccount')}</p>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+        <button type="button" className="btn btn-primary" onClick={e => { e.stopPropagation(); setInviteForId(w.id) }}
+          style={{ minHeight:36, padding:'6px 14px', fontSize:13, background: w.guestLinkActive ? 'var(--card2)' : undefined, color: w.guestLinkActive ? 'var(--text)' : undefined, border: w.guestLinkActive ? '1px solid var(--border)' : undefined }}>
+          {w.guestLinkActive ? t('guest.tempManage') : t('guest.promptInvite')}
+        </button>
+        <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', whiteSpace:'nowrap' }}>{t('guest.tempBadge')}</span>
+        <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
+      </div>
+    </div>
+  )
+
   return (
     <div className="page users-page">
       <Toast message={toast} />
@@ -548,13 +632,16 @@ export default function SettingsUsers() {
           <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
         </div>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
-          {workers.length === 0
+          {workers.length === 0 && externalWorkers.length === 0
             ? <div className="empty-state" style={{ padding:'30px' }}>
                 <p style={{ color:'var(--text3)', marginBottom:4 }}><User size={34} /></p>
                 <h3>{t('adminUsers.noWorkersTitle')}</h3>
                 <p>{t('adminUsers.noWorkersDesc')}</p>
               </div>
-            : workers.map(u => <UserRow key={u.id} u={u} />)
+            : <>
+                {workers.map(u => <UserRow key={u.id} u={u} />)}
+                {externalWorkers.map(w => <TempRow key={`ext-${w.id}`} w={w} />)}
+              </>
           }
         </div>
 
@@ -567,6 +654,41 @@ export default function SettingsUsers() {
           </>
         )}
       </div>
+
+      {/* ── Modal utente temporaneo: rinomina / elimina / link ─── */}
+      {tempEdit && (
+        <div className={`modal-overlay${tempDrag.closing ? ' closing' : ''}`} onClick={tempDrag.onOverlayClick}>
+          <div className={`modal admin-user-modal${tempDrag.jiggling ? ' modal-jiggle' : ''}${tempDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...tempDrag.props}>
+            <button className="close-btn" onClick={tempDrag.close}>✕</button>
+            <h2 style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+              {t('guest.tempEditTitle')}
+              <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:12 }}>{t('guest.tempBadge')}</span>
+            </h2>
+            {tempError && (
+              <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', color:'var(--red)', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13 }}>{tempError}</div>
+            )}
+            <div className="form-group">
+              <label htmlFor="temp-name">{t('adminUsers.fullNameLabel')}</label>
+              <input id="temp-name" value={tempEdit.name} onChange={e => setTempEdit(v => ({ ...v, name: e.target.value }))} />
+            </div>
+            <SaveButton onSave={saveTempName} onDone={tempDrag.close} onError={tempDrag.triggerJiggle} className="btn btn-primary btn-full">
+              <Check size={16} /> {t('guest.tempSaveName')}
+            </SaveButton>
+            <button type="button" className="btn btn-secondary btn-full" style={{ marginTop:10 }}
+              onClick={() => { const id = tempEdit.id; tempDrag.close(); setInviteForId(id) }}>
+              {externalWorkers.find(x => x.id === tempEdit.id)?.guestLinkActive ? t('guest.tempManage') : t('guest.promptInvite')}
+            </button>
+            <button type="button" className="btn btn-red btn-full" style={{ marginTop:10 }} onClick={deleteTemp}>
+              <Trash size={16} /> {t('guest.tempDeleteButton')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {inviteForId && (() => {
+        const w = externalWorkers.find(x => x.id === inviteForId)
+        return w ? <GuestInviteModal person={{ id: w.id, name: w.name, guestActive: !!w.guestLinkActive }} onClose={() => setInviteForId(null)} /> : null
+      })()}
 
       {/* ── Modal crea account ─────────────────────────────── */}
       {showCreate && (
@@ -585,6 +707,7 @@ export default function SettingsUsers() {
               <label>{t('adminUsers.fullNameLabel')}</label>
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('adminUsers.fullNamePlaceholder')} />
             </div>
+            {form.role !== 'temporaneo' && (<>
             <div className="form-group">
               <label>{t('adminUsers.usernameLabel')}</label>
               <input
@@ -609,6 +732,7 @@ export default function SettingsUsers() {
                 autoCapitalize="none"
               />
             </div>
+            </>)}
             <div className="form-group">
               <label>{t('adminUsers.roleLabel')}</label>
               {/* "Organizzatore evento" (generico) tolto dalle opzioni per i
@@ -624,6 +748,7 @@ export default function SettingsUsers() {
                 ariaLabel={t('adminUsers.roleLabel')}
                 options={[
                   { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
+                  { value:'temporaneo', label:t('guest.tempRoleOption'), icon:<User size={17} /> },
                 ]}
               />
             </div>
@@ -655,13 +780,19 @@ export default function SettingsUsers() {
               </button>
             )}
 
+            {form.role === 'temporaneo' && (
+              <p style={{ margin:'0 0 22px', fontSize:13, lineHeight:1.5, color:'var(--text2)' }}>{t('guest.tempRoleHint')}</p>
+            )}
+
+            {form.role !== 'temporaneo' && (
             <div className="form-group" style={{ marginBottom:22 }}>
               <label>{t('adminUsers.passwordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.passwordHint')}</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
             </div>
+            )}
 
-            <SaveButton onSave={createAccount} onDone={createDrag.close} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
-              <Check size={16} /> {t('adminUsers.createAccount')}
+            <SaveButton onSave={form.role === 'temporaneo' ? createTemp : createAccount} onDone={createDrag.close} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
+              <Check size={16} /> {form.role === 'temporaneo' ? t('guest.tempCreateInvite') : t('adminUsers.createAccount')}
             </SaveButton>
           </div>
         </div>

@@ -60,6 +60,23 @@ export default function StaffAssignPanel({
   const [saving, setSaving] = useState(false)
   const [dropHover, setDropHover] = useState(false)
   const addInputRef = useRef(null)
+  // Persone aggiunte da quando si è aperta la colonna (o dall'ultimo Salva):
+  // vengono scritte subito, quindi senza questo il pulsante Salva restava
+  // grigio dopo l'aggiunta — e con lui anche il promemoria "vuoi invitarlo?".
+  const savedIdsRef = useRef(new Set(item.assigned.map(b => b.id)))
+  const hasNewPeople = item.assigned.some(b => !savedIdsRef.current.has(b.id))
+  // Card "esterno" con il nome da scrivere: compare rilasciando il chip "Esterno"
+  // su una card (null = nessuna). Ha la stessa forma di una persona (orari, nota)
+  // ma al posto del nome un campo vuoto: con Salva diventa una persona esterna vera.
+  const [draft, setDraft] = useState(null) // { name, startTime, endTime, note, noteOpen }
+  const draftInputRef = useRef(null)
+  // Persone tolte dalla colonna ma non ancora salvate: la rimozione scrive solo con Salva.
+  const [removedIds, setRemovedIds] = useState(() => new Set())
+  const toggleRemoved = blockId => setRemovedIds(prev => {
+    const next = new Set(prev)
+    next.has(blockId) ? next.delete(blockId) : next.add(blockId)
+    return next
+  })
 
   // Chi arriva/parte dal drag sulla card (o da un altro dispositivo) compare
   // qui da solo; le bozze delle righe già presenti restano intatte.
@@ -69,18 +86,22 @@ export default function StaffAssignPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockSig])
 
-  // Rilasciare il chip "Esterno" sulla card apre il pannello già con il
-  // campo "aggiungi" attivo, pronto a ricevere il nome.
+  // Rilasciare il chip "Esterno" sulla card apre il pannello con già una riga
+  // persona dove il nome è un campo da scrivere, selezionato.
   useEffect(() => {
-    if (focusAddToken) addInputRef.current?.focus()
-  }, [focusAddToken])
+    if (!focusAddToken) return
+    setDraft(prev => prev ?? { name: '', startTime, endTime, note: '', noteOpen: false })
+    setTimeout(() => draftInputRef.current?.focus(), 0)
+  }, [focusAddToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const blockOf = id => item.assigned.find(b => b.id === id)
   const rowDirty = r => {
     const b = blockOf(r.blockId)
     return !b || b.startTime !== r.startTime || b.endTime !== r.endTime || (b.note || '') !== r.note
   }
-  const dirty = rows.some(rowDirty)
+  const draftReady = !!(draft && draft.name.trim())
+  const dirty = rows.some(r => !removedIds.has(r.blockId) && rowDirty(r))
+    || removedIds.size > 0 || draftReady
     || (isTask && (label !== (item.block.label || '') || description !== (item.block.description || '')
       || linkedEventId !== (item.linkedEventId || '') || linkedListId !== (item.linkedListId || '')
       || (rows.length === 0 && (startTime !== item.startTime || endTime !== item.endTime))))
@@ -121,13 +142,25 @@ export default function StaffAssignPanel({
     // Un'attività libera può scavalcare la mezzanotte (fine ≤ inizio = giorno
     // dopo), basta che inizio e fine non coincidano; eventi e fasi no.
     const badRange = (s0, e0) => (isTask ? e0 === s0 : e0 <= s0)
-    if (badRange(startTime, endTime) || rows.some(r => badRange(r.startTime, r.endTime))) {
+    const keptRows = rows.filter(r => !removedIds.has(r.blockId))
+    if (badRange(startTime, endTime) || keptRows.some(r => badRange(r.startTime, r.endTime)) || (draftReady && badRange(draft.startTime, draft.endTime))) {
       setError(t(isTask ? 'staffTimeline.errorTimeEqual' : 'staffTimeline.errorTimeRange'))
       return
     }
     setSaving(true)
     try {
-      await onSave({ label: label.trim(), description: description.trim(), startTime, endTime, rows, linkedEventId: linkedEventId || null, linkedListId: linkedEventId ? (linkedListId || null) : null })
+      // 1) esterno nuovo scritto nella card, 2) resto della bozza, 3) persone tolte
+      // (per ultime: il salvataggio dei task aggiorna tutti i blocchi del gruppo, che
+      // devono esistere ancora).
+      const created = draftReady
+        ? await onAddPerson({ id: null, kind: 'external', name: draft.name.trim() }, { startTime: draft.startTime, endTime: draft.endTime, note: draft.note.trim() })
+        : null
+      await onSave({ label: label.trim(), description: description.trim(), startTime, endTime, rows: keptRows, linkedEventId: linkedEventId || null, linkedListId: linkedEventId ? (linkedListId || null) : null, newExternals: created ? [{ id: created.id, name: created.name }] : [] })
+      for (const id of removedIds) { const b = blockOf(id); if (b) await onRemoveBlock(b) }
+      // Da qui in poi "nuove" sono solo le persone aggiunte dopo questo Salva
+      savedIdsRef.current = new Set([...item.assigned.map(b => b.id).filter(id => !removedIds.has(id)), ...(created?.blockId ? [created.blockId] : [])])
+      setRemovedIds(new Set())
+      setDraft(null)
     } catch {
       setError(t('staffTimeline.saveError'))
     } finally { setSaving(false) }
@@ -305,10 +338,41 @@ export default function StaffAssignPanel({
           )}
         </div>
 
-        {rows.length === 0 ? (
+        {rows.length === 0 && draft === null ? (
           <p style={{ margin: 0, fontSize: 12.5, color: 'var(--c-ink3)', fontStyle: 'italic' }}>{t('staffTimeline.noPeopleYet')}</p>
         ) : (
           <div style={{ borderRadius: 12, border: '1px solid var(--c-line)', overflow: 'hidden' }}>
+            {draft !== null && (
+              <div style={{ padding: '10px 12px', borderBottom: rows.length > 0 ? '1px solid var(--c-line)' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, border: '1.5px dashed var(--c-ink3)', color: 'var(--c-ink3)', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</span>
+                  <input ref={draftInputRef} autoFocus value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); if (draftReady) submit() }
+                      if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
+                    }}
+                    placeholder={t('staffTimeline.draftExternalPlaceholder')} aria-label={t('staffTimeline.draftExternalPlaceholder')}
+                    style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, padding: '6px 10px' }} />
+                  <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>
+                  <button type="button" className="btn-no-anim" onClick={() => setDraft(null)} aria-label={t('staffTimeline.draftCancelAria')}
+                    style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><TimeField compact value={draft.startTime} onChange={v => setDraft(d => ({ ...d, startTime: v }))} /></div>
+                  <span style={{ color: 'var(--c-ink3)', fontSize: 12, fontWeight: 700 }}>–</span>
+                  <div style={{ flex: 1, minWidth: 0 }}><TimeField compact value={draft.endTime} onChange={v => setDraft(d => ({ ...d, endTime: v }))} /></div>
+                </div>
+                {draft.noteOpen ? (
+                  <textarea value={draft.note} onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} rows={2}
+                    placeholder={t('staffTimeline.personNotePlaceholder')} style={{ resize: 'vertical', fontSize: 13 }} />
+                ) : (
+                  <button type="button" className="btn-no-anim" onClick={() => setDraft(d => ({ ...d, noteOpen: true }))}
+                    style={{ alignSelf: 'flex-start', fontSize: 11.5, fontWeight: 700, color: 'var(--c-ink2)', padding: '3px 9px', borderRadius: 20, background: 'var(--c-fill)' }}>
+                    + {t('staffTimeline.personNoteAdd')}
+                  </button>
+                )}
+              </div>
+            )}
             {rows.map((r, i) => {
               const b = blockOf(r.blockId)
               if (!b) return null
@@ -316,13 +380,25 @@ export default function StaffAssignPanel({
               const pid = b.workerId || b.externalWorkerId || b.id
               const name = (isWorker ? (activeWorkers.find(w => w.id === b.workerId)?.name) : b.externalWorkerName) || t('common.noName')
               const unavailable = isWorker && isWorkerUnavailable(b.workerId, { date, dateEnd: date }, unavailability)
+              if (removedIds.has(r.blockId)) {
+                // In attesa di Salva: la persona resta visibile, sbiadita, con "Ripristina".
+                return (
+                  <div key={r.blockId} style={{ padding: '10px 12px', borderTop: i > 0 || draft !== null ? '1px solid var(--c-line)' : 'none', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(230,57,70,0.04)' }}>
+                    <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: personColor(pid), opacity: 0.4, color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(name)}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--c-ink3)', textDecoration: 'line-through', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#e63946', whiteSpace: 'nowrap' }}>{t('staffTimeline.willBeRemoved')}</span>
+                    <button type="button" className="btn-no-anim" onClick={() => toggleRemoved(r.blockId)}
+                      style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--c-ink)', padding: '4px 10px', borderRadius: 20, background: 'var(--c-fill)', flexShrink: 0 }}>{t('staffTimeline.restorePerson')}</button>
+                  </div>
+                )
+              }
               return (
-                <div key={r.blockId} style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--c-line)' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div key={r.blockId} style={{ padding: '10px 12px', borderTop: i > 0 || draft !== null ? '1px solid var(--c-line)' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: personColor(pid), color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(name)}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--c-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                     {!isWorker && <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>}
-                    <button type="button" className="btn-no-anim" onClick={() => onRemoveBlock(b)} aria-label={t('staffTimeline.removePersonAria', { name })}
+                    <button type="button" className="btn-no-anim" onClick={() => toggleRemoved(r.blockId)} aria-label={t('staffTimeline.removePersonAria', { name })}
                       style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -361,7 +437,7 @@ export default function StaffAssignPanel({
             <List size={16} /> {t('eventSummary.goToLoadList')}
           </button>
         )}
-        <button onClick={submit} className="btn btn-primary" style={{ flex: 1 }} disabled={saving || (!dirty && !isNew)}>
+        <button onClick={submit} className="btn btn-primary" style={{ flex: 1 }} disabled={saving || (!dirty && !isNew && !hasNewPeople)}>
           {saving ? t('common.saving') : t('staffTimeline.saveBlock')}
         </button>
       </div>

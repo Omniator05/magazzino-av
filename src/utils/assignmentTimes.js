@@ -37,3 +37,22 @@ export function phaseTimeFor(ev, key, date) {
   }
   return [DEFAULT_START, DEFAULT_END]
 }
+
+// Testo dell'orario di un evento in UN giorno, per le card del calendario
+// (es. "09:00–18:00"): prima l'orario su misura di quel giorno
+// (event.dayTimes), poi quello dell'evento se non è "tutto il giorno"; se
+// nessuno dei due c'è, `allDayText`. Stessa regola del dettaglio nella colonna
+// laterale del Calendario su computer.
+export function eventHoursLabel(ev, date, allDayText) {
+  const custom = ev.dayTimes?.[date]
+  if (custom?.timeStart && custom?.timeEnd) return `${custom.timeStart}–${custom.timeEnd}`
+  if (ev.allDay === false && ev.timeStart && ev.timeEnd) return `${ev.timeStart}–${ev.timeEnd}`
+  return allDayText
+}
+
+// Orario di una fase solo se è stato impostato davvero (altrimenti niente: il
+// predefinito "tutto il giorno" non aggiunge informazione al tag).
+export function phaseHoursLabel(ev, key) {
+  const pt = ev.phaseTimes?.[key]
+  return pt?.timeStart && pt?.timeEnd ? `${pt.timeStart}–${pt.timeEnd}` : ''
+}

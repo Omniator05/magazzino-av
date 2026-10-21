@@ -54,8 +54,8 @@ export const CHANGELOG = [
         kind: 'fix',
         title: { it: 'Pagina evento più stabile', en: 'More stable event page' },
         text: {
-          it: 'Corretto un errore che poteva bloccare la pagina di un evento; se una pagina ha un problema ora compare un messaggio con "Ricarica" invece di una schermata bianca.',
-          en: 'Fixed an error that could block an event page; if a page has a problem you now see a message with "Reload" instead of a blank screen.',
+          it: 'Corretto un errore che poteva bloccare la pagina di un evento; se una pagina ha un problema ora compare un messaggio con "Torna alla home" invece di una schermata bianca.',
+          en: 'Fixed an error that could block an event page; if a page has a problem you now see a message with "Go to home" instead of a blank screen.',
         },
       },
     ],

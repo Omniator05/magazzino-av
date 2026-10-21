@@ -108,11 +108,15 @@ service cloud.firestore {
       // documento ha comunque un campo teamId. Nessuna regola sotto la nomina:
       // resta raggiungibile solo dall'Admin SDK lato server, che ignora le
       // regole di sicurezza.
-      allow get: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets'
+      //
+      // Idem 'guestLinks' (impronte dei link ospite, vedi api/_guest.js): create/
+      // lette solo dal server — se un client potesse scriverci, potrebbe
+      // fabbricarsi un link verso qualunque persona esterna della squadra.
+      allow get: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks'
         && (resource == null || canAccessTeam(resource.data.teamId));
-      allow list, update, delete: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets'
+      allow list, update, delete: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks'
         && canAccessTeam(resource.data.teamId);
-      allow create: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets'
+      allow create: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks'
         && canAccessTeam(request.resource.data.teamId);
     }
   }

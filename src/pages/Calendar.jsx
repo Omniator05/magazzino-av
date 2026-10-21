@@ -5,7 +5,8 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
-import { Pin, User, List, Wrench, Check, Search } from '../components/Icon'
+import { Pin, User, List, Wrench, Check, Search, Clock } from '../components/Icon'
+import { eventHoursLabel, phaseHoursLabel } from '../utils/assignmentTimes'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
@@ -126,6 +127,13 @@ export default function Calendar() {
   const { state: navState, search: locSearch } = useLocation()
   const [focusAssign, setFocusAssign] = useState(null) // {eventId?, date}
   useEffect(() => {
+    // Da "nuovo evento" della pagina Eventi su computer: apre subito la
+    // creazione nella colonna laterale.
+    if (navState?.createEvent && !isMobile) {
+      setSidebarCreating(true)
+      window.history.replaceState({}, '')
+      return
+    }
     if (navState?.assignEventId && navState?.assignDate) {
       setMode('assign')
       setFocusAssign({ eventId: navState.assignEventId, date: navState.assignDate })
@@ -1075,6 +1083,7 @@ export default function Calendar() {
                         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6 }}>
                           {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                         </p>
+                        <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4, fontVariantNumeric:'tabular-nums' }}><Clock size={12} /> {eventHoursLabel(ev, selectedDate, t('events.allDayLabel'))}</p>
                         {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                         {phasesOnDay && phasesOnDay.length > 0 && (() => {
                           // var(--text2) non si può concatenare con un suffisso
@@ -1103,7 +1112,7 @@ export default function Calendar() {
                                 const phaseBorder = isSelectedDayPast ? 'var(--border)' : phase.color + '44'
                                 return (
                                   <span key={phase.key} style={{ display:'inline-block', background: phaseBg, color: phaseColor, border:`1px solid ${phaseBorder}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>
-                                    {phase.label}
+                                    {phase.label}{phaseHoursLabel(ev, phase.key) ? ` · ${phaseHoursLabel(ev, phase.key)}` : ''}
                                   </span>
                                 )
                               })}

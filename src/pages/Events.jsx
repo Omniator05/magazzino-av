@@ -21,6 +21,7 @@ import { isModuleEnabled } from '../utils/modules'
 import { deleteEventWithInventoryCheck, closeInstallationEvent } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import CreateEventFlow from '../components/CreateEventFlow'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const EVENT_CAP = 5
 
@@ -320,6 +321,14 @@ export default function Events() {
   const [createFlowSkip, setCreateFlowSkip] = useState(null)
   const navigate = useNavigate()
   const { state: navState } = useLocation()
+  const isMobile = useIsMobile()
+  // Su computer un evento nuovo si crea dal Calendario (colonna laterale), non
+  // più da questo modal: stesso flusso, un solo posto. Su telefono resta il modal,
+  // lo stesso che usa il calendario mobile.
+  const startNewEvent = () => {
+    if (!isMobile) { navigate('/calendar', { state: { createEvent: true } }); return }
+    setCreateFlowSkip('blank'); setCreateFlowOpen(true)
+  }
   const anyModalOpen = showModal || createFlowOpen
   useModalScrollLock(anyModalOpen)
 
@@ -331,6 +340,7 @@ export default function Events() {
       setCreateFlowOpen(true)
       window.history.replaceState({}, '')
     } else if (navState?.openNewEvent) {
+      if (!isMobile) { navigate('/calendar', { state: { createEvent: true }, replace: true }); return }
       setCreateFlowSkip('blank')
       setCreateFlowOpen(true)
       window.history.replaceState({}, '')
@@ -540,7 +550,7 @@ export default function Events() {
         </div>
       </div>
 
-      <FabButton onClick={() => { setCreateFlowSkip('blank'); setCreateFlowOpen(true) }} ariaLabel={t('events.newEventButton')} />
+      <FabButton onClick={startNewEvent} ariaLabel={t('events.newEventButton')} />
 
       {/* Barra di ricerca SEMPRE visibile — stessa del Magazzino (fondo grigio,
           appiccicata in alto), con un po' d'aria sotto l'intestazione. */}
@@ -648,7 +658,7 @@ export default function Events() {
             {daScaricareSingle.length === 0 && todayList.length === 0 && recurringShown.length === 0 && upcomingSingle.length === 0 && installationsShown.length === 0 && (
               <button
                 type="button"
-                onClick={() => { setCreateFlowSkip('blank'); setCreateFlowOpen(true) }}
+                onClick={startNewEvent}
                 className="btn-no-anim"
                 style={{ width:'calc(100% - 32px)', margin:'20px 16px', background:'var(--dash-card)', border:'1.5px dashed var(--dash-pill-border)', borderRadius:20, padding:'32px 20px', display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:10, cursor:'pointer', font:'inherit', color:'inherit' }}
               >

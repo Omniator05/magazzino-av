@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
-import { Pin, User, Calendar, Wrench, Check, List } from '../components/Icon'
+import { Pin, User, Calendar, Wrench, Check, List, Clock } from '../components/Icon'
+import { eventHoursLabel, phaseHoursLabel } from '../utils/assignmentTimes'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
@@ -179,7 +180,7 @@ export default function WorkerCalendar() {
       if (e.phases) {
         Object.entries(e.phases).forEach(([k, v]) => {
           if (v === dStr && PHASE_META[k]) {
-            items.push({ event: e, assigned, color, phaseLabel: PHASE_META[k].label, phaseColor: PHASE_META[k].color })
+            items.push({ event: e, assigned, color, phaseKey: k, phaseLabel: PHASE_META[k].label, phaseColor: PHASE_META[k].color })
           }
         })
       }
@@ -377,7 +378,7 @@ export default function WorkerCalendar() {
       // giorno (non solo una sua fase) — serve a decidere se aggiungere
       // anche il tag "Evento" accanto a quello fase più sotto.
       const cur = m.get(it.event.id) || { event: it.event, assigned: it.assigned, phases: [], coincides: false }
-      if (it.phaseLabel) cur.phases.push({ label: it.phaseLabel, color: it.phaseColor })
+      if (it.phaseLabel) cur.phases.push({ key: it.phaseKey, label: it.phaseLabel, color: it.phaseColor })
       else cur.coincides = true
       m.set(it.event.id, cur)
     })
@@ -652,6 +653,7 @@ export default function WorkerCalendar() {
                     <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6 }}>
                       {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                     </p>
+                    <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4, fontVariantNumeric:'tabular-nums' }}><Clock size={12} /> {eventHoursLabel(ev, selectedDate, t('events.allDayLabel'))}</p>
                     {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                     {phases.length > 0 && (
                       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:5 }}>
@@ -669,7 +671,7 @@ export default function WorkerCalendar() {
                         )}
                         {phases.map((p, i) => (
                           <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, background:p.color+'18', color:p.color, border:`1px solid ${p.color}44`, borderRadius:6, padding:'1px 8px', fontSize:11, fontWeight:700 }}>
-                            <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}
+                            <span style={{ width:6, height:6, borderRadius:'50%', background:p.color }} /> {p.label}{p.key && phaseHoursLabel(ev, p.key) ? ` · ${phaseHoursLabel(ev, p.key)}` : ''}
                           </span>
                         ))}
                       </div>

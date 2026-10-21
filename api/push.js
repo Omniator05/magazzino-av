@@ -8,6 +8,7 @@
 // un token Firebase — vedi sync-google-pull.js per lo stesso schema.
 import { requireTeamMember, getAdmin } from './_authAdmin.js'
 import { todayStr } from './_date.js'
+import { handleGuestAction } from './_guest.js'
 
 const DEAD_TOKEN_CODES = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']
 
@@ -205,6 +206,11 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non permesso' })
+
+  // Link ospite (personale esterno): azioni "guest-*", vedi _guest.js. Vanno
+  // PRIMA del controllo del token Firebase perché "guest-view" è pubblico (si
+  // autentica con la chiave del link); create/revoke verificano da sé l'admin.
+  if (String(req.body?.action || '').startsWith('guest-') && await handleGuestAction(req, res)) return
 
   let db, teamId, uid
   try {
