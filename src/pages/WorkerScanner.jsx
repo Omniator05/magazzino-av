@@ -14,6 +14,7 @@ import { Check, Truck, Unload, Warn } from '../components/Icon'
 import { logItemActivity } from '../utils/itemActivity'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { useLongPress } from '../hooks/useLongPress'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow, isScanCandidate } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -96,7 +97,6 @@ export default function WorkerScanner() {
   const resolvedItemDetailIdsRef = useRef(new Set())
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
-  const [manualCode, setManualCode] = useState('')
   // Fase di partenza 'pronto' — corretta appena arrivano i dati reali
   // dell'evento (vedi l'effetto "fase iniziale" più sotto): NON è più
   // ricordata per dispositivo (era in localStorage, quindi un magazziniere
@@ -233,6 +233,7 @@ export default function WorkerScanner() {
   // Selezione multipla (stessa idea di EventDetail per gli admin): un bottone
   // "Seleziona" o una pressione lunga su una riga permettono di segnalare più
   // oggetti insieme come mancanti, rientrati in parte o rientrati rotti.
+  const isMobile = useIsMobile()
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkDialog, setBulkDialog] = useState(null) // null | 'partial' | 'broken'
@@ -1018,7 +1019,7 @@ export default function WorkerScanner() {
   if (!event) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh' }}><p style={{ color:'var(--text2)' }}>{t('eventDetail.loading')}</p></div>
 
   // Rientro parziale di UNA riga: dividerla in "già rientrati" e "ancora fuori"
-  // (vedi _onPartialReturn in buildItemProps e la selezione multipla).
+  // (usato dalla selezione multipla: menu "⋯" › Rientro parziale).
   const partialReturnRow = async (item, splitQty) => {
     const totalQty = item.qty || 1
     if (item.isBundle || !splitQty || splitQty <= 0 || splitQty >= totalQty) return
@@ -1126,14 +1127,79 @@ export default function WorkerScanner() {
     return true
   }
 
+  // Caricamento parziale di UNA riga (il contrario del rientro parziale): la riga
+  // tiene i pezzi caricati davvero e perde disponibilità in magazzino solo per quelli;
+  // i rimanenti diventano una riga "mancante" (stesso oggetto, id proprio) così la
+  // lista non resta bloccata e si vede cosa non è partito.
+  const partialLoadRow = async (item, loadQty) => {
+    const rowQty = item.qty || 1
+    if (item.isBundle || !loadQty || loadQty <= 0 || loadQty >= rowQty) return false
+    const missingRowId = `${item.id}_mis_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    setOptimistic(item.id, { qty: loadQty, pronto: true, loaded: true })
+    const rollbackKeys = ['qty', 'pronto', 'loaded']
+    let itm
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(eventRef)
+        if (!snap.exists()) return
+        const evItems = snap.data().items || []
+        const current = evItems.find(i => i.id === item.id)
+        if (!current || current.loaded || current.returned || current.mancante || (current.qty || 1) <= loadQty) return
+        itm = current
+        const missingRow = {
+          id: missingRowId, itemRef: current.itemRef || current.id,
+          name: current.name, category: current.category, location: current.location || '',
+          isKit: current.isKit || false, kitSize: current.kitSize || null,
+          isBundle: false, components: null,
+          qty: (current.qty || 1) - loadQty, pronto: false, loaded: false, returned: false, mancante: true,
+          ...(current.eventNote ? { eventNote: current.eventNote } : {}),
+          ...(current.listId ? { listId: current.listId } : {}),
+          ...(current.vehicleId ? { vehicleId: current.vehicleId } : {}),
+        }
+        tx.update(eventRef, {
+          items: evItems.flatMap(i => i.id !== item.id ? [i] : [{ ...i, qty: loadQty, pronto: true, loaded: true, mancante: false }, missingRow]),
+        })
+      })
+    } catch (e) {
+      setSaveError(t('workerScanner.saveErrorMessage'))
+      clearOptimistic(item.id, rollbackKeys)
+      return false
+    }
+    if (!itm) { clearOptimistic(item.id, rollbackKeys); return false }
+    await syncKitAwareInventory({
+      catalogItemId: itm.itemRef || item.id, isBundle: false, category: itm.category,
+      qty: loadQty, sign: -1,
+    })
+    logItemActivity({
+      teamId, eventId: id, eventName: event?.name, itemId: item.id, itemName: item.name,
+      catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
+      listId: rowListId(item), action: 'loaded', profile, userId: user?.uid,
+    })
+    return true
+  }
+
   // Quali righe selezionate può toccare ogni azione di gruppo:
   // - mancante: qualsiasi riga non ancora rientrata
+  // - caricamento parziale: riga semplice non ancora caricata, con più pezzi
   // - rientro parziale: riga semplice già caricata e non rientrata, con più pezzi
   // - rotto: oggetto di magazzino (non kit/extra/consumabile) già caricato e non rientrato
   // (valgono in ogni fase: conta lo stato della riga, non la scheda Pronto/Carico/Scarico)
   const selectedRows = allEventItems.filter(i => selectedIds.has(i.id))
+  // Oggetti attualmente visibili nella lista (stessa regola del disegno qui sotto: in Scarico
+  // niente mancanti, e il filtro di ricerca): la casella accanto al titolo seleziona questi.
+  const visibleSearch = itemListSearch.trim().toLowerCase()
+  const visibleItems = (mode === 'return' ? items.filter(i => !i.mancante) : items).filter(i => !visibleSearch || i.name?.toLowerCase().includes(visibleSearch))
+  const visibleSelectedCount = visibleItems.filter(i => selectedIds.has(i.id)).length
+  const allVisibleSelected = visibleItems.length > 0 && visibleSelectedCount === visibleItems.length
+  const toggleAllVisible = () => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (allVisibleSelected) visibleItems.forEach(i => next.delete(i.id)); else visibleItems.forEach(i => next.add(i.id))
+    return next
+  })
   const missingRows = selectedRows.filter(i => !i.returned)
   const partialRows = selectedRows.filter(i => !i.isBundle && (i.qty || 1) > 1 && i.loaded && !i.returned && !i.mancante)
+  // Caricamento parziale: oggetto semplice con più pezzi, non ancora caricato né rientrato né mancante
+  const partialLoadRows = selectedRows.filter(i => !i.isBundle && (i.qty || 1) > 1 && !i.loaded && !i.returned && !i.mancante)
   const brokenRows = selectedRows.filter(i => !i.isBundle && !i.isExtra && i.category !== 'Consumabili' && i.loaded && !i.returned && !i.mancante)
   const allSelectedMissing = missingRows.length > 0 && missingRows.every(i => i.mancante)
 
@@ -1164,20 +1230,23 @@ export default function WorkerScanner() {
     exitSelectMode()
   }
 
+  const dialogRows = kind => kind === 'partial' ? partialRows : kind === 'load' ? partialLoadRows : brokenRows
+
   const openBulkDialog = kind => {
-    const rows = kind === 'partial' ? partialRows : brokenRows
+    const rows = dialogRows(kind)
     setBulkDraft({ qtys: Object.fromEntries(rows.map(r => [r.id, 1])), note: '' })
     setBulkDialog(kind)
   }
 
   const applyBulkDialog = async () => {
-    const rows = bulkDialog === 'partial' ? partialRows : brokenRows
+    const rows = dialogRows(bulkDialog)
     if (rows.length === 0) return
     setBulkSaving(true)
     try {
       for (const row of rows) {
         const n = bulkDraft.qtys[row.id] || 1
         if (bulkDialog === 'partial') await partialReturnRow(row, n)
+        else if (bulkDialog === 'load') await partialLoadRow(row, n)
         else await brokenReturnRow(row, n, bulkDraft.note.trim())
       }
     } finally {
@@ -1636,47 +1705,8 @@ export default function WorkerScanner() {
 
         {error && <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', borderRadius:12, padding:'12px 16px', color:'var(--red)', marginTop:10, fontSize:14 }}>{error}</div>}
 
-        {/* Inserimento manuale - compatto e collassabile */}
-        <details style={{ marginTop:12 }}>
-          <summary style={{ color:'var(--text2)', fontSize:13, fontWeight:600, cursor:'pointer', userSelect:'none', padding:'8px 0' }}>
-            {t('workerScanner.manualEntryToggle')}
-          </summary>
-          <div style={{ display:'flex', gap:8, marginTop:8 }}>
-            <label htmlFor="ws-manual-code" style={srOnlyStyle}>{t('workerScanner.manualCodeLabel')}</label>
-            <input id="ws-manual-code" value={manualCode} onChange={e => setManualCode(e.target.value)}
-              placeholder={t('workerScanner.manualCodePlaceholder')} onKeyDown={e => { if (e.key === 'Enter') { processCode(manualCode); setManualCode('') } }}
-              style={{ fontFamily:'monospace', fontSize:13 }} />
-            <button onClick={() => { processCode(manualCode); setManualCode('') }} className="btn btn-primary" style={{ flexShrink:0, padding:'10px 14px' }}>{t('workerScanner.ok')}</button>
-          </div>
-        </details>
-
         {/* Lista carico - compatta con categorie */}
         <div style={{ marginTop:14, marginBottom:16 }}>
-          <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px' }}>
-            {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
-          </p>
-          {items.length > 0 && (
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, marginBottom:16 }}>
-            <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, minWidth:0 }}>
-              <svg style={{ position:'absolute', left:10, pointerEvents:'none' }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-              <label htmlFor="ws-item-search" style={srOnlyStyle}>{t('workerScanner.searchItemsPlaceholder')}</label>
-              <input id="ws-item-search" value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
-                placeholder={t('workerScanner.searchItemsPlaceholder')}
-                style={{ width:'100%', padding: itemListSearch ? '9px 34px 9px 32px' : '9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card2)', color:'var(--text)', fontSize:13 }} />
-              {itemListSearch && (
-                <button onClick={() => setItemListSearch('')} aria-label={t('common.close')}
-                  style={{ position:'absolute', right:6, width:26, height:26, borderRadius:6, background:'var(--card3)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
-              )}
-            </div>
-            {/* Stesso bottone "Seleziona" di EventDetail (admin): sulla riga della ricerca, diventa "Annulla" in selezione */}
-            <button type="button" className="btn-no-anim" aria-pressed={selectMode}
-              onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
-              style={{ background: selectMode ? 'var(--card2)' : 'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
-              {selectMode ? t('common.cancel') : t('workerScanner.selectButton')}
-            </button>
-            </div>
-          )}
-
           {/* Contatore mancanti al completamento della fase corrente (pronto/carico/rientro) */}
           {total > 0 && (() => {
             const done = mode === 'pronto' ? prepared : mode === 'load' ? loaded : returned
@@ -1719,6 +1749,72 @@ export default function WorkerScanner() {
               </div>
             )
           })()}
+
+          {items.length > 0 && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, marginBottom:16 }}>
+            <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, minWidth:0 }}>
+              <svg style={{ position:'absolute', left:10, pointerEvents:'none' }} viewBox="0 0 24 24" fill="var(--text3)" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <label htmlFor="ws-item-search" style={srOnlyStyle}>{t('workerScanner.searchItemsPlaceholder')}</label>
+              <input id="ws-item-search" value={itemListSearch} onChange={e => setItemListSearch(e.target.value)}
+                placeholder={t('workerScanner.searchItemsPlaceholder')}
+                style={{ width:'100%', padding: itemListSearch ? '9px 34px 9px 32px' : '9px 10px 9px 32px', borderRadius:10, border:'1px solid var(--border)', background:'var(--card2)', color:'var(--text)', fontSize:13 }} />
+              {itemListSearch && (
+                <button onClick={() => setItemListSearch('')} aria-label={t('common.close')}
+                  style={{ position:'absolute', right:6, width:26, height:26, borderRadius:6, background:'var(--card3)', color:'var(--text2)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+              )}
+            </div>
+            {/* Stesso bottone "Seleziona" di EventDetail (admin): sulla riga della ricerca, diventa "Annulla" in selezione */}
+            <button type="button" className="btn-no-anim" aria-pressed={selectMode}
+              onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              style={{ background: selectMode ? 'var(--card2)' : 'var(--card)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'9px 14px', fontSize:13, fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+              {selectMode ? t('common.cancel') : t('workerScanner.selectButton')}
+            </button>
+            </div>
+          )}
+
+          {/* Selezione su computer (come in EventDetail per gli admin): barra con contatore e
+              azioni sotto il contatore degli oggetti mancanti; scorrendo la lista resta incollata in alto. Sta nello
+              stesso contenitore della lista apposta: uno sticky si muove solo dentro il proprio
+              genitore. Su telefono ci sono invece le pillole in basso (portale più sotto). */}
+          {selectMode && !isMobile && (() => {
+            const actions = [
+              { key: 'missing', label: allSelectedMissing ? t('workerScanner.bulkNotMissing') : t('workerScanner.bulkMissing'), enabled: missingRows.length > 0, run: applyBulkMissing },
+              { key: 'load', label: t('workerScanner.bulkLoadPartial'), enabled: partialLoadRows.length > 0, run: () => openBulkDialog('load') },
+              { key: 'partial', label: t('workerScanner.bulkPartial'), enabled: partialRows.length > 0, run: () => openBulkDialog('partial') },
+              { key: 'broken', label: t('workerScanner.bulkBroken'), enabled: brokenRows.length > 0, run: () => openBulkDialog('broken') },
+            ]
+            return (
+              <div role="toolbar" className="rc-bulk-bar" aria-label={t('workerScanner.selectToolbarAria')}
+                style={{ position:'sticky', top:8, zIndex:30, margin:'0 0 14px', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.08)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', flexShrink:0, paddingRight:2 }}>{t('workerScanner.selectedCount', { count: selectedIds.size })}</span>
+                {actions.map(a => (
+                  <button key={a.key} type="button" className="btn-no-anim" disabled={!a.enabled || bulkSaving} onClick={a.run}
+                    style={{ flexShrink:0, whiteSpace:'nowrap', padding:'8px 14px', borderRadius:20, fontSize:13, fontWeight:700, background:'var(--card2)', color: a.enabled ? 'var(--text)' : 'var(--text3)', border:'1px solid var(--border)', opacity: a.enabled ? 1 : 0.5 }}>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
+
+          <div style={{ display:'flex', alignItems:'center', gap:10, margin:'2px 0 8px' }}>
+            {/* In selezione: casella accanto al titolo per scegliere (o togliere) tutti gli oggetti
+                visibili della lista in un tocco — come per gli admin in EventDetail. "–" se solo alcuni. */}
+            {selectMode && visibleItems.length > 0 && (
+              <button type="button" className="rc-select-checkbox btn-no-anim" role="checkbox"
+                aria-checked={allVisibleSelected ? true : visibleSelectedCount > 0 ? 'mixed' : false}
+                aria-label={t('workerScanner.selectAllListAria')} onClick={toggleAllVisible}
+                style={{ width:22, height:22, borderRadius:6, flexShrink:0, padding:0,
+                  border:`2px solid ${visibleSelectedCount > 0 ? 'var(--accent)' : 'var(--border)'}`,
+                  background: visibleSelectedCount > 0 ? 'var(--accent)' : 'transparent',
+                  display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:14, fontWeight:900, lineHeight:1 }}>
+                {allVisibleSelected ? '✓' : visibleSelectedCount > 0 ? '–' : ''}
+              </button>
+            )}
+            <p style={{ color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.6px' }}>
+              {t('workerScanner.loadListTitle', { returned: items.filter(i=>i.returned).length, total })}
+            </p>
+          </div>
 
           {/* Chiudi rent/install — solo qui, in fase Rientro, quando tutto è
               tornato: un rent/install non si archivia mai da solo come un
@@ -1945,7 +2041,6 @@ export default function WorkerScanner() {
                     // quantità restituita — stesso schema delle righe
                     // duplicate già usato per gli oggetti "mancante" in
                     // EventDetail.jsx (stesso itemRef, id proprio).
-                    _onPartialReturn: (itemId, splitQty) => partialReturnRow(item, splitQty),
                     _onTogglePronto: async (itemId) => {
                       const newPronto = !item.pronto
                       // Stesso controllo di _onToggleLoaded: segnare "pronto" senza
@@ -2052,6 +2147,29 @@ export default function WorkerScanner() {
                       <div key={cat}>
                         {multiCat && (
                           <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 3px', background:'var(--bg2)' }}>
+                            {/* In selezione: casella per scegliere (o togliere) tutti gli oggetti di questa
+                                categoria in un tocco; "–" se solo alcuni. */}
+                            {selectMode && (() => {
+                              const ids = grouped[cat].map(i => i.id)
+                              const n = ids.filter(id => selectedIds.has(id)).length
+                              const all = n === ids.length
+                              return (
+                                <button type="button" className="rc-select-checkbox btn-no-anim" role="checkbox"
+                                  aria-checked={all ? true : n > 0 ? 'mixed' : false}
+                                  aria-label={t('workerScanner.selectAllCategoryAria', { name: cat })}
+                                  onClick={() => setSelectedIds(prev => {
+                                    const next = new Set(prev)
+                                    if (all) ids.forEach(id => next.delete(id)); else ids.forEach(id => next.add(id))
+                                    return next
+                                  })}
+                                  style={{ width:20, height:20, borderRadius:6, flexShrink:0, padding:0, marginRight:2,
+                                    border:`2px solid ${n > 0 ? 'var(--accent)' : 'var(--border)'}`,
+                                    background: n > 0 ? 'var(--accent)' : 'transparent',
+                                    display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:13, fontWeight:900, lineHeight:1 }}>
+                                  {all ? '✓' : n > 0 ? '–' : ''}
+                                </button>
+                              )
+                            })()}
                             <span style={{ fontSize:11 }}>{WS_CAT_ICONS[cat]||'📦'}</span>
                             <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
                             <div style={{ flex:1, height:1, background:'var(--border)' }} />
@@ -2073,20 +2191,26 @@ export default function WorkerScanner() {
                   // oggetto — con gli oggetti non assegnati in una sezione a parte.
                   // Filtro di ricerca: non tocca i conteggi in alto (quelli
                   // restano sull'intera lista), solo cosa viene disegnato qui sotto.
+                  // Nella scheda Rientro gli oggetti mancanti non si vedono: non sono mai
+                  // partiti, quindi non c'è nulla da far rientrare (restano nelle altre schede).
+                  const listItems = mode === 'return' ? items.filter(i => !i.mancante) : items
+                  if (listItems.length === 0) {
+                    return <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>{t('workerScanner.noItemsToReturn')}</p>
+                  }
                   const searchQuery = itemListSearch.trim().toLowerCase()
                   const matchesSearch = item => !searchQuery || item.name?.toLowerCase().includes(searchQuery)
-                  if (searchQuery && !items.some(matchesSearch)) {
+                  if (searchQuery && !listItems.some(matchesSearch)) {
                     return <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>{t('workerScanner.noItemsMatchSearch', { query: itemListSearch })}</p>
                   }
 
-                  const usesVehicles = items.some(i => i.vehicleId)
-                  if (!usesVehicles) return renderCategoryGroups(items.filter(matchesSearch), null)
+                  const usesVehicles = listItems.some(i => i.vehicleId)
+                  if (!usesVehicles) return renderCategoryGroups(listItems.filter(matchesSearch), null)
 
                   const vehicleSections = vehicles
-                    .map(v => ({ vehicle: v, items: items.filter(i => i.vehicleId === v.id) }))
+                    .map(v => ({ vehicle: v, items: listItems.filter(i => i.vehicleId === v.id) }))
                     .filter(s => s.items.length > 0)
                   const assignedIds = new Set(vehicleSections.flatMap(s => s.items.map(i => i.id)))
-                  const unassignedItems = items.filter(i => !assignedIds.has(i.id))
+                  const unassignedItems = listItems.filter(i => !assignedIds.has(i.id))
 
                   return (
                     <>
@@ -2124,14 +2248,14 @@ export default function WorkerScanner() {
             style={{ width:'100%', marginTop:10, background:'rgba(245,166,35,0.10)', border:'1px solid rgba(245,166,35,0.35)', color:'var(--accent2)', borderRadius:10, padding:'12px', fontWeight:700, fontSize:14 }}>
             {t('workerScanner.addExtraItem')}
           </button>
-          {selectMode && <div aria-hidden="true" style={{ height:130 }} />}
+          {selectMode && isMobile && <div aria-hidden="true" style={{ height:130 }} />}
         </div>
       </div>
 
       {/* Selezione multipla — stessa barra flottante di EventDetail (admin):
           contatore a sinistra, "Annulla" e "⋯" a destra; "⋯" apre verso l'alto
           l'elenco delle azioni, con un velo scuro dietro (tocca per chiudere). */}
-      {selectMode && createPortal((() => {
+      {selectMode && isMobile && createPortal((() => {
         const pillShadow = '0 4px 14px rgba(0,0,0,0.10)'
         const chipStyle = { flexShrink:0, whiteSpace:'nowrap', padding:'8px 14px', borderRadius:20, fontSize:13, fontWeight:700, background:'var(--card2)', color:'var(--text2)', border:'1px solid var(--border)', boxShadow:pillShadow }
         const menuRowStyle = (enabled) => ({ display:'flex', alignItems:'center', whiteSpace:'nowrap', minHeight:48, padding:'13px 20px', borderRadius:24, background:'var(--card2)', border:'1px solid var(--border)', color: enabled ? 'var(--text)' : 'var(--text3)', fontSize:15, fontWeight:700, boxShadow:pillShadow, opacity: enabled ? 1 : 0.5 })
@@ -2141,7 +2265,7 @@ export default function WorkerScanner() {
             {selectMenuOpen && (
               <div onClick={() => setSelectMenuOpen(false)} style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
             )}
-            <div role="toolbar" aria-label={t('workerScanner.selectToolbarAria')}
+            <div role="toolbar" className="rc-bulk-bar" aria-label={t('workerScanner.selectToolbarAria')}
               style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 20px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
               {selectMenuOpen && (
                 <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>
@@ -2149,15 +2273,15 @@ export default function WorkerScanner() {
                     <button type="button" disabled={missingRows.length === 0 || bulkSaving} onClick={() => pick(applyBulkMissing)} style={menuRowStyle(missingRows.length > 0)}>
                       {allSelectedMissing ? t('workerScanner.bulkNotMissing') : t('workerScanner.bulkMissing')}
                     </button>
+                    <button type="button" disabled={partialLoadRows.length === 0 || bulkSaving} onClick={() => pick(() => openBulkDialog('load'))} style={menuRowStyle(partialLoadRows.length > 0)}>
+                      {t('workerScanner.bulkLoadPartial')}
+                    </button>
                     <button type="button" disabled={partialRows.length === 0 || bulkSaving} onClick={() => pick(() => openBulkDialog('partial'))} style={menuRowStyle(partialRows.length > 0)}>
                       {t('workerScanner.bulkPartial')}
                     </button>
                     <button type="button" disabled={brokenRows.length === 0 || bulkSaving} onClick={() => pick(() => openBulkDialog('broken'))} style={menuRowStyle(brokenRows.length > 0)}>
                       {t('workerScanner.bulkBroken')}
                     </button>
-                    {partialRows.length === 0 && brokenRows.length === 0 && (
-                      <p style={{ margin:'2px 0 0', maxWidth:270, textAlign:'left', fontSize:12, lineHeight:1.4, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'8px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('workerScanner.bulkNeedsLoaded')}</p>
-                    )}
                   </div>
                 </div>
               )}
@@ -2176,18 +2300,20 @@ export default function WorkerScanner() {
 
       {/* Rientro parziale / rientrato rotto per più righe */}
       {bulkDialog && (() => {
-        const rows = bulkDialog === 'partial' ? partialRows : brokenRows
-        const maxFor = r => bulkDialog === 'partial' ? (r.qty || 1) - 1 : (r.qty || 1)
+        const rows = dialogRows(bulkDialog)
+        const titleKey = { partial: 'bulkPartialTitle', load: 'bulkLoadTitle', broken: 'bulkBrokenTitle' }[bulkDialog]
+        const hintKey = { partial: 'bulkPartialHint', load: 'bulkLoadHint', broken: 'bulkBrokenHint' }[bulkDialog]
+        const maxFor = r => bulkDialog === 'broken' ? (r.qty || 1) : (r.qty || 1) - 1
         const skipped = selectedRows.length - rows.length
         const setQty = (r, v) => setBulkDraft(d => ({ ...d, qtys: { ...d.qtys, [r.id]: Math.min(maxFor(r), Math.max(1, v)) } }))
         const stepBtn = { width:40, height:40, borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:19, fontWeight:700, flexShrink:0 }
         return (
           <div onClick={() => !bulkSaving && setBulkDialog(null)}
             style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-            <div onClick={e => e.stopPropagation()} role="dialog" aria-label={bulkDialog === 'partial' ? t('workerScanner.bulkPartialTitle') : t('workerScanner.bulkBrokenTitle')}
+            <div onClick={e => e.stopPropagation()} role="dialog" aria-label={t(`workerScanner.${titleKey}`)}
               style={{ width:'100%', maxWidth:360, maxHeight:'86dvh', overflowY:'auto', background:'var(--card)', borderRadius:18, padding:20 }}>
-              <h3 style={{ fontSize:16, fontWeight:800, color:'var(--text)', margin:'0 0 4px' }}>{bulkDialog === 'partial' ? t('workerScanner.bulkPartialTitle') : t('workerScanner.bulkBrokenTitle')}</h3>
-              <p style={{ fontSize:13, color:'var(--text2)', margin:'0 0 14px', lineHeight:1.45 }}>{bulkDialog === 'partial' ? t('workerScanner.bulkPartialHint') : t('workerScanner.bulkBrokenHint')}</p>
+              <h3 style={{ fontSize:16, fontWeight:800, color:'var(--text)', margin:'0 0 4px' }}>{t(`workerScanner.${titleKey}`)}</h3>
+              <p style={{ fontSize:13, color:'var(--text2)', margin:'0 0 14px', lineHeight:1.45 }}>{t(`workerScanner.${hintKey}`)}</p>
               <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:14 }}>
                 {rows.map(r => (
                   <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -2196,7 +2322,9 @@ export default function WorkerScanner() {
                       <p style={{ margin:0, fontSize:12, color:'var(--text2)' }}>{t('workerScanner.bulkOutOf', { count: r.qty || 1 })}</p>
                     </div>
                     <button type="button" className="btn-no-anim" style={stepBtn} aria-label={t('eventDetail.decreaseQtyAria')} disabled={bulkSaving} onClick={() => setQty(r, (bulkDraft.qtys[r.id] || 1) - 1)}>−</button>
-                    <span style={{ minWidth:26, textAlign:'center', fontWeight:900, fontSize:18, color:'var(--text)' }}>{bulkDraft.qtys[r.id] || 1}</span>
+                    <input type="number" inputMode="numeric" min={1} max={maxFor(r)} value={bulkDraft.qtys[r.id] || 1} disabled={bulkSaving}
+                      onChange={e => setQty(r, parseInt(e.target.value, 10) || 1)} onFocus={e => e.target.select()} aria-label={r.name}
+                      style={{ width:56, flexShrink:0, textAlign:'center', fontWeight:900, fontSize:18, padding:'6px 2px', color:'var(--text)' }} />
                     <button type="button" className="btn-no-anim" style={stepBtn} aria-label={t('eventDetail.increaseQtyAria')} disabled={bulkSaving} onClick={() => setQty(r, (bulkDraft.qtys[r.id] || 1) + 1)}>+</button>
                   </div>
                 ))}
@@ -2341,22 +2469,12 @@ function BtnSpinner() {
 function ChecklistRow({ item, mode }) {
   const { t } = useTranslation()
   const [showInfo, setShowInfo]   = useState(false)
-  // Rientro parziale: solo per righe "semplici" (non kit) con più di 1
-  // pezzo, ancora fuori — vedi _onPartialReturn nel genitore. Il popup
-  // parte sempre da 1 e non può arrivare alla quantità intera della riga
-  // (quello è il bottone "Rientro" normale sopra). Compare solo nella fase
-  // "Rientro": nelle altre fasi (Pronto/Carico) è fuori contesto — chi sta
-  // preparando o caricando non deve vedersi proporre un'azione di rientro.
-  const [showPartialReturn, setShowPartialReturn] = useState(false)
-  const [partialQty, setPartialQty] = useState(1)
-  const [partialSaving, setPartialSaving] = useState(false)
   // Pressione prolungata sulla riga: entra in selezione multipla con questa riga
   // già scelta (stessa idea di EventDetail); in selezione il tap alterna la spunta.
   const longPress = useLongPress(
     () => { if (!item._selectMode) item._onLongPressSelect?.(item.id) },
     () => { if (item._selectMode) item._onSelectToggle?.(item.id) },
   )
-  const canPartialReturn = mode === 'return' && !item.isBundle && (item.qty || 1) > 1 && item.loaded && !item.returned
   // Tenere premuto il bottone "Carico" segna l'oggetto mancante/rotto invece
   // di caricarlo — evita un quarto bottone dedicato solo a un caso raro. La
   // striscia arancione parte con un piccolo ritardo (non su un tap normale,
@@ -2482,7 +2600,7 @@ function ChecklistRow({ item, mode }) {
             // Senza questo la pressione lunga apre il menu Copia/Incolla nativo invece della selezione
             WebkitTouchCallout:'none', WebkitUserSelect:'none', userSelect:'none' }}>
         {item._selectMode && (
-          <span aria-hidden="true" style={{ width:22, height:22, borderRadius:6, flexShrink:0, border:`2px solid ${item._selected ? 'var(--accent)' : 'var(--border)'}`, background: item._selected ? 'var(--accent)' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:14, fontWeight:900 }}>
+          <span aria-hidden="true" className="rc-select-checkbox" style={{ width:22, height:22, borderRadius:6, flexShrink:0, border:`2px solid ${item._selected ? 'var(--accent)' : 'var(--border)'}`, background: item._selected ? 'var(--accent)' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:14, fontWeight:900 }}>
             {item._selected ? '✓' : ''}
           </span>
         )}
@@ -2531,12 +2649,6 @@ function ChecklistRow({ item, mode }) {
             <span style={{ fontWeight:900, fontSize:20, color:'var(--text)', lineHeight:1 }}>{item.qty || 1}</span>
             <span style={{ fontSize:12, color:'var(--text2)', fontWeight:500 }}>{qtyUnitLabel}</span>
           </div>
-          {canPartialReturn && !item._selectMode && (
-            <button type="button" className="btn-no-anim" onClick={() => { setPartialQty(1); setShowPartialReturn(true) }}
-              style={{ display:'block', marginTop:4, background:'transparent', color:'var(--blue)', fontSize:11.5, fontWeight:700, textDecoration:'underline', padding:0 }}>
-              {t('workerScanner.partialReturnTrigger')}
-            </button>
-          )}
           {damagedInstances.length > 0 && (
             <p style={{ color:'var(--red)', fontSize:11, marginTop:3, lineHeight:1.4 }}>
               {damagedInstances.map(inst => t('eventDetail.kitInstanceIssue', {
@@ -2695,39 +2807,6 @@ function ChecklistRow({ item, mode }) {
         </div>
       )}
 
-      {showPartialReturn && (
-        <div
-          onClick={() => !partialSaving && setShowPartialReturn(false)}
-          style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-        >
-          <div onClick={e => e.stopPropagation()} style={{ width:'100%', maxWidth:340, background:'var(--card)', borderRadius:18, padding:22 }}>
-            <h3 style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:4 }}>{t('workerScanner.partialReturnTitle')}</h3>
-            <p style={{ fontSize:13, color:'var(--text2)', marginBottom:16 }}>{t('workerScanner.partialReturnDesc', { name: item.name, total: item.qty || 1 })}</p>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:14, marginBottom:20 }}>
-              <button onClick={() => setPartialQty(q => Math.max(1, q - 1))} disabled={partialSaving}
-                style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:20, fontWeight:700 }}>−</button>
-              <span style={{ fontSize:26, fontWeight:900, color:'var(--text)', minWidth:40, textAlign:'center' }}>{partialQty}</span>
-              <button onClick={() => setPartialQty(q => Math.min((item.qty || 1) - 1, q + 1))} disabled={partialSaving}
-                style={{ width:44, height:44, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text)', fontSize:20, fontWeight:700 }}>+</button>
-            </div>
-            <div style={{ display:'flex', gap:10 }}>
-              <button onClick={() => setShowPartialReturn(false)} disabled={partialSaving} className="btn-no-anim"
-                style={{ flex:1, padding:12, borderRadius:12, background:'var(--card2)', color:'var(--text2)', fontWeight:700, fontSize:13.5 }}>
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={async () => {
-                  setPartialSaving(true)
-                  try { await item._onPartialReturn(item.id, partialQty) } finally { setPartialSaving(false); setShowPartialReturn(false) }
-                }}
-                disabled={partialSaving} className="btn btn-primary"
-                style={{ flex:1, padding:12, borderRadius:12, fontWeight:700, fontSize:13.5 }}>
-                {partialSaving ? t('common.saving') : t('workerScanner.partialReturnConfirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

@@ -15,7 +15,7 @@ import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import PageHeader from '../components/PageHeader'
 import GuestInviteModal from '../components/GuestInviteModal'
-import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
+import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
 import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
 import {
@@ -206,9 +206,13 @@ export default function SettingsUsers() {
   const deleteTemp = async () => {
     const w = tempEdit
     if (!w) return
-    const ok = await confirm({ title: t('guest.tempDeleteTitle', { name: w.name }), message: t('guest.tempDeleteMessage'), confirmLabel: t('common.delete'), danger: true })
+    // Se è assegnato ad attività da oggi in poi: annulla, oppure elimina togliendolo anche da quelle.
+    const upcoming = await upcomingExternalBlocks(teamId, w.id)
+    const ok = await confirm(upcoming.length > 0
+      ? { title: t('guest.tempDeleteTitle', { name: w.name }), message: t('guest.tempDeleteAssigned', { count: upcoming.length, name: w.name }), cancelLabel: t('common.cancel'), confirmLabel: t('guest.tempDeleteAndRemove'), danger: true }
+      : { title: t('guest.tempDeleteTitle', { name: w.name }), message: t('guest.tempDeleteMessage'), confirmLabel: t('common.delete'), danger: true })
     if (!ok) return
-    await deleteDoc(doc(db, 'externalWorkers', w.id))
+    await deleteExternalWorker(teamId, w.id, upcoming)
     tempDrag.close()
   }
 
@@ -576,8 +580,9 @@ export default function SettingsUsers() {
     )
   }
 
-  // Utente temporaneo nell'elenco: al posto di "Attivo" ha il tag "Temporaneo" e
-  // accanto il bottone "Invita" (o "Link" se ne ha già uno attivo) per il link ospite.
+  // Utente temporaneo nell'elenco: al posto di "Attivo" ha il tag "Temp." (corto, per
+  // le card strette del telefono). Il link ospite si crea toccando la card: la finestra
+  // ha "Invita" (o "Link" se ne ha già uno), oltre a rinomina ed elimina.
   const TempRow = ({ w }) => (
     <div id={`temp-row-${w.id}`} className="item-row" onClick={() => { setTempEdit({ id: w.id, name: w.name || '' }); setTempError('') }}
       style={{ cursor:'pointer', transition:'background 0.4s ease', background: highlightIds.includes(w.id) ? 'rgba(230,57,70,0.10)' : undefined, boxShadow: highlightIds.includes(w.id) ? 'inset 3px 0 0 #e63946' : 'none' }}>
@@ -589,11 +594,7 @@ export default function SettingsUsers() {
         <p style={{ color:'var(--text2)', fontSize:13 }}>{w.guestLinkActive ? t('guest.tempLinkActive') : t('guest.tempNoAccount')}</p>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-        <button type="button" className="btn btn-primary" onClick={e => { e.stopPropagation(); setInviteForId(w.id) }}
-          style={{ minHeight:36, padding:'6px 14px', fontSize:13, background: w.guestLinkActive ? 'var(--card2)' : undefined, color: w.guestLinkActive ? 'var(--text)' : undefined, border: w.guestLinkActive ? '1px solid var(--border)' : undefined }}>
-          {w.guestLinkActive ? t('guest.tempManage') : t('guest.promptInvite')}
-        </button>
-        <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', whiteSpace:'nowrap' }}>{t('guest.tempBadge')}</span>
+        <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', whiteSpace:'nowrap' }}>{t('guest.tempBadgeShort')}</span>
         <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
       </div>
     </div>
@@ -671,10 +672,10 @@ export default function SettingsUsers() {
               <label htmlFor="temp-name">{t('adminUsers.fullNameLabel')}</label>
               <input id="temp-name" value={tempEdit.name} onChange={e => setTempEdit(v => ({ ...v, name: e.target.value }))} />
             </div>
-            <SaveButton onSave={saveTempName} onDone={tempDrag.close} onError={tempDrag.triggerJiggle} className="btn btn-primary btn-full">
+            <SaveButton onSave={saveTempName} onDone={tempDrag.close} onError={tempDrag.triggerJiggle} className="btn btn-secondary btn-full">
               <Check size={16} /> {t('guest.tempSaveName')}
             </SaveButton>
-            <button type="button" className="btn btn-secondary btn-full" style={{ marginTop:10 }}
+            <button type="button" className="btn btn-primary btn-full" style={{ marginTop:10, minHeight:52, fontSize:15 }}
               onClick={() => { const id = tempEdit.id; tempDrag.close(); setInviteForId(id) }}>
               {externalWorkers.find(x => x.id === tempEdit.id)?.guestLinkActive ? t('guest.tempManage') : t('guest.promptInvite')}
             </button>

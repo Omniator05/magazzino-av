@@ -245,7 +245,8 @@
     "nDates_other": "{{count}} date",
     "singleDay": "Solo un giorno",
     "absenceWhoLabel": "Per chi",
-    "viewTimeline": "Timeline"
+    "viewTimeline": "Timeline",
+    "rentLastDay": "Ultimo giorno"
   },
   "staffTimeline": {
     "prevWeekAria": "Settimana precedente",
@@ -1249,9 +1250,6 @@
     "itemsMissingPrep_one": "{{count}} oggetto manca alla preparazione",
     "itemsMissingPrep_other": "{{count}} oggetti mancano alla preparazione",
     "preparedOfTotal": "{{prepared}} di {{total}} pronti",
-    "manualEntryToggle": "⌨️ Inserisci codice manualmente",
-    "manualCodePlaceholder": "Codice articolo...",
-    "ok": "OK",
     "loadListTitle": "Lista carico · {{returned}}/{{total}} rientrati",
     "allLoaded": "Tutto caricato!",
     "itemsMissing_one": "{{count}} oggetto manca al carico",
@@ -1309,10 +1307,6 @@
     "returnShort": "○ Rientro",
     "returnedShort": "Rientrato",
     "forgottenShort": "Dimenticato",
-    "partialReturnTrigger": "Rientro parziale",
-    "partialReturnTitle": "Rientro parziale",
-    "partialReturnDesc": "Quanti \"{{name}}\" sono rientrati (su {{total}} totali)? Il resto rimane segnato come fuori.",
-    "partialReturnConfirm": "Conferma rientro",
     "markMissingHint": "tieni premuto per segnalare mancante o rotto",
     "restoreItem": "↺ Ripristina",
     "unassignedVehicle": "Senza furgone",
@@ -1320,7 +1314,6 @@
     "kitContents": "🧰 Contenuto kit",
     "noComponentsRegistered": "Nessun componente registrato",
     "kitInstancesBadge": "🧳 {{numbers}}",
-    "manualCodeLabel": "Codice manuale",
     "eventNotesToggle": "Note evento",
     "itemInfoToggle": "Dettagli oggetto",
     "decreaseQty": "Diminuisci quantità",
@@ -1348,7 +1341,12 @@
     "bulkConfirm": "Conferma",
     "returnedBrokenBadge": "Rotto",
     "selectMoreAria": "Altre azioni sugli oggetti selezionati",
-    "bulkNeedsLoaded": "Rientro parziale e rotto valgono per oggetti già caricati e non ancora rientrati (il parziale anche con più di 1 pezzo, il rotto non per i consumabili)."
+    "bulkLoadPartial": "Caricamento parziale",
+    "bulkLoadTitle": "Caricamento parziale",
+    "bulkLoadHint": "Per ogni oggetto indica quanti pezzi hai caricato. In magazzino scendono solo quelli; gli altri restano segnati come mancanti.",
+    "noItemsToReturn": "Nessun oggetto da far rientrare.",
+    "selectAllListAria": "Seleziona tutti gli oggetti della lista",
+    "selectAllCategoryAria": "Seleziona tutti gli oggetti di {{name}}"
   },
   "workerInventory": {
     "scan": "📷 Scansiona",
@@ -1822,7 +1820,13 @@
   "errorBoundary": {
     "title": "Qualcosa è andato storto",
     "message": "Questa pagina ha avuto un problema. Torna alla home per riprovare: se succede ancora, avvisaci.",
-    "reload": "Torna alla home"
+    "reload": "Torna alla home",
+    "report": "Segnala il problema via email",
+    "copyDetails": "Copia i dettagli tecnici",
+    "copied": "Dettagli copiati",
+    "emailSubject": "Bug su pagina {{page}}",
+    "emailIntro": "Cosa stavi facendo quando è comparso l'errore?",
+    "emailDetails": "Dettagli tecnici (lasciali, aiutano a capire)"
   },
   "guest": {
     "hello": "Ciao {{name}}",
@@ -1887,6 +1891,10 @@
     "tempEditTitle": "Utente temporaneo",
     "tempSaveName": "Salva nome",
     "tempNameTaken": "Esiste già un utente temporaneo con questo nome.",
-    "tempDeleteButton": "Elimina utente"
+    "tempDeleteButton": "Elimina utente",
+    "tempBadgeShort": "Temp.",
+    "tempDeleteAssigned_one": "{{name}} è assegnato a {{count}} attività da oggi in poi. Se lo elimini viene tolto anche da quella: i turni già passati restano nel calendario con il suo nome.",
+    "tempDeleteAssigned_other": "{{name}} è assegnato a {{count}} attività da oggi in poi. Se lo elimini viene tolto anche da queste: i turni già passati restano nel calendario con il suo nome.",
+    "tempDeleteAndRemove": "Elimina e togli dalle attività"
   }
 }

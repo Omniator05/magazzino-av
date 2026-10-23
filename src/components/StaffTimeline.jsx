@@ -7,7 +7,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
-import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
+import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
 import GuestInvitePrompt from './GuestInvitePrompt'
 import { isInvitePromptMuted, muteInvitePrompt } from '../utils/guestLinks'
 import StaffAssignPanel from './StaffAssignPanel'
@@ -735,14 +735,23 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // Le assegnazioni già fatte restano nel calendario con il suo nome; il suo link
   // ospite smette di funzionare (il server controlla che la persona esista ancora).
   const deleteExternal = async (p) => {
-    const ok = await confirm({
+    // Prima si guarda se è assegnato ad attività da oggi in poi: in quel caso si
+    // può annullare, oppure eliminarlo togliendolo anche da quelle.
+    const upcoming = await upcomingExternalBlocks(teamId, p.id)
+    const ok = await confirm(upcoming.length > 0 ? {
+      title: t('guest.tempDeleteTitle', { name: p.name }),
+      message: t('guest.tempDeleteAssigned', { count: upcoming.length, name: p.name }),
+      cancelLabel: t('common.cancel'),
+      confirmLabel: t('guest.tempDeleteAndRemove'),
+      danger: true,
+    } : {
       title: t('guest.tempDeleteTitle', { name: p.name }),
       message: t('guest.tempDeleteMessage'),
       confirmLabel: t('common.delete'),
       danger: true,
     })
     if (!ok) return
-    await deleteDoc(doc(db, 'externalWorkers', p.id))
+    await deleteExternalWorker(teamId, p.id, upcoming)
     setShownExternalIds(ids => ids.filter(id => id !== p.id))
     if (selectedPerson?.id === p.id) setSelectedPerson(null)
   }

@@ -245,7 +245,8 @@
     "nDates_other": "{{count}} dates",
     "singleDay": "Single day",
     "absenceWhoLabel": "For",
-    "viewTimeline": "Timeline"
+    "viewTimeline": "Timeline",
+    "rentLastDay": "Last day"
   },
   "staffTimeline": {
     "prevWeekAria": "Previous week",
@@ -1249,9 +1250,6 @@
     "itemsMissingPrep_one": "{{count}} item still needs prepping",
     "itemsMissingPrep_other": "{{count}} items still need prepping",
     "preparedOfTotal": "{{prepared}} of {{total}} prepped",
-    "manualEntryToggle": "⌨️ Enter code manually",
-    "manualCodePlaceholder": "Item code...",
-    "ok": "OK",
     "loadListTitle": "Loading list · {{returned}}/{{total}} returned",
     "allLoaded": "Everything loaded!",
     "itemsMissing_one": "{{count}} item missing to load",
@@ -1309,10 +1307,6 @@
     "returnShort": "○ Return",
     "returnedShort": "Returned",
     "forgottenShort": "Forgotten",
-    "partialReturnTrigger": "Partial return",
-    "partialReturnTitle": "Partial return",
-    "partialReturnDesc": "How many \"{{name}}\" are back (out of {{total}} total)? The rest stays marked as out.",
-    "partialReturnConfirm": "Confirm return",
     "markMissingHint": "hold to mark as missing or broken",
     "restoreItem": "↺ Restore",
     "unassignedVehicle": "No vehicle",
@@ -1320,7 +1314,6 @@
     "kitContents": "🧰 Kit contents",
     "noComponentsRegistered": "No components registered",
     "kitInstancesBadge": "🧳 {{numbers}}",
-    "manualCodeLabel": "Manual code",
     "eventNotesToggle": "Event notes",
     "itemInfoToggle": "Item details",
     "decreaseQty": "Decrease quantity",
@@ -1348,7 +1341,12 @@
     "bulkConfirm": "Confirm",
     "returnedBrokenBadge": "Broken",
     "selectMoreAria": "More actions for the selected items",
-    "bulkNeedsLoaded": "Partial return and broken apply to items already loaded and not yet returned (partial needs more than 1 piece, broken excludes consumables)."
+    "bulkLoadPartial": "Partial loading",
+    "bulkLoadTitle": "Partial loading",
+    "bulkLoadHint": "For each item enter how many pieces you loaded. Only those come off the warehouse stock; the rest stay marked as missing.",
+    "noItemsToReturn": "Nothing to return.",
+    "selectAllListAria": "Select all items in the list",
+    "selectAllCategoryAria": "Select all items in {{name}}"
   },
   "workerInventory": {
     "scan": "📷 Scan",
@@ -1822,7 +1820,13 @@
   "errorBoundary": {
     "title": "Something went wrong",
     "message": "This page ran into a problem. Go back to the home page to try again: if it keeps happening, let us know.",
-    "reload": "Go to home"
+    "reload": "Go to home",
+    "report": "Report the problem by email",
+    "copyDetails": "Copy technical details",
+    "copied": "Details copied",
+    "emailSubject": "Bug on page {{page}}",
+    "emailIntro": "What were you doing when the error appeared?",
+    "emailDetails": "Technical details (please keep them, they help)"
   },
   "guest": {
     "hello": "Hi {{name}}",
@@ -1887,6 +1891,10 @@
     "tempEditTitle": "Temporary user",
     "tempSaveName": "Save name",
     "tempNameTaken": "A temporary user with this name already exists.",
-    "tempDeleteButton": "Delete user"
+    "tempDeleteButton": "Delete user",
+    "tempBadgeShort": "Temp.",
+    "tempDeleteAssigned_one": "{{name}} is assigned to {{count}} activity from today on. If you delete them they are removed from it too: past shifts stay in the calendar under their name.",
+    "tempDeleteAssigned_other": "{{name}} is assigned to {{count}} activities from today on. If you delete them they are removed from these too: past shifts stay in the calendar under their name.",
+    "tempDeleteAndRemove": "Delete and remove from activities"
   }
 }

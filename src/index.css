@@ -56,6 +56,14 @@ html, body, #root {
   color: var(--text);
   overflow-x: hidden;
 }
+/* `overflow-x: hidden` su body e #root li trasforma in contenitori di scorrimento: ogni
+   `position: sticky` della pagina faceva riferimento a loro (che non scorrono) e non
+   si incollava mai in alto. `clip` taglia comunque ciò che esce di lato ma NON crea un
+   contenitore di scorrimento, così lo sticky segue la pagina. `html` resta `hidden`
+   (è la finestra stessa). I browser che non conoscono `clip` tengono `hidden` di sopra. */
+body, #root {
+  overflow-x: clip;
+}
 
 /* ── Typography ───────────────────────────────── */
 h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }

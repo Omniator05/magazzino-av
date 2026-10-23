@@ -2106,6 +2106,7 @@ export default function EventDetail() {
           </div>
         ) : null
         return (
+          <>
           <div style={{ margin:'12px 16px 0' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <div style={{ position:'relative', display:'flex', alignItems:'center', flex:1, minWidth:0 }}>
@@ -2126,18 +2127,6 @@ export default function EventDetail() {
                 {selectMode ? t('common.cancel') : t('eventDetail.selectItems')}
               </button>
             </div>
-
-            {/* Desktop: barra azioni fissa sotto la ricerca mentre si scorre
-                la lista. Telefono: stessa barra ma in fondo allo schermo
-                (vedi sotto, fuori da questo contenitore) — qui non c'è
-                abbastanza spazio fisso senza rubarlo alla tab bar, che
-                infatti sfuma via (vedi useEffect su selectMode/.select-mode). */}
-            {selectMode && !isMobile && (
-              <div className="rc-bulk-bar" style={{ position:'sticky', top:8, zIndex:30, marginTop:8, background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>
-                {actionChips}
-                {actionPanel && <div style={{ marginTop:10 }}>{actionPanel}</div>}
-              </div>
-            )}
 
             {/* Telefono: niente barra bianca — solo "Elimina" + "⋯" flottanti,
                 più in alto rispetto alla tab bar (che intanto è sfumata via)
@@ -2173,6 +2162,20 @@ export default function EventDetail() {
               document.body
             )}
           </div>
+            {/* Desktop: barra azioni sotto la ricerca; scorrendo la lista resta incollata
+                in alto (sticky). Sta FUORI dal contenitore della ricerca apposta: uno sticky
+                si muove solo dentro il proprio genitore, e lì dentro spariva appena la
+                ricerca usciva dallo schermo. Qui il genitore è tutta la pagina.
+                Telefono: stessa barra ma in fondo allo schermo (vedi sopra, nel portale) —
+                lì non c'è abbastanza spazio fisso senza rubarlo alla tab bar, che infatti
+                sfuma via (vedi useEffect su selectMode/.select-mode). */}
+            {selectMode && !isMobile && (
+              <div className="rc-bulk-bar" style={{ position:'sticky', top:8, zIndex:30, margin:'8px 16px 0', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'10px 12px', boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>
+                {actionChips}
+                {actionPanel && <div style={{ marginTop:10 }}>{actionPanel}</div>}
+              </div>
+            )}
+          </>
         )
       })()}
 

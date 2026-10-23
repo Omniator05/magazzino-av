@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-23',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Personale esterno senza account: crei un utente temporaneo, gli mandi un link e vede solo i suoi turni, gli orari e la lista di carico',
+        'Caricamento parziale nella lista di carico: scegli quanti pezzi hai caricato, gli altri restano mancanti',
+        'Lista di carico dei magazzinieri riordinata, con selezione per lista e categoria e barra azioni fissa in alto su computer',
+        'Calendario: tag "Ultimo giorno" sui rent, orari nelle card su telefono; correzione della pagina che restava bloccata',
+        'Pagina d\'errore con "Torna alla home" e segnalazione via email già compilata',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'External staff without an account: create a temporary user, send a link and they only see their own shifts, hours and loading list',
+        'Partial loading in the loading list: choose how many pieces you loaded, the rest stay missing',
+        'Warehouse workers\' loading list reordered, with selection by list and category and a fixed actions bar at the top on desktop',
+        'Calendar: "Last day" tag on rents, hours on cards on phone; fixed the page that stayed stuck',
+        'Error page with "Go to home" and a pre-filled email report',
+      ],
+    },
+  },
+  {
     version: '2026-10-18',
     it: {
       title: 'Novità di oggi',

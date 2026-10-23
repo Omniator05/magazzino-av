@@ -6,7 +6,7 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteD
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
 import { Pin, User, List, Wrench, Check, Search, Clock } from '../components/Icon'
-import { eventHoursLabel, phaseHoursLabel } from '../utils/assignmentTimes'
+import { eventHoursLabel, phaseHoursLabel, isRentLastDay } from '../utils/assignmentTimes'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
@@ -130,6 +130,9 @@ export default function Calendar() {
     // Da "nuovo evento" della pagina Eventi su computer: apre subito la
     // creazione nella colonna laterale.
     if (navState?.createEvent && !isMobile) {
+      // Anche se il calendario era rimasto su "Assegna personale": la creazione
+      // vive nella vista Calendario (colonna laterale), quindi si torna lì.
+      setMode('grid')
       setSidebarCreating(true)
       window.history.replaceState({}, '')
       return
@@ -1084,6 +1087,7 @@ export default function Calendar() {
                           {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                         </p>
                         <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4, fontVariantNumeric:'tabular-nums' }}><Clock size={12} /> {eventHoursLabel(ev, selectedDate, t('events.allDayLabel'))}</p>
+                        {isRentLastDay(ev, selectedDate) && <div style={{ marginTop:5 }}><span style={{ display:'inline-block', background:'rgba(124,111,205,0.14)', color:'#5b4fcf', border:'1px solid rgba(124,111,205,0.35)', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>{t('calendar.rentLastDay')}</span></div>}
                         {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                         {phasesOnDay && phasesOnDay.length > 0 && (() => {
                           // var(--text2) non si può concatenare con un suffisso

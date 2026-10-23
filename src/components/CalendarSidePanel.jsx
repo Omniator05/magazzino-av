@@ -6,6 +6,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { personColor } from '../utils/assignmentBlocks'
 import { assigneesOnDay } from '../utils/workerAssignment'
+import { isRentLastDay } from '../utils/assignmentTimes'
 import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { generateDates } from '../utils/recurrence'
@@ -402,6 +403,11 @@ export default function CalendarSidePanel({
                     <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 4 }}>
                       {durationLabel}{ev.location ? ` · ${ev.location}` : ''}
                     </div>
+                    {isRentLastDay(ev, selectedDate) && (
+                      <div style={{ marginTop: 6 }}>
+                        <span style={{ display: 'inline-block', background: 'rgba(124,111,205,0.14)', color: '#5b4fcf', border: '1px solid rgba(124,111,205,0.35)', borderRadius: 6, padding: '2px 8px', fontSize: 10.5, fontWeight: 800 }}>{t('calendar.rentLastDay')}</span>
+                      </div>
+                    )}
 
                     {mgr?.name && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11, color: 'var(--c-ink2)' }}>

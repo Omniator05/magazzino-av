@@ -135,14 +135,22 @@ function ContentIt() {
         a rischi legali o di sicurezza altri Clienti o il Servizio stesso.
       </LegalP>
 
-      <LegalH2>12. Modifiche ai Termini</LegalH2>
+      <LegalH2>12. Sviluppo del Servizio e intelligenza artificiale</LegalH2>
+      <LegalP>
+        Roadcase è stato progettato e sviluppato anche con l'ausilio di strumenti di intelligenza
+        artificiale (ad esempio assistenti per la scrittura e la revisione del codice). Ne diamo
+        comunicazione per trasparenza: l'uso di questi strumenti riguarda la realizzazione del software
+        e non modifica i diritti e gli obblighi previsti da questi Termini.
+      </LegalP>
+
+      <LegalH2>13. Modifiche ai Termini</LegalH2>
       <LegalP>
         Possiamo aggiornare questi Termini nel tempo. In caso di modifiche sostanziali te lo
         comunicheremo con un preavviso ragionevole; l'uso continuato del Servizio dopo l'entrata in
         vigore delle modifiche costituisce accettazione dei nuovi Termini.
       </LegalP>
 
-      <LegalH2>13. Legge applicabile e foro competente</LegalH2>
+      <LegalH2>14. Legge applicabile e foro competente</LegalH2>
       <LegalP>
         I presenti Termini sono regolati dalla legge italiana. Per qualsiasi controversia non risolta in
         via amichevole è competente in via esclusiva il Foro di Bolzano, salve le norme
@@ -280,14 +288,22 @@ function ContentEn() {
         legal or security risks.
       </LegalP>
 
-      <LegalH2>12. Changes to the Terms</LegalH2>
+      <LegalH2>12. Development of the Service and artificial intelligence</LegalH2>
+      <LegalP>
+        Roadcase was designed and built with the help of artificial intelligence tools as well (for
+        example assistants for writing and reviewing code). We tell you this for transparency: the use of
+        these tools concerns how the software was built and does not change the rights and obligations
+        set out in these Terms.
+      </LegalP>
+
+      <LegalH2>13. Changes to the Terms</LegalH2>
       <LegalP>
         We may update these Terms over time. In case of material changes we will notify you with
         reasonable advance notice; continued use of the Service after the changes take effect constitutes
         acceptance of the new Terms.
       </LegalP>
 
-      <LegalH2>13. Governing law and jurisdiction</LegalH2>
+      <LegalH2>14. Governing law and jurisdiction</LegalH2>
       <LegalP>
         These Terms are governed by Italian law. Any dispute not resolved amicably is subject to the
         exclusive jurisdiction of the Court of Bolzano, subject to any mandatory consumer-protection
@@ -310,7 +326,7 @@ export default function TermsOfService() {
   return (
     <LegalPageLayout
       title={lang === 'en' ? 'Terms and Conditions' : 'Termini e Condizioni'}
-      updatedAt={lang === 'en' ? 'September 8, 2026' : '8 settembre 2026'}
+      updatedAt={lang === 'en' ? 'October 22, 2026' : '22 ottobre 2026'}
       lang={lang}
       onLangChange={setLang}
     >

@@ -6,6 +6,53 @@
 // mostra il badge "Nuovo" a chi non l'ha ancora aperta.
 export const CHANGELOG = [
   {
+    id: '2026-10-23',
+    date: '2026-10-23',
+    title: { it: 'Link per il personale esterno, caricamento parziale e lista di carico rifatta', en: 'Links for external staff, partial loading and a reworked loading list' },
+    items: [
+      {
+        kind: 'new',
+        title: { it: 'Link per il personale esterno', en: 'Links for external staff' },
+        text: {
+          it: 'Chi lavora a chiamata non ha più bisogno di un account: crei un utente temporaneo (da Impostazioni › Utenti, scegliendo "Utente temporaneo", oppure trascinando "Esterno" su un evento in Assegna personale) e gli mandi un link. Vede solo i suoi turni con gli orari, i dettagli dell\'evento e la lista di carico, in sola lettura. Dopo aver salvato un esterno ti viene chiesto se invitarlo. Dalla scheda dell\'utente puoi rinominarlo, eliminarlo o creare un nuovo link.',
+          en: 'People who work on call no longer need an account: create a temporary user (from Settings › Users by choosing "Temporary user", or by dragging "External" onto an event in Assign staff) and send them a link. They only see their own shifts with hours, the event details and the loading list, read-only. After saving an external person you are asked whether to invite them. From their card you can rename them, delete them or create a new link.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Caricamento parziale', en: 'Partial loading' },
+        text: {
+          it: 'Nella lista di carico, da Seleziona (o con una pressione lunga) c\'è ora "Caricamento parziale": indichi quanti pezzi hai caricato. In magazzino scendono solo quelli; gli altri restano segnati come mancanti. Resta anche il rientro parziale e il "rientrato rotto".',
+          en: 'In the loading list, Select (or a long press) now has "Partial loading": enter how many pieces you loaded. Only those come off the warehouse stock; the rest stay marked as missing. Partial return and "returned broken" are still there.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Lista di carico più comoda per i magazzinieri', en: 'A more comfortable loading list for warehouse workers' },
+        text: {
+          it: 'La pagina è riordinata: lettore QR, contatore dei mancanti, ricerca con Seleziona e poi la lista (l\'inserimento manuale del codice non c\'è più: si segna "Pronto" dalla riga). Selezionando si può scegliere tutta la lista o una categoria con una casella; su computer la barra delle azioni resta in alto mentre scorri, anche per gli admin. Nella scheda Scarico gli oggetti mancanti non si vedono più.',
+          en: 'The page has a new order: QR reader, missing counter, search with Select, then the list (manual code entry is gone: mark "Ready" from the row). When selecting you can pick the whole list or one category with a checkbox; on desktop the actions bar stays at the top while you scroll, for admins too. Missing items are hidden in the Return tab.',
+        },
+      },
+      {
+        kind: 'new',
+        title: { it: 'Calendario: ultimo giorno del rent e orari su telefono', en: 'Calendar: last day of a rent and hours on phone' },
+        text: {
+          it: 'Sull\'ultimo giorno di un rent su più giorni compare il tag "Ultimo giorno". Su telefono le card degli eventi mostrano anche gli orari (e quelli di montaggio e smontaggio). In "Assegna personale" togliere una persona richiede il Salva, e un esterno nuovo si scrive direttamente nella card.',
+          en: 'On the last day of a multi-day rent a "Last day" tag appears. On phone, event cards also show their hours (and setup and teardown hours). In "Assign staff" removing a person needs Save, and a new external person is typed straight into the card.',
+        },
+      },
+      {
+        kind: 'fix',
+        title: { it: 'Correzioni', en: 'Fixes' },
+        text: {
+          it: 'Risolto un difetto che a volte lasciava la pagina del calendario bloccata e troppo alta. Il "+" della pagina Eventi su computer apre il calendario già in creazione. La pagina d\'errore ora porta alla home e permette di segnalare il problema via email con i dettagli già inseriti. Nelle policy è indicato che l\'app è stata sviluppata anche con l\'aiuto dell\'intelligenza artificiale.',
+          en: 'Fixed a bug that sometimes left the calendar page stuck and too tall. The "+" on the Events page on desktop opens the calendar already in creation mode. The error page now goes to the home page and lets you report the problem by email with the details already filled in. The policies now state that the app was also built with the help of artificial intelligence.',
+        },
+      },
+    ],
+  },
+  {
     id: '2026-10-18',
     date: '2026-10-18',
     title: { it: 'Oggetti con difetto, selezione per i magazzinieri, nuovo foglio dei bauli', en: 'Items with defects, selection for warehouse workers, new case sheet' },

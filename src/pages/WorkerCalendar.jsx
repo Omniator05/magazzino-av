@@ -5,7 +5,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check, List, Clock } from '../components/Icon'
-import { eventHoursLabel, phaseHoursLabel } from '../utils/assignmentTimes'
+import { eventHoursLabel, phaseHoursLabel, isRentLastDay } from '../utils/assignmentTimes'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
@@ -654,6 +654,7 @@ export default function WorkerCalendar() {
                       {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                     </p>
                     <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4, fontVariantNumeric:'tabular-nums' }}><Clock size={12} /> {eventHoursLabel(ev, selectedDate, t('events.allDayLabel'))}</p>
+                    {isRentLastDay(ev, selectedDate) && <div style={{ marginTop:5 }}><span style={{ display:'inline-block', background:'rgba(124,111,205,0.14)', color:'#5b4fcf', border:'1px solid rgba(124,111,205,0.35)', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>{t('calendar.rentLastDay')}</span></div>}
                     {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                     {phases.length > 0 && (
                       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:5 }}>

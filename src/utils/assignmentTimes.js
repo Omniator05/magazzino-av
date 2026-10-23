@@ -56,3 +56,10 @@ export function phaseHoursLabel(ev, key) {
   const pt = ev.phaseTimes?.[key]
   return pt?.timeStart && pt?.timeEnd ? `${pt.timeStart}–${pt.timeEnd}` : ''
 }
+
+// Ultimo giorno di un rent/installazione che dura più giorni (date → dateEnd):
+// le card di quel giorno mostrano un tag "Ultimo giorno". Solo per le
+// installazioni (il "rent"), non per gli eventi normali su più giorni.
+export function isRentLastDay(ev, date) {
+  return ev?.type === 'installation' && !!ev.dateEnd && ev.dateEnd > ev.date && date === ev.dateEnd
+}

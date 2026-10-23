@@ -136,7 +136,14 @@ function ContentIt() {
         Non raccogliamo consapevolmente dati di minori di 18 anni.
       </LegalP>
 
-      <LegalH2>10. Modifiche alla presente informativa</LegalH2>
+      <LegalH2>10. Sviluppo con intelligenza artificiale</LegalH2>
+      <LegalP>
+        Roadcase è stata sviluppata anche con l'ausilio di strumenti di intelligenza artificiale (ad
+        esempio assistenti per la scrittura e la revisione del codice). Ne diamo comunicazione per
+        trasparenza: riguarda la realizzazione del software.
+      </LegalP>
+
+      <LegalH2>11. Modifiche alla presente informativa</LegalH2>
       <LegalP>
         Possiamo aggiornare questa informativa nel tempo, ad esempio per riflettere nuove funzionalità
         del Servizio o modifiche normative. La data di "ultimo aggiornamento" in cima alla pagina indica
@@ -272,7 +279,14 @@ function ContentEn() {
         knowingly collect data from anyone under 18.
       </LegalP>
 
-      <LegalH2>10. Changes to this notice</LegalH2>
+      <LegalH2>10. Development with artificial intelligence</LegalH2>
+      <LegalP>
+        Roadcase was built with the help of artificial intelligence tools as well (for example
+        assistants for writing and reviewing code). We tell you this for transparency: it concerns how
+        the software was built.
+      </LegalP>
+
+      <LegalH2>11. Changes to this notice</LegalH2>
       <LegalP>
         We may update this notice over time, for example to reflect new Service features or regulatory
         changes. The "last updated" date at the top of the page indicates the version in force; in case
@@ -295,7 +309,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalPageLayout
       title={lang === 'en' ? 'Privacy Policy' : 'Informativa sulla Privacy'}
-      updatedAt={lang === 'en' ? 'September 8, 2026' : '8 settembre 2026'}
+      updatedAt={lang === 'en' ? 'October 22, 2026' : '22 ottobre 2026'}
       lang={lang}
       onLangChange={setLang}
     >
