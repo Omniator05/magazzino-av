@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
-import { adminLimit, workerLimit, promptLimitReached } from '../utils/planLimits'
+import { adminLimit, workerLimit, promptLimitReached, isProPlan } from '../utils/planLimits'
 import { isModuleEnabled } from '../utils/modules'
 import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -253,9 +253,13 @@ export default function SettingsUsers() {
         return false
       }
     }
+    // La "Postazione magazzino" è un dispositivo, non una persona: solo sui piani a
+    // pagamento (anche in prova) e fuori dal conteggio dei magazzinieri.
+    const isStationRole = role === 'postazione'
+    if (isStationRole && !isProPlan(team)) { setError(t('station.paidOnly')); return false }
     if (role === 'worker') {
       const cap = workerLimit(team)
-      if (Number.isFinite(cap) && users.filter(u => u.role === 'worker').length >= cap) {
+      if (Number.isFinite(cap) && users.filter(u => u.role === 'worker' && !u.isStation).length >= cap) {
         await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.workersMsg', { limit: cap }) })
         return false
       }
@@ -277,7 +281,10 @@ export default function SettingsUsers() {
         username,
         internalEmail,
         email:         form.email.trim().toLowerCase() || null,
-        role:          form.role || 'worker',
+        // La postazione è un magazziniere con l'etichetta isStation (stesso ruolo: regole e
+        // pagine esistenti la trattano già bene), con la sua home a schermo intero.
+        role:          isStationRole ? 'worker' : (form.role || 'worker'),
+        ...(isStationRole ? { isStation: true } : {}),
         teamId:        teamId,
         approved:      true,
         active:        true,
@@ -572,7 +579,7 @@ export default function SettingsUsers() {
             color: u.approved === false ? 'var(--accent2)' : roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)',
             whiteSpace:'nowrap', flexShrink:0,
           }}>
-            {u.approved === false ? t('adminUsers.waitingBadge') : u.role === 'admin' ? t('adminUsers.adminBadge') : roleColor ? ROLE_BADGE_LABELS[u.role] : u.active !== false ? t('adminUsers.activeBadge') : t('adminUsers.deactivatedBadge')}
+            {u.approved === false ? t('adminUsers.waitingBadge') : u.role === 'admin' ? t('adminUsers.adminBadge') : u.isStation ? t('station.badge') : roleColor ? ROLE_BADGE_LABELS[u.role] : u.active !== false ? t('adminUsers.activeBadge') : t('adminUsers.deactivatedBadge')}
           </span>
           <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
         </div>
@@ -750,6 +757,7 @@ export default function SettingsUsers() {
                 options={[
                   { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
                   { value:'temporaneo', label:t('guest.tempRoleOption'), icon:<User size={17} /> },
+                  ...(isProPlan(team) ? [{ value:'postazione', label:t('station.roleOption'), icon:<Box size={17} /> }] : []),
                 ]}
               />
             </div>
@@ -783,6 +791,12 @@ export default function SettingsUsers() {
 
             {form.role === 'temporaneo' && (
               <p style={{ margin:'0 0 22px', fontSize:13, lineHeight:1.5, color:'var(--text2)' }}>{t('guest.tempRoleHint')}</p>
+            )}
+            {form.role === 'postazione' && (
+              <p style={{ margin:'0 0 16px', fontSize:13, lineHeight:1.5, color:'var(--text2)' }}>{t('station.roleHint')}</p>
+            )}
+            {!isProPlan(team) && form.role === 'worker' && (
+              <p style={{ margin:'-6px 0 16px', fontSize:12, lineHeight:1.45, color:'var(--text3)' }}>{t('station.paidHint')}</p>
             )}
 
             {form.role !== 'temporaneo' && (

@@ -15,10 +15,11 @@ import { logItemActivity } from '../utils/itemActivity'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { useLongPress } from '../hooks/useLongPress'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useOperator } from '../context/OperatorContext'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, resolveScanRow, isScanCandidate } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
-import { syncKitAwareInventory, writeOffConsumable, closeInstallationEvent } from '../utils/kitInventory'
+import { syncKitAwareInventory, writeOffConsumable, closeInstallationEvent, rentReadyToClose } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import { todayStr } from '../utils/workHours'
 
@@ -57,6 +58,10 @@ export default function WorkerScanner() {
   const { t } = useTranslation()
   const { id } = useParams()
   const { user, profile, teamId, team } = useAuth()
+  // Alla Postazione magazzino chi lavora è l'operatore del badge, non l'account del PC: le azioni
+  // registrate nello storico portano il suo nome. Altrove è l'utente normale.
+  const { operator, requireOperator } = useOperator()
+  const actor = operator ? { userId: operator.userId, profile: { name: operator.name } } : { userId: user?.uid, profile }
   const navigate = useNavigate()
   const confirm = useConfirm()
   const location = useLocation()
@@ -228,6 +233,33 @@ export default function WorkerScanner() {
   const [showAllLoadedPopup, setShowAllLoadedPopup] = useState(false)
   const [showAllReturnedPopup, setShowAllReturnedPopup] = useState(false)
   const [showCloseInstallModal, setShowCloseInstallModal] = useState(false)
+  // Rent/install tutto rientrato: avvisa gli admin (una sola volta, con un flag sull'evento) che
+  // c'è da verificarlo e chiuderlo. Si parte dal primo valore letto, così aprire un rent già
+  // rientrato non rimanda la notifica.
+  const rentReturned = rentReadyToClose(event)
+  const prevRentReturned = useRef(null)
+  useEffect(() => {
+    if (!event || event.type !== 'installation') return
+    if (prevRentReturned.current === null) { prevRentReturned.current = rentReturned; return }
+    if (prevRentReturned.current === rentReturned) return
+    prevRentReturned.current = rentReturned
+    const evRef = doc(db, 'events', id)
+    if (!rentReturned) { updateDoc(evRef, { closeNotified: false }).catch(() => {}); return }
+    runTransaction(db, async tx => {
+      const snap = await tx.get(evRef)
+      if (!snap.exists() || snap.data().closeNotified) return false
+      tx.update(evRef, { closeNotified: true })
+      return true
+    }).then(first => {
+      if (!first || profile?.role === 'admin') return
+      notifyTeamPush({
+        title: t('workerScanner.pushRentReturnedTitle'),
+        body: t('workerScanner.pushRentReturnedBody', { name: event.name }),
+        url: `/events/${id}`,
+        audience: { type: 'admins' },
+      })
+    }).catch(() => {})
+  }, [rentReturned, event?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showConfetti, setShowConfetti] = useState(false)
   const [showEventNotes, setShowEventNotes] = useState(false)
   // Selezione multipla (stessa idea di EventDetail per gli admin): un bottone
@@ -377,6 +409,7 @@ export default function WorkerScanner() {
   }, [teamId])
 
   const processCode = async (code) => {
+    if (!requireOperator()) return
     const { baseCode: normalized, unitNumber } = parseScannedCode(code)
 
     // Ignora lo stesso codice scansionato entro 3 secondi (evita doppi)
@@ -667,7 +700,7 @@ export default function WorkerScanner() {
       loggedRows.forEach(row => logItemActivity({
         teamId, eventId: id, eventName: event?.name, itemId: row.id, itemName: row.name,
         catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
-        listId: rowListId(row), action: outcome.action, profile, userId: user?.uid,
+        listId: rowListId(row), action: outcome.action, profile: actor.profile, userId: actor.userId,
       }))
     }
     } catch (e) {
@@ -889,6 +922,7 @@ export default function WorkerScanner() {
 
   const [confirmingExtra, setConfirmingExtra] = useState(false)
   const addExtraWorkerItem = async () => {
+    if (!requireOperator()) return
     if (!extraWorkerForm.name.trim() || confirmingExtra) return
     if (!isProPlan(team) && allEventItems.length >= FREE_LIMITS.itemsPerList) {
       await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
@@ -1021,6 +1055,7 @@ export default function WorkerScanner() {
   // Rientro parziale di UNA riga: dividerla in "già rientrati" e "ancora fuori"
   // (usato dalla selezione multipla: menu "⋯" › Rientro parziale).
   const partialReturnRow = async (item, splitQty) => {
+    if (!requireOperator()) return
     const totalQty = item.qty || 1
     if (item.isBundle || !splitQty || splitQty <= 0 || splitQty >= totalQty) return
     const remainingQty = totalQty - splitQty
@@ -1061,7 +1096,7 @@ export default function WorkerScanner() {
     logItemActivity({
       teamId, eventId: id, eventName: event?.name, itemId: returnedRowId, itemName: item.name,
       catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-      listId: rowListId(item), action: 'returned', profile, userId: user?.uid,
+      listId: rowListId(item), action: 'returned', profile: actor.profile, userId: actor.userId,
     })
   }
 
@@ -1070,6 +1105,7 @@ export default function WorkerScanner() {
   // disponibili). Se sono tutti i pezzi la riga si chiude, altrimenti si divide
   // come nel rientro parziale. La descrizione è facoltativa.
   const brokenReturnRow = async (item, brokenN, note) => {
+    if (!requireOperator()) return
     const rowQty = item.qty || 1
     const n = Math.min(rowQty, Math.max(1, brokenN))
     const catalogId = item.itemRef || item.id
@@ -1116,7 +1152,7 @@ export default function WorkerScanner() {
     logItemActivity({
       teamId, eventId: id, eventName: event?.name, itemId: whole ? item.id : brokenRowId, itemName: item.name,
       catalogItemId: item.itemRef || item.id,
-      listId: rowListId(item), action: 'returned', profile, userId: user?.uid,
+      listId: rowListId(item), action: 'returned', profile: actor.profile, userId: actor.userId,
     })
     notifyTeamPush({
       title: t('inventory.pushBrokenTitle'),
@@ -1132,6 +1168,7 @@ export default function WorkerScanner() {
   // i rimanenti diventano una riga "mancante" (stesso oggetto, id proprio) così la
   // lista non resta bloccata e si vede cosa non è partito.
   const partialLoadRow = async (item, loadQty) => {
+    if (!requireOperator()) return
     const rowQty = item.qty || 1
     if (item.isBundle || !loadQty || loadQty <= 0 || loadQty >= rowQty) return false
     const missingRowId = `${item.id}_mis_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
@@ -1173,7 +1210,7 @@ export default function WorkerScanner() {
     logItemActivity({
       teamId, eventId: id, eventName: event?.name, itemId: item.id, itemName: item.name,
       catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-      listId: rowListId(item), action: 'loaded', profile, userId: user?.uid,
+      listId: rowListId(item), action: 'loaded', profile: actor.profile, userId: actor.userId,
     })
     return true
   }
@@ -1204,6 +1241,7 @@ export default function WorkerScanner() {
   const allSelectedMissing = missingRows.length > 0 && missingRows.every(i => i.mancante)
 
   const applyBulkMissing = async () => {
+    if (!requireOperator()) return
     if (missingRows.length === 0) return
     const target = !allSelectedMissing
     const ids = new Set(missingRows.map(i => i.id))
@@ -1224,7 +1262,7 @@ export default function WorkerScanner() {
     missingRows.forEach(i => logItemActivity({
       teamId, eventId: id, eventName: event?.name, itemId: i.id, itemName: i.name,
       catalogItemId: i.isExtra ? null : (i.itemRef || i.id),
-      listId: rowListId(i), action: target ? 'missing' : 'unmissing', profile, userId: user?.uid,
+      listId: rowListId(i), action: target ? 'missing' : 'unmissing', profile: actor.profile, userId: actor.userId,
     }))
     setBulkSaving(false)
     exitSelectMode()
@@ -1239,6 +1277,7 @@ export default function WorkerScanner() {
   }
 
   const applyBulkDialog = async () => {
+    if (!requireOperator()) return
     const rows = dialogRows(bulkDialog)
     if (rows.length === 0) return
     setBulkSaving(true)
@@ -1274,6 +1313,7 @@ export default function WorkerScanner() {
 
   return (
     <div style={{ minHeight:'100dvh', background:'var(--bg)', display:'flex', flexDirection:'column', paddingBottom:'calc(env(safe-area-inset-bottom, 0px) + 48px)' }}>
+      {/* Alla Postazione magazzino senza operatore la lista è bloccata: si sblocca scansionando il badge */}
 
       {saveError && (
         <div role="alert" style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:999, background:'rgba(40,16,20,0.97)', border:'1.5px solid var(--red)', borderRadius:14, padding:'12px 18px', maxWidth:'90vw', boxShadow:'0 8px 32px rgba(0,0,0,0.35)', display:'flex', alignItems:'center', gap:10 }}>
@@ -1819,9 +1859,12 @@ export default function WorkerScanner() {
           {/* Chiudi rent/install — solo qui, in fase Rientro, quando tutto è
               tornato: un rent/install non si archivia mai da solo come un
               evento normale (resta caricato apposta anche a lungo), quindi
-              serve un'azione esplicita, e va raggiungibile anche da chi lo
-              sta effettivamente scaricando, non solo dall'admin. */}
-          {mode === 'return' && event?.type === 'installation' && allEventItems.some(i => !i.mancante) && allEventItems.filter(i => !i.mancante).every(i => i.returned) && (
+              serve un'azione esplicita. Solo l'admin può farla: così verifica
+              di persona che sia tornato tutto, e il giorno giusto. */}
+          {profile?.role !== 'admin' && mode === 'return' && event?.type === 'installation' && allEventItems.some(i => !i.mancante) && allEventItems.filter(i => !i.mancante).every(i => i.returned) && (
+            <p style={{ margin:'0 0 8px', padding:'11px 14px', borderRadius:12, background:'rgba(90,82,201,0.10)', border:'1px solid rgba(90,82,201,0.25)', color:'#5b4fcf', fontSize:13.5, fontWeight:700, textAlign:'center' }}>{t('workerScanner.waitingAdminClose')}</p>
+          )}
+          {profile?.role === 'admin' && mode === 'return' && event?.type === 'installation' && allEventItems.some(i => !i.mancante) && allEventItems.filter(i => !i.mancante).every(i => i.returned) && (
             <button onClick={() => setShowCloseInstallModal(true)}
               style={{ width:'100%', marginBottom:8, padding:'13px', borderRadius:12,
                 background:'rgba(90,82,201,0.12)', border:'1px solid rgba(90,82,201,0.3)',
@@ -1867,6 +1910,7 @@ export default function WorkerScanner() {
                     // riprova automaticamente da una lettura fresca se qualcun
                     // altro ha scritto nel mezzo.
                     _onToggleLoaded: async (itemId) => {
+                      if (!requireOperator()) return
                       const newLoadedGuess = !item.loaded
                       // Stesso controllo di processCode (scanner a codice): anche
                       // spuntando la riga a mano invece di scansionare, non deve
@@ -1946,7 +1990,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        listId: rowListId(item), action: newLoaded ? 'loaded' : 'unloaded', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newLoaded ? 'loaded' : 'unloaded', profile: actor.profile, userId: actor.userId,
                       })
                     },
                     // forceOut: dalla pressione lunga sul bottone Scarico —
@@ -1957,6 +2001,7 @@ export default function WorkerScanner() {
                     // consumabili "consumati", ma disponibile per QUALSIASI
                     // categoria e senza dover rispondere al popup.
                     _onToggleReturned: async (itemId, forceOut = false) => {
+                      if (!requireOperator()) return
                       // Rientrato rotto: i pezzi sono già usciti dai disponibili, annullare il rientro sfalserebbe la giacenza
                       if (item.returnedBroken) return
                       const newReturnedGuess = !item.returned
@@ -2028,7 +2073,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        listId: rowListId(item), action: newReturned ? 'returned' : 'unreturned', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newReturned ? 'returned' : 'unreturned', profile: actor.profile, userId: actor.userId,
                       })
                     },
                     // Rientro PARZIALE: solo per oggetti non-kit con qty > 1
@@ -2042,6 +2087,7 @@ export default function WorkerScanner() {
                     // duplicate già usato per gli oggetti "mancante" in
                     // EventDetail.jsx (stesso itemRef, id proprio).
                     _onTogglePronto: async (itemId) => {
+                      if (!requireOperator()) return
                       const newPronto = !item.pronto
                       // Stesso controllo di _onToggleLoaded: segnare "pronto" senza
                       // verificare la disponibilità porterebbe a un risultato incoerente
@@ -2095,10 +2141,11 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        listId: rowListId(item), action: newPronto ? 'pronto' : 'unpronto', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newPronto ? 'pronto' : 'unpronto', profile: actor.profile, userId: actor.userId,
                       })
                     },
                     _onToggleMancante: async (itemId) => {
+                      if (!requireOperator()) return
                       const newMancante = !item.mancante
                       setOptimistic(itemId, { mancante: newMancante })
                       try {
@@ -2116,7 +2163,7 @@ export default function WorkerScanner() {
                       logItemActivity({
                         teamId, eventId: id, eventName: event?.name, itemId, itemName: item.name,
                         catalogItemId: item.isExtra ? null : (item.itemRef || item.id),
-                        listId: rowListId(item), action: newMancante ? 'missing' : 'unmissing', profile, userId: user?.uid,
+                        listId: rowListId(item), action: newMancante ? 'missing' : 'unmissing', profile: actor.profile, userId: actor.userId,
                       })
                     },
                   })

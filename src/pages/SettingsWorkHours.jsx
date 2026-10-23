@@ -102,7 +102,7 @@ export default function SettingsWorkHours() {
     const q = query(collection(db, 'profiles'), where('teamId', '==', teamId))
     return onSnapshot(q, snap => setWorkers(
       snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .filter(p => (p.role === 'worker' || p.role === 'admin') && p.active !== false)
+        .filter(p => (p.role === 'worker' || p.role === 'admin') && !p.isStation && p.active !== false)
     ))
   }, [teamId])
 

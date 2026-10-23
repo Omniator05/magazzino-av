@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useOperator } from '../context/OperatorContext'
 import { useTranslation } from 'react-i18next'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { db } from '../firebase'
@@ -23,6 +24,8 @@ export default function Tasks() {
   const { t } = useTranslation()
   const { user, profile, teamId } = useAuth()
   const confirm = useConfirm()
+  // Postazione magazzino: completare una task richiede il badge, e chi l'ha completata è l'operatore.
+  const { operator, requireOperator } = useOperator()
   const [tasks, setTasks]       = useState([])
   const [users, setUsers]       = useState([])
   const [showModal, setShowModal] = useState(false)
@@ -126,10 +129,12 @@ export default function Tasks() {
   const taskDrag = useModalDrag(closeTaskModal, undefined, submitTaskForm, showModal)
 
   const toggleDone = async (task) => {
+    if (!requireOperator()) return
     await updateDoc(doc(db, 'tasks', task.id), {
       done: !task.done,
       doneAt: !task.done ? serverTimestamp() : null,
-      doneBy: !task.done ? user.uid : null,
+      doneBy: !task.done ? (operator?.userId || user.uid) : null,
+      ...(operator ? { doneByName: !task.done ? operator.name : null } : {}),
     })
   }
 
@@ -240,7 +245,7 @@ export default function Tasks() {
                 <label>{t('tasks.assignToLabel')}</label>
                 <select value={form.assignee} onChange={e => setForm({...form, assignee:e.target.value})}>
                   <option value="all">{t('tasks.allWorkers')}</option>
-                  {users.filter(u => u.role === 'worker').map(u => (
+                  {users.filter(u => u.role === 'worker' && !u.isStation).map(u => (
                     <option key={u.id} value={u.id}>{u.name || u.username}</option>
                   ))}
                 </select>

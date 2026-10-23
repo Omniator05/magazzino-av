@@ -112,11 +112,14 @@ service cloud.firestore {
       // Idem 'guestLinks' (impronte dei link ospite, vedi api/_guest.js): create/
       // lette solo dal server — se un client potesse scriverci, potrebbe
       // fabbricarsi un link verso qualunque persona esterna della squadra.
-      allow get: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks'
+      // Idem 'operatorBadges' (codici dei badge personali per la Postazione magazzino, vedi
+      // api/_badge.js): letti e scritti solo dal server, altrimenti chiunque nella squadra
+      // potrebbe leggere il badge di un collega e lavorare a suo nome.
+      allow get: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks' && collection != 'operatorBadges'
         && (resource == null || canAccessTeam(resource.data.teamId));
-      allow list, update, delete: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks'
+      allow list, update, delete: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks' && collection != 'operatorBadges'
         && canAccessTeam(resource.data.teamId);
-      allow create: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks'
+      allow create: if collection != 'profiles' && collection != 'teams' && collection != 'teamSecrets' && collection != 'guestLinks' && collection != 'operatorBadges'
         && canAccessTeam(request.resource.data.teamId);
     }
   }

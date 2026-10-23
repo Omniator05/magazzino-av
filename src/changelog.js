@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-24',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Postazione magazzino (piani a pagamento): un account per il PC fisso con lettore USB. La home mostra eventi da preparare, montaggi, smontaggi e inizio/fine dei rent; scansionando un\'etichetta si apre la scheda dell\'oggetto con "Rotto", "Con difetto" e "Riparato"',
+        'Badge personale: dal Profilo mostri il tuo QR e lo passi sul lettore, così carichi e segnali a tuo nome. Esci da solo dopo 20 minuti; guardare è libero, per segnare qualcosa serve il badge',
+        'Segnalazione problemi in due passi nel Magazzino: prima "Con difetto" o "Rotto", poi i dettagli. Il numero del pezzo compare solo per oggetti con pochi pezzi',
+        'Rent: solo un admin può terminarli. Quando è tutto rientrato compare il tag "Da chiudere" e gli admin ricevono una notifica',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Warehouse station (paid plans): an account for the fixed PC with a USB reader. Home shows events to prepare, set-ups, tear-downs and rent starts/ends; scanning a label opens the item card with "Broken", "Defective" and "Repaired"',
+        'Personal badge: show your QR from Profile and scan it on the reader, so loading and reports are made under your name. You are signed out after 20 minutes; browsing is free, marking anything needs the badge',
+        'Reporting problems in two steps in the Warehouse: first "Defective" or "Broken", then the details. The piece number only appears for items with few pieces',
+        'Rents: only an admin can end them. When everything is back a "To close" tag appears and admins get a notification',
+      ],
+    },
+  },
+  {
     version: '2026-10-23',
     it: {
       title: 'Novità di oggi',

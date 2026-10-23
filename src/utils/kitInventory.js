@@ -187,6 +187,14 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
 // logica che prima viveva duplicata fra Events.jsx (lista admin) e
 // EventDetail.jsx (pagina del singolo evento, ora raggiungibile anche dai
 // magazzinieri). Un solo posto da cui tenerla corretta.
+// Rent/install con tutto rientrato (esclusi i pezzi segnati mancanti) ma non ancora chiuso:
+// solo un admin può chiuderlo, dopo aver verificato che sia davvero tutto a posto.
+export const rentReadyToClose = ev => {
+  if (!ev || ev.type !== 'installation' || ev.archived) return false
+  const rows = (ev.items || []).filter(i => !i.mancante)
+  return rows.length > 0 && rows.every(i => i.returned)
+}
+
 export const closeInstallationEvent = async (eventId, fallbackItems) => {
   const eventRef = doc(db, 'events', eventId)
   // Transazione invece di scrivere direttamente lo snapshot `items` passato

@@ -11,10 +11,11 @@ export const countIssues = (issues, type) => (issues || []).filter(i => i.type =
 // Aggiunge una segnalazione. Un pezzo numerato ha una sola segnalazione alla
 // volta: se esiste già per lo stesso numero viene sostituita (es. da "difetto"
 // a "rotto") invece di duplicarsi.
-export function addIssue(issues, { type, unit, note }) {
+export function addIssue(issues, { type, unit, note, by }) {
   const u = unit == null || unit === '' ? null : Math.max(1, parseInt(unit, 10) || 1)
   const rest = u == null ? (issues || []) : (issues || []).filter(i => i.unit !== u)
-  return [...rest, { id: newId(), type, unit: u, note: (note || '').trim(), at: Date.now() }]
+  // `by` = chi l'ha segnalato (operatore della Postazione magazzino), facoltativo
+  return [...rest, { id: newId(), type, unit: u, note: (note || '').trim(), at: Date.now(), ...(by ? { by } : {}) }]
 }
 
 export const removeIssueById = (issues, id) => (issues || []).filter(i => i.id !== id)

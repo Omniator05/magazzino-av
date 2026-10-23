@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isBadgeCode } from '../utils/operatorBadge'
 
 // Lettori barcode/QR wireless (es. Netum C750) in modalità Bluetooth HID si
 // comportano come una tastiera: appena si abbina al telefono, ogni scansione
@@ -19,7 +20,10 @@ function isEditableTarget(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable
 }
 
-export function useKeyboardWedgeScanner(onScan, { enabled = true } = {}) {
+// `badges`: ogni scansione è o un BADGE personale ("RCB-…", vedi utils/operatorBadge.js) o un
+// codice oggetto. Un'istanza con `badges: true` riceve SOLO i badge, tutte le altre SOLO il
+// resto: così passare un badge non fa mai comparire "oggetto non trovato" in nessuna pagina.
+export function useKeyboardWedgeScanner(onScan, { enabled = true, badges = false } = {}) {
   const bufferRef = useRef('')
   const lastKeyTimeRef = useRef(0)
   const onScanRef = useRef(onScan)
@@ -39,7 +43,7 @@ export function useKeyboardWedgeScanner(onScan, { enabled = true } = {}) {
       if (e.key === 'Enter') {
         const code = bufferRef.current
         bufferRef.current = ''
-        if (code.length >= MIN_CODE_LENGTH) {
+        if (code.length >= MIN_CODE_LENGTH && isBadgeCode(code) === badges) {
           e.preventDefault()
           onScanRef.current(code)
         }
@@ -50,5 +54,5 @@ export function useKeyboardWedgeScanner(onScan, { enabled = true } = {}) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [enabled])
+  }, [enabled, badges])
 }

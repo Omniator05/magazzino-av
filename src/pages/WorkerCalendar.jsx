@@ -121,7 +121,7 @@ export default function WorkerCalendar() {
     if (!teamId) return
     const q = query(collection(db, 'profiles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => {
-      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.role === 'worker' || p.role === 'admin'))
+      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => (p.role === 'worker' || p.role === 'admin') && !p.isStation))
     })
   }, [teamId])
 

@@ -18,7 +18,7 @@ import { rememberEventManager } from '../utils/eventManagers'
 import { db } from '../firebase'
 import { collection, updateDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-import { deleteEventWithInventoryCheck, closeInstallationEvent } from '../utils/kitInventory'
+import { deleteEventWithInventoryCheck, closeInstallationEvent, rentReadyToClose } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import CreateEventFlow from '../components/CreateEventFlow'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -232,6 +232,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
   const statusColor = isToday ? 'var(--c-danger)' : loaded > 0 ? '#5b4fcf' : 'var(--dash-muted)'
   const baseStatusText = total === 0 ? t('events.emptyListShort') : loaded === 0 ? t('events.inListShort', { count: total }) : t('events.installedOfTotal', { loaded, total })
   const statusText = isToday ? t('events.todayStatus', { status: baseStatusText.toLowerCase() }) : baseStatusText
+  const toClose = rentReadyToClose(inst)
 
   return (
     <div onClick={() => navigate(`/events/${inst.id}`)}
@@ -265,10 +266,12 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
           <span className="install-tag" style={{ background:'var(--c-violet-bg)', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>{t('events.installLabel')}</span>
         </div>
         {loadListsOn && (
-          <p style={{ fontSize:12, fontWeight:600, color:statusColor, display:'flex', alignItems:'center', gap:5 }}>
-            {isToday && <Dot size={7} color="var(--c-danger)" />}
-            {statusText}
-          </p>
+          toClose
+            ? <span style={{ alignSelf:'flex-start', background:'var(--c-violet-bg)', color:'#5b4fcf', borderRadius:6, padding:'2px 8px', fontSize:10.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.3px' }}>{t('events.statusToClose')}</span>
+            : <p style={{ fontSize:12, fontWeight:600, color:statusColor, display:'flex', alignItems:'center', gap:5 }}>
+              {isToday && <Dot size={7} color="var(--c-danger)" />}
+              {statusText}
+            </p>
         )}
         {inst.location && <span style={{ fontSize:11, color:'var(--dash-muted)', marginTop:4, display:'inline-flex', alignItems:'center', gap:4 }}><Pin size={12} /> {inst.location}</span>}
       </button>

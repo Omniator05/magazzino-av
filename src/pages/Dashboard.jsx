@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { rentReadyToClose } from '../utils/kitInventory'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
@@ -321,6 +322,7 @@ export default function Dashboard({ toggleTheme, theme }) {
     const nLoaded = evItems.filter(i => i.loaded).length
     const nReady = evItems.filter(i => i.pronto).length
     const status = nTot === 0 ? null
+      : rentReadyToClose(ev) ? { tag: true, color:'#5b4fcf', text:t('events.statusToClose') }
       : nReturned > 0 ? { color:'var(--c-green)', text:t('events.statusReturnedCount', { returned:nReturned, total:nTot }) }
       : nLoaded > 0 ? { color:'var(--c-amber)', text:t('events.statusLoadedCount', { loaded:nLoaded, total:nTot }) }
       : nReady > 0 ? { color:'#2563eb', text:t('events.statusReadyCount', { prepared:nReady, total:nTot }) }
@@ -352,7 +354,9 @@ export default function Dashboard({ toggleTheme, theme }) {
             )}
           </div>
           <p style={{ fontSize:12, fontWeight:500, color:'var(--c-ink2)', margin:0, textTransform:'capitalize' }}>{dateLabel}{dateEndLabel}</p>
-          {status && <p style={{ fontSize:11.5, fontWeight:700, color:status.color, margin:'4px 0 0' }}>{status.text}</p>}
+          {status && (status.tag
+            ? <span style={{ display:'inline-block', margin:'4px 0 0', background:'var(--c-violet-bg)', color:status.color, borderRadius:6, padding:'2px 8px', fontSize:10.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.3px' }}>{status.text}</span>
+            : <p style={{ fontSize:11.5, fontWeight:700, color:status.color, margin:'4px 0 0' }}>{status.text}</p>)}
           {ev.location && <p style={{ fontSize:11.5, color:'var(--c-ink3)', margin:'4px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={11} /> {ev.location}</p>}
         </div>
         <span style={{ color:'var(--c-ink3)', display:'flex', flexShrink:0 }}><IconChevron /></span>

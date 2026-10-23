@@ -10,6 +10,10 @@ import SegmentedControl from '../components/SegmentedControl'
 import LogoutButton from '../components/LogoutButton'
 import { getThemePref, setThemePref } from '../utils/theme'
 import { hasUnseenWhatsNew } from '../utils/whatsNew'
+import { isProPlan } from '../utils/planLimits'
+import { fetchMyBadge } from '../utils/operatorBadge'
+import { generateQRDataURL } from '../utils/generateCode'
+import { useConfirm } from '../context/ConfirmProvider'
 import { isPushAvailable, isPushEnabled, enablePushNotifications, disablePushNotifications } from '../utils/pushNotifications'
 
 const IconCheck = () => (
@@ -71,8 +75,30 @@ function Switch({ enabled, onClick, disabled, label }) {
 // contesto, meritano la stessa "finestra" delle altre schermate di sistema.
 export default function Profile({ onClose, showLogout }) {
   const { t, i18n } = useTranslation()
-  const { profile, user, updateProfileData } = useAuth()
+  const { profile, user, team, updateProfileData } = useAuth()
   const navigate = useNavigate()
+  const confirm = useConfirm()
+  // Badge QR personale per lavorare a proprio nome alla Postazione magazzino (solo piani a
+  // pagamento, e non per l'account della postazione stessa). Il codice sta sul server.
+  const showBadge = isProPlan(team) && !profile?.isStation
+  const [badgeOpen, setBadgeOpen] = useState(false)
+  const [badgeQr, setBadgeQr] = useState('')
+  const [badgeCode, setBadgeCode] = useState('')
+  const [badgeBusy, setBadgeBusy] = useState(false)
+  const [badgeError, setBadgeError] = useState('')
+  const loadBadge = async (regenerate = false) => {
+    setBadgeBusy(true); setBadgeError('')
+    try {
+      const code = await fetchMyBadge(regenerate)
+      setBadgeCode(code)
+      setBadgeQr(await generateQRDataURL(code, 360))
+    } catch { setBadgeError(t('badge.loadError')) } finally { setBadgeBusy(false) }
+  }
+  const openBadge = () => { setBadgeOpen(true); if (!badgeQr) loadBadge() }
+  const regenerateBadge = async () => {
+    const ok = await confirm({ title: t('badge.regenTitle'), message: t('badge.regenMessage'), confirmLabel: t('badge.regenConfirm'), danger: true })
+    if (ok) loadBadge(true)
+  }
   const [savingLang, setSavingLang] = useState(false)
   const modal = useCenteredModal(onClose)
   useModalScrollLock(true)
@@ -271,6 +297,39 @@ export default function Profile({ onClose, showLogout }) {
             <span style={{ color: 'var(--text3)', fontSize: 18 }}>›</span>
           </button>
         </GroupCard>
+
+        {/* Gruppo: Badge per il magazzino — QR personale da passare sul lettore della postazione */}
+        {showBadge && (
+          <GroupCard label={t('badge.section')}>
+            <button onClick={() => (badgeOpen ? setBadgeOpen(false) : openBadge())} className="btn-no-anim" aria-expanded={badgeOpen}
+              style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'transparent', textAlign: 'left' }}>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--c-ink)' }}>{t('badge.row')}</span>
+              <IconChevronDown open={badgeOpen} />
+            </button>
+            {badgeOpen && (
+              <div style={{ padding: '4px 16px 18px', borderTop: '1px solid var(--c-line)', textAlign: 'center' }}>
+                <p style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--c-ink2)', margin: '12px 0 14px' }}>{t('badge.hint')}</p>
+                {badgeError ? (
+                  <p role="alert" style={{ fontSize: 13, color: '#e63946', fontWeight: 700, margin: '0 0 12px' }}>{badgeError}</p>
+                ) : badgeQr ? (
+                  <img src={badgeQr} alt={t('badge.qrAlt')} width={220} height={220}
+                    style={{ width: 220, height: 220, borderRadius: 12, border: '1px solid var(--c-line)', background: '#fff', opacity: badgeBusy ? 0.4 : 1, transition: 'opacity .2s' }} />
+                ) : (
+                  <p style={{ fontSize: 13, color: 'var(--c-ink3)', margin: '24px 0' }}>{t('badge.loading')}</p>
+                )}
+                {badgeCode && !badgeError && (
+                  <p style={{ margin: '12px 0 0', fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.5px', color: 'var(--c-ink2)', wordBreak: 'break-all' }} aria-label={t('badge.codeLabel')}>
+                    {badgeCode.replace(/(.{4})/g, '$1 ').trim()}
+                  </p>
+                )}
+                <p style={{ fontSize: 12, color: 'var(--c-ink3)', margin: '12px 0' }}>{t('badge.privacy')}</p>
+                <button type="button" onClick={badgeError ? () => loadBadge() : regenerateBadge} disabled={badgeBusy} className="btn btn-secondary btn-full" style={{ minHeight: 44 }}>
+                  {badgeError ? t('badge.retry') : t('badge.regen')}
+                </button>
+              </div>
+            )}
+          </GroupCard>
+        )}
 
         {/* Gruppo: Sicurezza — cambio password a comparsa, chiuso di default */}
         <GroupCard label={t('profile.sectionSecurity')}>

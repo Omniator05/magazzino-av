@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
+import { OperatorProvider } from './context/OperatorContext'
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 // Pagine caricate on-demand (React.lazy), non tutte insieme in un unico
 // bundle da 900KB: prima ogni pagina — anche quelle che un dato utente non
@@ -30,6 +31,7 @@ const Tasks = lazy(() => import('./pages/Tasks'))
 const Templates = lazy(() => import('./pages/Templates'))
 const Calendar = lazy(() => import('./pages/Calendar'))
 const WorkerHome = lazy(() => import('./pages/WorkerHome'))
+const StationHome = lazy(() => import('./pages/StationHome'))
 const WorkerScanner = lazy(() => import('./pages/WorkerScanner'))
 const WorkerInventory = lazy(() => import('./pages/WorkerInventory'))
 const WorkerCalendar = lazy(() => import('./pages/WorkerCalendar'))
@@ -203,7 +205,8 @@ function PrivateRoutes({ toggleTheme, theme }) {
         <AbsenceEditedNotification />
         <AnimatedPage>
           <Routes>
-            <Route path="/" element={<WorkerHome />} />
+            {/* Postazione magazzino (account isStation, solo piani a pagamento): home a schermo intero con scansione */}
+            <Route path="/" element={profile?.isStation ? <StationHome /> : <WorkerHome />} />
             {/* Magazziniere "senior": stesso ruolo, un permesso in più impostato
                 dall'admin per singolo utente (Settings.jsx) — vede il
                 magazzino completo (aggiungi/modifica/elimina, etichette,
@@ -324,6 +327,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ConfirmProvider>
+        <OperatorProvider>
         <BrowserRouter>
           <LoadingBar />
           <OfflineIndicator />
@@ -348,6 +352,7 @@ export default function App() {
           </Suspense>
           </ErrorBoundary>
         </BrowserRouter>
+        </OperatorProvider>
       </ConfirmProvider>
     </AuthProvider>
   )
