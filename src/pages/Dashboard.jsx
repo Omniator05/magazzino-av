@@ -327,12 +327,14 @@ export default function Dashboard({ toggleTheme, theme }) {
       : nLoaded > 0 ? { color:'var(--c-amber)', text:t('events.statusLoadedCount', { loaded:nLoaded, total:nTot }) }
       : nReady > 0 ? { color:'#2563eb', text:t('events.statusReadyCount', { prepared:nReady, total:nTot }) }
       : { color:'var(--c-ink3)', text:t('events.statusInList', { count:nTot }) }
-    const tileBg = overdue ? '#ea580c' : isToday ? '#e63946' : 'var(--c-fill)'
+    // Un rent/install di oggi è rosso-viola (non il rosso degli eventi normali): il viola dice
+    // "rent", il rosso "oggi".
+    const tileBg = overdue ? '#ea580c' : isToday ? (ev.type === 'installation' ? 'linear-gradient(135deg, #e63946 0%, #7c6fea 100%)' : '#e63946') : 'var(--c-fill)'
     const tileFg = overdue || isToday ? '#fff' : 'var(--c-ink)'
     const tileSub = overdue || isToday ? 'rgba(255,255,255,0.85)' : 'var(--c-ink2)'
     return (
       <button type="button" key={ev.id} onClick={() => navigate(`/events/${ev.id}`)} aria-label={t('events.openEventAria', { name: ev.name })} className="btn-no-anim"
-        style={{ width:'100%', marginBottom:12, background:'var(--c-surface)', border:`1px solid ${overdue ? 'rgba(234,88,12,0.45)' : 'var(--c-line)'}`, borderRadius:18, display:'flex', alignItems:'center', gap:14, padding:'15px 16px', textAlign:'left' }}>
+        style={{ width:'100%', marginBottom:12, background:'var(--c-surface)', border:`1px solid ${overdue ? 'rgba(234,88,12,0.45)' : isToday && ev.type === 'installation' ? 'rgba(124,111,234,0.45)' : 'var(--c-line)'}`, borderRadius:18, display:'flex', alignItems:'center', gap:14, padding:'15px 16px', textAlign:'left' }}>
         <div style={{ position:'relative', width:50, height:50, flexShrink:0 }}>
           <div style={{ width:50, height:50, borderRadius:13, background:tileBg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:tileFg, lineHeight:1.1 }}>
             <span style={{ fontSize:19, fontWeight:800 }}>{ev.date ? new Date(ev.date+'T12:00:00').getDate() : '?'}</span>

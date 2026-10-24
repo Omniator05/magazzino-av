@@ -246,7 +246,8 @@
     "singleDay": "Solo un giorno",
     "absenceWhoLabel": "Per chi",
     "viewTimeline": "Timeline",
-    "rentLastDay": "Ultimo giorno"
+    "rentLastDay": "Ultimo giorno",
+    "detailsTag": "Dettagli"
   },
   "staffTimeline": {
     "prevWeekAria": "Settimana precedente",
@@ -819,7 +820,8 @@
     "managerLabel": "Responsabile",
     "assignedLabel": "Assegnati",
     "goToLoadList": "Vai a lista di carico",
-    "assignSomeone": "Assegna qualcuno"
+    "assignSomeone": "Assegna qualcuno",
+    "you": "Tu"
   },
   "signup": {
     "heroTitle": "Benvenuto!",
@@ -1538,7 +1540,7 @@
     "title": "Archivio eventi",
     "subtitle_one": "{{count}} evento",
     "subtitle_other": "{{count}} eventi",
-    "searchPlaceholder": "Cerca per nome o location...",
+    "searchPlaceholder": "Cerca per nome o luogo…",
     "loadingArchive": "Caricamento archivio...",
     "noResults": "Nessun risultato",
     "noArchivedEvents": "Nessun evento in archivio",
@@ -1566,7 +1568,13 @@
     "deleteAction": "Elimina",
     "phasesLabel": "Montaggio / smontaggio",
     "vehiclesLabel": "Furgoni",
-    "selectHint": "Tocca un evento per vedere i dettagli e la lista di carico"
+    "selectHint": "Tocca un evento per vedere i dettagli e la lista di carico",
+    "searchingAll": "Cerco in tutto l'archivio…",
+    "resultsCount_one": "{{count}} risultato",
+    "resultsCount_other": "{{count}} risultati",
+    "wholeArchive": "su tutto l'archivio",
+    "shortSearchHint": "scrivi almeno 3 lettere per cercare in tutto l'archivio",
+    "clearSearch": "Cancella la ricerca"
   },
   "scanner": {
     "title": "Scanner QR/Barcode",

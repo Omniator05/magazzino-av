@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { db } from '../firebase'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { formatDate, capitalize } from '../utils/formatDate'
-import { personColor } from '../utils/assignmentBlocks'
+import { PersonDot } from './AssigneeAvatars'
 import { assigneesOnDay } from '../utils/workerAssignment'
 import { isRentLastDay } from '../utils/assignmentTimes'
 import { pushEventToGoogle } from '../utils/googleCalendar'
@@ -23,7 +23,6 @@ import SegmentedControl from './SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from './AbsenceTypeBadge'
 import DeleteButton from './DeleteButton'
 
-const initials = name => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 
 const blankQuickForm = (initialDate) => ({
   type: 'event', name: '',
@@ -48,7 +47,7 @@ const SIDEBAR_MAX_HEIGHT = 'calc(100vh - 76px)'
 export default function CalendarSidePanel({
   absencesOnDate, todayStr, selectedDate, selectedDayEvents, selectedDayPhases = [], selectedDayTasks, assignmentBlocks = [], user, isWorker, workers, teamId,
   readOnly, onOpenEvent, eventDetail, eventBlocks, onCloseEvent, onOpenEventPage,
-  onOpenTask, taskDetail, onCloseTask, onAddAbsence, onEditEvent, creating, onCancelCreate, onEventCreated,
+  onOpenTask, onEditTask, taskDetail, onCloseTask, onAddAbsence, onEditEvent, creating, onCancelCreate, onEventCreated,
   reportMode, rangeStart, onCancelReportMode,
   absenceFormOpen, absenceForm, setAbsenceForm, onSubmitAbsence, savingAbsence, editingAbsenceId, onCloseAbsenceForm, isAdmin, onEditAbsence, onDeleteAbsence,
   editingEvent, editForm, setEditForm, onSaveEdit, saving, onCancelEdit, onDeleteEvent,
@@ -379,20 +378,14 @@ export default function CalendarSidePanel({
               else status = { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'rgba(5,150,105,0.12)', color: '#059669' }
 
               return (
-                <div key={ev.id} style={{ position: 'relative', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
-                  {/* Card divisa in due metà cliccabili invece di un unico
-                      onClick: a sinistra (verso il nome) apre la modifica
-                      rapida, a destra (verso "apri evento") va alla lista di
-                      carico — stesso verso del contenuto che le persone
-                      cercano in quella zona. Sotto al contenuto vero
-                      (z-index 1 contro 2), che ha pointerEvents:none tranne
-                      sui controlli specifici (telefono/email/avatar/link),
-                      così il tap su un punto "vuoto" della card cade comunque
-                      su una delle due zone. */}
-                  <div onClick={e => (readOnly ? onOpenEvent(ev) : onEditEvent(e, ev))} role="button" tabIndex={-1}
-                    style={{ position: 'absolute', inset: '0 50% 0 0', cursor: 'pointer', zIndex: 1 }} />
+                <div key={ev.id} className="rc-cal-card" style={{ position: 'relative', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
+                  {/* Tutta la card apre la lista di carico (è quello che si fa più spesso).
+                      Sotto al contenuto vero (z-index 1 contro 2), che ha pointerEvents:none
+                      tranne sui controlli specifici (telefono/email/avatar/"Modifica"), così
+                      il tap su un punto "vuoto" cade comunque qui. La modifica rapida
+                      dell'evento sta nella sigla "Modifica" in basso a destra. */}
                   <Link to={`/events/${ev.id}`} aria-label={t('calendar.openEventLink')}
-                    style={{ position: 'absolute', inset: '0 0 0 50%', cursor: 'pointer', zIndex: 1 }} />
+                    style={{ position: 'absolute', inset: 0, borderRadius: 12, cursor: 'pointer', zIndex: 1 }} />
 
                   <div style={{ position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -436,19 +429,14 @@ export default function CalendarSidePanel({
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8 }}>
                       <div style={{ display: 'flex', gap: 5 }}>
                         {dayPeople.map(w => (
-                          <span key={w.key} className="rc-cal-avatar" aria-label={`${w.name} · ${w.hours || durationLabel}`}
-                            style={{ position: 'relative', width: 24, height: 24, borderRadius: '50%', background: personColor(w.id), color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, pointerEvents: 'auto' }}>
-                            {initials(w.name)}
-                            <span className="rc-cal-avatar-tooltip">
-                              <strong>{w.name}</strong>
-                              <span>{w.hours || durationLabel}</span>
-                            </span>
-                          </span>
+                          <PersonDot key={w.key} person={{ ...w, hours: w.hours || durationLabel }} className="rc-cal-avatar" style={{ pointerEvents: 'auto' }} />
                         ))}
                       </div>
-                      <Link to={`/events/${ev.id}`} style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textDecoration: 'none', pointerEvents: 'auto', flexShrink: 0 }}>
-                        {t('calendar.openEventLink')}
-                      </Link>
+                      <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); readOnly ? onOpenEvent(ev) : onEditEvent(e, ev) }}
+                        aria-label={`${readOnly ? t('calendar.detailsTag') : t('common.edit')} · ${ev.name}`}
+                        style={{ pointerEvents: 'auto', flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>
+                        {readOnly ? t('calendar.detailsTag') : t('common.edit')}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -458,7 +446,7 @@ export default function CalendarSidePanel({
                 l'evento vero è un altro giorno: tocca per aprire la lista di
                 carico da preparare. */}
             {selectedDayPhases.map(ph => (
-              <Link key={`${ph.event.id}-${ph.key}`} to={`/events/${ph.event.id}`}
+              <Link key={`${ph.event.id}-${ph.key}`} to={`/events/${ph.event.id}`} className="rc-cal-card"
                 style={{ position: 'relative', display: 'block', textDecoration: 'none', border: '1px solid var(--c-line)', borderRadius: 12, padding: '12px 12px 12px 16px', background: 'var(--card)', overflow: 'hidden' }}>
                 <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 4, background: ph.color }} />
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -472,23 +460,39 @@ export default function CalendarSidePanel({
                   <div style={{ display: 'flex', gap: 5, marginTop: 8 }}>
                     {ph.assigned.map(b => {
                       const name = (b.workerId ? workers.find(w => w.id === b.workerId)?.name : b.externalWorkerName) || '?'
-                      return (
-                        <span key={b.id} title={`${name} · ${b.startTime}–${b.endTime}`}
-                          style={{ width: 24, height: 24, borderRadius: '50%', background: personColor(b.workerId || b.externalWorkerId || b.id), color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {initials(name)}
-                        </span>
-                      )
+                      return <PersonDot key={b.id} person={{ key: b.id, id: b.workerId || b.externalWorkerId || b.id, name, hours: `${b.startTime}–${b.endTime}` }} />
                     })}
                   </div>
                 )}
               </Link>
             ))}
             {selectedDayTasks.map(tk => (
-              <button key={tk.id} onClick={() => onOpenTask(tk)} className="btn-no-anim"
-                style={{ textAlign: 'left', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
+              <div key={tk.id} role="button" tabIndex={0} onClick={() => onOpenTask(tk)} onKeyDown={e => { if (e.key === 'Enter') onOpenTask(tk) }} className="rc-cal-card"
+                style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink)' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
-                <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 4 }}>{tk.startTime}–{tk.endTime}</div>
-              </button>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: 11, color: 'var(--c-ink2)' }}>{tk.startTime}–{tk.endTime}</span>
+                  {!readOnly && onEditTask && (
+                    <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); onEditTask(tk) }} aria-label={`${t('common.edit')} · ${tk.label || t('staffTimeline.untitledTask')}`}
+                      style={{ flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>{t('common.edit')}</button>
+                  )}
+                </div>
+                {/* Chi è assegnato all'attività: stessi pallini delle card degli eventi. */}
+                {(() => {
+                  const seen = new Map()
+                  ;(tk.assigned || []).forEach(b => {
+                    const key = b.workerId || `ext:${b.externalWorkerId || b.externalWorkerName}`
+                    const name = b.workerId ? workers.find(w => w.id === b.workerId)?.name : b.externalWorkerName
+                    if (name && !seen.has(key)) seen.set(key, { key, id: b.workerId || b.externalWorkerId || key, name, hours: b.startTime && b.endTime ? `${b.startTime}–${b.endTime}` : null })
+                  })
+                  const people = [...seen.values()]
+                  return people.length > 0 && (
+                    <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
+                      {people.map(p => <PersonDot key={p.key} person={p} className="rc-cal-avatar" />)}
+                    </div>
+                  )
+                })()}
+              </div>
             ))}
           </div>
         )}

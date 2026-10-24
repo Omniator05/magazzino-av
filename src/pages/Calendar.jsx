@@ -960,7 +960,7 @@ export default function Calendar() {
         <CalendarSidePanel
           absencesOnDate={absencesOnDate} workers={workers} teamId={teamId}
           todayStr={todayStr} selectedDate={selectedDate} selectedDayEvents={selectedEvents} selectedDayPhases={selectedDayPhases} selectedDayTasks={selectedTasks} assignmentBlocks={assignmentBlocks}
-          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} taskDetail={!isMobile ? summaryTask : null} onCloseTask={() => setSummaryTask(null)}
+          user={user} isWorker={isWorker} onOpenTask={tk => setSummaryTask(tk)} onEditTask={tk => { setSummaryTask(null); setMode('assign'); setFocusAssign({ taskGroupId: tk.id, date: tk.date }) }} taskDetail={!isMobile ? summaryTask : null} onCloseTask={() => setSummaryTask(null)}
           readOnly={readOnly} onOpenEvent={ev => { setSummaryTask(null); setDetailEvent(ev) }} eventDetail={!isMobile && readOnly ? detailEvent : null} eventBlocks={detailEvent ? assignmentBlocks.filter(b => b.eventId === detailEvent.id) : []} onCloseEvent={() => setDetailEvent(null)} onOpenEventPage={ev => navigate(`/events/${ev.id}`)} onEditEvent={(e, ev) => openEdit(e, ev)}
           onAddAbsence={() => { if (reportMode) { cancelReportMode() } else { setSidebarCreating(false); setEditingEvent(null); startReportMode() } }}
           creating={sidebarCreating} onCancelCreate={() => setSidebarCreating(false)}

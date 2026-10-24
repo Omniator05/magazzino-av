@@ -4,6 +4,8 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { Calendar, Clock, User, FileText, List } from './Icon'
+import { PersonAvatar } from './AssigneeAvatars'
+import { useAuth } from '../context/AuthContext'
 
 // Riepilogo di un task libero creato nella timeline "Assegna personale"
 // (assignmentBlocks senza eventId) — stessa famiglia visiva di
@@ -14,12 +16,18 @@ import { Calendar, Clock, User, FileText, List } from './Icon'
 export function TaskSummaryBody({ block, workers }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const { user } = useAuth()
   // block.assigned: array dei blocchi dello stesso taskGroupId (vedi
   // tasksByDate in Calendar.jsx) — più persone collegate alla stessa
   // attività, non più un solo assegnato per forza.
-  const assignedNames = (block.assigned || [])
-    .map(b => b.workerId ? (workers.find(w => w.id === b.workerId)?.name || t('common.unknown')) : b.externalWorkerName)
-    .filter(Boolean)
+  const assignedPeople = []
+  ;(block.assigned || []).forEach(b => {
+    const name = b.workerId ? (workers.find(w => w.id === b.workerId)?.name || t('common.unknown')) : b.externalWorkerName
+    const id = b.workerId || b.externalWorkerId || name
+    if (name && !assignedPeople.some(p => p.id === id)) assignedPeople.push({ id, name, me: !!b.workerId && b.workerId === user?.uid })
+  })
+  // Chi guarda sta in cima, con il tag "Tu".
+  assignedPeople.sort((a, b) => Number(b.me) - Number(a.me))
 
   const Row = ({ icon, label, children }) => (
     <div style={{ display:'flex', gap:12, padding:'12px 0', borderBottom:'1px solid var(--c-line)' }}>
@@ -42,11 +50,11 @@ export function TaskSummaryBody({ block, workers }) {
         <p style={{ fontSize:14, fontWeight:600, color:'var(--c-ink)' }}>{block.startTime} – {block.endTime}</p>
       </Row>
       <Row icon={<User size={15} />} label={t('eventSummary.assignedLabel')}>
-        {assignedNames.length > 0 ? (
+        {assignedPeople.length > 0 ? (
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-            {assignedNames.map(name => (
-              <span key={name} style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--c-ink)' }}>
-                <User size={11} /> {name}
+            {assignedPeople.map(p => (
+              <span key={p.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:20, padding:'3px 10px 3px 4px', fontSize:12, fontWeight:700, color:'var(--c-ink)' }}>
+                <PersonAvatar person={p} size={20} /> {p.name} {p.me && <span style={{ fontSize:10, fontWeight:800, color:'var(--accent)', background:'rgba(230,57,70,0.12)', borderRadius:6, padding:'1px 6px' }}>{t('eventSummary.you')}</span>}
               </span>
             ))}
           </div>

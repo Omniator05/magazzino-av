@@ -293,8 +293,8 @@ export default function StationHome() {
                   const range = kind === 'event' && ev.dateEnd && ev.dateEnd > ev.date ? ` — ${fmt(ev.dateEnd, { day: 'numeric', month: 'long' })}` : ''
                   return (
                     <button key={entry.key} type="button" className="btn-no-anim" onClick={() => navigate(`/events/${ev.id}`)}
-                      style={{ display: 'grid', gridTemplateColumns: '50px minmax(0,1fr) 220px 20px', alignItems: 'center', gap: 16, width: '100%', padding: '14px 18px', borderRadius: 18, textAlign: 'left', background: tone.cardBg, border: `1px solid ${tone.border}` }}>
-                      <div style={{ width: 50, height: 50, borderRadius: 13, background: kindInfo ? kindInfo.color : tone.tile, color: kindInfo ? '#fff' : tone.tileInk, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
+                      style={{ display: 'grid', gridTemplateColumns: '50px minmax(0,1fr) 220px 20px', alignItems: 'center', gap: 16, width: '100%', padding: '14px 18px', borderRadius: 18, textAlign: 'left', background: tone.cardBg, border: `1px solid ${(kind === 'rentStart' || kind === 'rentEnd') && g.tone === 'today' ? 'rgba(124,111,234,0.45)' : tone.border}` }}>
+                      <div style={{ width: 50, height: 50, borderRadius: 13, background: kindInfo ? ((kind === 'rentStart' || kind === 'rentEnd') && g.tone === 'today' ? 'linear-gradient(135deg, #e63946 0%, #7c6fea 100%)' : kindInfo.color) : tone.tile, color: kindInfo ? '#fff' : tone.tileInk, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
                         <span style={{ fontSize: 19, fontWeight: 800 }}>{d.getDate()}</span>
                         <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', opacity: 0.85 }}>{formatDate(d, { month: 'short' }, lang)}</span>
                       </div>

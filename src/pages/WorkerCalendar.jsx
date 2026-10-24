@@ -6,6 +6,8 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check, List, Clock } from '../components/Icon'
 import { eventHoursLabel, phaseHoursLabel, isRentLastDay } from '../utils/assignmentTimes'
+import { assigneesOnDay } from '../utils/workerAssignment'
+import AssigneeAvatars from '../components/AssigneeAvatars'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
@@ -385,6 +387,28 @@ export default function WorkerCalendar() {
     const rank = ({ event: ev, assigned }) => ev.isDeadlineReminder ? 3 : ev.type === 'installation' ? 2 : assigned ? 0 : 1
     return [...m.values()].sort((a, b) => rank(a) - rank(b))
   })()
+  // Chi lavora su un evento in un giorno (come nelle card del Calendario admin): le persone
+  // dell'evento e, se il giorno è anche una fase, quelle assegnate alla fase.
+  const personName = (workerId, fallback) => (workerId ? workers.find(w => w.id === workerId)?.name : null) || fallback || null
+  const peopleOfEvent = (ev, date, phases, coincides) => {
+    const out = new Map()
+    const add = (key, workerId, name, hours) => {
+      const n = personName(workerId, name)
+      if (n && !out.has(key)) out.set(key, { key, id: workerId || key, name: n, hours })
+    }
+    if (coincides || phases.length === 0) assigneesOnDay(ev, date, assignmentBlocks).forEach(a => add(a.key, a.workerId, a.name, a.hours))
+    if (phases.length > 0) assignmentBlocks.filter(b => b.eventId === ev.id && b.date === date && b.phase).forEach(b => add(b.workerId || `ext:${b.externalWorkerId || b.externalWorkerName}`, b.workerId, b.externalWorkerName, b.startTime && b.endTime ? `${b.startTime}–${b.endTime}` : null))
+    return [...out.values()]
+  }
+  const peopleOfTask = b => {
+    const out = new Map()
+    assignmentBlocks.filter(x => !x.eventId && (x.taskGroupId || x.id) === (b.taskGroupId || b.id)).forEach(x => {
+      const key = x.workerId || `ext:${x.externalWorkerId || x.externalWorkerName}`
+      const n = personName(x.workerId, x.externalWorkerName)
+      if (n && !out.has(key)) out.set(key, { key, id: x.workerId || key, name: n, hours: x.startTime && x.endTime ? `${x.startTime}–${x.endTime}` : null })
+    })
+    return [...out.values()]
+  }
   const selectedGoogleEvents = selectedDate ? dayGoogleEvents(selectedDate) : []
   const selectedMyTasks = selectedDate ? myTasksOn(selectedDate) : []
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
@@ -677,6 +701,7 @@ export default function WorkerCalendar() {
                         ))}
                       </div>
                     )}
+                    <AssigneeAvatars people={peopleOfEvent(ev, selectedDate, phases, coincides)} style={{ marginTop:8 }} />
                     {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:4, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> {t('workerCalendar.assignedToYouInline')}</p>}
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
@@ -697,6 +722,7 @@ export default function WorkerCalendar() {
                       {cont ? `${t('workerCalendar.taskContinues')} · 00:00–${b.endTime}` : `${b.startTime}–${b.endTime}`}
                     </p>
                     {b.note && <p style={{ fontSize:12, color:'var(--text2)', marginTop:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.note}</p>}
+                    <AssigneeAvatars people={peopleOfTask(b)} style={{ marginTop:8 }} />
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>
                 </div>

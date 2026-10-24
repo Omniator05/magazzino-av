@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-25',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Archivio: la ricerca cerca in tutti gli eventi passati, per nome o luogo, senza badare agli accenti e con più parole; le parole trovate sono evidenziate e c\'è un contatore dei risultati',
+        'Calendario su computer: un clic sulla card apre la lista di carico e la sigla "Modifica" apre la modifica; i rent lunghi compaiono nella timeline solo il primo e l\'ultimo giorno',
+        'Chi lavora su un evento o un\'attività si vede con le iniziali colorate nelle card e nei riepiloghi (con nome e orario al passaggio del mouse o al tocco), anche per i magazzinieri e su telefono',
+        'Nelle home i rent di oggi hanno un colore rosso-viola; sulla Postazione magazzino anche le task richiedono il badge e il badge ha una nuova animazione di ingresso e uscita',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Archive: search now covers all past events, by name or location, ignoring accents and with several words; matches are highlighted and there\'s a result counter',
+        'Calendar on desktop: clicking a card opens the loading list and the "Edit" tag opens editing; long rents show in the timeline only on the first and last day',
+        'Who works on an event or task now shows as coloured initials on cards and summaries (name and hours on hover or tap), also for warehouse workers and on phone',
+        'On the home pages today\'s rents get a red-violet colour; on the Warehouse station tasks also need the badge, and the badge has a new sign-in and sign-out animation',
+      ],
+    },
+  },
+  {
     version: '2026-10-24',
     it: {
       title: 'Novità di oggi',

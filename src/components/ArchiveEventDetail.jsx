@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { getEventLists, rowListId, MAIN_LIST_ID } from '../utils/eventLists'
 import { Calendar, Clock, Pin, User, Phone, Mail, FileText, Truck, Wrench } from './Icon'
+import { PersonAvatar } from './AssigneeAvatars'
+import { useAuth } from '../context/AuthContext'
 
 // Corpo del dettaglio di un evento in archivio: tutti i dati dell'evento e
 // la sua lista di carico. Usato sia nella colonna laterale (computer) sia nel
@@ -28,6 +30,7 @@ function Row({ icon, label, children }) {
 }
 
 export default function ArchiveEventDetail({ event, workers = [], blocks = [], vehicles = [], loadListsOn }) {
+  const { user } = useAuth()
   const { t, i18n } = useTranslation()
   const lang = i18n.language
   const fmt = (d, o) => formatDate(d + 'T12:00:00', o, lang)
@@ -53,13 +56,13 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
   const blockPeople = blocks.map(b => {
     const name = nameOf(b)
     if (!name) return null
-    return { key: b.id, name, hours: b.startTime && b.endTime ? `${b.startTime}–${b.endTime}` : null, phase: b.phase ? PHASE_META[b.phase] : null, date: b.date }
+    return { key: b.id, id: b.workerId || b.externalWorkerId || b.id, name, hours: b.startTime && b.endTime ? `${b.startTime}–${b.endTime}` : null, phase: b.phase ? PHASE_META[b.phase] : null, date: b.date }
   }).filter(Boolean).sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.name.localeCompare(b.name))
   const coveredIds = new Set(blocks.map(b => b.workerId).filter(Boolean))
   const legacyPeople = (event.assignedWorkers || [])
     .filter(id => !coveredIds.has(id))
     .map(id => workers.find(w => w.id === id)).filter(Boolean)
-    .map(w => ({ key: w.id, name: w.name, hours: null, phase: null, date: null }))
+    .map(w => ({ key: w.id, id: w.id, name: w.name, hours: null, phase: null, date: null }))
   const people = [...blockPeople, ...legacyPeople]
   const showPeopleDate = new Set(blockPeople.map(p => p.date)).size > 1
 
@@ -127,8 +130,10 @@ export default function ArchiveEventDetail({ event, workers = [], blocks = [], v
         <Row icon={<User size={15} />} label={t('eventSummary.assignedLabel')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {people.map(p => (
-              <p key={p.key} style={{ ...valueStyle, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <p key={p.key} style={{ ...valueStyle, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <PersonAvatar person={p} size={22} />
                 {p.name}
+                {p.id === user?.uid && <span style={{ fontSize:10, fontWeight:800, color:'var(--accent)', background:'rgba(230,57,70,0.12)', borderRadius:6, padding:'1px 6px' }}>{t('eventSummary.you')}</span>}
                 {(p.hours || (showPeopleDate && p.date)) && (
                   <span style={{ color: 'var(--c-ink2)', fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {showPeopleDate && p.date ? fmt(p.date, { day: 'numeric', month: 'short' }) : ''}{showPeopleDate && p.date && p.hours ? ' · ' : ''}{p.hours || ''}

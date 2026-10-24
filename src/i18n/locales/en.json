@@ -246,7 +246,8 @@
     "singleDay": "Single day",
     "absenceWhoLabel": "For",
     "viewTimeline": "Timeline",
-    "rentLastDay": "Last day"
+    "rentLastDay": "Last day",
+    "detailsTag": "Details"
   },
   "staffTimeline": {
     "prevWeekAria": "Previous week",
@@ -819,7 +820,8 @@
     "managerLabel": "Manager",
     "assignedLabel": "Assigned",
     "goToLoadList": "Go to load list",
-    "assignSomeone": "Assign someone"
+    "assignSomeone": "Assign someone",
+    "you": "You"
   },
   "signup": {
     "heroTitle": "Welcome!",
@@ -1538,7 +1540,7 @@
     "title": "Event archive",
     "subtitle_one": "{{count}} event",
     "subtitle_other": "{{count}} events",
-    "searchPlaceholder": "Search by name or location...",
+    "searchPlaceholder": "Search by name or location…",
     "loadingArchive": "Loading archive...",
     "noResults": "No results",
     "noArchivedEvents": "No archived events",
@@ -1566,7 +1568,13 @@
     "deleteAction": "Delete",
     "phasesLabel": "Setup / teardown",
     "vehiclesLabel": "Vehicles",
-    "selectHint": "Tap an event to see its details and load list"
+    "selectHint": "Tap an event to see its details and load list",
+    "searchingAll": "Searching the whole archive…",
+    "resultsCount_one": "{{count}} result",
+    "resultsCount_other": "{{count}} results",
+    "wholeArchive": "across the whole archive",
+    "shortSearchHint": "type at least 3 letters to search the whole archive",
+    "clearSearch": "Clear search"
   },
   "scanner": {
     "title": "QR/Barcode Scanner",

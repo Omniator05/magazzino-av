@@ -4,6 +4,8 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { Calendar, Clock, Pin, User, Phone, Mail, FileText, List, Wrench } from './Icon'
+import { PersonAvatar } from './AssigneeAvatars'
+import { useAuth } from '../context/AuthContext'
 
 // Riepilogo rapido di un evento già esistente — stesso richiamo sia dal
 // calendario "normale" (tap su un evento nell'elenco del giorno) sia dalla
@@ -64,7 +66,7 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
     const isFullSpan = !b.phase && eventOwnRange && b.startTime === eventOwnRange[0] && b.endTime === eventOwnRange[1]
     // Una persona di montaggio/smontaggio mostra sempre il suo orario e la
     // fase: non è "l'orario dell'evento", è un altro turno.
-    return { key: b.id, name, hours: isFullSpan ? null : `${b.startTime}–${b.endTime}`, phase: b.phase ? PHASE_META[b.phase] : null, note: b.note || '' }
+    return { key: b.id, id: b.workerId || b.externalWorkerId || b.id, name, hours: isFullSpan ? null : `${b.startTime}–${b.endTime}`, phase: b.phase ? PHASE_META[b.phase] : null, note: b.note || '' }
   }).filter(Boolean)
   // Assegnazioni "semplici" (vecchio sistema, solo assignedWorkers, nessun
   // orario proprio) — un worker già coperto da un blocco per questo giorno
@@ -73,8 +75,10 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
     .filter(wid => !blockWorkerIds.has(wid))
     .map(wid => workers.find(w => w.id === wid))
     .filter(Boolean)
-    .map(w => ({ key: w.id, name: w.name, hours: null }))
-  const assignedPeople = [...peopleFromBlocks, ...peopleLegacy]
+    .map(w => ({ key: w.id, id: w.id, name: w.name, hours: null }))
+  const { user } = useAuth()
+  // Chi guarda sta in cima, con il tag "Tu".
+  const assignedPeople = [...peopleFromBlocks, ...peopleLegacy].map(p => ({ ...p, me: p.id === user?.uid })).sort((a, b) => Number(b.me) - Number(a.me))
   const manager = event.eventManager || {}
   const hasManager = manager.name || manager.phone || manager.email
 
@@ -155,8 +159,8 @@ export default function EventSummaryModal({ event, workers, date, blocks, onClos
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {assignedPeople.map(p => (
                 <div key={p.key}>
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:20, padding:'3px 10px', fontSize:12, fontWeight:700, color:'var(--c-ink)' }}>
-                    <User size={11} /> {p.name}{p.hours && <span style={{ fontWeight:600, opacity:0.8 }}>&nbsp;· {p.hours}</span>}
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:6, background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:20, padding:'3px 10px 3px 4px', fontSize:12, fontWeight:700, color:'var(--c-ink)' }}>
+                    <PersonAvatar person={p} size={20} /> {p.name}{p.me && <>&nbsp;<span style={{ fontSize:10, fontWeight:800, color:'var(--accent)', background:'rgba(230,57,70,0.12)', borderRadius:6, padding:'1px 6px' }}>{t('eventSummary.you')}</span></>}{p.hours && <span style={{ fontWeight:600, opacity:0.8 }}>&nbsp;· {p.hours}</span>}
                   </span>
                   {p.phase && <span style={{ marginLeft:6, color:p.phase.color, background:p.phase.color+'18', borderRadius:6, padding:'2px 7px', fontSize:11, fontWeight:800 }}>{p.phase.label}</span>}
                   {p.note && <p style={{ margin:'4px 0 0 4px', fontSize:12.5, color:'var(--c-ink2)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{p.note}</p>}

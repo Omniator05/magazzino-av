@@ -6,6 +6,7 @@ import { db } from '../firebase'
 import { useConfirm } from '../context/ConfirmProvider'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
+import { PersonDot } from './AssigneeAvatars'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
 import GuestInvitePrompt from './GuestInvitePrompt'
@@ -42,7 +43,7 @@ const AVATAR_SIZE = 22
 const ROW_GAP = 5
 const ITEM_MARGIN = 6 // sopra e sotto ogni card, dentro la propria corsia
 const EMPTY_ITEM_H = CARD_PAD * 2 + TITLE_ROW_H + ROW_GAP + SUBTITLE_ROW_H + ROW_GAP + AVATAR_ROW_H
-const MAX_AVATARS = 4
+const MAX_AVATARS = 3
 // Larghezza minima di una card, come frazione della colonna del giorno:
 // un'attività di un'ora sarebbe larga pochi pixel e illeggibile, così ogni
 // card ha comunque una dimensione "di default" (la posizione resta quella
@@ -380,7 +381,12 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     allDates.forEach(date => {
       const dayEvents = weekEvents.filter(ev => {
         const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
-        return date >= ev.date && date <= end
+        if (date < ev.date || date > end) return false
+        // Un rent/install lungo compare solo il primo e l'ultimo giorno (inizio e fine): nei
+        // giorni in mezzo non c'è nulla da fare. Se però lì c'è già qualcuno assegnato resta
+        // visibile, altrimenti quelle assegnazioni sparirebbero dalla timeline.
+        if (ev.type === 'installation' && date !== ev.date && date !== end) return blocks.some(b => b.eventId === ev.id && b.date === date && !b.phase)
+        return true
       })
       const dayEventItems = dayEvents
         .filter(ev => ev.type === 'installation' ? showInstallations : showEvents)
@@ -650,9 +656,14 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setWeekStart(startOfWeek(new Date(focusAssign.date + 'T12:00:00')))
     if (ev) {
       const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
-      const covers = focusAssign.date >= ev.date && focusAssign.date <= end
+      const middleOfRent = ev.type === 'installation' && focusAssign.date !== ev.date && focusAssign.date !== end
+        && !blocks.some(x => x.eventId === ev.id && x.date === focusAssign.date && !x.phase)
+      const covers = focusAssign.date >= ev.date && focusAssign.date <= end && !middleOfRent
       const phaseKey = covers ? null : Object.entries(ev.phases || {}).find(([k, d]) => d === focusAssign.date && PHASE_META[k])?.[0]
       setPanel({ key: covers || !phaseKey ? `ev${ev.id}` : `ph${ev.id}-${phaseKey}`, date: focusAssign.date, isNew: false })
+    } else if (focusAssign.taskGroupId) {
+      // Attività libera (dal tag "Modifica" del Calendario): apre la sua colonna.
+      setPanel({ key: `tk${focusAssign.taskGroupId}`, date: focusAssign.date, isNew: false })
     }
     onFocusAssignConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1116,13 +1127,12 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                             {timeLabel}
                           </span>
                           {/* Persone assegnate: avatar sovrapposti, sempre su UNA riga così
-                              tutte le card hanno la stessa altezza. Con una sola persona
-                              compare anche il nome. Puntino arancione = orario diverso da
+                              tutte le card hanno la stessa altezza. Puntino arancione = orario diverso da
                               quello della card (dettaglio nella colonna laterale). */}
                           <div style={{ display: 'flex', alignItems: 'center', height: AVATAR_ROW_H, flexShrink: 0, minWidth: 0 }}>
                             {(() => {
                               const people_ = item.bars
-                              const shownBars = people_.length > MAX_AVATARS ? people_.slice(0, MAX_AVATARS - 1) : people_
+                              const shownBars = people_.length > MAX_AVATARS ? people_.slice(0, MAX_AVATARS) : people_
                               const extra = people_.length - shownBars.length
                               const nameOf = a => (a.workerId ? people.find(p => p.id === a.workerId)?.name : a.externalWorkerName) || '?'
                               return (
@@ -1132,19 +1142,15 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                                     const personId = a.workerId || a.externalWorkerId
                                     const differs = left > 0.005 || width < 0.995
                                     return (
-                                      <span key={a.id} title={`${name} · ${a.startTime}–${a.endTime}`}
-                                        style={{ position: 'relative', width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: '50%', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, background: isPast ? '#9a9a9a' : personColor(personId), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px var(--c-surface)', zIndex: shownBars.length - i }}>
-                                        {initials(name)}
+                                      <PersonDot key={a.id} person={{ key: a.id, id: personId, name, hours: `${a.startTime}–${a.endTime}` }} size={AVATAR_SIZE}
+                                        style={{ marginLeft: i === 0 ? 0 : -6, background: isPast ? '#9a9a9a' : personColor(personId), fontSize: 9, boxShadow: '0 0 0 2px var(--c-surface)', zIndex: shownBars.length - i }}>
                                         {differs && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#ea580c', boxShadow: '0 0 0 1.5px var(--c-surface)' }} />}
-                                      </span>
+                                      </PersonDot>
                                     )
                                   })}
                                   {extra > 0 && (
-                                    <span title={people_.slice(shownBars.length).map(b => nameOf(b.a)).join(', ')}
-                                      style={{ marginLeft: -6, height: AVATAR_SIZE, minWidth: AVATAR_SIZE, padding: '0 6px', boxSizing: 'border-box', borderRadius: AVATAR_SIZE / 2, flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px var(--c-surface)' }}>+{extra}</span>
-                                  )}
-                                  {people_.length === 1 && (
-                                    <span style={{ marginLeft: 7, minWidth: 0, fontSize: 10.5, fontWeight: 700, color: isPast ? 'var(--c-ink3)' : 'var(--c-ink2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(people_[0].a)}</span>
+                                    <PersonDot person={{ key: 'extra', id: 'extra', name: people_.slice(shownBars.length).map(b => nameOf(b.a)).join(', ') }} size={AVATAR_SIZE} content={`+${extra}`}
+                                      style={{ width: 'auto', marginLeft: -6, minWidth: AVATAR_SIZE, padding: '0 6px', boxSizing: 'border-box', borderRadius: AVATAR_SIZE / 2, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 10, boxShadow: '0 0 0 2px var(--c-surface)' }} />
                                   )}
                                 </>
                               )

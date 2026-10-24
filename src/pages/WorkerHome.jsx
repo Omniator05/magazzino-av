@@ -421,7 +421,7 @@ function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
     : phaseColor
     ? phaseColor
     : isToday
-    ? '#e63946'
+    ? (ev.type === 'installation' ? 'linear-gradient(135deg, #e63946 0%, #7c6fea 100%)' : '#e63946')
     : ev.type === 'installation'
     ? '#7c6fea'
     : (phase === 'partial' || phase === 'out')
@@ -430,7 +430,7 @@ function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
   // Tessera chiara (grigia) = niente di urgente: testo scuro invece che bianco.
   const tileLight = iconGradient === 'var(--c-fill)'
 
-  const cardBorder = daScaricare ? 'rgba(234,88,12,0.45)' : phaseColor ? `${phaseColor}66` : isToday ? 'rgba(230,57,70,0.4)' : isMine ? 'rgba(230,57,70,0.4)' : 'var(--c-line)'
+  const cardBorder = daScaricare ? 'rgba(234,88,12,0.45)' : phaseColor ? `${phaseColor}66` : isToday && ev.type === 'installation' ? 'rgba(124,111,234,0.45)' : isToday ? 'rgba(230,57,70,0.4)' : isMine ? 'rgba(230,57,70,0.4)' : 'var(--c-line)'
   const dateStr = ev.date ? formatDate(ev.date+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
 
   return (
