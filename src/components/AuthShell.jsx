@@ -9,6 +9,10 @@ import AuthBackground from './AuthBackground'
 // `heroSide` sposta il pannello ('right' per il login, 'left' per il signup)
 // con uno slide animato — la diagonale si specchia durante il movimento.
 // Su mobile il pannello diventa un banner in alto con taglio diagonale.
+// Margine intorno al contenuto del form dentro il contenitore che anima l'altezza (overflow nascosto):
+// serve perché l'ombra/alone rosso dei pulsanti e dei campi non venga tagliato ai lati e sotto.
+const GLOW_PAD = 28
+
 export default function AuthShell({ children, heroTitle = 'Bentornato!', heroText = '', heroSide = 'right' }) {
   const [mounted, setMounted] = useState(false)
   const formContentRef = useRef(null)
@@ -62,13 +66,13 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
           width:100%;
           max-width:880px;
           display:grid;
-          background:rgba(12,14,22,0.82);
+          background:var(--au-card);
           border:1px solid rgba(230,57,70,0.35);
           border-radius:26px;
           overflow:hidden;
           backdrop-filter:blur(28px);
           -webkit-backdrop-filter:blur(28px);
-          box-shadow:0 0 44px rgba(230,57,70,0.16), 0 32px 80px rgba(0,0,0,0.55);
+          box-shadow:var(--au-card-shadow);
           box-sizing:border-box;
         }
         .auth-split-form {
@@ -185,7 +189,7 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
           <div className="auth-split-form">
             <div
               className="auth-form-animated-height"
-              style={{ height: formHeight ? `${formHeight}px` : 'auto', overflow:'hidden', transition:'height 0.35s cubic-bezier(0.4,0,0.2,1)' }}
+              style={{ height: formHeight ? `${formHeight + 2 * GLOW_PAD}px` : 'auto', overflow:'hidden', boxSizing:'border-box', padding:`${GLOW_PAD}px`, margin:`-${GLOW_PAD}px`, transition:'height 0.35s cubic-bezier(0.4,0,0.2,1)' }}
             >
               <div ref={formContentRef}>
                 {children}
@@ -200,7 +204,7 @@ export default function AuthShell({ children, heroTitle = 'Bentornato!', heroTex
             </div>
           </div>
         </div>
-        <p style={{ textAlign:'center', color:'rgba(255,255,255,0.25)', fontSize:11.5, marginTop:16, maxWidth:430, lineHeight:1.6 }}>
+        <p style={{ textAlign:'center', color:'rgba(var(--au-fg), calc(var(--au-k) * 0.25))', fontSize:11.5, marginTop:16, maxWidth:430, lineHeight:1.6 }}>
           <Link to="/privacy" style={{ color:'inherit' }}>Privacy</Link>
           {' · '}
           <Link to="/terms" style={{ color:'inherit' }}>Termini</Link>

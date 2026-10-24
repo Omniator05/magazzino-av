@@ -98,7 +98,12 @@ export const eventRowIncludesItem = (row, itemId, catalogItems) => {
 // oggetto ha più unità, un furgone/worker no. Non scende nei componenti dei
 // kit (stesso motivo di isVehicleUnavailable: un controllo di primo livello,
 // non serve replicare la logica di eventRowIncludesItem qui).
-export const itemCommittedElsewhere = (catalogItemId, event, otherEvents) => {
+// `includeStillOut`: conta anche i pezzi ancora fuori dal magazzino (caricati e non rientrati) a
+// prescindere dalle date dell'evento — serve allo Storico, per sapere cosa c'è davvero ADESSO.
+// Quando si compone una lista (EventDetail) NON va attivato: lì conta solo se negli stessi giorni
+// dell'evento l'oggetto è già in un'altra lista (un pezzo che oggi è fuori ma rientra prima non è
+// un conflitto).
+export const itemCommittedElsewhere = (catalogItemId, event, otherEvents, { includeStillOut = false } = {}) => {
   const result = { qty: 0, events: [] }
   if (!catalogItemId || !event?.date) return result
   const evStart = event.date
@@ -115,9 +120,10 @@ export const itemCommittedElsewhere = (catalogItemId, event, otherEvents) => {
     // l'occupazione a un solo giorno (il vecchio comportamento) la faceva
     // sparire dal controllo non appena quel giorno non era più "oggi" — qui
     // resta aperta finché non risulta rientrata.
-    const stillOut = rows.some(i => i.loaded && !i.returned)
+    const stillOut = includeStillOut && rows.some(i => i.loaded && !i.returned)
     const oStart = other.date
-    const oEnd = other.dateEnd && other.dateEnd >= other.date ? other.dateEnd : other.date
+    // Un rent/install senza data di fine è occupato a tempo indeterminato, finché non viene chiuso.
+    const oEnd = other.dateEnd && other.dateEnd >= other.date ? other.dateEnd : (other.type === 'installation' && !other.archived ? '9999-12-31' : other.date)
     // Caricato vuol dire già fuori dal magazzino, anche se l'evento inizia più
     // avanti (montaggio anticipato, es. venerdì per un evento di lunedì): da
     // quel momento e fino al rientro il pezzo non c'è, quindi l'impegno parte

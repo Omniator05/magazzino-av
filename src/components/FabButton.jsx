@@ -1,9 +1,13 @@
 // Bottone "+" flottante in basso a destra, stesso stile di quello usato per
 // creare un nuovo evento in Calendar.jsx — riusato per Task, Furgoni e Template
 // al posto del vecchio bottone "+" nell'header pagina.
+import { usePulseAdd } from '../hooks/usePulseAdd'
+
 export default function FabButton({ onClick, ariaLabel }) {
+  const pulse = usePulseAdd()
   return (
     <button
+      className={pulse ? 'fab-pulse' : undefined}
       onClick={onClick}
       aria-label={ariaLabel}
       style={{

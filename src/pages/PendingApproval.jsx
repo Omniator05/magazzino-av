@@ -29,8 +29,8 @@ export default function PendingApproval({ reason = 'unknown' }) {
     <AuthShell heroTitle={t('pendingApproval.heroTitle')} heroText={t('pendingApproval.heroText')}>
       <div className="auth-card" style={{ textAlign:'center' }}>
         <div style={{ fontSize:38, marginBottom:14 }}>{reason === 'pending' ? '⏳' : '⚠️'}</div>
-        <h2 style={{ fontSize:20, fontWeight:700, color:'white', marginBottom:10 }}>{title}</h2>
-        <p style={{ fontSize:14, color:'rgba(255,255,255,0.5)', lineHeight:1.6, marginBottom:28 }}>
+        <h2 style={{ fontSize:20, fontWeight:700, color:'rgb(var(--au-fg))', marginBottom:10 }}>{title}</h2>
+        <p style={{ fontSize:14, color:'rgba(var(--au-fg), calc(var(--au-k) * 0.5))', lineHeight:1.6, marginBottom:28 }}>
           {body}
         </p>
         <button className="auth-btn-secondary" onClick={logout}>{t('pendingApproval.exit')}</button>

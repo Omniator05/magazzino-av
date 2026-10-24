@@ -677,8 +677,8 @@
     "confirmAvailabilityTitleFor": "Not enough {{name}} available",
     "confirmAvailabilityLabel": "Add anyway",
     "confirmAvailabilityReduceLabel": "Add only what's free",
-    "availabilityConflictBody_one": "{{count}} is already on \"{{eventName}}\"{{extra}}",
-    "availabilityConflictBody_other": "{{count}} are already on \"{{eventName}}\"{{extra}}",
+    "availabilityConflictBody_one": "{{count}} is already on \"{{eventName}}\" on the same days{{extra}}",
+    "availabilityConflictBody_other": "{{count}} are already on \"{{eventName}}\" on the same days{{extra}}",
     "availabilityConflictMore": " and {{count}} more",
     "availabilityConflictMoreItems": "…and {{count}} more items",
     "apply": "Apply",
@@ -813,7 +813,14 @@
     "assignSheetTitle": "Assign staff",
     "selectAllListAria": "Select all items in {{name}}",
     "externalShort": "External",
-    "qtyInputAria": "Quantity (you can type e.g. 6x5)"
+    "qtyInputAria": "Quantity (you can type e.g. 6x5)",
+    "copyAction": "Copy",
+    "copiedToast": "{{count}} items copied: paste them into another list",
+    "pasteAction": "Paste",
+    "pasteAria": "Paste {{count}} copied items",
+    "pasteNothing": "The copied items no longer exist in the warehouse.",
+    "pasteSkipped": "{{count}} items no longer exist in the warehouse and were skipped.",
+    "pasteCountItems": "{{count}} items"
   },
   "eventSummary": {
     "timeLabel": "Time",
@@ -867,7 +874,14 @@
     "noTeamsFound": "No teams found",
     "teamSelected": "✓ Team selected: {{name}}",
     "sendingRequest": "Sending request…",
-    "requestAccess": "Request access →"
+    "requestAccess": "Request access →",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "pwTooShort": "Too short",
+    "pwWeak": "Weak",
+    "pwFair": "Fair",
+    "pwGood": "Good",
+    "pwStrong": "Strong"
   },
   "adminUsers": {
     "statUsers": "Users",
@@ -1136,7 +1150,20 @@
     "confirmDeleteAccountTitle": "Delete account",
     "confirmDeleteAccountMessage": "Permanently delete {{name}}'s account?\nThis action cannot be undone.",
     "confirmDeleteAccountLabel": "Delete",
-    "accountDeletedToast": "{{name}}'s account deleted."
+    "accountDeletedToast": "{{name}}'s account deleted.",
+    "billingRowCta": "Choose a plan",
+    "billingMostChosen": "Most chosen by teams",
+    "profilePreviewTitle": "Preview",
+    "profilePreviewDesc": "How the header of PDFs and labels looks.",
+    "prefsModulesSection": "Modules",
+    "prefsCodesSection": "Labels and codes",
+    "prefsPreviewLabel": "Preview of the chosen format",
+    "prefsFeaturesSection": "Features",
+    "prefsLabelsSection": "Labels",
+    "prefsLabelsQuestion": "What should each item label show?",
+    "prefsHintQr": "Read with the phone camera",
+    "prefsHintBarcode": "Read with handheld scanners",
+    "prefsHintBoth": "A label with both codes"
   },
   "events": {
     "recurrenceNever": "Never",
@@ -1611,7 +1638,9 @@
     "errorWrongPassword": "Wrong password",
     "errorInvalidCredential": "Wrong username or password",
     "errorTooManyRequests": "Too many attempts, try again in a few minutes",
-    "errorGeneric": "Sign in failed"
+    "errorGeneric": "Sign in failed",
+    "errorUsernameRequired": "Enter your username or email.",
+    "errorPasswordRequired": "Enter your password."
   },
   "superAdmin": {
     "title": "Companies",
@@ -1698,7 +1727,8 @@
     "doneTitle": "All set!",
     "doneDesc": "You can always change the logo and add more workers from Settings.",
     "goToDashboard": "Go to Dashboard",
-    "launching": "Almost there…"
+    "launching": "Almost there…",
+    "revealDone": "All set!"
   },
   "pendingApproval": {
     "heroTitle": "Almost there!",

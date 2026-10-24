@@ -21,9 +21,10 @@ const IconUsersPlus = () => (
     <line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/>
   </svg>
 )
-const IconCheckDone = () => (
+// `draw`: la spunta si "scrive" lentamente (passo appena completato), altrimenti è già disegnata.
+const IconCheckDone = ({ draw }) => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12"/>
+    <polyline className={draw ? 'gsw-check-draw' : undefined} points="20 6 9 17 4 12"/>
   </svg>
 )
 const IconChevronDown = ({ up }) => (
@@ -76,10 +77,28 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
 
   const steps = [
     { key:'item',  label: t('dashboard.gettingStartedItem'),  icon: <IconBoxPlus />,      path:'/inventory',    done: items.length > 0 },
-    { key:'event', label: t('dashboard.gettingStartedEvent'), icon: <IconCalendarPlus />, path:'/events',       done: events.length > 0 },
-    { key:'team',  label: t('dashboard.gettingStartedTeam'),  icon: <IconUsersPlus />,    path:'/admin/settings',  done: (workerCount ?? 1) > 1 },
+    { key:'event', label: t('dashboard.gettingStartedEvent'), icon: <IconCalendarPlus />, path:'/calendar',     done: events.length > 0 },
+    { key:'team',  label: t('dashboard.gettingStartedTeam'),  icon: <IconUsersPlus />,    path:'/admin/settings/users', done: (workerCount ?? 1) > 1 },
   ]
   const doneCount = steps.filter(s => s.done).length
+
+  // Un passo completato la prima volta che lo si vede come fatto: la spunta si scrive lentamente e il
+  // cerchio fa un piccolo "pop". Quelli già visti restano fermi (si ricorda per squadra, su questo dispositivo).
+  const [justDone, setJustDone] = useState([])
+  const ready = dataReady && workerCount !== null
+  const doneKey = steps.filter(s => s.done).map(s => s.key).join(',')
+  useEffect(() => {
+    if (!ready || !teamId) return
+    const storeKey = `gettingStartedSeenDone_${teamId}`
+    let seen = []
+    try { seen = JSON.parse(localStorage.getItem(storeKey) || '[]') } catch { seen = [] }
+    const doneNow = doneKey ? doneKey.split(',') : []
+    const fresh = doneNow.filter(k => !seen.includes(k))
+    if (fresh.length) {
+      setJustDone(fresh)
+      try { localStorage.setItem(storeKey, JSON.stringify([...new Set([...seen, ...doneNow])])) } catch { /* nessun problema */ }
+    }
+  }, [ready, teamId, doneKey])
 
   // Il pallino attivo segue lo scroll reale (swipe con un dito), non uno
   // stato scelto a priori — arrotonda la posizione al pannello più vicino.
@@ -150,18 +169,18 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
           {/* Desktop (≥700px, vedi .gsw-steps-list sotto): tutti gli step impilati */}
           <div className="gsw-steps-list" style={{ padding:'4px 10px 8px' }}>
             {steps.map(step => (
-              <button key={step.key} onClick={() => navigate(step.path)} className="btn-no-anim" style={{
+              <button key={step.key} onClick={() => navigate(step.path, { state: { pulseAdd: true } })} className="btn-no-anim" style={{
                 width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 6px',
                 background:'transparent', textAlign:'left', borderRadius:10,
               }}>
-                <span style={{
+                <span className={step.done && justDone.includes(step.key) ? 'gsw-done-pop' : undefined} style={{
                   width:20, height:20, borderRadius:'50%', flexShrink:0,
                   display:'flex', alignItems:'center', justifyContent:'center',
                   background: step.done ? '#22c55e' : 'var(--dash-pill-bg)',
                   border: step.done ? 'none' : '1.5px solid var(--dash-pill-border)',
                   color: step.done ? 'white' : 'var(--dash-muted)',
                 }}>
-                  {step.done ? <IconCheckDone /> : step.icon}
+                  {step.done ? <IconCheckDone draw={justDone.includes(step.key)} /> : step.icon}
                 </span>
                 <span style={{
                   flex:1, fontSize:13, fontWeight:600,
@@ -178,18 +197,18 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
           <div className="gsw-steps-carousel" style={{ padding:'2px 0 10px' }}>
             <div ref={stepsScrollRef} onScroll={handleStepsScroll} className="gsw-steps-scroll" style={{ display:'flex' }}>
               {steps.map(step => (
-                <button key={step.key} onClick={() => navigate(step.path)} className="btn-no-anim gsw-step-slide" style={{
+                <button key={step.key} onClick={() => navigate(step.path, { state: { pulseAdd: true } })} className="btn-no-anim gsw-step-slide" style={{
                   flex:'0 0 100%', minWidth:0, display:'flex', alignItems:'center', gap:10, padding:'9px 10px',
                   background:'transparent', textAlign:'left', borderRadius:10,
                 }}>
-                  <span style={{
+                  <span className={step.done && justDone.includes(step.key) ? 'gsw-done-pop' : undefined} style={{
                     width:20, height:20, borderRadius:'50%', flexShrink:0,
                     display:'flex', alignItems:'center', justifyContent:'center',
                     background: step.done ? '#22c55e' : 'var(--dash-pill-bg)',
                     border: step.done ? 'none' : '1.5px solid var(--dash-pill-border)',
                     color: step.done ? 'white' : 'var(--dash-muted)',
                   }}>
-                    {step.done ? <IconCheckDone /> : step.icon}
+                    {step.done ? <IconCheckDone draw={justDone.includes(step.key)} /> : step.icon}
                   </span>
                   <span style={{
                     flex:1, minWidth:0, fontSize:13, fontWeight:600,
@@ -225,6 +244,10 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
            a bottom: env()+44px, alta ~70px — senza margine il widget ci
            entrava dentro). Desktop: angolo in basso a sinistra, poco più
            grande, e la tab bar centrata non gli sta comunque tra i piedi. */
+        .gsw-check-draw { stroke-dasharray: 24; stroke-dashoffset: 24; animation: gswCheckDraw 0.6s ease 0.2s forwards; }
+        @keyframes gswCheckDraw { to { stroke-dashoffset: 0; } }
+        .gsw-done-pop { animation: gswDonePop 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+        @keyframes gswDonePop { from { transform: scale(0.6); } to { transform: scale(1); } }
         .gsw-widget {
           left: 50%;
           transform: translateX(-50%);

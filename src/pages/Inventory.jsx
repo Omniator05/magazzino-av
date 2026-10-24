@@ -631,10 +631,8 @@ export default function Inventory() {
   // portare con sé un location.state.
   const [activeFilter, setActiveFilter] = useState(navState?.filter || new URLSearchParams(locationSearch).get('filter') || 'all')
   // Override manuale dell'utente sull'apertura/chiusura di una categoria —
-  // per default decide da sola (vedi groupedFiltered più sotto: aperta se
-  // c'è qualcosa che richiede attenzione o se si sta cercando/filtrando),
-  // ma un tap sulla freccia vince sempre sul default finché non cambia
-  // ricerca/filtro.
+  // per default sono tutte aperte, ma un tap sulla freccia vince sempre sul
+  // default finché non cambia ricerca/filtro.
   const [manualCollapse, setManualCollapse] = useState({})
 
   const filtered = items.filter(i => {
@@ -1004,11 +1002,10 @@ export default function Inventory() {
             {sortedFlat.map(item => <ItemRow key={item.id} item={item} onOpen={openDetail} t={t} outEvents={activeFilter === 'out' ? getOutEventNames(item) : null} />)}
           </div>
         : groupedFiltered.map(({ cat, catItems, isForgottenGroup, needsAttention }) => {
-            // Il gruppo "dimenticati" resta sempre aperto (è già un avviso a
-            // sé); le altre categorie aprono di default solo se c'è qualcosa
-            // che richiede attenzione o se si sta cercando/filtrando — un tap
-            // dell'utente sulla freccia vince sempre sul default.
-            const defaultOpen = isForgottenGroup || needsAttention || narrowed
+            // Tutte le categorie sono aperte di default (anche nelle squadre nuove, dove
+            // altrimenti si vedrebbero solo intestazioni chiuse) — un tap dell'utente sulla
+            // freccia vince sempre sul default.
+            const defaultOpen = true
             const open = manualCollapse[cat] != null ? !manualCollapse[cat] : defaultOpen
             return (
               <div key={cat} className="rc-inv-card" style={{ background:'var(--c-surface)', border: isForgottenGroup ? '1px solid rgba(245,166,35,0.35)' : '1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>

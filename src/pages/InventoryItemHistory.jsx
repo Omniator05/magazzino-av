@@ -101,7 +101,7 @@ export default function InventoryItemHistory() {
   const maxAvail = item ? Math.max(0, (item.totalQty || 0) - (item.brokenQty || 0)) : 0
   const checkRangeValid = !!(checkStart && checkEnd && checkEnd >= checkStart)
   const { qty: committedQty, events: committedEvents } = (item && checkRangeValid)
-    ? itemCommittedElsewhere(item.id, { id: null, date: checkStart, dateEnd: checkEnd }, events)
+    ? itemCommittedElsewhere(item.id, { id: null, date: checkStart, dateEnd: checkEnd }, events, { includeStillOut: true })
     : { qty: 0, events: [] }
   // Giacenza ATTUALE in magazzino (availableQty: tolti rotti e pezzi già
   // caricati/fuori): se il periodo controllato include oggi vale anche questa,

@@ -74,6 +74,25 @@ const FREE_PLAN = {
 // quindi va sempre calcolato da un numero, mai scritto a mano.
 const formatEuros = cents => `${Math.round(cents / 100)}€`
 
+// Stili condivisi dalle due viste: pulsanti dei piani e griglia delle card.
+const BILLING_CSS = `
+  .billing-shell { padding: 0 0 40px; }
+  .billing-btn { width: 100%; min-height: 48px; border-radius: 13px; font-size: 14.5px; font-weight: 800; cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease; }
+  .billing-btn-primary { background: var(--accent); color: #fff; border: none; box-shadow: 0 6px 18px rgba(230,57,70,0.28); }
+  .billing-btn-secondary { background: var(--c-surface, var(--card)); color: var(--c-ink, var(--text)); border: 1.5px solid var(--c-line, var(--border)); }
+  .billing-btn:disabled { opacity: .6; cursor: default; }
+  @media (hover: hover) {
+    .billing-btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(230,57,70,0.36); }
+    .billing-btn-secondary:hover:not(:disabled) { border-color: var(--c-ink3, var(--text2)); }
+  }
+  .billing-plans { flex-direction: column; }
+  @media (min-width: 760px) {
+    .billing-plans { flex-direction: row; align-items: stretch; }
+    .billing-plans > div { flex: 1 1 0; min-width: 0; }
+  }
+`
+
 export default function SettingsBilling() {
   const { t, i18n } = useTranslation()
   const { user, team } = useAuth()
@@ -169,11 +188,13 @@ export default function SettingsBilling() {
   // solo cosa succede al click del bottone, passato da chi la chiama.
   const renderPlanCard = (p, cta) => (
     <div key={p.tier} style={{
-      position:'relative', background:'var(--card)',
-      border: p.recommended ? '2px solid var(--accent)' : '1px solid var(--border)',
-      borderRadius:20, padding: p.recommended ? '21px 20px 20px' : '22px 20px 20px',
-      boxShadow: p.recommended ? '0 10px 28px rgba(230,57,70,0.14)' : 'none',
-      display:'flex', flexDirection:'column', gap:16,
+      position:'relative',
+      background: p.recommended ? 'linear-gradient(180deg, rgba(230,57,70,0.07) 0%, var(--c-surface, var(--card)) 38%)' : 'var(--c-surface, var(--card))',
+      border: p.recommended ? '2px solid var(--accent)' : '1px solid var(--c-line, var(--border))',
+      borderRadius:20, padding: p.recommended ? '25px 22px 22px' : '26px 22px 22px',
+      boxShadow: p.recommended ? '0 14px 34px rgba(230,57,70,0.16)' : 'none',
+      display:'flex', flexDirection:'column', gap:18,
+      opacity: p.tier === 'free' ? 0.92 : 1,
     }}>
       {p.recommended && (
         <span style={{ position:'absolute', top:-12, left:20, background:'var(--accent)', color:'#fff', borderRadius:20, padding:'3px 12px', fontSize:10.5, fontWeight:800, letterSpacing:'0.4px', textTransform:'uppercase' }}>
@@ -185,7 +206,7 @@ export default function SettingsBilling() {
         <p style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>{t(`adminUsers.${p.nameKey}`)}</p>
         <p style={{ fontSize:13, color:'var(--text2)', marginTop:3, lineHeight:1.4 }}>{t(`adminUsers.${p.taglineKey}`)}</p>
         <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:10 }}>
-          <p style={{ fontSize:30, fontWeight:800, color: p.recommended ? 'var(--accent)' : 'var(--text)', lineHeight:1 }}>
+          <p style={{ fontSize:36, fontWeight:800, letterSpacing:'-1px', color: p.recommended ? 'var(--accent)' : 'var(--text)', lineHeight:1 }}>
             {p.tier === 'free' ? formatEuros(p.priceCents) : <>{formatEuros(p.priceCents)}<span style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>/{t('adminUsers.billingPerMonth')}</span></>}
           </p>
           {p.betaBadge && <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', letterSpacing:'0.3px', background:'var(--card2)', border:'1px solid var(--border)', borderRadius:6, padding:'2px 6px' }}>PREZZO BETA</span>}
@@ -197,9 +218,14 @@ export default function SettingsBilling() {
           ha una riga in meno delle altre due): senza, il bottone della card
           più corta resterebbe più in alto, fuori riga dalle altre. */}
       <div style={{ display:'flex', flexDirection:'column', gap:9, flex:1 }}>
+        {p.recommended && (
+          <p style={{ display:'flex', alignItems:'center', gap:6, margin:'0 0 4px', fontSize:12.5, fontWeight:800, color:'var(--accent)' }}>
+            <Star size={13} /> {t('adminUsers.billingMostChosen')}
+          </p>
+        )}
         {p.features.map(f => (
           <div key={f.key} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
-            <div style={{ width:20, height:20, flexShrink:0, borderRadius:6, marginTop:1, background:'rgba(105,240,174,0.15)', color:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ width:20, height:20, flexShrink:0, borderRadius:6, marginTop:1, background: p.recommended ? 'rgba(230,57,70,0.12)' : 'rgba(52,168,83,0.13)', color: p.recommended ? 'var(--accent)' : '#2f9e5b', display:'flex', alignItems:'center', justifyContent:'center' }}>
               <Check size={11} />
             </div>
             <p style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', lineHeight:1.4 }}>
@@ -218,6 +244,8 @@ export default function SettingsBilling() {
     return (
       <div className="page">
         {header}
+        <style>{BILLING_CSS}</style>
+        <div className="billing-shell">
 
         {/* Hero Pro — la ricompensa emotiva dell'upgrade. Gradiente accento,
             crest a stella, ringraziamento. Nessun prezzo in evidenza, nessun
@@ -229,7 +257,7 @@ export default function SettingsBilling() {
             solo ingresso animato (.animate-in, già usata altrove nell'app),
             non ripetuto ai render successivi. */}
         <div className={showWelcome ? 'animate-in' : undefined} style={{
-          margin:'0 16px 18px', borderRadius:20, overflow:'hidden', position:'relative',
+          margin:'18px 16px 18px', borderRadius:20, overflow:'hidden', position:'relative',
           background:'linear-gradient(145deg, #e63946 0%, #b31f3c 100%)',
           padding:'22px 20px 24px', color:'#fff',
           boxShadow:'0 12px 32px rgba(179,31,60,0.28)',
@@ -296,7 +324,7 @@ export default function SettingsBilling() {
                 <div style={{ margin:'0 16px 18px' }}>
                   {renderPlanCard(
                     PLANS.find(p => p.tier === 'business'),
-                    <button onClick={upgradeToBusiness} className="btn btn-primary btn-full" disabled={billingLoading}>
+                    <button onClick={upgradeToBusiness} className="billing-btn billing-btn-primary" disabled={billingLoading}>
                       {billingLoading ? t('common.saving') : t('adminUsers.billingUpgradeCardButton')}
                     </button>
                   )}
@@ -314,7 +342,7 @@ export default function SettingsBilling() {
                 {t('adminUsers.billingPlanRow', { plan: t(`adminUsers.${plan.nameKey}`) })} — {formatEuros(planPriceCents)}/{t('adminUsers.billingPerMonth')}
                 {renewalDate && !cancelScheduled && <>. {t('adminUsers.billingNextRenewal', { date: renewalDate })}</>}
               </p>
-              <button onClick={() => manageBilling(true)} className="btn btn-secondary btn-full" disabled={billingLoading}>
+              <button onClick={() => manageBilling(true)} className="billing-btn billing-btn-secondary" disabled={billingLoading}>
                 {billingLoading ? t('common.redirecting')
                   : cancelScheduled ? t('adminUsers.billingReactivateButton')
                   : t('adminUsers.billingManagePlanButton')}
@@ -322,6 +350,7 @@ export default function SettingsBilling() {
             </div>
           </>
         )}
+        </div>
       </div>
     )
   }
@@ -339,50 +368,62 @@ export default function SettingsBilling() {
   const urgencyBg     = urgency === 'critical' ? 'rgba(248,113,113,0.08)' : urgency === 'warning' ? 'rgba(212,130,10,0.08)' : 'var(--card)'
   const urgencyBorder = urgency === 'critical' ? 'rgba(248,113,113,0.3)' : urgency === 'warning' ? 'rgba(212,130,10,0.3)' : 'var(--border)'
 
+  // Avanzamento della prova (30 giorni): barra che si riempie man mano che passano i giorni.
+  const trialProgress = status === 'trialing' ? Math.min(1, Math.max(0, (30 - daysLeft) / 30)) : 1
+
   return (
     <div className="page">
       {header}
+      <style>{BILLING_CSS}</style>
+      <div className="billing-shell">
 
-      {/* Header con urgenza concreta — il contatore/stato resta com'era; sotto,
-          una sola frase (nessuna griglia di numeri: quelli ora vivono dentro
-          ogni card, la Free compresa, più avanti). */}
-      <div style={{ margin:'0 16px 16px', borderRadius:20, padding:'20px 18px', background:urgencyBg, border:`1.5px solid ${urgencyBorder}` }}>
-        {status === 'trialing' ? (
-          <div style={{ display:'flex', alignItems:'baseline', gap:9, marginBottom:12 }}>
-            <span style={{ fontSize:44, fontWeight:800, lineHeight:1, color:urgencyColor, fontVariantNumeric:'tabular-nums' }}>{daysLeft}</span>
-            <span style={{ fontSize:14, fontWeight:700, color:urgencyColor }}>{t('adminUsers.billingTrialingDaysLabel', { count: daysLeft })}</span>
-          </div>
-        ) : (
-          <p style={{ fontSize:17, fontWeight:800, color:urgencyColor, marginBottom:10 }}>
-            {status === 'past_due' ? t('adminUsers.billingRowPastDue') : t('adminUsers.billingUrgentHeadingCanceled')}
+      {/* Stato dell'abbonamento in testa: a sinistra il contatore (giorni rimasti), a destra cosa
+          succede alla fine; sotto, la barra di avanzamento della prova. Il colore sale di tono
+          man mano che la prova finisce. */}
+      <div style={{ margin:'18px 16px 26px', borderRadius:20, padding:'22px 24px', background:urgencyBg, border:`1.5px solid ${urgencyBorder}` }}>
+        <div style={{ display:'flex', alignItems:'center', gap:22, flexWrap:'wrap' }}>
+          {status === 'trialing' ? (
+            <div style={{ display:'flex', alignItems:'baseline', gap:9, flexShrink:0 }}>
+              <span style={{ fontSize:56, fontWeight:800, lineHeight:1, letterSpacing:'-2px', color:urgencyColor, fontVariantNumeric:'tabular-nums' }}>{daysLeft}</span>
+              <span style={{ fontSize:14, fontWeight:700, color:urgencyColor, maxWidth:130, lineHeight:1.25 }}>{t('adminUsers.billingTrialingDaysLabel', { count: daysLeft })}</span>
+            </div>
+          ) : (
+            <p style={{ fontSize:19, fontWeight:800, color:urgencyColor, margin:0, flexShrink:0 }}>
+              {status === 'past_due' ? t('adminUsers.billingRowPastDue') : t('adminUsers.billingUrgentHeadingCanceled')}
+            </p>
+          )}
+          <p style={{ flex:'1 1 260px', minWidth:0, fontSize:14, color:'var(--text2)', lineHeight:1.55, margin:0 }}>
+            {t(status === 'trialing' ? 'adminUsers.billingRestrictionIntroTrialing'
+              : status === 'past_due' ? 'adminUsers.billingRestrictionIntroPastDue'
+              : 'adminUsers.billingRestrictionIntroCanceled')}
           </p>
+        </div>
+        {status === 'trialing' && (
+          <div style={{ height:6, borderRadius:3, background:'rgba(128,128,128,0.18)', marginTop:18, overflow:'hidden' }} aria-hidden="true">
+            <div style={{ height:'100%', width:`${Math.round(trialProgress * 100)}%`, borderRadius:3, background:urgencyColor, transition:'width .6s ease' }} />
+          </div>
         )}
-        <p style={{ fontSize:13.5, color:'var(--text2)', lineHeight:1.55 }}>
-          {t(status === 'trialing' ? 'adminUsers.billingRestrictionIntroTrialing'
-            : status === 'past_due' ? 'adminUsers.billingRestrictionIntroPastDue'
-            : 'adminUsers.billingRestrictionIntroCanceled')}
-        </p>
       </div>
 
-      <p style={{ padding:'0 16px 14px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>
+      <p style={{ padding:'0 16px 16px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>
         {t('adminUsers.billingPlansSectionTitle')}
       </p>
 
       {/* Tre piani, ognuno una scheda prodotto completa e autonoma — la
           consigliata (Team) per prima. Colonna su mobile, tre affiancate da
-          desktop in su (vedi .billing-plans qui sotto). */}
-      <div className="billing-plans" style={{ margin:'0 16px 8px', display:'flex', gap:14 }}>
+          desktop in su (vedi .billing-plans nel CSS sopra). */}
+      <div className="billing-plans" style={{ margin:'0 16px 8px', display:'flex', gap:16 }}>
         {[...PLANS, FREE_PLAN].map(p => renderPlanCard(p,
           /* Free non è un'azione — è dove ci si trova già finché non si
              sceglie uno degli altri due piani. Bottone non cliccabile. */
           p.tier === 'free' ? (
-            <button className="btn btn-secondary btn-full" disabled style={{ opacity:0.6, cursor:'default' }}>
+            <button className="billing-btn billing-btn-secondary" disabled>
               {t('adminUsers.billingCurrentPlanButton')}
             </button>
           ) : (
             <button
               onClick={() => manageBilling(isSubscribed, p.tier)}
-              className={isSubscribed ? 'btn btn-secondary btn-full' : (p.recommended ? 'btn btn-primary btn-full' : 'btn btn-secondary btn-full')}
+              className={`billing-btn ${isSubscribed || !p.recommended ? 'billing-btn-secondary' : 'billing-btn-primary'}`}
               disabled={billingLoading}
             >
               {billingLoading ? t('common.redirecting')
@@ -393,18 +434,11 @@ export default function SettingsBilling() {
         ))}
       </div>
 
-      <p style={{ textAlign:'center', fontSize:11.5, color:'var(--text3)', margin:'0 16px 16px' }}>
+      <p style={{ textAlign:'center', fontSize:12, color:'var(--text3)', margin:'14px 16px 16px' }}>
         {t('adminUsers.billingCancelAnytimeHint')}
       </p>
       {billingError && <p style={{ color:'var(--red)', fontSize:12, margin:'0 16px 16px', fontWeight:600, textAlign:'center' }}>{billingError}</p>}
-
-      <style>{`
-        .billing-plans { flex-direction: column; }
-        @media (min-width: 760px) {
-          .billing-plans { flex-direction: row; align-items: stretch; }
-          .billing-plans > div { flex: 1 1 0; min-width: 0; }
-        }
-      `}</style>
+      </div>
     </div>
   )
 }

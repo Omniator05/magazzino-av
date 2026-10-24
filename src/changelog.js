@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-26',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Liste di carico: copia e incolla degli oggetti da una lista all\'altra (Seleziona → Copia, poi "Incolla", anche con ⌘/Ctrl+C e ⌘/Ctrl+V). L\'avviso di disponibilità ora guarda solo se l\'oggetto è già in un\'altra lista negli stessi giorni dell\'evento',
+        'Accesso e registrazione: tema chiaro o scuro in base al dispositivo, errori sotto ogni campo, occhio per vedere la password con indicatore di robustezza e nuova animazione di creazione account',
+        'Pagine rifatte: Abbonamento, Profilo squadra e Preferenze; riga Abbonamento in evidenza finché non ti abboni; la guida "Per iniziare" porta alle pagine giuste e fa lampeggiare il "+"',
+        'Magazzino con le categorie aperte di default; home delle squadre nuove con gli strumenti a tutta altezza',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Loading lists: copy and paste items between lists (Select → Copy, then "Paste", also with ⌘/Ctrl+C and ⌘/Ctrl+V). The availability warning now only checks whether the item is already in another list on the same days as the event',
+        'Sign-in and sign-up: light or dark theme following your device, errors under each field, an eye to show the password with a strength meter, and a new account-creation animation',
+        'Redesigned pages: Subscription, Team profile and Preferences; the Subscription row stands out until you subscribe; the "Getting started" guide opens the right pages and makes the "+" blink',
+        'Warehouse categories open by default; new teams\' home with full-height tools',
+      ],
+    },
+  },
+  {
     version: '2026-10-25',
     it: {
       title: 'Novità di oggi',

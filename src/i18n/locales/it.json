@@ -677,8 +677,8 @@
     "confirmAvailabilityTitleFor": "Disponibilità insufficiente per {{name}}",
     "confirmAvailabilityLabel": "Aggiungi comunque",
     "confirmAvailabilityReduceLabel": "Aggiungi solo il disponibile",
-    "availabilityConflictBody_one": "{{count}} oggetto è già a \"{{eventName}}\"{{extra}}",
-    "availabilityConflictBody_other": "{{count}} oggetti sono già a \"{{eventName}}\"{{extra}}",
+    "availabilityConflictBody_one": "{{count}} oggetto è già a \"{{eventName}}\" negli stessi giorni{{extra}}",
+    "availabilityConflictBody_other": "{{count}} oggetti sono già a \"{{eventName}}\" negli stessi giorni{{extra}}",
     "availabilityConflictMore": " e altri {{count}}",
     "availabilityConflictMoreItems": "…e altri {{count}} articoli",
     "apply": "Applica",
@@ -813,7 +813,14 @@
     "assignSheetTitle": "Assegna personale",
     "selectAllListAria": "Seleziona tutti gli oggetti di {{name}}",
     "externalShort": "Esterno",
-    "qtyInputAria": "Quantità (puoi scrivere ad esempio 6x5)"
+    "qtyInputAria": "Quantità (puoi scrivere ad esempio 6x5)",
+    "copyAction": "Copia",
+    "copiedToast": "{{count}} oggetti copiati: incollali in un'altra lista",
+    "pasteAction": "Incolla",
+    "pasteAria": "Incolla {{count}} oggetti copiati",
+    "pasteNothing": "Gli oggetti copiati non esistono più in magazzino.",
+    "pasteSkipped": "{{count}} oggetti non esistono più in magazzino e sono stati saltati.",
+    "pasteCountItems": "{{count}} oggetti"
   },
   "eventSummary": {
     "timeLabel": "Orario",
@@ -867,7 +874,14 @@
     "noTeamsFound": "Nessuna squadra trovata",
     "teamSelected": "✓ Squadra selezionata: {{name}}",
     "sendingRequest": "Invio richiesta…",
-    "requestAccess": "Richiedi accesso →"
+    "requestAccess": "Richiedi accesso →",
+    "showPassword": "Mostra password",
+    "hidePassword": "Nascondi password",
+    "pwTooShort": "Troppo corta",
+    "pwWeak": "Debole",
+    "pwFair": "Discreta",
+    "pwGood": "Buona",
+    "pwStrong": "Forte"
   },
   "adminUsers": {
     "statUsers": "Utenti",
@@ -1136,7 +1150,20 @@
     "confirmDeleteAccountTitle": "Elimina account",
     "confirmDeleteAccountMessage": "Eliminare definitivamente l'account di {{name}}?\nQuesta azione non può essere annullata.",
     "confirmDeleteAccountLabel": "Elimina",
-    "accountDeletedToast": "Account di {{name}} eliminato."
+    "accountDeletedToast": "Account di {{name}} eliminato.",
+    "billingRowCta": "Scegli il piano",
+    "billingMostChosen": "Il più scelto dalle squadre",
+    "profilePreviewTitle": "Anteprima",
+    "profilePreviewDesc": "Così appare l'intestazione di PDF ed etichette.",
+    "prefsModulesSection": "Moduli",
+    "prefsCodesSection": "Etichette e codici",
+    "prefsPreviewLabel": "Anteprima del formato scelto",
+    "prefsFeaturesSection": "Funzioni",
+    "prefsLabelsSection": "Etichette",
+    "prefsLabelsQuestion": "Cosa stampare sull'etichetta di ogni oggetto?",
+    "prefsHintQr": "Si legge con la fotocamera del telefono",
+    "prefsHintBarcode": "Si legge con i lettori a pistola",
+    "prefsHintBoth": "Un'etichetta con entrambi i codici"
   },
   "events": {
     "recurrenceNever": "Mai",
@@ -1611,7 +1638,9 @@
     "errorWrongPassword": "Password errata",
     "errorInvalidCredential": "Nome utente o password errati",
     "errorTooManyRequests": "Troppi tentativi, riprova tra qualche minuto",
-    "errorGeneric": "Accesso non riuscito"
+    "errorGeneric": "Accesso non riuscito",
+    "errorUsernameRequired": "Inserisci il tuo nome utente o la tua email.",
+    "errorPasswordRequired": "Inserisci la password."
   },
   "superAdmin": {
     "title": "Aziende",
@@ -1698,7 +1727,8 @@
     "doneTitle": "Tutto pronto!",
     "doneDesc": "Puoi sempre cambiare logo e aggiungere altri magazzinieri da Impostazioni.",
     "goToDashboard": "Vai alla Dashboard",
-    "launching": "Ci siamo quasi…"
+    "launching": "Ci siamo quasi…",
+    "revealDone": "Tutto pronto!"
   },
   "pendingApproval": {
     "heroTitle": "Ci siamo quasi!",

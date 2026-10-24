@@ -30,16 +30,22 @@ function SettingsRowsCard({ rows, navigate }) {
             className="btn-no-anim"
             style={{
               width:'100%', display:'flex', alignItems:'center', gap:12, padding:'13px 16px',
-              borderTop: i > 0 ? '1px solid var(--border)' : 'none', textAlign:'left', background:'transparent',
+              borderTop: i > 0 ? '1px solid var(--border)' : 'none', textAlign:'left',
+              // Riga da far notare (abbonamento non ancora fatto): sfondo caldo e filo rosso a sinistra.
+              background: row.highlight ? 'linear-gradient(90deg, rgba(230,57,70,0.13) 0%, rgba(124,111,234,0.10) 100%)' : 'transparent',
+              boxShadow: row.highlight ? 'inset 3px 0 0 var(--accent)' : 'none',
             }}
           >
-            <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background:row.bg, color:row.color, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ width:34, height:34, borderRadius:9, flexShrink:0, background: row.highlight ? 'var(--accent)' : row.bg, color: row.highlight ? '#fff' : row.color, display:'flex', alignItems:'center', justifyContent:'center' }}>
               <RowIcon size={17} />
             </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:14.5, fontWeight:600 }}>{row.title}</p>
-              <p style={{ color:'var(--text2)', fontSize:12, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.subtitle}</p>
+              <p style={{ fontSize:14.5, fontWeight: row.highlight ? 800 : 600 }}>{row.title}</p>
+              <p style={{ color: row.highlight ? 'var(--accent)' : 'var(--text2)', fontWeight: row.highlight ? 700 : 400, fontSize:12, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{row.subtitle}</p>
             </div>
+            {row.cta && (
+              <span style={{ flexShrink:0, background:'var(--accent)', color:'#fff', borderRadius:20, padding:'4px 11px', fontSize:11.5, fontWeight:800 }}>{row.cta}</span>
+            )}
             {row.badge && (
               <span style={{ background:'var(--accent)', color:'#fff', borderRadius:9, minWidth:18, height:18, padding:'0 5px', fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 {row.badge}
@@ -111,6 +117,8 @@ export default function Settings() {
     : team?.billingStatus === 'past_due' ? t('adminUsers.billingRowPastDue')
     : t('adminUsers.billingRowCanceled')
 
+  const needsSubscription = team?.billingStatus !== 'active' && team?.billingStatus !== 'exempt'
+
   // Strumenti pratici — cose che si toccano spesso ma non sono davvero
   // "impostazioni" (non c'è nulla da configurare, solo dati da gestire):
   // i Furgoni sono stati spostati qui dalla Dashboard perché si usano poco;
@@ -155,6 +163,8 @@ export default function Settings() {
       key: 'billing', to: '/admin/settings/billing', icon: CreditCard,
       color: 'var(--green)', bg: 'rgba(105,240,174,0.18)',
       title: t('adminUsers.billingTitle'), subtitle: billingSubtitle,
+      // Finché non c'è un abbonamento (né una squadra esente) la riga resta evidenziata.
+      ...(needsSubscription ? { highlight: true, cta: t('adminUsers.billingRowCta') } : {}),
     },
   ]
 

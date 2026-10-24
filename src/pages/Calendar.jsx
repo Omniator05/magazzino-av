@@ -1,3 +1,4 @@
+import { usePulseAdd } from '../hooks/usePulseAdd'
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -125,8 +126,12 @@ export default function Calendar() {
   // navigazione va consumato una volta sola (altrimenti un refresh o un
   // back/forward ci farebbero tornare qui di continuo).
   const { state: navState, search: locSearch } = useLocation()
+  const pulseAdd = usePulseAdd()
   const [focusAssign, setFocusAssign] = useState(null) // {eventId?, date}
   useEffect(() => {
+    // Dal passo "Crea il tuo primo evento" della guida (GettingStartedWidget): sempre sul calendario
+    // del mese, qualunque vista fosse rimasta aperta prima (es. "Assegna personale").
+    if (navState?.pulseAdd) setMode('grid')
     // Da "nuovo evento" della pagina Eventi su computer: apre subito la
     // creazione nella colonna laterale.
     if (navState?.createEvent && !isMobile) {
@@ -1241,6 +1246,7 @@ export default function Calendar() {
           già aperto, per non doverci rinavigare sopra. */}
       {mode === 'grid' && !sidebarCreating && !readOnly && (
       <button
+        className={pulseAdd ? 'fab-pulse' : undefined}
         onClick={() => { if (isMobile) { setShowCreate(true) } else { if (reportMode) cancelReportMode(); if (showAbsenceModal) closeAbsenceModal(); setEditingEvent(null); setSidebarCreating(true) } }}
         style={{
           position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,

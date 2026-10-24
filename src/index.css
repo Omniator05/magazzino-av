@@ -1326,3 +1326,16 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
    fluttuante (600px al centro) arriva fino alla colonna: più spazio sotto. */
 .rc-side-footer { flex-shrink: 0; padding: 14px 28px 22px; border-top: 1px solid var(--c-line); background: var(--c-surface); }
 @media (max-width: 1520px) { .rc-side-footer { padding-bottom: 104px; } }
+
+
+/* Bottone "+" che richiama l'attenzione (arrivando da un passo di "Per iniziare"): un piccolo
+   rimbalzo e un alone che si espande, tre volte. */
+@keyframes fabPop { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.2); } 50% { transform: scale(0.95); } 75% { transform: scale(1.08); } }
+@keyframes fabRing { 0% { box-shadow: 0 4px 16px rgba(216,56,63,0.4), 0 0 0 0 rgba(230,57,70,0.55); } 100% { box-shadow: 0 4px 16px rgba(216,56,63,0.4), 0 0 0 24px rgba(230,57,70,0); } }
+.fab-pulse { animation: fabPop 1.1s ease-in-out 0.6s 3, fabRing 1.1s ease-out 0.6s 3; }
+@media (prefers-reduced-motion: reduce) { .fab-pulse { animation: none; } }
+
+/* Righe appena incollate in una lista di carico: un lampo verde che si spegne piano. */
+@keyframes rowFlash { 0%, 55% { box-shadow: inset 0 0 0 100px rgba(34,197,94,0.16); } 100% { box-shadow: inset 0 0 0 100px rgba(34,197,94,0); } }
+.row-flash { animation: rowFlash 4s ease-out; }
+@media (prefers-reduced-motion: reduce) { .row-flash { animation: none; } }

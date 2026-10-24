@@ -364,7 +364,7 @@ export default function Archive() {
           <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder={t('archive.searchPlaceholder')} aria-label={t('archive.searchPlaceholder')} style={{ paddingRight: 40 }} />
           {search && (
             <button type="button" className="btn-no-anim" aria-label={t('archive.clearSearch')} onClick={() => { setSearch(''); searchRef.current?.focus() }}
-              style={{ position:'absolute', right:26, top:'50%', transform:'translateY(-50%)', width:26, height:26, borderRadius:'50%', background:'var(--c-line)', color:'var(--c-ink2)', fontSize:16, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+              style={{ position:'absolute', right:26, top:'calc(50% - 13px)', width:26, height:26, borderRadius:'50%', background:'var(--c-line)', color:'var(--c-ink2)', fontSize:16, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           )}
         </div>
       </div>

@@ -27,8 +27,8 @@ export default function QrRedirect({ teamId }) {
   }, [teamId])
 
   return (
-    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'#07090f' }}>
-      <div style={{ width:32, height:32, border:'3px solid rgba(255,255,255,0.18)', borderTop:'3px solid #e63946', borderRadius:'50%', animation:'qrSpin 0.8s linear infinite' }} />
+    <div style={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
+      <div style={{ width:32, height:32, border:'3px solid var(--c-line)', borderTop:'3px solid #e63946', borderRadius:'50%', animation:'qrSpin 0.8s linear infinite' }} />
       <style>{`@keyframes qrSpin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )

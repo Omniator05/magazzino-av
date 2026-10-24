@@ -305,6 +305,9 @@ export default function Dashboard({ toggleTheme, theme }) {
   // (compresi i rent scaduti, in testa), "Prossimi" = gli altri della stessa
   // lista di tre.
   const todayEvents = upcoming.filter(e => isRelevantToday(e) || isOverdueRent(e))
+  // Squadra nuova (nessun evento in evidenza), su computer: la colonna degli strumenti si allunga
+  // fino all'altezza del riquadro "Ancora nessun evento", con i quattro tasti più grandi.
+  const emptyHome = !isMobile && upcoming.length === 0
   const nextEvents = upcoming.filter(e => !(isRelevantToday(e) || isOverdueRent(e)))
   const sectionLabel = { fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink3)', margin:'0 0 12px 2px' }
   const attentionRow = { width:'100%', display:'flex', alignItems:'center', gap:12, padding:'14px 16px', borderRadius:12, background:'var(--c-surface)', border:'1px solid var(--c-line)', fontSize:13, fontWeight:600, color:'var(--c-ink)' }
@@ -392,12 +395,12 @@ export default function Dashboard({ toggleTheme, theme }) {
   ) : (
     <>
       <p style={sectionLabel}>{t('dashboard.toolsSection')}</p>
-      <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:12, marginBottom:28 }}>
+      <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2, minmax(0, 1fr))', gap:12, marginBottom: emptyHome ? 0 : 28, ...(emptyHome ? { flex:1, gridAutoRows:'1fr' } : {}) }}>
         {tools.map((tool) => (
           <button key={tool.path} className="dash-tool-tile btn-no-anim" onClick={() => navigate(tool.path)}
-            style={{ position:'relative', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding:'18px 16px', display:'flex', alignItems:'center', gap:12, color:'var(--c-ink)', textAlign:'left' }}>
-            <span style={{ width:42, height:42, borderRadius:13, background:'var(--c-fill)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{tool.icon}</span>
-            <span style={{ fontSize:14, fontWeight:700 }}>{tool.label}</span>
+            style={{ position:'relative', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding: emptyHome ? '22px 20px' : '18px 16px', display:'flex', alignItems:'center', gap:14, color:'var(--c-ink)', textAlign:'left' }}>
+            <span style={{ width: emptyHome ? 48 : 42, height: emptyHome ? 48 : 42, borderRadius:14, background:'var(--c-fill)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{tool.icon}</span>
+            <span style={{ fontSize: emptyHome ? 15 : 14, fontWeight:700 }}>{tool.label}</span>
             {tool.badge !== null && (
               <span style={{ marginLeft:'auto', minWidth:22, height:22, padding:'0 7px', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--accent)', color:'#fff', borderRadius:11, fontSize:12, fontWeight:800 }}>{tool.badge}</span>
             )}
@@ -437,7 +440,7 @@ export default function Dashboard({ toggleTheme, theme }) {
     <>
       <p style={sectionLabel}>{t('dashboard.upcomingEvents')}</p>
       <button type="button" onClick={() => navigate('/events', { state: { openNewEvent: true } })} className="btn-no-anim"
-        style={{ width:'100%', background:'var(--c-surface)', border:'1.5px dashed var(--c-dash)', borderRadius:16, padding:'26px 20px', display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center' }}>
+        style={{ width:'100%', background:'var(--c-surface)', border:'1.5px dashed var(--c-dash)', borderRadius:16, padding:'26px 20px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, textAlign:'center', ...(emptyHome ? { flex:1 } : {}) }}>
         <div style={{ width:48, height:48, borderRadius:'50%', background:'var(--c-fill)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--c-ink2)' }}>
           <IconCalendarEmpty />
         </div>
@@ -518,10 +521,10 @@ export default function Dashboard({ toggleTheme, theme }) {
           </div>
         )}
 
-        <div style={isMobile ? { display:'flex', flexDirection:'column' } : { display:'grid', gridTemplateColumns:'minmax(0, 1.8fr) minmax(340px, 1fr)', gap:36, alignItems:'start' }}>
+        <div style={isMobile ? { display:'flex', flexDirection:'column' } : { display:'grid', gridTemplateColumns:'minmax(0, 1.8fr) minmax(340px, 1fr)', gap:36, alignItems: emptyHome ? 'stretch' : 'start' }}>
 
           {/* Colonna principale (computer) — su telefono tutto in fila */}
-          <div style={{ order: isMobile ? 2 : 1, minWidth:0 }}>
+          <div style={{ order: isMobile ? 2 : 1, minWidth:0, ...(emptyHome ? { display:'flex', flexDirection:'column' } : {}) }}>
             {todayEvents.length > 0 && (
               <>
                 <p style={sectionLabel}>{t('dashboard.todaySection')}</p>
@@ -535,7 +538,7 @@ export default function Dashboard({ toggleTheme, theme }) {
           {/* Colonna laterale (computer): strumenti e avvisi. Su telefono gli
               strumenti stanno SOPRA a tutto (fila compatta, posizione stabile
               prima dei dati asincroni), gli avvisi dopo "Oggi". */}
-          <div style={{ order: isMobile ? 1 : 2, minWidth:0 }}>
+          <div style={{ order: isMobile ? 1 : 2, minWidth:0, ...(emptyHome ? { display:'flex', flexDirection:'column' } : {}) }}>
             {toolsBlock}
             {!isMobile && attentionBlock}
           </div>

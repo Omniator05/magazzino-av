@@ -25,6 +25,8 @@ import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import { logItemActivity } from '../utils/itemActivity'
 import { syncKitAwareInventory, itemCommittedElsewhere, closeInstallationEvent } from '../utils/kitInventory'
+import { writeListClipboard, readListClipboard, clearListClipboard } from '../utils/listClipboard'
+import Toast from '../components/Toast'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import ListNameModal from '../components/ListNameModal'
@@ -106,6 +108,37 @@ export default function EventDetail() {
   // chiuso) mentre in realtà l'oggetto non era mai stato salvato su Firestore.
   const [saveError, setSaveError] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
+  // Copia/incolla di oggetti tra liste (vedi utils/listClipboard.js).
+  const [clip, setClip] = useState(() => readListClipboard())
+  const [copyToast, setCopyToast] = useState('')
+  // true mentre il carrello arriva da un "Incolla": alla conferma gli appunti si svuotano da soli.
+  const pastedRef = useRef(false)
+  // Righe appena incollate: restano evidenziate per qualche secondo.
+  const [flashIds, setFlashIds] = useState(() => new Set())
+  // Tiene gli appunti allineati anche quando cambiano altrove (altra scheda, ritorno sulla pagina).
+  useEffect(() => {
+    const sync = () => setClip(readListClipboard())
+    window.addEventListener('storage', sync)
+    window.addEventListener('focus', sync)
+    window.addEventListener('pageshow', sync)
+    return () => { window.removeEventListener('storage', sync); window.removeEventListener('focus', sync); window.removeEventListener('pageshow', sync) }
+  }, [])
+  // Scorciatoie da tastiera ⌘/Ctrl+C e ⌘/Ctrl+V: leggono sempre l'ultimo stato (vedi kbRef sotto).
+  const kbRef = useRef({})
+  useEffect(() => {
+    const onKey = e => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return
+      const el = document.activeElement
+      if (el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)) return
+      if (window.getSelection?.().toString()) return   // testo selezionato: resta il copia normale
+      const k = kbRef.current
+      const key = e.key.toLowerCase()
+      if (key === 'c' && k.selectMode && k.selectedCount > 0) { e.preventDefault(); k.copySelected() }
+      else if (key === 'v' && !k.showAddItem && readListClipboard()) { e.preventDefault(); k.pasteClip(k.targetListId) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const [showExtraModal, setShowExtraModal] = useState(false)
   const [cart, setCart] = useState([])
   const [showDiscardCart, setShowDiscardCart] = useState(false)
@@ -1156,6 +1189,16 @@ export default function EventDetail() {
     // a SaveButton perché faccia scuotere il modal — un doppio segnale
     // (toast + jiggle) invece di un fallimento silenzioso sul bottone.
     await updateEventItems(current => [...current, ...rowsCapped])
+    // Incollato: gli oggetti sono nella lista, gli appunti non servono più (subito, prima di registrare
+    // la cronologia: se quella fallisse, i pulsanti "Incolla" non devono restare lì).
+    if (pastedRef.current) {
+      pastedRef.current = false
+      const ids = rowsCapped.map(r => r.id)
+      setFlashIds(new Set(ids))
+      setTimeout(() => setFlashIds(new Set()), 4500)
+      // porta in vista la prima riga arrivata (le righe si montano subito dopo la scrittura)
+      setTimeout(() => document.querySelector(`[data-row-id="${ids[0]}"]`)?.scrollIntoView({ block:'center', behavior:'smooth' }), 400)
+    }
     await Promise.all(rowsCapped.map(row => logItemActivity({
       teamId, eventId, eventName: event?.name, itemId: row.id, itemName: row.name,
       catalogItemId: row.isExtra ? null : (row.itemRef || row.id),
@@ -1170,10 +1213,51 @@ export default function EventDetail() {
     return true
   }
 
+  // Copia le righe selezionate negli appunti delle liste.
+  const copySelected = () => {
+    const rows = eventItems.filter(i => bulkSelectedIds.has(i.id))
+    if (rows.length === 0) return
+    setClip(writeListClipboard(event, rows))
+    setCopyToast(t('eventDetail.copiedToast', { count: rows.length }))
+    setTimeout(() => setCopyToast(''), 3500)
+    exitSelectMode()
+  }
+
+  // Incolla: porta gli oggetti copiati nel carrello della lista scelta e apre l'aggiunta, così
+  // si vedono prima di confermare e valgono gli stessi controlli di disponibilità di sempre.
+  const pasteClip = (listId) => {
+    const data = readListClipboard()
+    if (!data) { setClip(null); return }
+    const merged = new Map()
+    let skipped = 0
+    const extras = []
+    data.rows.forEach((r, n) => {
+      if (r.extra) { extras.push({ id: `extra-${Date.now()}-${n}`, name: r.name, qty: r.qty || 1, notes: r.notes || '', category: 'Extra', isExtra: true }); return }
+      const cat = allItems.find(i => i.id === r.id)
+      if (!cat) { skipped++; return }
+      const prev = merged.get(cat.id)
+      merged.set(cat.id, prev ? { ...prev, qty: prev.qty + (r.qty || 1) } : toCartRow(cat, r.qty || 1))
+    })
+    const rows = [...merged.values(), ...extras]
+    if (rows.length === 0) { setCopyToast(t('eventDetail.pasteNothing')); setTimeout(() => setCopyToast(''), 3500); return }
+    // Gli appunti si svuotano subito: una volta incollati non servono più (annullando, si ricopia).
+    clearListClipboard(); setClip(null)
+    if (typeof listId === 'string') setAddTargetList(listId)
+    pastedRef.current = true
+    setCart(rows)
+    setSearch('')
+    setShowAddItem(true)
+    if (skipped > 0) { setCopyToast(t('eventDetail.pasteSkipped', { count: skipped })); setTimeout(() => setCopyToast(''), 4500) }
+  }
+
+  // Aggiorna ad ogni render quello che le scorciatoie da tastiera devono vedere.
+  kbRef.current = { selectMode, selectedCount: bulkSelectedIds.size, copySelected, pasteClip, targetListId, showAddItem }
+
   const openAddModal = (listId) => {
     // Chiamato anche direttamente come onClick (riceve l'evento): solo una
     // stringa vale come id di lista.
     if (typeof listId === 'string') setAddTargetList(listId)
+    pastedRef.current = false
     setCart([])
     setSearch('')
     setShowAddItem(true)
@@ -1496,7 +1580,7 @@ export default function EventDetail() {
           </div>
         )}
         {catGrouped[cat].map(item => (
-          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={selectMode} bulkSelected={bulkSelectedIds.has(item.id)} onBulkToggle={toggleBulkSelect} onLongPressSelect={enterSelectModeWith} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
+          <EventItemRow key={item.id} item={item} onRemove={removeFromEvent} onEdit={setEditItem} vehicles={vehicles} externalVehicles={externalVehicles} onSetVehicle={setItemVehicle} onRequestExternalVehicle={() => setPendingExternalVehicleFor(item.id)} bulkMode={selectMode} bulkSelected={bulkSelectedIds.has(item.id)} flash={flashIds.has(item.id)} onBulkToggle={toggleBulkSelect} onLongPressSelect={enterSelectModeWith} location={itemDetails[item.itemRef || item.id]?.location || null} warehouseNotes={itemDetails[item.itemRef || item.id]?.notes || null} allItems={allItems} event={event} otherEvents={otherEvents} />
         ))}
       </div>
     ))
@@ -1565,6 +1649,12 @@ export default function EventDetail() {
           {/* Sfuma e si disattiva durante la selezione multipla, come il FAB
               in fondo pagina — niente da aggiungere mentre si stanno
               modificando oggetti già in lista (vedi commento sul FAB). */}
+          {clip && (
+            <button onClick={() => pasteClip(l.id)} aria-label={t('eventDetail.pasteAria', { count: clip.rows.length })} title={`${t('eventDetail.pasteAria', { count: clip.rows.length })} (⌘/Ctrl+V)`}
+              style={{ height:30, padding:'0 10px', borderRadius:8, background:'var(--card)', border:'1px dashed var(--accent)', color:'var(--accent)', display:'flex', alignItems:'center', gap:5, flexShrink:0, fontSize:12, fontWeight:800, whiteSpace:'nowrap', opacity: selectMode ? 0.4 : 1, pointerEvents: selectMode ? 'none' : 'auto' }}>
+              {t('eventDetail.pasteAction')} · {clip.rows.length}
+            </button>
+          )}
           <button onClick={() => openAddModal(l.id)} aria-label={t('eventDetail.addToThisListAria', { name: listLabel(l) })}
             style={{ width:30, height:30, borderRadius:8, background:'var(--card)', border:'1px solid var(--border)', color:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: selectMode ? 0 : 1, pointerEvents: selectMode ? 'none' : 'auto', transition:'opacity 0.2s ease' }}>
             <Plus size={15} />
@@ -1601,6 +1691,12 @@ export default function EventDetail() {
                     <p style={{ fontSize:32 }}>📋</p>
                     <h3>{t('eventDetail.emptyListTitle')}</h3>
                     <p>{t('eventDetail.emptyListDescBefore')} <strong style={{ color:'var(--accent)' }}>+</strong> {t('eventDetail.emptyListDescAfter')}</p>
+                    {clip && (
+                      <button onClick={() => pasteClip(l.id)}
+                        style={{ marginTop:14, marginRight: templates.length > 0 ? 8 : 0, padding:'7px 16px', borderRadius:20, background:'transparent', border:'1px dashed var(--accent)', color:'var(--accent)', fontSize:13, fontWeight:800 }}>
+                        {t('eventDetail.pasteAction')} · {t('eventDetail.pasteCountItems', { count: clip.rows.length })}
+                      </button>
+                    )}
                     {templates.length > 0 && (
                       <button
                         onClick={() => setShowTemplatePicker(true)}
@@ -1996,6 +2092,7 @@ export default function EventDetail() {
               <button onClick={() => setBulkAction(a => a === 'moveExisting' ? null : 'moveExisting')} aria-pressed={bulkAction === 'moveExisting'} style={chipStyle(bulkAction === 'moveExisting')}>{t('eventDetail.moveToListExisting')}</button>
             )}
             <button onClick={() => setListModal({ mode:'moveSelected', name:'' })} style={chipStyle(false)}>{t('eventDetail.moveToListNew')}</button>
+            <button onClick={copySelected} title="⌘/Ctrl+C" style={chipStyle(false)}>{t('eventDetail.copyAction')}</button>
             <button onClick={() => setBulkAction(a => a === 'status' ? null : 'status')} aria-pressed={bulkAction === 'status'} style={chipStyle(bulkAction === 'status')}>{t('eventDetail.bulkStatusAction')}</button>
             <PendingButton onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
           </div>
@@ -2087,6 +2184,7 @@ export default function EventDetail() {
               <button onClick={() => { setBulkAction('moveExisting'); setMobileMoreOpen(false) }} style={menuRowStyle}>{t('eventDetail.moveToListExisting')}</button>
             )}
             <button onClick={() => { setMobileMoreOpen(false); setListModal({ mode:'moveSelected', name:'' }) }} style={menuRowStyle}>{t('eventDetail.moveToListNew')}</button>
+            <button onClick={() => { setMobileMoreOpen(false); copySelected() }} style={menuRowStyle}>{t('eventDetail.copyAction')}</button>
             <button onClick={() => { setBulkAction('status'); setMobileMoreOpen(false) }} style={menuRowStyle}>{t('eventDetail.bulkStatusAction')}</button>
           </div>
         )
@@ -2195,6 +2293,8 @@ export default function EventDetail() {
           </button>
         </div>
       )}
+
+      <Toast message={copyToast} />
 
       {/* FAB aggiungi articoli — sfuma via durante la selezione multipla,
           stesso trattamento della tab bar (niente da aggiungere mentre si
@@ -2935,7 +3035,7 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 }
 
 // Riga lista evento con location live
-function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, externalVehicles, onSetVehicle, onRequestExternalVehicle, bulkMode, bulkSelected, onBulkToggle, onLongPressSelect, allItems, event, otherEvents }) {
+function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, externalVehicles, onSetVehicle, onRequestExternalVehicle, bulkMode, bulkSelected, flash, onBulkToggle, onLongPressSelect, allItems, event, otherEvents }) {
   const { t } = useTranslation()
   // Pressione prolungata (soprattutto da cellulare): entra in selezione con
   // questa riga già scelta, senza dover risalire al bottone "Seleziona" in
@@ -2978,7 +3078,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
     : t('inventory.unitShort_pezzi')
 
   return (
-    <div style={{ borderBottom:'1px solid var(--border)', background: bulkSelected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: bulkSelected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
+    <div data-row-id={item.id} className={flash ? 'row-flash' : undefined} style={{ borderBottom:'1px solid var(--border)', background: bulkSelected ? 'rgba(216,56,63,0.06)' : item.mancante ? 'rgba(234,88,12,0.04)' : 'transparent', borderLeft: bulkSelected ? '3px solid var(--accent)' : item.mancante ? '3px solid #ea580c' : '3px solid transparent' }}>
       <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:12 }}>
         {/* Icona + testo — anche bottone reale per l'apertura da tastiera
             (le azioni a destra restano bottoni separati, non annidati qui). */}
