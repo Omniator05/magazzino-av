@@ -383,9 +383,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
         if (date < ev.date || date > end) return false
         // Un rent/install lungo compare solo il primo e l'ultimo giorno (inizio e fine): nei
-        // giorni in mezzo non c'è nulla da fare. Se però lì c'è già qualcuno assegnato resta
-        // visibile, altrimenti quelle assegnazioni sparirebbero dalla timeline.
-        if (ev.type === 'installation' && date !== ev.date && date !== end) return blocks.some(b => b.eventId === ev.id && b.date === date && !b.phase)
+        // giorni in mezzo non c'è nulla da fare, anche per gli admin. Eventuali assegnazioni già
+        // fatte in quei giorni restano salvate ma non si vedono nella timeline.
+        if (ev.type === 'installation' && date !== ev.date && date !== end) return false
         return true
       })
       const dayEventItems = dayEvents
@@ -657,7 +657,6 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     if (ev) {
       const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
       const middleOfRent = ev.type === 'installation' && focusAssign.date !== ev.date && focusAssign.date !== end
-        && !blocks.some(x => x.eventId === ev.id && x.date === focusAssign.date && !x.phase)
       const covers = focusAssign.date >= ev.date && focusAssign.date <= end && !middleOfRent
       const phaseKey = covers ? null : Object.entries(ev.phases || {}).find(([k, d]) => d === focusAssign.date && PHASE_META[k])?.[0]
       setPanel({ key: covers || !phaseKey ? `ev${ev.id}` : `ph${ev.id}-${phaseKey}`, date: focusAssign.date, isNew: false })
