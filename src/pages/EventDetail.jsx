@@ -90,7 +90,7 @@ export default function EventDetail() {
   // nelle chiamate a logItemActivity evita di scrivere per sbaglio l'id
   // della riga anche come eventId.
   const eventId = id
-  const { user, profile, teamId, team } = useAuth()
+  const { user, profile, teamId, team, isOwner } = useAuth()
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const navigate = useNavigate()
@@ -1181,7 +1181,7 @@ export default function EventDetail() {
     const rowsCapped = rowsToAdd.slice(0, headroom)
     const rowsSkipped = rowsToAdd.length - rowsCapped.length
     if (rowsCapped.length === 0 && rowsSkipped > 0) {
-      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
+      await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
       return false
     }
     // Non catturato qui apposta: updateEventItems mostra già il proprio
@@ -1208,7 +1208,7 @@ export default function EventDetail() {
     setCart([])
     setSearch('')
     if (rowsSkipped > 0) {
-      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
+      await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
     }
     return true
   }

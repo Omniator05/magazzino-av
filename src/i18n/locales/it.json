@@ -58,6 +58,7 @@
     "modalLater": "Più tardi"
   },
   "billing": {
+    "notOwnerDesc": "L'abbonamento della squadra ha un problema di pagamento. Solo il creatore della squadra può sistemarlo: avvisalo per riportare tutto in funzione.",
     "trialExpiredTitle": "Prova terminata",
     "pastDueTitle": "Pagamento non riuscito",
     "canceledTitle": "Abbonamento cancellato",
@@ -884,6 +885,8 @@
     "pwStrong": "Forte"
   },
   "adminUsers": {
+    "ownerHint": "Creatore della squadra: vede l'abbonamento e gestisce gli altri admin",
+    "ownerBadge": "Creatore",
     "statUsers": "Utenti",
     "statItems": "Oggetti in magazzino",
     "statTotalEvents": "Eventi totali",
@@ -1983,8 +1986,36 @@
   },
   "station": {
     "title": "Postazione magazzino",
-    "roleOption": "Postazione magazzino",
-    "roleHint": "Account per il PC fisso in magazzino: una home a schermo intero con il lettore USB, che mostra la scheda di ogni oggetto scansionato. Non conta tra i magazzinieri del piano.",
+    "rowSubtitle": "Collega il PC di magazzino con un link e un QR da stampare",
+    "linkIntro": "Il PC di magazzino non ha nome utente né password: si collega aprendo un link (o scansionando il suo QR) che vale solo per la tua squadra. Stampa il foglio e tienilo vicino al computer.",
+    "linkCreate": "Crea il link della postazione",
+    "linkKeep": "Chi ha questo link può collegare un dispositivo alla tua squadra come postazione: tieni il foglio al sicuro.",
+    "linkQrAlt": "QR per collegare la postazione",
+    "linkLabel": "Link della postazione",
+    "print": "Stampa il foglio",
+    "printBlocked": "Il browser ha bloccato la finestra di stampa. Consenti i popup per questo sito e riprova.",
+    "linkNew": "Crea un nuovo link",
+    "linkNewTitle": "Creare un nuovo link?",
+    "linkNewMessage": "Il link attuale smette di funzionare e il PC collegato esce: dovrai collegarlo di nuovo con il nuovo foglio.",
+    "linkNewConfirm": "Crea nuovo",
+    "linkRevoke": "Disattiva",
+    "linkRevokeTitle": "Disattivare il link?",
+    "linkRevokeMessage": "Il link smette di funzionare e il PC collegato esce. Potrai crearne uno nuovo quando vuoi.",
+    "linkRevokeConfirm": "Disattiva",
+    "linkError": "Non riesco a completare l'operazione. Riprova tra poco.",
+    "sheetStep1": "Apri Roadcase sul PC di magazzino.",
+    "sheetStep2": "Passa il lettore su questo QR (oppure apri il link qui sotto).",
+    "sheetStep3": "Premi «Collega questo computer».",
+    "sheetWarn": "Foglio riservato: chi lo ha può collegare un dispositivo a questa squadra. Tienilo in magazzino e, se sparisce, crea un nuovo link da Utenti.",
+    "connectLoading": "Caricamento…",
+    "connectText": "Questo computer diventerà la postazione di magazzino della squadra. Per usarla serve il badge o il codice personale di chi lavora.",
+    "connectButton": "Collega questo computer",
+    "connecting": "Collego…",
+    "connectBadTitle": "Link non utilizzabile",
+    "connectInvalid": "Questo link non è più valido. Chiedi a un admin di crearne uno nuovo.",
+    "connectError": "Non riesco a collegare la postazione. Riprova tra poco.",
+    "detailLinkNote": "Questa postazione si collega con il link del foglio stampato: non ha nome utente né password.",
+    "detailManage": "Gestisci il link e il foglio",
     "paidHint": "La Postazione magazzino è disponibile nei piani a pagamento.",
     "paidOnly": "La Postazione magazzino è disponibile solo nei piani a pagamento.",
     "badge": "Postazione",
@@ -2051,21 +2082,23 @@
     "regenTitle": "Creare un nuovo badge?",
     "regenMessage": "Il badge attuale smetterà subito di funzionare. Usa questa opzione se qualcuno lo ha fotografato.",
     "regenConfirm": "Crea nuovo",
-    "codeLabel": "Codice del badge"
+    "codeLabel": "Codice del badge",
+    "pinLabel": "Codice personale"
   },
   "operator": {
-    "barNone": "Scansiona il tuo badge per iniziare",
+    "barNone": "Digita il tuo codice a 4 cifre o scansiona il badge",
     "invalid": "Badge non valido",
     "inactive": "Utente non attivo",
+    "locked": "Troppi tentativi: riprova tra qualche minuto",
     "expires": "Esce tra {{time}}",
     "logout": "Esci",
     "lockTitle": "Chi sta lavorando?",
-    "lockText": "Passa il tuo badge sul lettore per iniziare: così si sa chi ha fatto cosa. Lo trovi nel Profilo dell'app, sul telefono.",
+    "lockText": "Digita il tuo codice a 4 cifre, oppure passa il badge sul lettore: così si sa chi ha fatto cosa. Li trovi nel Profilo dell'app.",
     "lockHome": "Torna alla home",
-    "promptText": "Passa il tuo badge sul lettore, oppure scrivi qui il codice che trovi nel Profilo dell'app. Finché non lo fai, le azioni non hanno un nome.",
-    "codePlaceholder": "Codice del badge (RCB-…)",
+    "promptText": "Digita il tuo codice a 4 cifre (lo trovi nel Profilo dell'app) oppure passa il badge sul lettore. Finché non lo fai, le azioni non hanno un nome.",
+    "codePlaceholder": "Codice a 4 cifre",
     "codeGo": "Entra",
-    "needBadge": "Scansiona prima il tuo badge"
+    "needBadge": "Inserisci prima il tuo codice"
   },
   "backup": {
     "title": "Backup dei dati",
@@ -2105,8 +2138,15 @@
       "brasserieArtists": "Artisti Brasserie",
       "eventOrganizerContent": "Contenuti organizzatore"
     },
-    "rowSubtitleNever": "Mai fatto",
-    "rowSubtitleLast": "Ultimo: {{date}}",
-    "rowSubtitleStale": "Da fare: ultimo {{date}}"
+    "rowSubtitleStale": "Backup da fare"
+  },
+  "activities": {
+    "todayTitle": "Attività di oggi",
+    "doneTag": "Completata",
+    "doneBy": "Completata da {{name}}",
+    "complete": "Completa",
+    "reopen": "Riapri",
+    "onlyAssigned": "Solo chi è assegnato può completarla",
+    "onlyAssignedMsg": "Questa attività la può completare solo chi è assegnato."
   }
 }

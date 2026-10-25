@@ -11,6 +11,7 @@ import { todayStr } from './_date.js'
 import { handleGuestAction } from './_guest.js'
 import { handleBadgeAction } from './_badge.js'
 import { handleUserAction } from './_users.js'
+import { handleStationAction } from './_station.js'
 
 const DEAD_TOKEN_CODES = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']
 
@@ -213,6 +214,10 @@ export default async function handler(req, res) {
   // PRIMA del controllo del token Firebase perché "guest-view" è pubblico (si
   // autentica con la chiave del link); create/revoke verificano da sé l'admin.
   if (String(req.body?.action || '').startsWith('guest-') && await handleGuestAction(req, res)) return
+
+  // Collegamento della postazione con un link (vedi _station.js): "station-connect" è pubblico (la chiave del
+  // link è la credenziale), le altre azioni station-* verificano da sole l'admin.
+  if (String(req.body?.action || '').startsWith('station-') && await handleStationAction(req, res)) return
 
   let db, teamId, uid, profile
   try {

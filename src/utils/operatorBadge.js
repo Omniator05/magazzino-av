@@ -15,15 +15,18 @@ export const normalizeBadge = raw => {
   return /^RCB[A-Z0-9]/.test(c) ? `RCB-${c.slice(3)}` : c
 }
 export const isBadgeCode = raw => BADGE_RE.test(normalizeBadge(raw))
+// Codice personale a 4 cifre: alternativa rapida al QR, si digita alla postazione.
+export const isPin = raw => /^\d{4}$/.test(String(raw || '').trim())
 
 // Solo in `npm run dev`: Vite non serve la cartella api/, quindi /api/push non risponde.
 // Per poter provare l'interfaccia in locale si usa un badge FINTO fisso che la postazione
 // riconosce come "Operatore di prova". Nel build di produzione questo ramo non esiste.
 export const DEV_BADGE = 'RCB-DEVPROVA2345678ABCDEFG'
+export const DEV_PIN = '1234'
 function devFallback(body) {
-  if (body.action === 'badge-get') return { code: DEV_BADGE }
+  if (body.action === 'badge-get') return { code: DEV_BADGE, pin: DEV_PIN }
   if (body.action === 'badge-login') {
-    if (normalizeBadge(body.code) === DEV_BADGE) return { userId: 'dev-operator', name: 'Operatore di prova' }
+    if (normalizeBadge(body.code) === DEV_BADGE || body.pin === DEV_PIN) return { userId: 'dev-operator', name: 'Operatore di prova' }
     const e = new Error('Badge non valido'); e.status = 404; e.code = 'invalid'; throw e
   }
   throw new Error('dev-fallback')
@@ -47,7 +50,12 @@ async function post(body) {
 
 // Il proprio badge (si crea la prima volta). `regenerate` ne fa uno nuovo: il vecchio
 // smette subito di funzionare.
-export const fetchMyBadge = async (regenerate = false) => (await post({ action: 'badge-get', regenerate })).code
+// Ritorna { code, pin }: il QR (RCB-…) e il codice a 4 cifre.
+export const fetchMyBadge = async (regenerate = false) => {
+  const r = await post({ action: 'badge-get', regenerate })
+  return { code: r.code, pin: r.pin || '' }
+}
 
 // Chiamata dalla postazione: chi è il proprietario di questo badge → { userId, name }.
-export const badgeLogin = code => post({ action: 'badge-login', code: normalizeBadge(code) })
+// `input` è il codice QR oppure il codice a 4 cifre.
+export const badgeLogin = input => post(isPin(input) ? { action: 'badge-login', pin: String(input).trim() } : { action: 'badge-login', code: normalizeBadge(input) })

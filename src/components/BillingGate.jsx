@@ -11,7 +11,7 @@ import AuthBackground from './AuthBackground'
 // falliscono comunque a leggere i loro dati una volta bloccato l'accesso.
 export default function BillingGate() {
   const { t } = useTranslation()
-  const { team, user, profile, logout } = useAuth()
+  const { team, user, profile, logout, isOwner } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const isAdmin = profile?.role === 'admin'
@@ -49,10 +49,10 @@ export default function BillingGate() {
         <div style={{ fontSize:38, marginBottom:14 }}>⏳</div>
         <h1 style={{ fontSize:21, fontWeight:800, marginBottom:10, color:'var(--text)' }}>{t(titleKey)}</h1>
         <p style={{ color:'var(--text2)', fontSize:14, lineHeight:1.6, marginBottom:26 }}>
-          {isAdmin ? t('billing.adminDesc') : t('billing.workerDesc')}
+          {isAdmin && isOwner ? t('billing.adminDesc') : isAdmin ? t('billing.notOwnerDesc') : t('billing.workerDesc')}
         </p>
         {error && <p style={{ color:'var(--c-danger)', fontSize:13, marginBottom:14, fontWeight:600 }}>{error}</p>}
-        {isAdmin && (
+        {isAdmin && isOwner && (
           <button onClick={fixPayment} disabled={loading} className="btn btn-primary btn-full">
             {loading ? t('common.redirecting') : t('billing.fixPaymentButton')}
           </button>

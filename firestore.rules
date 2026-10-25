@@ -52,6 +52,18 @@ service cloud.firestore {
     function canAdminTeam(teamId) {
       return (isTeamAdmin(teamId) && !isBillingBlocked(teamId)) || isSuperAdmin();
     }
+    // Creatore della squadra: chi l'ha registrata (`createdByUid` sul documento squadra, scritto da
+    // Signup.jsx e poi immutabile dall'app). È l'admin "supremo": solo lui vede l'abbonamento (lo applicano
+    // anche le API dei pagamenti) e crea, promuove, modifica o toglie altri admin. Una squadra senza
+    // `createdByUid` (create prima che esistesse, finché non si lancia scripts/set-team-owners.js) non ha un
+    // creatore: lì ogni admin vale come tale, come prima. Il super admin vale sempre come il creatore.
+    function teamOwnerId(teamId) {
+      return get(/databases/$(database)/documents/teams/$(teamId)).data.get('createdByUid', null);
+    }
+    function canOwnTeam(teamId) {
+      return isSuperAdmin()
+        || (canAdminTeam(teamId) && (teamOwnerId(teamId) == null || teamOwnerId(teamId) == request.auth.uid));
+    }
 
     match /profiles/{uid} {
       // Signup: il profilo non esiste ancora, non può dipendere da myProfile().
@@ -63,7 +75,16 @@ service cloud.firestore {
       // capitava prima "per sbaglio" quando la sessione veniva davvero switchata.
       allow create: if request.auth != null
         && request.resource.data.get('superAdmin', false) != true
-        && (request.auth.uid == uid || canAdminTeam(request.resource.data.teamId));
+        && (
+          // Registrazione: ognuno crea il PROPRIO profilo. Come "unisciti alla squadra" nasce in attesa di
+          // approvazione e senza poteri; un admin nasce solo se la squadra l'ha appena creato lui.
+          (request.auth.uid == uid
+            && ((request.resource.data.get('role', null) != 'admin' && request.resource.data.get('approved', true) == false)
+                || teamOwnerId(request.resource.data.teamId) == request.auth.uid))
+          // Un admin crea il profilo di un utente della sua squadra; un nuovo ADMIN solo il creatore.
+          || (canAdminTeam(request.resource.data.teamId)
+              && (request.resource.data.get('role', null) != 'admin' || canOwnTeam(request.resource.data.teamId)))
+        );
       // Il proprio profilo è sempre leggibile (serve anche prima dell'approvazione,
       // per la schermata "in attesa"); un membro approvato (o il super admin)
       // legge anche i profili della squadra (es. AdminUsers, assegnazione worker).
@@ -72,9 +93,23 @@ service cloud.firestore {
       // Il flag superAdmin è immutabile dall'app: qualunque update deve
       // lasciarlo esattamente com'era (assente compreso).
       allow update: if request.auth != null
-        && (canAdminTeam(resource.data.teamId) || request.auth.uid == uid)
-        && request.resource.data.get('superAdmin', false) == resource.data.get('superAdmin', false);
-      allow delete: if canAdminTeam(resource.data.teamId);
+        && request.resource.data.get('superAdmin', false) == resource.data.get('superAdmin', false)
+        && (
+          // Il proprio profilo (nome, tema, preferenze…): ruolo, squadra, approvazione e stato restano com'erano.
+          (request.auth.uid == uid
+            && request.resource.data.get('role', null) == resource.data.get('role', null)
+            && request.resource.data.get('teamId', null) == resource.data.get('teamId', null)
+            && request.resource.data.get('approved', true) == resource.data.get('approved', true)
+            && request.resource.data.get('active', true) == resource.data.get('active', true))
+          // Un admin della squadra sugli altri utenti; sugli ADMIN (o per farne uno) solo il creatore.
+          || (canAdminTeam(resource.data.teamId)
+              && ((resource.data.get('role', null) != 'admin' && request.resource.data.get('role', null) != 'admin')
+                  || canOwnTeam(resource.data.teamId)))
+          || isSuperAdmin()
+        );
+      // Togliere un admin: solo il creatore (ognuno può togliere sé stesso).
+      allow delete: if canAdminTeam(resource.data.teamId)
+        && (resource.data.get('role', null) != 'admin' || canOwnTeam(resource.data.teamId) || request.auth.uid == uid);
     }
 
     match /teams/{teamId} {
@@ -83,8 +118,19 @@ service cloud.firestore {
       // l'utente crei il proprio account Firebase Auth. Espone solo nome
       // squadra e logo, non è un dato sensibile.
       allow read: if true;
-      allow create: if request.auth != null;
-      allow update: if canAdminTeam(teamId);
+      // Una squadra nasce solo dalla registrazione: in prova (mai già "attiva"), con chi la crea come
+      // creatore e una prova di 30 giorni al massimo (margine per l'orologio del dispositivo).
+      allow create: if request.auth != null
+        && request.resource.data.get('createdByUid', null) == request.auth.uid
+        && request.resource.data.get('billingStatus', null) == 'trialing'
+        && request.resource.data.get('trialEndsAt', request.time) <= request.time + duration.value(40, 'd');
+      // Abbonamento e creatore li scrivono solo le API (Stripe) o il super admin: un admin non può dichiararsi
+      // "abbonato" né cambiare chi è il creatore dal browser.
+      allow update: if canAdminTeam(teamId)
+        && (isSuperAdmin() || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+              'createdByUid', 'billingStatus', 'trialEndsAt', 'planTier', 'planPriceCents',
+              'currentPeriodEnd', 'cancelAtPeriodEnd', 'stripeCustomerId', 'stripeSubscriptionId'
+            ]));
       // Eliminazione azienda: SOLO il super admin, mai un admin della propria
       // squadra (troppo distruttivo per essere self-service dai clienti).
       allow delete: if isSuperAdmin();

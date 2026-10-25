@@ -6,6 +6,7 @@ import {
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import i18n from '../i18n'
 import { releasePushToken } from '../utils/pushNotifications'
+import { isTeamOwner } from '../utils/teamOwner'
 
 const AuthContext = createContext(null)
 
@@ -111,6 +112,21 @@ export function AuthProvider({ children }) {
       .catch(() => { if (!cancelled) setTeam(null) })
     return () => { cancelled = true }
   }, [effectiveTeamId])
+
+  // Squadra senza creatore (creata prima che esistesse): il server lo assegna all'admin più vecchio, la prima
+  // volta che un admin apre l'app. Non serve nessuna operazione a mano; si fa una volta sola per squadra.
+  const ownerAskedRef = useRef(false)
+  useEffect(() => {
+    if (!user || !team?.id || team.createdByUid || profile?.role !== 'admin' || profile?.superAdmin || ownerAskedRef.current) return
+    ownerAskedRef.current = true
+    user.getIdToken().then(idToken => fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action: 'user-ensure-owner' }),
+    })).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.createdByUid) setTeam(prev => prev ? { ...prev, createdByUid: d.createdByUid } : prev)
+    }).catch(() => { /* senza rete o in locale: nessun creatore per ora, tutti gli admin valgono come prima */ })
+  }, [user, team, profile])
 
   const enterGhostTeam = (id) => {
     if (!profile?.superAdmin) return
@@ -252,6 +268,7 @@ export function AuthProvider({ children }) {
       isApproved: profile?.approved !== false,
       isActive:   profile?.active !== false,
       isAdmin:  profile?.role === 'admin',
+      isOwner:  isTeamOwner(team, profile, user?.uid),   // creatore della squadra: abbonamento e admin
       isWorker: profile?.role === 'worker',
       isBrasserieOrganizer: profile?.role === 'organizzatore-brasserie',
       showOverlay, setShowOverlay, loginName,

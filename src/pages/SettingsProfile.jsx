@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
 import PageHeader from '../components/PageHeader'
+import BackupSection from '../components/BackupSection'
 
 // Sotto-pagina "Profilo squadra" di Impostazioni — logo (sostituisce quello
 // di default nell'app e nei PDF) e URL del sito (dove finisce chi scansiona
@@ -161,6 +162,8 @@ export default function SettingsProfile() {
             </button>
           </div>
         </div>
+
+        <BackupSection />
       </div>
 
       <style>{`

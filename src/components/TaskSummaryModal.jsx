@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { formatDate, capitalize } from '../utils/formatDate'
-import { Calendar, Clock, User, FileText, List } from './Icon'
+import { Calendar, Clock, User, FileText, List, Check } from './Icon'
 import { PersonAvatar } from './AssigneeAvatars'
 import { useAuth } from '../context/AuthContext'
 
@@ -62,6 +62,15 @@ export function TaskSummaryBody({ block, workers }) {
           <p style={{ fontSize:13, color:'var(--c-ink3)', fontStyle:'italic' }}>{t('calendar.noneAssigned')}</p>
         )}
       </Row>
+      {(block.assigned || []).some(b => b.done) && (() => {
+        const d = block.assigned.find(b => b.done)
+        const at = d.doneAt?.toDate ? formatDate(d.doneAt.toDate(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }, i18n.language) : ''
+        return (
+          <Row icon={<Check size={15} />} label={t('activities.doneTag')}>
+            <p style={{ fontSize:14, fontWeight:700, color:'#2f9e5b' }}>{t('activities.doneBy', { name: d.doneByName || t('common.unknown') })}{at ? ` · ${at}` : ''}</p>
+          </Row>
+        )
+      })()}
       {block.note && (
         <Row icon={<FileText size={15} />} label={t('staffTimeline.personNoteLabel')}>
           <p style={{ fontSize:14, color:'var(--c-ink)', whiteSpace:'pre-wrap', lineHeight:1.4 }}>{block.note}</p>

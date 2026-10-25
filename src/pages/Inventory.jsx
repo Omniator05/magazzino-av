@@ -120,7 +120,7 @@ const CATEGORY_MIGRATION = {
 
 export default function Inventory() {
   const { t, i18n } = useTranslation()
-  const { user, teamId, team, profile } = useAuth()
+  const { user, teamId, team, profile, isOwner } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const { state: navState, search: locationSearch } = useLocation()
@@ -431,7 +431,7 @@ export default function Inventory() {
     if (!selected) {
       const warehouseCap = warehouseLimit(team)
       if (items.length >= warehouseCap) {
-        await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
+        await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
         return false
       }
       const dup = items.find(i => i.name.trim().toLowerCase() === form.name.trim().toLowerCase())
@@ -621,7 +621,7 @@ export default function Inventory() {
     }
     setImportStep('done')
     if (skipped > 0) {
-      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.importCappedMsg', { imported: toImport.length, limit: warehouseCap, skipped }) })
+      await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.importCappedMsg', { imported: toImport.length, limit: warehouseCap, skipped }) })
     }
   }
 
@@ -1793,7 +1793,7 @@ export default function Inventory() {
                 if (!kitForm.name.trim() || kitComponents.length === 0) return false
                 const warehouseCap = warehouseLimit(team)
                 if (items.length >= warehouseCap) {
-                  await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
+                  await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.itemsInWarehouseMsg', { limit: warehouseCap }) })
                   return false
                 }
                 const kitQty = kitForm.qty || 1

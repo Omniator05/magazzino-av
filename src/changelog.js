@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-28',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Postazione magazzino: ora si collega con un link e un QR da stampare (Utenti → Postazione magazzino), senza nome utente né password, così ogni azienda ha il suo. Il PC di magazzino scansiona il foglio e basta',
+        'Codice personale a 4 cifre: alla postazione basta digitare i 4 numeri (li trovi nel Profilo, sotto il QR) invece di mostrare il badge. I codici banali come 1234 o 0000 non vengono mai assegnati',
+        'Attività di oggi nella home dei magazzinieri e nella postazione, con a chi sono assegnate: chi è assegnato le completa con un tocco',
+        'Creatore della squadra: chi l\'ha creata vede l\'abbonamento e crea o gestisce gli altri admin, con l\'etichetta "Creatore". Ora si può creare un admin direttamente dal nuovo utente',
+        'Il backup dei dati ora sta in fondo a Impostazioni → Profilo squadra',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Warehouse station: it now connects with a printable link and QR (Users → Warehouse station), with no username or password, so every company has its own. The warehouse PC scans the sheet and that\'s it',
+        'Personal 4-digit code: at the station just type the 4 digits (you\'ll find them in your Profile, under the QR) instead of showing your badge. Obvious codes like 1234 or 0000 are never assigned',
+        'Today\'s tasks on the warehouse staff home and at the station, showing who they\'re assigned to: the assigned people complete them with a tap',
+        'Team creator: whoever created the team sees the subscription and creates or manages the other admins, with a "Creator" tag. You can now create an admin straight from the new user form',
+        'Data backup now lives at the bottom of Settings → Team profile',
+      ],
+    },
+  },
+  {
     version: '2026-10-27',
     it: {
       title: 'Novità di oggi',

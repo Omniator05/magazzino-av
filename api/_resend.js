@@ -63,13 +63,15 @@ function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl }) {
   </div>`
 }
 
-export function inviteEmailHtml({ workerName, teamName, username, password, loginUrl }) {
+export function inviteEmailHtml({ workerName, teamName, username, password, loginUrl, asAdmin = false }) {
   return emailShell({
     logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,
     title: `Ciao ${esc(workerName)},`,
     bodyHtml: `
       <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
-        Sei stato aggiunto alla squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi.
+        ${asAdmin
+          ? `Sei stato aggiunto come <strong>amministratore</strong> della squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi. Potrai gestire eventi, magazzino e utenti; l'abbonamento resta al creatore della squadra.`
+          : `Sei stato aggiunto alla squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi.`}
       </p>
       <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
         <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Le tue credenziali</p>

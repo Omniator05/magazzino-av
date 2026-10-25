@@ -5,9 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck, Download } from '../components/Icon'
+import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck } from '../components/Icon'
 import { lastBackupAt } from '../utils/teamBackup'
-import { formatDate } from '../utils/formatDate'
 import { trialDaysLeft } from '../utils/billing'
 import Toast from '../components/Toast'
 import PageHeader from '../components/PageHeader'
@@ -67,8 +66,8 @@ function SettingsRowsCard({ rows, navigate }) {
 // App.jsx). Qui si mostrano solo riepiloghi leggeri (contatori, stato), la
 // logica vera vive nella sotto-pagina di ciascuna sezione.
 export default function Settings() {
-  const { t, i18n } = useTranslation()
-  const { team, teamId } = useAuth()
+  const { t } = useTranslation()
+  const { team, teamId, isOwner } = useAuth()
   const navigate = useNavigate()
   const [users, setUsers] = useState([])
   const [itemCount, setItemCount] = useState(null)
@@ -129,17 +128,11 @@ export default function Settings() {
   // un interruttore). Gruppo separato da quello sotto, con la sua label.
   const lastBackup = lastBackupAt(teamId)
   const backupStale = !lastBackup || (Date.now() - lastBackup.getTime()) > THIRTY_DAYS
-  const backupDate = lastBackup ? formatDate(lastBackup, { day: 'numeric', month: 'short', year: 'numeric' }, i18n.language) : ''
   const toolRows = [
     {
       key: 'vehicles', to: '/vehicles', icon: Truck,
       color: 'var(--accent2)', bg: 'rgba(245,166,35,0.15)',
       title: t('vehicles.title'), subtitle: t('adminUsers.vehiclesRowDesc'),
-    },
-    {
-      key: 'backup', to: '/admin/settings/backup', icon: Download,
-      color: backupStale ? '#d97706' : 'var(--green)', bg: backupStale ? 'rgba(217,119,6,0.15)' : 'rgba(105,240,174,0.18)',
-      title: t('backup.title'), subtitle: !lastBackup ? t('backup.rowSubtitleNever') : backupStale ? t('backup.rowSubtitleStale', { date: backupDate }) : t('backup.rowSubtitleLast', { date: backupDate }),
     },
     ...(workHoursEnabled ? [{
       key: 'workHours', to: '/admin/settings/work-hours', icon: Clock,
@@ -152,7 +145,8 @@ export default function Settings() {
     {
       key: 'profile', to: '/admin/settings/profile', icon: Image,
       color: 'var(--blue)', bg: 'rgba(79,195,247,0.15)',
-      title: t('adminUsers.settingsProfileTitle'), subtitle: team?.name || t('adminUsers.settingsProfileDesc'),
+      title: t('adminUsers.settingsProfileTitle'), subtitle: backupStale ? t('backup.rowSubtitleStale') : (team?.name || t('adminUsers.settingsProfileDesc')),
+      badge: backupStale ? '!' : null,
     },
     {
       key: 'users', to: '/admin/settings/users', icon: User,
@@ -170,13 +164,14 @@ export default function Settings() {
       color: '#16a085', bg: 'rgba(22,160,133,0.15)',
       title: t('adminUsers.integrationsTitle'), subtitle: team?.googleCalendarId ? t('adminUsers.googleCalendarConnected') : t('adminUsers.integrationsRowNotConnected'),
     }] : []),
-    {
+    // L'abbonamento lo vede e lo gestisce solo il creatore della squadra (vedi utils/teamOwner.js).
+    ...(isOwner ? [{
       key: 'billing', to: '/admin/settings/billing', icon: CreditCard,
       color: 'var(--green)', bg: 'rgba(105,240,174,0.18)',
       title: t('adminUsers.billingTitle'), subtitle: billingSubtitle,
       // Finché non c'è un abbonamento (né una squadra esente) la riga resta evidenziata.
       ...(needsSubscription ? { highlight: true, cta: t('adminUsers.billingRowCta') } : {}),
-    },
+    }] : []),
   ]
 
   return (

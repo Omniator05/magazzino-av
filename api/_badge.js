@@ -21,6 +21,35 @@ const CODE_LEN = 24
 const newCode = () => 'RCB-' + Array.from({ length: CODE_LEN }, () => ALPHABET[crypto.randomInt(ALPHABET.length)]).join('')
 const normalize = raw => String(raw || '').trim().replace(/'/g, '-').toUpperCase()
 const CODE_RE = /^RCB-[A-Z0-9]{20,40}$/
+const PIN_RE = /^\d{4}$/
+
+// Codice personale a 4 cifre, alternativa rapida al QR (alla postazione si digita sulla tastiera).
+// Unico dentro la squadra: due colleghi non possono avere lo stesso. Il tentativo di indovinarlo è
+// limitato (vedi loginWithBadge): per entrare serve comunque essere già collegati come postazione.
+// Codici troppo facili da indovinare, che non vengono mai assegnati: 0000, 7777, 1234, 4321, 2345,
+// 1212, 1122, 6969…
+function isWeakPin(pin) {
+  const d = pin.split('').map(Number)
+  if (d.every(x => x === d[0])) return true                                       // 0000, 1111…
+  const step = d[1] - d[0]
+  if ((step === 1 || step === -1) && d.every((x, i) => i === 0 || x - d[i - 1] === step)) return true   // 1234, 4321…
+  if (d[0] === d[2] && d[1] === d[3]) return true                                 // 1212, 6969…
+  if (d[0] === d[1] && d[2] === d[3]) return true                                 // 1122, 3366…
+  return false
+}
+
+async function newPin(db, teamId) {
+  for (let i = 0; i < 60; i++) {
+    const pin = String(crypto.randomInt(10000)).padStart(4, '0')
+    if (isWeakPin(pin)) continue
+    const taken = await db.collection('operatorBadges').where('teamId', '==', teamId).where('pin', '==', pin).limit(1).get()
+    if (taken.empty) return pin
+  }
+  throw new Error('Nessun codice libero')
+}
+
+const MAX_PIN_FAILS = 10
+const PIN_WINDOW_MS = 5 * 60 * 1000
 
 async function getBadge(req, res, { db, teamId, uid, profile }) {
   if (profile?.isStation) return res.status(403).json({ error: 'La postazione non ha un badge' })
@@ -28,20 +57,44 @@ async function getBadge(req, res, { db, teamId, uid, profile }) {
   const snap = await ref.get()
   if (!snap.exists || req.body?.regenerate === true) {
     const code = newCode()
-    await ref.set({ teamId, userId: uid, code, createdAt: new Date().toISOString() })
-    return res.status(200).json({ code })
+    const pin = await newPin(db, teamId)
+    await ref.set({ teamId, userId: uid, code, pin, createdAt: new Date().toISOString() })
+    return res.status(200).json({ code, pin })
   }
-  return res.status(200).json({ code: snap.data().code })
+  const data = snap.data()
+  // Badge creati prima del codice a 4 cifre: lo ricevono la prima volta che vengono aperti.
+  let pin = data.pin
+  if (!pin || isWeakPin(pin)) { pin = await newPin(db, teamId); await ref.update({ pin }) }
+  return res.status(200).json({ code: data.code, pin })
 }
 
-async function loginWithBadge(req, res, { db, teamId, profile }) {
+async function loginWithBadge(req, res, { db, teamId, uid, profile }) {
   // Solo le postazioni "accettano" badge: un normale utente non ha motivo di farlo.
   if (!profile?.isStation) return res.status(403).json({ error: 'Solo la postazione può usare un badge' })
+  const pin = String(req.body?.pin || '').trim()
   const code = normalize(req.body?.code)
-  if (!CODE_RE.test(code)) return res.status(404).json({ error: 'Badge non valido', code: 'invalid' })
+  if (!(PIN_RE.test(pin) || CODE_RE.test(code))) return res.status(404).json({ error: 'Badge non valido', code: 'invalid' })
 
-  const found = await db.collection('operatorBadges').where('code', '==', code).limit(1).get()
-  if (found.empty) return res.status(404).json({ error: 'Badge non valido', code: 'invalid' })
+  // I codici a 4 cifre si possono indovinare: dopo troppi errori di fila la postazione aspetta qualche minuto.
+  const failRef = db.collection('teamSecrets').doc(`pinfail_${uid}`)
+  if (PIN_RE.test(pin)) {
+    const f = (await failRef.get()).data()
+    if (f && Date.now() - f.since < PIN_WINDOW_MS && f.n >= MAX_PIN_FAILS) {
+      return res.status(429).json({ error: 'Troppi tentativi', code: 'locked' })
+    }
+  }
+
+  const found = PIN_RE.test(pin)
+    ? await db.collection('operatorBadges').where('teamId', '==', teamId).where('pin', '==', pin).limit(1).get()
+    : await db.collection('operatorBadges').where('code', '==', code).limit(1).get()
+  if (found.empty) {
+    if (PIN_RE.test(pin)) {
+      const f = (await failRef.get()).data()
+      const fresh = !f || Date.now() - f.since >= PIN_WINDOW_MS
+      await failRef.set({ n: fresh ? 1 : f.n + 1, since: fresh ? Date.now() : f.since })
+    }
+    return res.status(404).json({ error: 'Badge non valido', code: 'invalid' })
+  }
   const badge = found.docs[0].data()
   if (badge.teamId !== teamId) return res.status(404).json({ error: 'Badge non valido', code: 'invalid' })
 
@@ -50,6 +103,7 @@ async function loginWithBadge(req, res, { db, teamId, profile }) {
   if (!person || person.teamId !== teamId || person.approved === false || person.active === false || person.isStation) {
     return res.status(403).json({ error: 'Utente non attivo', code: 'inactive' })
   }
+  if (PIN_RE.test(pin)) await failRef.delete().catch(() => {})
   return res.status(200).json({ userId: badge.userId, name: person.name || person.username || '' })
 }
 

@@ -18,7 +18,7 @@ const SESSION_KEY = 'proUpsellLoginSeen'
 
 export default function ProUpsell() {
   const { t } = useTranslation()
-  const { team, profile } = useAuth()
+  const { team, profile, isOwner } = useAuth()
   const navigate = useNavigate()
 
   const status = team?.billingStatus
@@ -31,7 +31,7 @@ export default function ProUpsell() {
   const urgent = trialEndingSoon || trialExpired
 
   // Solo admin, squadra non già a pagamento e non bloccata (past_due → BillingGate).
-  const eligible = isAdmin && !!status && !isPaid && status !== 'past_due'
+  const eligible = isAdmin && isOwner && !!status && !isPaid && status !== 'past_due'
 
   const [modalOpen, setModalOpen] = useState(false)
 

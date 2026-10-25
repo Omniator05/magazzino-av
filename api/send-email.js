@@ -37,7 +37,8 @@ async function sendInvite(req, res) {
   let ctx
   try { ctx = await requireTeamAdmin(req) } catch (e) { return res.status(e.status || 500).json({ error: e.message }) }
 
-  const { toEmail, workerName, username, password } = req.body || {}
+  const { toEmail, workerName, username, password, role } = req.body || {}
+  const asAdmin = role === 'admin'
   if (!toEmail || !workerName || !username || !password) {
     return res.status(400).json({ error: 'Dati mancanti' })
   }
@@ -46,8 +47,8 @@ async function sendInvite(req, res) {
   try {
     await sendEmail({
       to: toEmail,
-      subject: `Sei stato invitato su Roadcase — ${ctx.team.name}`,
-      html: inviteEmailHtml({ workerName, teamName: ctx.team.name, username, password, loginUrl: `${origin}/login` }),
+      subject: asAdmin ? `Sei stato aggiunto come admin su Roadcase — ${ctx.team.name}` : `Sei stato invitato su Roadcase — ${ctx.team.name}`,
+      html: inviteEmailHtml({ workerName, teamName: ctx.team.name, username, password, loginUrl: `${origin}/login`, asAdmin }),
     })
     res.status(200).json({ sent: true })
   } catch (e) {

@@ -58,6 +58,7 @@
     "modalLater": "Later"
   },
   "billing": {
+    "notOwnerDesc": "The team's subscription has a payment problem. Only the team's creator can fix it: let them know so everything is back up.",
     "trialExpiredTitle": "Trial ended",
     "pastDueTitle": "Payment failed",
     "canceledTitle": "Subscription canceled",
@@ -884,6 +885,8 @@
     "pwStrong": "Strong"
   },
   "adminUsers": {
+    "ownerHint": "Team creator: sees the subscription and manages the other admins",
+    "ownerBadge": "Owner",
     "statUsers": "Users",
     "statItems": "Items in stock",
     "statTotalEvents": "Total events",
@@ -1983,8 +1986,36 @@
   },
   "station": {
     "title": "Warehouse station",
-    "roleOption": "Warehouse station",
-    "roleHint": "Account for the fixed PC in the warehouse: a full-screen home with the USB scanner that shows the card of every scanned item. It does not count towards the plan's warehouse workers.",
+    "rowSubtitle": "Connect the warehouse PC with a link and a printable QR",
+    "linkIntro": "The warehouse PC has no username or password: it connects by opening a link (or scanning its QR) that only works for your team. Print the sheet and keep it near the computer.",
+    "linkCreate": "Create the station link",
+    "linkKeep": "Anyone with this link can connect a device to your team as a station: keep the sheet safe.",
+    "linkQrAlt": "QR to connect the station",
+    "linkLabel": "Station link",
+    "print": "Print the sheet",
+    "printBlocked": "The browser blocked the print window. Allow popups for this site and try again.",
+    "linkNew": "Create a new link",
+    "linkNewTitle": "Create a new link?",
+    "linkNewMessage": "The current link stops working and the connected PC is signed out: you'll have to connect it again with the new sheet.",
+    "linkNewConfirm": "Create new",
+    "linkRevoke": "Turn off",
+    "linkRevokeTitle": "Turn off the link?",
+    "linkRevokeMessage": "The link stops working and the connected PC is signed out. You can create a new one whenever you like.",
+    "linkRevokeConfirm": "Turn off",
+    "linkError": "Couldn't complete the operation. Try again shortly.",
+    "sheetStep1": "Open Roadcase on the warehouse PC.",
+    "sheetStep2": "Scan this QR with the reader (or open the link below).",
+    "sheetStep3": "Press “Connect this computer”.",
+    "sheetWarn": "Keep this sheet private: anyone holding it can connect a device to this team. Leave it in the warehouse and, if it goes missing, create a new link from Users.",
+    "connectLoading": "Loading…",
+    "connectText": "This computer will become the team's warehouse station. To use it, people need their badge or personal code.",
+    "connectButton": "Connect this computer",
+    "connecting": "Connecting…",
+    "connectBadTitle": "Link can't be used",
+    "connectInvalid": "This link is no longer valid. Ask an admin to create a new one.",
+    "connectError": "Couldn't connect the station. Try again shortly.",
+    "detailLinkNote": "This station connects with the link on the printed sheet: it has no username or password.",
+    "detailManage": "Manage the link and the sheet",
     "paidHint": "The Warehouse station is available on paid plans.",
     "paidOnly": "The Warehouse station is only available on paid plans.",
     "badge": "Station",
@@ -2051,21 +2082,23 @@
     "regenTitle": "Create a new badge?",
     "regenMessage": "The current badge will stop working immediately. Use this if someone has photographed it.",
     "regenConfirm": "Create new",
-    "codeLabel": "Badge code"
+    "codeLabel": "Badge code",
+    "pinLabel": "Personal code"
   },
   "operator": {
-    "barNone": "Scan your badge to start",
+    "barNone": "Type your 4-digit code or scan your badge",
     "invalid": "Invalid badge",
     "inactive": "User not active",
+    "locked": "Too many attempts: try again in a few minutes",
     "expires": "Signs out in {{time}}",
     "logout": "Sign out",
     "lockTitle": "Who's working?",
-    "lockText": "Scan your badge on the reader to start, so we know who did what. You'll find it in the app's Profile, on your phone.",
+    "lockText": "Type your 4-digit code or scan your badge on the reader, so we know who did what. You'll find both in the app's Profile.",
     "lockHome": "Back to home",
-    "promptText": "Scan your badge on the reader, or type the code you'll find in the app's Profile. Until you do, actions have no name attached.",
-    "codePlaceholder": "Badge code (RCB-…)",
+    "promptText": "Type your 4-digit code (you'll find it in the app's Profile) or scan your badge on the reader. Until you do, actions have no name attached.",
+    "codePlaceholder": "4-digit code",
     "codeGo": "Sign in",
-    "needBadge": "Scan your badge first"
+    "needBadge": "Enter your code first"
   },
   "backup": {
     "title": "Data backup",
@@ -2105,8 +2138,15 @@
       "brasserieArtists": "Brasserie artists",
       "eventOrganizerContent": "Organizer content"
     },
-    "rowSubtitleNever": "Never done",
-    "rowSubtitleLast": "Last: {{date}}",
-    "rowSubtitleStale": "Due: last {{date}}"
+    "rowSubtitleStale": "Backup due"
+  },
+  "activities": {
+    "todayTitle": "Today's tasks",
+    "doneTag": "Done",
+    "doneBy": "Completed by {{name}}",
+    "complete": "Mark as done",
+    "reopen": "Reopen",
+    "onlyAssigned": "Only the assigned people can complete it",
+    "onlyAssignedMsg": "Only the people assigned to this task can complete it."
   }
 }

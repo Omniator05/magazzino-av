@@ -16,6 +16,7 @@ import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import PageHeader from '../components/PageHeader'
 import GuestInviteModal from '../components/GuestInviteModal'
+import StationLinkModal from '../components/StationLinkModal'
 import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
 import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
@@ -114,9 +115,20 @@ function EventOrganizerFields({ events, assignedEventId, setAssignedEventId }) {
   )
 }
 
+// Etichetta del creatore della squadra (l'admin "supremo": abbonamento e altri admin, vedi utils/teamOwner.js).
+function OwnerTag() {
+  const { t } = useTranslation()
+  return (
+    <span title={t('adminUsers.ownerHint')} style={{ display:'inline-flex', alignItems:'center', gap:4, flexShrink:0, background:'rgba(230,57,70,0.12)', color:'var(--accent)', border:'1px solid rgba(230,57,70,0.3)', borderRadius:20, padding:'1px 8px', fontSize:10.5, fontWeight:800, letterSpacing:'0.04em', textTransform:'uppercase' }}>
+      <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg>
+      {t('adminUsers.ownerBadge')}
+    </span>
+  )
+}
+
 export default function SettingsUsers() {
   const { t, i18n } = useTranslation()
-  const { user, teamId, team } = useAuth()
+  const { user, teamId, team, isOwner } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   // Arrivando dal popup "Utente esterno inserito" l'utente temporaneo va portato
@@ -143,16 +155,16 @@ export default function SettingsUsers() {
   }, [navState, externalWorkers])
   useEffect(() => watchExternalWorkers(teamId, list => setExternalWorkers(list.sort((a, b) => (a.name || '').localeCompare(b.name || '')))), [teamId])
   const [showCreate, setShowCreate]   = useState(false)
+  const [stationOpen, setStationOpen] = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
   const createDrag = useModalDrag(() => setShowCreate(false))
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   useModalScrollLock(showCreate || !!showDetail || !!tempEdit)
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
-  // Per default un nuovo utente entra con la sua email vera; chi non ne ha una (o la Postazione, che è
-  // un dispositivo) usa il vecchio accesso con nome utente.
+  // Per default un nuovo utente entra con la sua email vera; chi non ne ha una usa il vecchio accesso con nome utente.
   const [noEmail, setNoEmail]           = useState(false)
-  const emailMode = form.role !== 'postazione' && !noEmail
+  const emailMode = !noEmail
   const [newPw, setNewPw]             = useState('')
   const [maxHours, setMaxHours]       = useState('') // limite ore mensili (modulo Ore di lavoro)
   const [vacationDays, setVacationDays] = useState('') // giorni di ferie annuali
@@ -281,18 +293,14 @@ export default function SettingsUsers() {
     if (role === 'admin') {
       const cap = adminLimit(team)
       if (Number.isFinite(cap) && users.filter(u => u.role === 'admin').length >= cap) {
-        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.adminsMsg', { limit: cap }) })
+        await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.adminsMsg', { limit: cap }) })
         return false
       }
     }
-    // La "Postazione magazzino" è un dispositivo, non una persona: solo sui piani a
-    // pagamento (anche in prova) e fuori dal conteggio dei magazzinieri.
-    const isStationRole = role === 'postazione'
-    if (isStationRole && !isProPlan(team)) { setError(t('station.paidOnly')); return false }
     if (role === 'worker') {
       const cap = workerLimit(team)
       if (Number.isFinite(cap) && users.filter(u => u.role === 'worker' && !u.isStation).length >= cap) {
-        await promptLimitReached({ confirm, navigate, isAdmin: true, t, message: t('planLimits.workersMsg', { limit: cap }) })
+        await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.workersMsg', { limit: cap }) })
         return false
       }
     }
@@ -314,10 +322,7 @@ export default function SettingsUsers() {
         username,
         internalEmail,
         email:         form.email.trim().toLowerCase() || null,
-        // La postazione è un magazziniere con l'etichetta isStation (stesso ruolo: regole e
-        // pagine esistenti la trattano già bene), con la sua home a schermo intero.
-        role:          isStationRole ? 'worker' : (form.role || 'worker'),
-        ...(isStationRole ? { isStation: true } : {}),
+        role:          form.role || 'worker',
         teamId:        teamId,
         approved:      true,
         active:        true,
@@ -342,7 +347,7 @@ export default function SettingsUsers() {
           await fetch('/api/send-email', {
             method: 'POST',
             headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'invite', toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password }),
+            body: JSON.stringify({ type: 'invite', toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password, role: form.role === 'admin' ? 'admin' : 'worker' }),
           })
         } catch {}
       }
@@ -410,6 +415,17 @@ export default function SettingsUsers() {
   const ROLE_BADGE_LABELS = { ...ROLE_LABELS, 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieBadge'), 'organizzatore-evento': t('adminUsers.roleOrgEventBadge') }
   const changeRole = async (newRole) => {
     if (newRole === showDetail.role) return
+    // Solo il creatore della squadra fa o toglie gli admin (anche se il menu già lo nasconde agli altri).
+    if ((newRole === 'admin' || showDetail.role === 'admin') && !isOwner) return
+    // Promuovere ad admin conta come crearne uno: vale lo stesso tetto del piano.
+    if (newRole === 'admin') {
+      const cap = adminLimit(team)
+      if (Number.isFinite(cap) && users.filter(u => u.role === 'admin').length >= cap) {
+        setRoleMenuOpen(false)
+        await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.adminsMsg', { limit: cap }) })
+        return
+      }
+    }
     if (!(await confirm({
       title: t('adminUsers.confirmChangeRoleTitle'),
       message: t('adminUsers.confirmChangeRoleMessage', { name: showDetail.name, role: ROLE_LABELS[newRole] }),
@@ -610,14 +626,17 @@ export default function SettingsUsers() {
 
   const UserRow = ({ u }) => {
     const roleColor = ROLE_COLORS[u.role]
+    // Un admin lo gestisce solo il creatore della squadra (e ognuno il proprio profilo).
+    const locked = u.role === 'admin' && u.id !== user.uid && !isOwner
     return (
       <div className="item-row" onClick={() => {
+        if (locked) return
         setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setRoleMenuOpen(false)
         setOrgConfig(u.organizerConfig || EMPTY_ORG_CONFIG)
         setAssignedEventId(u.assignedEventId || '')
         setMaxHours(u.maxMonthlyHours ?? '')
         setVacationDays(u.vacationDaysPerYear ?? '')
-      }} style={{ cursor:'pointer' }}>
+      }} style={{ cursor: locked ? 'default' : 'pointer' }}>
         <div className="item-icon" style={{
           background: roleColor ? roleColor.bg : u.active !== false ? 'rgba(79,195,247,0.15)' : 'rgba(144,144,176,0.1)',
           color: roleColor ? roleColor.color : u.active !== false ? 'var(--blue)' : 'var(--text2)',
@@ -626,7 +645,10 @@ export default function SettingsUsers() {
           {(u.name || u.username || '?').charAt(0).toUpperCase()}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</p>
+          <p style={{ display:'flex', alignItems:'center', gap:7, fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)', minWidth:0 }}>
+            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>{u.name}</span>
+            {team?.createdByUid === u.id && <OwnerTag />}
+          </p>
           <p style={{ color:'var(--text2)', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.username ? (u.username.includes('@') ? u.username : `@${u.username}`) : u.email}</p>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
@@ -710,6 +732,17 @@ export default function SettingsUsers() {
           </>
         )}
 
+        {/* Postazione magazzino: il PC fisso si collega con un link/QR stampato, senza nome utente né password */}
+        <button type="button" className="btn-no-anim" onClick={() => isProPlan(team) && setStationOpen(true)} disabled={!isProPlan(team)}
+          style={{ width:'calc(100% - 32px)', margin:'0 16px 16px', display:'flex', alignItems:'center', gap:12, padding:'13px 16px', textAlign:'left', background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', opacity: isProPlan(team) ? 1 : 0.6 }}>
+          <span style={{ width:34, height:34, borderRadius:9, flexShrink:0, background:'rgba(245,166,35,0.15)', color:'var(--accent2)', display:'flex', alignItems:'center', justifyContent:'center' }}><Box size={17} /></span>
+          <span style={{ flex:1, minWidth:0 }}>
+            <span style={{ display:'block', fontSize:14.5, fontWeight:700 }}>{t('station.title')}</span>
+            <span style={{ display:'block', fontSize:12, color:'var(--text2)', marginTop:1 }}>{isProPlan(team) ? t('station.rowSubtitle') : t('station.paidHint')}</span>
+          </span>
+          {isProPlan(team) && <span style={{ color:'var(--text2)', fontSize:18, flexShrink:0 }}>›</span>}
+        </button>
+
         <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.workersSection')}</p>
         <div style={{ margin:'0 16px 16px', background:'rgba(79,195,247,0.05)', border:'1px solid rgba(79,195,247,0.15)', borderRadius:'var(--radius)', padding:'14px' }}>
           <p style={{ color:'var(--blue)', fontWeight:700, fontSize:13, marginBottom:6 }}>{t('adminUsers.howLoginWorksTitle')}</p>
@@ -769,6 +802,8 @@ export default function SettingsUsers() {
         </div>
       )}
 
+      {stationOpen && <StationLinkModal onClose={() => setStationOpen(false)} />}
+
       {inviteForId && (() => {
         const w = externalWorkers.find(x => x.id === inviteForId)
         return w ? <GuestInviteModal person={{ id: w.id, name: w.name, guestActive: !!w.guestLinkActive }} onClose={() => setInviteForId(null)} /> : null
@@ -803,12 +838,10 @@ export default function SettingsUsers() {
                   autoCapitalize="none" autoCorrect="off"
                 />
                 <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>{t('adminUsers.loginEmailHint')}</p>
-                {form.role !== 'postazione' && (
-                  <button type="button" onClick={() => setNoEmail(true)} className="btn-no-anim"
-                    style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
-                    {t('adminUsers.noEmailToggle')}
-                  </button>
-                )}
+                <button type="button" onClick={() => setNoEmail(true)} className="btn-no-anim"
+                  style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
+                  {t('adminUsers.noEmailToggle')}
+                </button>
               </div>
             ) : (<>
               <div className="form-group">
@@ -825,22 +858,20 @@ export default function SettingsUsers() {
                   </p>
                 )}
               </div>
-              {form.role !== 'postazione' && (
-                <div className="form-group">
-                  <label>{t('adminUsers.emailLabel')}</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={e => setForm({...form, email: e.target.value})}
-                    placeholder={t('adminUsers.emailPlaceholder')}
-                    autoCapitalize="none"
-                  />
-                  <button type="button" onClick={() => setNoEmail(false)} className="btn-no-anim"
-                    style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
-                    {t('adminUsers.useEmailToggle')}
-                  </button>
-                </div>
-              )}
+              <div className="form-group">
+                <label>{t('adminUsers.emailLabel')}</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({...form, email: e.target.value})}
+                  placeholder={t('adminUsers.emailPlaceholder')}
+                  autoCapitalize="none"
+                />
+                <button type="button" onClick={() => setNoEmail(false)} className="btn-no-anim"
+                  style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
+                  {t('adminUsers.useEmailToggle')}
+                </button>
+              </div>
             </>)}
             </>)}
             <div className="form-group">
@@ -858,8 +889,8 @@ export default function SettingsUsers() {
                 ariaLabel={t('adminUsers.roleLabel')}
                 options={[
                   { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
+                  ...(isOwner ? [{ value:'admin', label:t('adminUsers.roleAdminOption'), icon:<User size={17} /> }] : []),
                   { value:'temporaneo', label:t('guest.tempRoleOption'), icon:<User size={17} /> },
-                  ...(isProPlan(team) ? [{ value:'postazione', label:t('station.roleOption'), icon:<Box size={17} /> }] : []),
                 ]}
               />
             </div>
@@ -893,12 +924,6 @@ export default function SettingsUsers() {
 
             {form.role === 'temporaneo' && (
               <p style={{ margin:'0 0 22px', fontSize:13, lineHeight:1.5, color:'var(--text2)' }}>{t('guest.tempRoleHint')}</p>
-            )}
-            {form.role === 'postazione' && (
-              <p style={{ margin:'0 0 16px', fontSize:13, lineHeight:1.5, color:'var(--text2)' }}>{t('station.roleHint')}</p>
-            )}
-            {!isProPlan(team) && form.role === 'worker' && (
-              <p style={{ margin:'-6px 0 16px', fontSize:12, lineHeight:1.45, color:'var(--text3)' }}>{t('station.paidHint')}</p>
             )}
 
             {form.role !== 'temporaneo' && (
@@ -940,6 +965,7 @@ export default function SettingsUsers() {
                   {(showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
                 </div>
                 <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
+                {team?.createdByUid === showDetail.id && <div style={{ marginTop:8 }}><OwnerTag /></div>}
                 {showDetail.username && (
                   <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>{showDetail.username.includes('@') ? showDetail.username : `@${showDetail.username}`}</p>
                 )}
@@ -1016,6 +1042,12 @@ export default function SettingsUsers() {
                 )}
 
                 {/* Accesso: con email vera oppure con nome utente (vecchi account) */}
+                {showDetail.loginByLink && (
+                  <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'12px 14px', marginBottom:16 }}>
+                    <p style={{ fontSize:12.5, lineHeight:1.5, color:'var(--text2)' }}>{t('station.detailLinkNote')}</p>
+                    <button type="button" className="btn btn-secondary" style={{ marginTop:10, width:'100%' }} onClick={() => { setStationOpen(true) }}>{t('station.detailManage')}</button>
+                  </div>
+                )}
                 {!showDetail.isStation && (
                   isLegacyLogin(showDetail) ? (
                     <div style={{ background:'rgba(124,111,234,0.08)', border:'1px solid rgba(124,111,234,0.3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
@@ -1037,7 +1069,7 @@ export default function SettingsUsers() {
                 )}
 
                 {/* Nome utente (solo per chi entra ancora con quello) */}
-                {(isLegacyLogin(showDetail) || showDetail.isStation) && (
+                {(isLegacyLogin(showDetail) || (showDetail.isStation && !showDetail.loginByLink)) && (
                 <div className="form-group">
                   <label>{t('adminUsers.changeUsernameLabel')}</label>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -1053,8 +1085,8 @@ export default function SettingsUsers() {
                 </div>
                 )}
 
-                {/* Cambio password — sempre aperta */}
-                <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                {/* Cambio password — sempre aperta (la postazione col link non ha password) */}
+                {!showDetail.loginByLink && <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
                   <p style={{ fontWeight:700, fontSize:14, marginBottom:12 }}>{t('adminUsers.changePasswordTitle')}</p>
                   <div className="form-group">
                     <label>{t('adminUsers.newPasswordLabel')}</label>
@@ -1080,10 +1112,10 @@ export default function SettingsUsers() {
                   ) : (
                     <p style={{ fontSize:12, color:'var(--text3)', marginTop:8, lineHeight:1.4 }}>{t('adminUsers.sendResetEmailNoEmailHint')}</p>
                   )}
-                </div>
+                </div>}
 
-                {/* Cambio ruolo — menu ad hamburger */}
-                {showDetail.id !== user.uid && (
+                {/* Cambio ruolo — menu ad hamburger (non per la postazione: non deve diventare admin) */}
+                {showDetail.id !== user.uid && !showDetail.isStation && (
                   <div style={{ marginBottom:16, position:'relative' }}>
                     <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:8 }}>{t('adminUsers.roleSectionTitle')}</p>
                     <button onClick={() => setRoleMenuOpen(o => !o)} className="btn btn-secondary" style={{ width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -1094,7 +1126,7 @@ export default function SettingsUsers() {
                       <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,0.16)', zIndex:20, overflow:'hidden' }}>
                         {[
                           { key:'worker', label:t('adminUsers.roleMagazziniere') },
-                          { key:'admin', label:t('adminUsers.roleAdminOption') },
+                          ...(isOwner ? [{ key:'admin', label:t('adminUsers.roleAdminOption') }] : []),
                         ].map(r => (
                           <button key={r.key} onClick={() => changeRole(r.key)} className="btn-no-anim" style={{
                             width:'100%', textAlign:'left', padding:'11px 14px', fontSize:14, fontWeight:600,

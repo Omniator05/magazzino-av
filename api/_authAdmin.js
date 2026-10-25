@@ -38,7 +38,18 @@ export async function requireTeamAdmin(req) {
   const teamSnap = await teamRef.get()
   if (!teamSnap.exists) { const e = new Error('Squadra non trovata'); e.status = 404; throw e }
 
-  return { db, teamRef, team: teamSnap.data(), teamId: profile.teamId }
+  return { db, teamRef, team: teamSnap.data(), teamId: profile.teamId, uid: decoded.uid, profile }
+}
+
+// Come requireTeamAdmin, ma solo per il creatore della squadra (abbonamento e pagamenti). Le squadre senza
+// `createdByUid` (create prima che esistesse) non hanno un creatore: lì vale ogni admin, come sempre.
+export async function requireTeamOwner(req) {
+  const ctx = await requireTeamAdmin(req)
+  // Il super admin vale sempre come il creatore.
+  if (!ctx.profile.superAdmin && ctx.team.createdByUid && ctx.team.createdByUid !== ctx.uid) {
+    const e = new Error('Solo il creatore della squadra può gestire l\'abbonamento'); e.status = 403; throw e
+  }
+  return ctx
 }
 
 // Come requireTeamAdmin ma per endpoint che qualunque membro approvato della

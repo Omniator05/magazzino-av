@@ -2,7 +2,7 @@
 // i dati della carta non passano mai dal nostro codice) per abbonare la
 // squadra dell'admin che chiama. Il client fa POST qui e reindirizza il
 // browser all'URL restituito.
-import { requireTeamAdmin } from './_authAdmin.js'
+import { requireTeamOwner } from './_authAdmin.js'
 import { getStripe, resolveTeamStripeCustomer, PRICE_IDS } from './_stripe.js'
 
 export default async function handler(req, res) {
@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
   let ctx
   try {
-    ctx = await requireTeamAdmin(req)
+    ctx = await requireTeamOwner(req)
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message })
   }

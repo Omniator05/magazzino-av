@@ -57,7 +57,7 @@ const ICONS = {
 export default function WorkerScanner() {
   const { t } = useTranslation()
   const { id } = useParams()
-  const { user, profile, teamId, team } = useAuth()
+  const { user, profile, teamId, team, isOwner } = useAuth()
   // Alla Postazione magazzino chi lavora è l'operatore del badge, non l'account del PC: le azioni
   // registrate nello storico portano il suo nome. Altrove è l'utente normale.
   const { operator, requireOperator } = useOperator()
@@ -925,7 +925,7 @@ export default function WorkerScanner() {
     if (!requireOperator()) return
     if (!extraWorkerForm.name.trim() || confirmingExtra) return
     if (!isProPlan(team) && allEventItems.length >= FREE_LIMITS.itemsPerList) {
-      await promptLimitReached({ confirm, navigate, isAdmin: profile?.role === 'admin', t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
+      await promptLimitReached({ confirm, navigate, isAdmin: isOwner, t, message: t('planLimits.itemsPerListMsg', { limit: FREE_LIMITS.itemsPerList }) })
       return
     }
     const name = extraWorkerForm.name.trim()

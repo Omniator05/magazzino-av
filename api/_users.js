@@ -50,8 +50,34 @@ async function setLoginEmail(req, res, { db, teamId, profile }) {
   return res.status(200).json({ ok: true })
 }
 
+// Squadre create prima che esistesse il "creatore" (campo `createdByUid`, vedi src/utils/teamOwner.js): la prima
+// volta che un admin apre l'app il creatore diventa l'admin con l'account più vecchio (mai un super admin).
+// Idempotente e senza scelta di chi chiama: chiunque lo attivi, il risultato è lo stesso.
+async function ensureOwner(req, res, { db, teamId, profile }) {
+  if (profile?.role !== 'admin') return res.status(403).json({ error: 'Solo un admin' })
+  const ref = db.collection('teams').doc(teamId)
+  try {
+    const owner = await db.runTransaction(async tx => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return null
+      if (snap.data().createdByUid) return snap.data().createdByUid
+      const admins = (await tx.get(db.collection('profiles').where('teamId', '==', teamId).where('role', '==', 'admin'))).docs
+        .filter(p => !p.data().superAdmin && p.data().approved !== false && p.data().active !== false)
+        .sort((a, b) => String(a.data().createdAt || '9999').localeCompare(String(b.data().createdAt || '9999')))
+      if (admins.length === 0) return null
+      tx.update(ref, { createdByUid: admins[0].id })
+      return admins[0].id
+    })
+    return res.status(200).json({ createdByUid: owner })
+  } catch (e) {
+    console.error('[user-ensure-owner]', e.message)
+    return res.status(502).json({ error: e.message })
+  }
+}
+
 // true se l'azione era "user-*" e la risposta è già stata data.
 export async function handleUserAction(req, res, ctx) {
+  if (req.body?.action === 'user-ensure-owner') { await ensureOwner(req, res, ctx); return true }
   if (req.body?.action === 'user-set-login-email') { await setLoginEmail(req, res, ctx); return true }
   return false
 }

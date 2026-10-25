@@ -4,12 +4,15 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useFieldErrors, FieldError, PasswordInput } from '../components/AuthFields'
 import { EMAIL_RE, requestPasswordReset } from '../utils/loginEmail'
+import { useStationLinkScanner } from '../hooks/useStationLinkScanner'
 
 // Solo il form di accesso: il guscio (sfondo + card divisa) è in Auth.jsx,
 // che tiene login e signup montati nella stessa card così il pannello rosso
 // può scivolare da un lato all'altro quando si cambia modalità.
 export default function LoginForm({ onSwitch }) {
   const { t } = useTranslation()
+  // Il lettore del PC di magazzino che scansiona il foglio della postazione porta alla pagina di collegamento.
+  useStationLinkScanner()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]   = useState('')

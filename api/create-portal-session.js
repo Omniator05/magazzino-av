@@ -1,7 +1,7 @@
 // Crea una sessione del Billing Portal di Stripe (pagina ospitata da Stripe
 // per gestire/annullare l'abbonamento, cambiare metodo di pagamento, vedere
 // le fatture) per la squadra dell'admin che chiama.
-import { requireTeamAdmin } from './_authAdmin.js'
+import { requireTeamOwner } from './_authAdmin.js'
 import { getStripe, resolveTeamStripeCustomer } from './_stripe.js'
 
 export default async function handler(req, res) {
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   let ctx
   try {
-    ctx = await requireTeamAdmin(req)
+    ctx = await requireTeamOwner(req)
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message })
   }

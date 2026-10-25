@@ -6,7 +6,7 @@
 // affidabile: senza quella configurazione esatta il portal non offre alcun
 // modo di cambiare piano, mostrando solo metodo di pagamento e fatturazione.
 // Qui invece basta la chiave Stripe già in uso, nessuna configurazione extra.
-import { requireTeamAdmin } from './_authAdmin.js'
+import { requireTeamOwner } from './_authAdmin.js'
 import { getStripe, PRICE_IDS, subscriptionFields, billingStatusFromSubStatus } from './_stripe.js'
 
 export default async function handler(req, res) {
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   let ctx
   try {
-    ctx = await requireTeamAdmin(req)
+    ctx = await requireTeamOwner(req)
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message })
   }

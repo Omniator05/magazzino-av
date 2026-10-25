@@ -13,6 +13,8 @@ import { formatDate, capitalize } from '../utils/formatDate'
 import { todayStr } from '../utils/workHours'
 import { useOperator } from '../context/OperatorContext'
 import LogoutButton from '../components/LogoutButton'
+import ActivityCard from '../components/ActivityCard'
+import { groupActivities, activitiesForDay, setActivityDone, isAssignedTo } from '../utils/activities'
 import { isModuleEnabled } from '../utils/modules'
 import { Wrench, Warn, Pin, QrCode, ChevronRight, Unload, Check } from '../components/Icon'
 
@@ -53,6 +55,9 @@ export default function StationHome() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [blocks, setBlocks] = useState([])      // assegnazioni di "Assegna personale" (le attività libere sono senza evento)
+  const [people, setPeople] = useState({})      // uid → nome
+  const [actMsg, setActMsg] = useState('')
 
   useEffect(() => {
     if (!teamId) return
@@ -61,6 +66,19 @@ export default function StationHome() {
   useEffect(() => {
     if (!teamId) return
     return onSnapshot(query(collection(db, 'events'), where('teamId', '==', teamId)), snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [teamId])
+
+  useEffect(() => {
+    if (!teamId) return
+    return onSnapshot(query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId)), snap => setBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [teamId])
+  useEffect(() => {
+    if (!teamId) return
+    return onSnapshot(query(collection(db, 'profiles'), where('teamId', '==', teamId)), snap => {
+      const map = {}
+      snap.docs.forEach(d => { map[d.id] = d.data().name || d.data().username || '' })
+      setPeople(map)
+    })
   }, [teamId])
 
   const item = scanned ? items.find(i => i.id === scanned.id) : null
@@ -101,6 +119,19 @@ export default function StationHome() {
       return { ev, qty: rows.reduce((n, r) => n + (r.qty || 1), 0), out }
     }).filter(Boolean).sort((a, b) => (a.ev.date || '').localeCompare(b.ev.date || ''))
   }, [events, items, item])
+
+  // ── Attività di oggi, con a chi sono assegnate: le completa chi è assegnato, dopo il badge ──
+  const todayActs = useMemo(() => {
+    const today = todayStr()
+    const yesterday = todayStr(new Date(Date.now() - 86400000))
+    return activitiesForDay(groupActivities(blocks, uid => people[uid]), today, yesterday)
+  }, [blocks, people])
+  const toggleActivity = async (act, done) => {
+    setActMsg('')
+    if (!requireOperator()) return                      // senza badge si apre la richiesta e basta
+    if (!isAssignedTo(act, operator?.userId)) { setActMsg(t('activities.onlyAssignedMsg')); return }
+    try { await setActivityDone(act, done, { uid: operator.userId, name: operator.name }) } catch { setActMsg(t('station.saveError')) }
+  }
 
   // ── Home: eventi da preparare (elenco) o calendario del mese ─────────────
   const loadListsOn = isModuleEnabled(team, 'loadLists')
@@ -267,6 +298,20 @@ export default function StationHome() {
             <button type="submit" className="btn btn-secondary" disabled={!manual.trim()} style={{ flexShrink: 0 }}>{t('station.manualGo')}</button>
           </form>
         </div>
+
+        {todayActs.length > 0 && (
+          <section style={{ marginBottom: 26 }}>
+            <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 800 }}>{t('activities.todayTitle')}</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
+              {todayActs.map(act => (
+                <ActivityCard key={`${act.id}-${act.cont ? 'c' : 'o'}`} act={act} meId={operator?.userId} onToggle={toggleActivity} station large
+                  linkedEventName={act.linkedEventId ? events.find(e => e.id === act.linkedEventId)?.name : ''}
+                  onOpenList={a => navigate(`/events/${a.linkedEventId}${a.linkedListId ? `?list=${a.linkedListId}` : ''}`)} />
+              ))}
+            </div>
+            {actMsg && <p role="status" style={{ margin: '12px 0 0', fontSize: 14, fontWeight: 700, color: '#e63946' }}>{actMsg}</p>}
+          </section>
+        )}
 
         <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 800 }}>{t('station.eventsToPrepare')}</h2>
       </div>

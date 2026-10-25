@@ -83,14 +83,14 @@ export default function Profile({ onClose, showLogout }) {
   const showBadge = isProPlan(team) && !profile?.isStation
   const [badgeOpen, setBadgeOpen] = useState(false)
   const [badgeQr, setBadgeQr] = useState('')
-  const [badgeCode, setBadgeCode] = useState('')
+  const [badgePin, setBadgePin] = useState('')
   const [badgeBusy, setBadgeBusy] = useState(false)
   const [badgeError, setBadgeError] = useState('')
   const loadBadge = async (regenerate = false) => {
     setBadgeBusy(true); setBadgeError('')
     try {
-      const code = await fetchMyBadge(regenerate)
-      setBadgeCode(code)
+      const { code, pin } = await fetchMyBadge(regenerate)
+      setBadgePin(pin)
       setBadgeQr(await generateQRDataURL(code, 360))
     } catch { setBadgeError(t('badge.loadError')) } finally { setBadgeBusy(false) }
   }
@@ -317,12 +317,13 @@ export default function Profile({ onClose, showLogout }) {
                 ) : (
                   <p style={{ fontSize: 13, color: 'var(--c-ink3)', margin: '24px 0' }}>{t('badge.loading')}</p>
                 )}
-                {badgeCode && !badgeError && (
-                  <p style={{ margin: '12px 0 0', fontFamily: 'monospace', fontSize: 13, letterSpacing: '0.5px', color: 'var(--c-ink2)', wordBreak: 'break-all' }} aria-label={t('badge.codeLabel')}>
-                    {badgeCode.replace(/(.{4})/g, '$1 ').trim()}
-                  </p>
+                {badgePin && !badgeError && (
+                  <div style={{ margin: '18px 0 0' }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--c-ink3)' }}>{t('badge.pinLabel')}</div>
+                    <div style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 38, fontWeight: 800, letterSpacing: '0.32em', paddingLeft: '0.32em', color: 'var(--c-ink)', lineHeight: 1.15, opacity: badgeBusy ? 0.4 : 1, transition: 'opacity .2s' }}>{badgePin}</div>
+                  </div>
                 )}
-                <p style={{ fontSize: 12, color: 'var(--c-ink3)', margin: '12px 0' }}>{t('badge.privacy')}</p>
+                <p style={{ fontSize: 12, color: 'var(--c-ink3)', margin: '16px 0 12px' }}>{t('badge.privacy')}</p>
                 <button type="button" onClick={badgeError ? () => loadBadge() : regenerateBadge} disabled={badgeBusy} className="btn btn-secondary btn-full" style={{ minHeight: 44 }}>
                   {badgeError ? t('badge.retry') : t('badge.regen')}
                 </button>

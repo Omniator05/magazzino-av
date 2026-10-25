@@ -8,13 +8,15 @@ import DateBadge from '../components/DateBadge'
 import SkyArc from '../components/SkyArc'
 import { useIsMobile } from '../hooks/useIsMobile'
 import TutorialModal from '../components/TutorialModal'
-import { Unload, Recurring, Pin, Box, ChevronRight, Plus, User, List } from '../components/Icon'
+import { Unload, Recurring, Pin, Box, ChevronRight, Plus, User } from '../components/Icon'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import DailyQuip from '../components/DailyQuip'
 import Profile from './Profile'
 import { hasUnseenWhatsNew } from '../utils/whatsNew'
 import TodayReminderModal from '../components/TodayReminderModal'
+import ActivityCard from '../components/ActivityCard'
+import { groupActivities, activitiesForDay, setActivityDone, isAssignedTo } from '../utils/activities'
 
 const EVENT_CAP = 5
 
@@ -33,7 +35,8 @@ export default function WorkerHome() {
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const [showProfile, setShowProfile] = useState(false)
   const [events, setEvents] = useState([])
-  const [myBlocks, setMyBlocks] = useState([]) // le MIE assegnazioni di "Assegna personale" (attività libere incluse)
+  const [teamBlocks, setTeamBlocks] = useState([]) // tutte le assegnazioni di "Assegna personale" (le attività libere sono quelle senza evento)
+  const [people, setPeople] = useState({})         // uid → nome, per dire a chi è assegnata un'attività
   const [search, setSearch] = useState('')
   const [visibleCount, setVisibleCount] = useState(EVENT_CAP)
   const [openSections, setOpenSections] = useState(() => {
@@ -66,10 +69,19 @@ export default function WorkerHome() {
   useEffect(() => {
     if (!teamId || !user?.uid) return
     return onSnapshot(
-      query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId), where('workerId', '==', user.uid)),
-      snap => setMyBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId)),
+      snap => setTeamBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     )
   }, [teamId, user?.uid])
+
+  useEffect(() => {
+    if (!teamId) return
+    return onSnapshot(query(collection(db, 'profiles'), where('teamId', '==', teamId)), snap => {
+      const map = {}
+      snap.docs.forEach(d => { map[d.id] = d.data().name || d.data().username || '' })
+      setPeople(map)
+    })
+  }, [teamId])
 
   useEffect(() => {
     fetch('https://api.open-meteo.com/v1/forecast?latitude=46.4983&longitude=11.3548&current=weather_code,temperature_2m&timezone=Europe/Rome')
@@ -161,10 +173,12 @@ export default function WorkerHome() {
   // l'admin ci ha collegato una lista di carico — un tocco porta a quella
   // lista. Un'attività a cavallo di mezzanotte compare anche il giorno dopo.
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-  const myTodayTasks = myBlocks
-    .filter(b => !b.eventId && (b.date === today || (b.date === yesterday && b.endTime <= b.startTime)))
-    .map(b => ({ block: b, cont: b.date !== today }))
-    .sort((a, b) => (a.cont ? '00:00' : a.block.startTime).localeCompare(b.cont ? '00:00' : b.block.startTime))
+  // Le attività di oggi di TUTTA la squadra, con a chi sono assegnate: chi è assegnato può completarla.
+  const todayTasks = activitiesForDay(groupActivities(teamBlocks, uid => people[uid]), today, yesterday)
+    .sort((a, b) => (a.done - b.done) || (Number(isAssignedTo(b, user?.uid)) - Number(isAssignedTo(a, user?.uid))))
+  const toggleActivity = async (act, done) => {
+    try { await setActivityDone(act, done, { uid: user.uid, name: profile?.name || profile?.username || '' }) } catch { /* senza rete riprova al prossimo tocco */ }
+  }
   const recurringShown = pinnedRecurring.filter(e => !todayIds.has(e.id))
 
   // Rent/Install (ex "installazioni") vanno in una sezione propria — restano
@@ -245,12 +259,14 @@ export default function WorkerHome() {
 
         {/* OGGI — eventi di oggi e montaggi/smontaggi di oggi (anche di
             eventi in un altro giorno): stessa evidenza rossa. */}
-        {(todayList.length > 0 || myTodayTasks.length > 0) && (
+        {(todayList.length > 0 || todayTasks.length > 0) && (
           <div id="sec-today" style={{ margin:'0 0 24px', scrollMarginTop:16 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 20px 12px' }}>
               <p style={{ color:'#9a9a9a', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', margin:0 }}>{t('workerHome.todoToday')}</p>
             </div>
-            {myTodayTasks.map(({ block, cont }) => <TaskCard key={`${block.id}-${cont ? 'c' : 'o'}`} block={block} cont={cont} today={today} linkedEvent={block.linkedEventId ? events.find(e => e.id === block.linkedEventId) : null} navigate={navigate} />)}
+            {todayTasks.map(act => <ActivityCard key={`${act.id}-${act.cont ? 'c' : 'o'}`} act={act} meId={user?.uid} onToggle={toggleActivity}
+              linkedEventName={act.linkedEventId ? events.find(e => e.id === act.linkedEventId)?.name : ''}
+              onOpenList={a => navigate(`/events/${a.linkedEventId}${a.linkedListId ? `?list=${a.linkedListId}` : ''}`)} />)}
             {todayList.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} forceState={happeningToday(ev) ? 'today' : 'phaseToday'} loadListsOn={loadListsOn} />)}
           </div>
         )}
@@ -261,7 +277,7 @@ export default function WorkerHome() {
             in events.length avrebbe superato questo controllo restando
             comunque a schermo vuoto, senza nessun placeholder — pagina
             "morta" senza motivo (stesso bug già corretto in Events.jsx). */}
-        {(!loadListsOn || daScaricare.length === 0) && todayList.length === 0 && myTodayTasks.length === 0 && recurringShown.length === 0 && upcomingSingle.length === 0 && installations.length === 0 ? (
+        {(!loadListsOn || daScaricare.length === 0) && todayList.length === 0 && todayTasks.length === 0 && recurringShown.length === 0 && upcomingSingle.length === 0 && installations.length === 0 ? (
           <div className="empty-state">
             <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={46} /></p>
             <h3>{t('workerHome.emptyTitle')}</h3>
@@ -346,36 +362,6 @@ const PHASE_COLORS = { montaggio: '#2563eb', smontaggio: '#ea580c' }
 // Una mia attività di oggi (assegnata da "Assegna personale", senza evento):
 // stessa forma delle card evento, con l'orario, la mia nota e — se collegata —
 // la lista di carico da aprire (anche di un evento di un altro giorno).
-function TaskCard({ block, cont, today, linkedEvent, navigate }) {
-  const { t, i18n } = useTranslation()
-  const goList = () => navigate(`/events/${block.linkedEventId}${block.linkedListId ? `?list=${block.linkedListId}` : ''}`)
-  const linked = !!block.linkedEventId
-  return (
-    <div onClick={linked ? goList : undefined}
-      style={{ margin:'0 18px 12px', background:'var(--c-surface)', border:'1px solid rgba(230,57,70,0.4)', borderRadius:18, display:'flex', alignItems:'center', padding:'15px 16px', gap:14, cursor: linked ? 'pointer' : 'default' }}>
-      <div style={{ width:50, height:50, flexShrink:0, borderRadius:13, background:'#e63946', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white', lineHeight:1.1 }}>
-        <span style={{ fontSize:18, fontWeight:800 }}>{new Date(today+'T12:00:00').getDate()}</span>
-        <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', opacity:0.85 }}>{formatDate(today+'T12:00:00', {month:'short'}, i18n.language)}</span>
-      </div>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-          <p style={{ fontWeight:800, fontSize:15, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, margin:0 }}>{block.label || t('staffTimeline.untitledTask')}</p>
-          <span style={{ background:'rgba(230,57,70,0.12)', color:'#e63946', borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:800, flexShrink:0, textTransform:'uppercase' }}>{t('workerHome.taskTag')}</span>
-        </div>
-        <p style={{ fontSize:12, fontWeight:600, color:'var(--text2)', fontVariantNumeric:'tabular-nums' }}>
-          {cont ? `${t('workerCalendar.taskContinues')} · 00:00–${block.endTime}` : `${block.startTime}–${block.endTime}`}
-        </p>
-        {block.note && <p style={{ fontSize:12, color:'var(--text2)', marginTop:3, whiteSpace:'pre-wrap' }}>{block.note}</p>}
-        {linked && (
-          <p style={{ fontSize:12, fontWeight:700, color:'var(--blue)', marginTop:4, display:'flex', alignItems:'center', gap:5 }}>
-            <List size={13} /> {t('workerHome.openLinkedList')}{linkedEvent ? ` · ${linkedEvent.name}` : ''} <span style={{ marginLeft:'auto' }}>›</span>
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function EventCard({ ev, today, navigate, uid, forceState, loadListsOn }) {
   const { t, i18n } = useTranslation()
   const phasesToday = phaseKeysToday(ev, today)

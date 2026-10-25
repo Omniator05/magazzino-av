@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useLayoutEffect, useRef
 import { useTranslation } from 'react-i18next'
 import { useAuth } from './AuthContext'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
-import { badgeLogin, isBadgeCode } from '../utils/operatorBadge'
+import { badgeLogin, isBadgeCode, isPin } from '../utils/operatorBadge'
 
 // "Operatore" della Postazione magazzino (account con isStation, vedi SettingsUsers.jsx):
 // il PC fisso resta sempre collegato all'account della postazione, ma chi sta lavorando si
@@ -38,13 +38,36 @@ export function OperatorProvider({ children }) {
       expiresRef.current = Date.now() + IDLE_MS
       setLoginError('')
     } catch (e) {
-      setLoginError(e.code === 'inactive' ? 'inactive' : 'invalid')
+      setLoginError(e.code === 'inactive' ? 'inactive' : e.code === 'locked' ? 'locked' : 'invalid')
       setTimeout(() => setLoginError(''), 4000)
     }
   }, [])
 
   // I badge (e solo quelli) arrivano da qui, da qualunque pagina della postazione.
   useKeyboardWedgeScanner(login, { enabled: isStation, badges: true })
+
+  // Codice personale a 4 cifre: senza operatore, chi digita 4 numeri (fuori dai campi di testo) entra
+  // subito, senza premere altro. Le cifre "sparate" dal lettore di codici a barre (troppo veloci) non contano.
+  useEffect(() => {
+    if (!isStation || operator) return
+    let digits = ''
+    let last = 0
+    const onKey = e => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const el = document.activeElement
+      if (el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)) return
+      if (!/^\d$/.test(e.key)) { digits = ''; return }
+      const now = Date.now()
+      const gap = now - last
+      last = now
+      if (gap < 35 || gap > 4000) digits = ''     // lettore (troppo veloce) o pausa lunga: si riparte
+      if (gap < 35) return
+      digits += e.key
+      if (digits.length === 4) { const pin = digits; digits = ''; login(pin) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isStation, operator, login])
 
   useEffect(() => {
     if (!isStation) return
@@ -229,14 +252,19 @@ export function BadgeEntry({ autoFocus }) {
   const { t } = useTranslation()
   const { login, loginError } = useOperator()
   const [code, setCode] = useState('')
-  const valid = isBadgeCode(code)
+  const valid = isBadgeCode(code) || isPin(code)
   const submit = async e => { e.preventDefault(); if (!valid) return; await login(code); setCode('') }
+  // Il codice a 4 cifre entra da solo appena è completo, senza premere altro.
+  const change = async v => {
+    setCode(v)
+    if (isPin(v)) { await login(v.trim()); setCode('') }
+  }
   return (
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input value={code} onChange={e => setCode(e.target.value)} autoFocus={autoFocus} autoComplete="off" spellCheck={false}
+        <input value={code} onChange={e => change(e.target.value)} autoFocus={autoFocus} autoComplete="off" spellCheck={false} inputMode="text"
           placeholder={t('operator.codePlaceholder')} aria-label={t('operator.codePlaceholder')}
-          style={{ flex: 1, minWidth: 0, fontFamily: 'monospace', fontSize: 13.5, textTransform: 'uppercase' }} />
+          style={{ flex: 1, minWidth: 0, fontFamily: 'monospace', fontSize: 14, textTransform: 'uppercase', letterSpacing: isPin(code) ? '0.3em' : 0 }} />
         <button type="submit" className="btn btn-secondary" disabled={!valid} style={{ flexShrink: 0 }}>{t('operator.codeGo')}</button>
       </div>
       {loginError && <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#e63946' }}>{t(`operator.${loginError}`)}</p>}
