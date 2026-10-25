@@ -7,6 +7,23 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-27',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Backup dei dati: da Impostazioni → Backup dei dati scarichi in un file tutto quello che ha la squadra (oggetti, eventi, liste, persone, turni, storico), con la data dell\'ultimo backup',
+        'Reimposta password via email più affidabile: usa l\'email vera dell\'account e, se qualcosa non va, mostra il motivo all\'admin',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Data backup: from Settings → Data backup you download everything your team has (items, events, lists, people, shifts, history) in one file, with the date of the last backup',
+        'More reliable password reset by email: it uses the account\'s real email and, if something fails, shows the admin why',
+      ],
+    },
+  },
+  {
     version: '2026-10-26',
     it: {
       title: 'Novità di oggi',

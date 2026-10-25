@@ -462,10 +462,16 @@ export default function SettingsUsers() {
         headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'passwordReset', targetUid: showDetail.id }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
       showToast(t('adminUsers.resetEmailSentToast', { email: showDetail.email }))
-    } catch {
-      setDetailMsg({ text:t('adminUsers.errorSendResetEmail'), type:'error' })
+    } catch (e) {
+      // Solo l'admin vede questa schermata: il motivo vero (es. dominio Resend non verificato)
+      // aiuta a sistemare la configurazione senza dover aprire la console.
+      console.error('[reset email]', e.message)
+      setDetailMsg({ text: e.message ? `${t('adminUsers.errorSendResetEmail')} (${e.message.slice(0, 160)})` : t('adminUsers.errorSendResetEmail'), type:'error' })
     } finally {
       setSendingResetEmail(false)
     }

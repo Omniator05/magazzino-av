@@ -5,12 +5,15 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { isModuleEnabled } from '../utils/modules'
-import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck } from '../components/Icon'
+import { Image, Sliders, CreditCard, User, Calendar, Mail, Share, Clock, Truck, Download } from '../components/Icon'
+import { lastBackupAt } from '../utils/teamBackup'
+import { formatDate } from '../utils/formatDate'
 import { trialDaysLeft } from '../utils/billing'
 import Toast from '../components/Toast'
 import PageHeader from '../components/PageHeader'
 
 const SUPPORT_EMAIL = 'info@roadcase.it'
+const THIRTY_DAYS = 30 * 86400000
 
 const sectionLabelStyle = { padding:'0 16px 8px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }
 
@@ -64,7 +67,7 @@ function SettingsRowsCard({ rows, navigate }) {
 // App.jsx). Qui si mostrano solo riepiloghi leggeri (contatori, stato), la
 // logica vera vive nella sotto-pagina di ciascuna sezione.
 export default function Settings() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { team, teamId } = useAuth()
   const navigate = useNavigate()
   const [users, setUsers] = useState([])
@@ -124,11 +127,19 @@ export default function Settings() {
   // i Furgoni sono stati spostati qui dalla Dashboard perché si usano poco;
   // il resoconto Ore ci sta per lo stesso motivo di natura (un report, non
   // un interruttore). Gruppo separato da quello sotto, con la sua label.
+  const lastBackup = lastBackupAt(teamId)
+  const backupStale = !lastBackup || (Date.now() - lastBackup.getTime()) > THIRTY_DAYS
+  const backupDate = lastBackup ? formatDate(lastBackup, { day: 'numeric', month: 'short', year: 'numeric' }, i18n.language) : ''
   const toolRows = [
     {
       key: 'vehicles', to: '/vehicles', icon: Truck,
       color: 'var(--accent2)', bg: 'rgba(245,166,35,0.15)',
       title: t('vehicles.title'), subtitle: t('adminUsers.vehiclesRowDesc'),
+    },
+    {
+      key: 'backup', to: '/admin/settings/backup', icon: Download,
+      color: backupStale ? '#d97706' : 'var(--green)', bg: backupStale ? 'rgba(217,119,6,0.15)' : 'rgba(105,240,174,0.18)',
+      title: t('backup.title'), subtitle: !lastBackup ? t('backup.rowSubtitleNever') : backupStale ? t('backup.rowSubtitleStale', { date: backupDate }) : t('backup.rowSubtitleLast', { date: backupDate }),
     },
     ...(workHoursEnabled ? [{
       key: 'workHours', to: '/admin/settings/work-hours', icon: Clock,

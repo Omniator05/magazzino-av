@@ -21,6 +21,7 @@ const Scanner = lazy(() => import('./pages/Scanner'))
 const Settings = lazy(() => import('./pages/Settings'))
 const SettingsProfile = lazy(() => import('./pages/SettingsProfile'))
 const SettingsModules = lazy(() => import('./pages/SettingsModules'))
+const SettingsBackup = lazy(() => import('./pages/SettingsBackup'))
 const SettingsBilling = lazy(() => import('./pages/SettingsBilling'))
 const SettingsUsers = lazy(() => import('./pages/SettingsUsers'))
 const SettingsIntegrations = lazy(() => import('./pages/SettingsIntegrations'))
@@ -296,6 +297,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
           <Route path="/admin/settings" element={<Settings />} />
           <Route path="/admin/settings/profile" element={<SettingsProfile />} />
           <Route path="/admin/settings/modules" element={<SettingsModules />} />
+          <Route path="/admin/settings/backup" element={<SettingsBackup />} />
           <Route path="/admin/settings/billing" element={<SettingsBilling />} />
           <Route path="/admin/settings/users" element={<SettingsUsers />} />
           <Route path="/admin/settings/integrations" element={<SettingsIntegrations />} />

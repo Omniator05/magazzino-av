@@ -100,11 +100,30 @@ async function sendPasswordReset(req, res) {
   // L'email dell'account Firebase Auth: per i worker/organizzatori creati da
   // username è l'internalEmail finta; per un admin (che si registra con la
   // propria email vera) coincide con `email` stessa.
-  const authEmail = targetProfile.internalEmail || targetProfile.email
+  // Meglio chiederla direttamente a Firebase Auth (l'id del profilo è l'uid dell'account): i campi del
+  // profilo possono non coincidere con l'email reale dell'account (cambi manuali, vecchi utenti), e
+  // con l'email sbagliata Firebase non riesce a creare il link ("Unable to create the email action link").
+  let authEmail = targetProfile.internalEmail || targetProfile.email
+  try {
+    const authUser = await getAdmin().auth().getUser(targetUid)
+    if (authUser?.email) authEmail = authUser.email
+  } catch (e) {
+    if (e.code === 'auth/user-not-found') return res.status(404).json({ error: 'Questo utente non ha un account di accesso' })
+    console.error('[send-email passwordReset] getUser', e.message)
+  }
 
   const origin = req.headers.origin || `https://${req.headers.host}`
   try {
-    const resetLink = await getAdmin().auth().generatePasswordResetLink(authEmail, { url: `${origin}/login` })
+    // Il dominio da cui si lavora deve essere tra i "Domini autorizzati" di Firebase Authentication;
+    // se non lo è (es. un'anteprima Vercel), si genera comunque il link, senza ritorno automatico al login.
+    let resetLink
+    try {
+      resetLink = await getAdmin().auth().generatePasswordResetLink(authEmail, { url: `${origin}/login` })
+    } catch (err) {
+      if (!/allowlist|unauthorized-continue-uri/i.test(`${err.code || ''} ${err.message || ''}`)) throw err
+      console.warn('[send-email passwordReset] dominio non autorizzato in Firebase:', origin)
+      resetLink = await getAdmin().auth().generatePasswordResetLink(authEmail)
+    }
     await sendEmail({
       to: targetProfile.email,
       subject: 'Reimposta la tua password — Roadcase',
@@ -112,6 +131,8 @@ async function sendPasswordReset(req, res) {
     })
     res.status(200).json({ sent: true })
   } catch (e) {
+    // Nei log di Vercel si vede il motivo vero (chiave Resend, dominio non verificato, utente senza account…).
+    console.error('[send-email passwordReset]', e.message)
     res.status(502).json({ error: e.message })
   }
 }
