@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
+import { isLegacyLogin, isRealEmail, setLoginEmail } from '../utils/loginEmail'
 import { adminLimit, workerLimit, promptLimitReached, isProPlan } from '../utils/planLimits'
 import { isModuleEnabled } from '../utils/modules'
 import { formatDate } from '../utils/formatDate'
@@ -148,6 +149,10 @@ export default function SettingsUsers() {
   useModalScrollLock(showCreate || !!showDetail || !!tempEdit)
   const [editMode, setEditMode]       = useState(false)
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
+  // Per default un nuovo utente entra con la sua email vera; chi non ne ha una (o la Postazione, che è
+  // un dispositivo) usa il vecchio accesso con nome utente.
+  const [noEmail, setNoEmail]           = useState(false)
+  const emailMode = form.role !== 'postazione' && !noEmail
   const [newPw, setNewPw]             = useState('')
   const [maxHours, setMaxHours]       = useState('') // limite ore mensili (modulo Ore di lavoro)
   const [vacationDays, setVacationDays] = useState('') // giorni di ferie annuali
@@ -183,6 +188,28 @@ export default function SettingsUsers() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
   const clearDetailMsg = () => setDetailMsg({ text:'', type:'' })
+
+  // ── Accesso con email ─────────────────────────────────────────
+  // Gli account più vecchi entrano con il nome utente (email finta dentro Firebase): l'admin può
+  // passarli all'email vera, da cui poi l'utente reimposta da solo la password. Vedi api/_users.js.
+  const [loginEmailInput, setLoginEmailInput] = useState('')
+  const [switchingLogin, setSwitchingLogin] = useState(false)
+  const [bulkLogin, setBulkLogin] = useState(null)   // null | { done, total }
+  const loginErrorText = code => ({
+    'email-in-use': t('adminUsers.loginEmailInUse'),
+    'invalid-email': t('adminUsers.errorEmailInvalid'),
+    'no-account': t('adminUsers.loginNoAccount'),
+  }[code] || t('adminUsers.loginSwitchError'))
+  const switchToEmailLogin = async () => {
+    const email = loginEmailInput.trim().toLowerCase()
+    if (!isRealEmail(email)) { setDetailMsg({ text: t('adminUsers.errorEmailInvalid'), type:'error' }); return }
+    setSwitchingLogin(true); clearDetailMsg()
+    const r = await setLoginEmail(showDetail.id, email)
+    setSwitchingLogin(false)
+    if (!r.ok) { setDetailMsg({ text: loginErrorText(r.code), type:'error' }); return }
+    setShowDetail(d => ({ ...d, email, internalEmail: email, loginByEmail: true }))
+    showToast(t('adminUsers.loginSwitchedToast', { email }))
+  }
 
   // ── Crea account ──────────────────────────────────────────────
   // Ritorna true solo se l'account è stato davvero creato — SaveButton
@@ -230,15 +257,20 @@ export default function SettingsUsers() {
   }
 
   const createAccount = async () => {
-    if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
+    const loginEmail = form.email.trim().toLowerCase()
+    if (!form.name.trim() || form.password.length < 6 || (emailMode ? !loginEmail : !form.username.trim())) {
       setError(t('adminUsers.errorFillAllFields')); return false
     }
+    if (emailMode && !isRealEmail(loginEmail)) { setError(t('adminUsers.errorEmailInvalid')); return false }
     if (form.role === 'organizzatore-evento' && !assignedEventId) {
       setError(t('adminUsers.errorOrgLinkedEvent')); return false
     }
-    const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
-    if (users.some(u => u.username === username)) {
-      setError(t('adminUsers.errorUsernameTaken')); return false
+    // Con l'email vera il "nome utente" è l'email stessa (serve solo per riconoscere la persona).
+    const username = emailMode ? loginEmail : form.username.toLowerCase().trim().replace(/\s+/g, '.')
+    if (emailMode
+      ? users.some(u => (u.email || '').toLowerCase() === loginEmail || (u.internalEmail || '').toLowerCase() === loginEmail)
+      : users.some(u => u.username === username)) {
+      setError(emailMode ? t('adminUsers.errorEmailInUse') : t('adminUsers.errorUsernameTaken')); return false
     }
     // Tetto admin e magazzinieri: sempre controllati, non solo sul piano
     // gratuito — sono due delle leve che distinguono Team da Business, vedi
@@ -266,7 +298,8 @@ export default function SettingsUsers() {
     }
     setLoading(true); setError('')
 
-    const internalEmail = usernameToEmail(username)
+    // Email con cui l'account esiste in Firebase Auth: quella vera, oppure quella finta del nome utente.
+    const internalEmail = emailMode ? loginEmail : usernameToEmail(username)
 
     let cred = null
     try {
@@ -315,6 +348,7 @@ export default function SettingsUsers() {
       }
 
       setForm({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
+      setNoEmail(false)
       setOrgConfig(EMPTY_ORG_CONFIG)
       setAssignedEventId('')
       return true
@@ -545,6 +579,27 @@ export default function SettingsUsers() {
   const pending   = users.filter(u => u.approved === false)
   const workers   = users.filter(u => u.role === 'worker' && u.approved !== false)
   const admins    = users.filter(u => u.role === 'admin' && u.approved !== false)
+  // Chi entra ancora con il nome utente: con un'email vera nel profilo si può passare subito
+  // all'accesso con email; senza, l'admin deve prima aggiungerla dalla scheda.
+  const legacyUsers = users.filter(u => isLegacyLogin(u) && u.id !== user.uid && u.approved !== false)
+  const legacyReady = legacyUsers.filter(u => isRealEmail(u.email))
+  const legacyNoEmail = legacyUsers.length - legacyReady.length
+  const switchAllToEmail = async () => {
+    if (!(await confirm({
+      title: t('adminUsers.bulkLoginTitle'),
+      message: t('adminUsers.bulkLoginMessage', { count: legacyReady.length }),
+      confirmLabel: t('adminUsers.bulkLoginConfirm'),
+    }))) return
+    let ok = 0, failed = 0
+    setBulkLogin({ done: 0, total: legacyReady.length })
+    for (const u of legacyReady) {
+      const r = await setLoginEmail(u.id, u.email.trim().toLowerCase())
+      if (r.ok) ok++; else failed++
+      setBulkLogin(b => ({ ...b, done: b.done + 1 }))
+    }
+    setBulkLogin(null)
+    showToast(failed ? t('adminUsers.bulkLoginDoneSome', { ok, failed }) : t('adminUsers.bulkLoginDone', { count: ok }))
+  }
   const organizers = users.filter(u => (u.role === 'organizzatore-brasserie' || u.role === 'organizzatore-evento') && u.approved !== false)
 
   const ROLE_COLORS = {
@@ -572,7 +627,7 @@ export default function SettingsUsers() {
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <p style={{ fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</p>
-          <p style={{ color:'var(--text2)', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.username ? `@${u.username}` : u.email}</p>
+          <p style={{ color:'var(--text2)', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.username ? (u.username.includes('@') ? u.username : `@${u.username}`) : u.email}</p>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
           {u.role === 'worker' && u.canManageInventory && (
@@ -622,6 +677,21 @@ export default function SettingsUsers() {
       <FabButton onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} ariaLabel={t('adminUsers.newButton')} />
 
       <div style={{ padding:'8px 0 0' }}>
+        {legacyUsers.length > 0 && (
+          <div style={{ margin:'0 16px 16px', background:'rgba(124,111,234,0.08)', border:'1px solid rgba(124,111,234,0.3)', borderRadius:'var(--radius)', padding:'14px 16px' }}>
+            <p style={{ fontWeight:800, fontSize:14, color:'var(--text)' }}>{t('adminUsers.legacyBannerTitle', { count: legacyUsers.length })}</p>
+            <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginTop:4 }}>
+              {t('adminUsers.legacyBannerText')}
+              {legacyNoEmail > 0 ? ` ${t('adminUsers.legacyBannerNoEmail', { count: legacyNoEmail })}` : ''}
+            </p>
+            {legacyReady.length > 0 && (
+              <button onClick={switchAllToEmail} disabled={!!bulkLogin} className="btn" style={{ marginTop:12, background:'var(--accent)', color:'#fff', fontWeight:800 }}>
+                {bulkLogin ? t('adminUsers.bulkLoginRunning', { done: bulkLogin.done, total: bulkLogin.total }) : t('adminUsers.bulkLoginButton', { count: legacyReady.length })}
+              </button>
+            )}
+          </div>
+        )}
+
         {pending.length > 0 && (
           <>
             <p style={{ padding:'0 16px 10px', color:'var(--accent2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.pendingApprovalSection')}</p>
@@ -722,30 +792,56 @@ export default function SettingsUsers() {
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('adminUsers.fullNamePlaceholder')} />
             </div>
             {form.role !== 'temporaneo' && (<>
-            <div className="form-group">
-              <label>{t('adminUsers.usernameLabel')}</label>
-              <input
-                value={form.username}
-                onChange={e => setForm({...form, username: e.target.value.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')})}
-                placeholder={t('adminUsers.usernamePlaceholder')}
-                autoCapitalize="none" autoCorrect="off"
-              />
-              {form.username && (
-                <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>
-                  {t('adminUsers.willLoginWith')} <strong style={{ color:'var(--blue)', fontFamily:'monospace' }}>{form.username}</strong>
-                </p>
+            {emailMode ? (
+              <div className="form-group">
+                <label>{t('adminUsers.loginEmailLabel')}</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({...form, email: e.target.value})}
+                  placeholder={t('adminUsers.emailPlaceholder')}
+                  autoCapitalize="none" autoCorrect="off"
+                />
+                <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>{t('adminUsers.loginEmailHint')}</p>
+                {form.role !== 'postazione' && (
+                  <button type="button" onClick={() => setNoEmail(true)} className="btn-no-anim"
+                    style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
+                    {t('adminUsers.noEmailToggle')}
+                  </button>
+                )}
+              </div>
+            ) : (<>
+              <div className="form-group">
+                <label>{t('adminUsers.usernameLabel')}</label>
+                <input
+                  value={form.username}
+                  onChange={e => setForm({...form, username: e.target.value.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '')})}
+                  placeholder={t('adminUsers.usernamePlaceholder')}
+                  autoCapitalize="none" autoCorrect="off"
+                />
+                {form.username && (
+                  <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>
+                    {t('adminUsers.willLoginWith')} <strong style={{ color:'var(--blue)', fontFamily:'monospace' }}>{form.username}</strong>
+                  </p>
+                )}
+              </div>
+              {form.role !== 'postazione' && (
+                <div className="form-group">
+                  <label>{t('adminUsers.emailLabel')}</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={e => setForm({...form, email: e.target.value})}
+                    placeholder={t('adminUsers.emailPlaceholder')}
+                    autoCapitalize="none"
+                  />
+                  <button type="button" onClick={() => setNoEmail(false)} className="btn-no-anim"
+                    style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
+                    {t('adminUsers.useEmailToggle')}
+                  </button>
+                </div>
               )}
-            </div>
-            <div className="form-group">
-              <label>{t('adminUsers.emailLabel')}</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={e => setForm({...form, email: e.target.value})}
-                placeholder={t('adminUsers.emailPlaceholder')}
-                autoCapitalize="none"
-              />
-            </div>
+            </>)}
             </>)}
             <div className="form-group">
               <label>{t('adminUsers.roleLabel')}</label>
@@ -845,7 +941,7 @@ export default function SettingsUsers() {
                 </div>
                 <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
                 {showDetail.username && (
-                  <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>@{showDetail.username}</p>
+                  <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>{showDetail.username.includes('@') ? showDetail.username : `@${showDetail.username}`}</p>
                 )}
 
                 {showDetail.email && (
@@ -898,7 +994,7 @@ export default function SettingsUsers() {
                 )}
 
                 <button
-                  onClick={() => { setEditMode(true); setNewUsername(showDetail.username); clearDetailMsg() }}
+                  onClick={() => { setEditMode(true); setNewUsername(showDetail.username || ''); setLoginEmailInput(showDetail.email || ''); clearDetailMsg() }}
                   className="btn btn-secondary btn-full"
                   style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}
                 >
@@ -919,7 +1015,29 @@ export default function SettingsUsers() {
                   </div>
                 )}
 
-                {/* Nome utente */}
+                {/* Accesso: con email vera oppure con nome utente (vecchi account) */}
+                {!showDetail.isStation && (
+                  isLegacyLogin(showDetail) ? (
+                    <div style={{ background:'rgba(124,111,234,0.08)', border:'1px solid rgba(124,111,234,0.3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                      <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.loginSectionTitle')}</p>
+                      <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginBottom:10 }}>{t('adminUsers.loginLegacyText')}</p>
+                      <div style={{ display:'flex', gap:8 }}>
+                        <input type="email" value={loginEmailInput} onChange={e => setLoginEmailInput(e.target.value)} placeholder={t('adminUsers.emailPlaceholder')} autoCapitalize="none" style={{ flex:1, minWidth:0 }} />
+                        <button onClick={switchToEmailLogin} disabled={switchingLogin} className="btn" style={{ flexShrink:0, padding:'9px 14px', background:'var(--accent)', color:'#fff', fontWeight:800 }}>
+                          {switchingLogin ? t('common.saving') : t('adminUsers.loginSwitchButton')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'12px 14px', marginBottom:16 }}>
+                      <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.loginEmailBadge')}</p>
+                      <p style={{ fontFamily:'monospace', fontSize:14, marginTop:4, wordBreak:'break-all' }}>{showDetail.internalEmail || showDetail.email}</p>
+                    </div>
+                  )
+                )}
+
+                {/* Nome utente (solo per chi entra ancora con quello) */}
+                {(isLegacyLogin(showDetail) || showDetail.isStation) && (
                 <div className="form-group">
                   <label>{t('adminUsers.changeUsernameLabel')}</label>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -933,6 +1051,7 @@ export default function SettingsUsers() {
                     <button onClick={saveUsername} className="btn btn-secondary" style={{ padding:'9px 16px', flexShrink:0 }}>{t('adminUsers.save')}</button>
                   </div>
                 </div>
+                )}
 
                 {/* Cambio password — sempre aperta */}
                 <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>

@@ -4,6 +4,7 @@ import { db, secondaryAuth } from '../firebase'
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
+import { isRealEmail } from '../utils/loginEmail'
 import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
 import { Check, User } from '../components/Icon'
 import AuthBackground from '../components/AuthBackground'
@@ -51,18 +52,22 @@ export default function Welcome() {
   }
 
   // ── Step primo worker ──
-  const [form, setForm] = useState({ name: '', username: '', password: '' })
+  const [form, setForm] = useState({ name: '', username: '', email: '', password: '' })
   const [workerError, setWorkerError] = useState('')
   const [creatingWorker, setCreatingWorker] = useState(false)
   const [workerCreated, setWorkerCreated] = useState(false)
 
   const createFirstWorker = async () => {
-    if (!form.name.trim() || !form.username.trim() || form.password.length < 6) {
+    // Con l'email vera il magazziniere entra con quella (e può reimpostare da solo la password);
+    // senza email si ripiega sul nome utente, come prima.
+    const email = form.email.trim().toLowerCase()
+    if (!form.name.trim() || (!email && !form.username.trim()) || form.password.length < 6) {
       setWorkerError(t('welcome.errorFillFields')); return
     }
+    if (email && !isRealEmail(email)) { setWorkerError(t('adminUsers.errorEmailInvalid')); return }
     setCreatingWorker(true); setWorkerError('')
-    const username = form.username.toLowerCase().trim().replace(/\s+/g, '.')
-    const internalEmail = usernameToEmail(username)
+    const username = email || form.username.toLowerCase().trim().replace(/\s+/g, '.')
+    const internalEmail = email || usernameToEmail(username)
 
     let cred = null
     try {
@@ -73,6 +78,7 @@ export default function Welcome() {
         name: form.name.trim(),
         username,
         internalEmail,
+        email: email || null,
         role: 'worker',
         teamId,
         approved: true,
@@ -187,7 +193,11 @@ export default function Welcome() {
                   <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={t('welcome.workerNamePlaceholder')} autoFocus />
                 </div>
                 <div className="form-group">
-                  <label>{t('welcome.workerUsernameLabel')}</label>
+                  <label>{t('adminUsers.loginEmailLabel')}</label>
+                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder={t('adminUsers.emailPlaceholder')} autoCapitalize="none" autoCorrect="off" />
+                </div>
+                <div className="form-group">
+                  <label>{t('welcome.workerUsernameLabel')} <span style={{ color:'var(--text2)', fontWeight:500 }}>({t('welcome.usernameIfNoEmail')})</span></label>
                   <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="es. marco.rossi" autoCapitalize="none" autoCorrect="off" />
                 </div>
                 <div className="form-group">

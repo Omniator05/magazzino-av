@@ -12,6 +12,7 @@ export const CHANGELOG = [
       title: 'Novità di oggi',
       items: [
         'Backup dei dati: da Impostazioni → Backup dei dati scarichi in un file tutto quello che ha la squadra (oggetti, eventi, liste, persone, turni, storico), con la data dell\'ultimo backup',
+        'Accesso con l\'email: i nuovi utenti entrano con la loro email e dalla pagina di accesso possono reimpostare da soli la password con "Password dimenticata?". Gli utenti già creati restano con il nome utente finché non li passi all\'email dalla loro scheda',
         'Reimposta password via email più affidabile: usa l\'email vera dell\'account e, se qualcosa non va, mostra il motivo all\'admin',
       ],
     },
@@ -19,6 +20,7 @@ export const CHANGELOG = [
       title: "Today's updates",
       items: [
         'Data backup: from Settings → Data backup you download everything your team has (items, events, lists, people, shifts, history) in one file, with the date of the last backup',
+        'Email sign-in: new users sign in with their email and can reset their own password from the sign-in page with "Forgot your password?". Existing users keep their username until you move them to email from their card',
         'More reliable password reset by email: it uses the account\'s real email and, if something fails, shows the admin why',
       ],
     },

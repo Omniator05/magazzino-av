@@ -10,6 +10,7 @@
 // (vedi i `catch {}` lato client), quindi un tipo che fallisce non deve mai
 // impedire agli altri di funzionare.
 import { requireTeamAdmin, requireTeamMember, getAdmin } from './_authAdmin.js'
+import crypto from 'node:crypto'
 import { sendEmail, inviteEmailHtml, absenceNotificationEmailHtml, passwordResetEmailHtml, welcomeEmailHtml } from './_resend.js'
 
 async function sendWelcome(req, res) {
@@ -137,7 +138,56 @@ async function sendPasswordReset(req, res) {
   }
 }
 
-const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset }
+// "Password dimenticata?" dalla pagina di accesso: nessun login, quindi risponde SEMPRE allo stesso modo
+// (l'email esista o no) per non rivelare chi è registrato. Trova l'account dall'email vera: o è
+// l'email stessa dell'account Firebase, o è quella salvata nel profilo (utenti con nome utente).
+// Un solo invio al minuto per indirizzo (si appoggia a teamSecrets, chiusa a tutti i client).
+async function sendForgotPassword(req, res) {
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Email non valida' })
+  const done = () => res.status(200).json({ ok: true })
+
+  try {
+    const admin = getAdmin()
+    const db = admin.firestore()
+    const throttle = db.collection('teamSecrets').doc(`pwreset_${crypto.createHash('sha256').update(email).digest('hex').slice(0, 40)}`)
+    const last = (await throttle.get()).data()?.at || 0
+    if (Date.now() - last < 60000) return done()
+    await throttle.set({ at: Date.now() })
+
+    let uid = null
+    let authEmail = null
+    try { const u = await admin.auth().getUserByEmail(email); uid = u.uid; authEmail = u.email } catch { /* non è un account diretto */ }
+    if (!authEmail) {
+      const found = await db.collection('profiles').where('email', '==', email).limit(1).get()
+      if (!found.empty) {
+        uid = found.docs[0].id
+        try { authEmail = (await admin.auth().getUser(uid)).email } catch { /* profilo senza account */ }
+      }
+    }
+    if (!authEmail) return done()
+
+    const name = uid ? ((await db.collection('profiles').doc(uid).get()).data()?.name || '') : ''
+    const origin = req.headers.origin || `https://${req.headers.host}`
+    let resetLink
+    try {
+      resetLink = await admin.auth().generatePasswordResetLink(authEmail, { url: `${origin}/login` })
+    } catch (err) {
+      if (!/allowlist|unauthorized-continue-uri/i.test(`${err.code || ''} ${err.message || ''}`)) throw err
+      resetLink = await admin.auth().generatePasswordResetLink(authEmail)
+    }
+    await sendEmail({
+      to: email,
+      subject: 'Reimposta la tua password — Roadcase',
+      html: passwordResetEmailHtml({ workerName: name || email, resetUrl: resetLink, appUrl: origin }),
+    })
+  } catch (e) {
+    console.error('[send-email forgotPassword]', e.message)
+  }
+  return done()
+}
+
+const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

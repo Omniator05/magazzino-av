@@ -10,6 +10,7 @@ import { requireTeamMember, getAdmin } from './_authAdmin.js'
 import { todayStr } from './_date.js'
 import { handleGuestAction } from './_guest.js'
 import { handleBadgeAction } from './_badge.js'
+import { handleUserAction } from './_users.js'
 
 const DEAD_TOKEN_CODES = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']
 
@@ -223,6 +224,8 @@ export default async function handler(req, res) {
   const { action } = req.body || {}
   // Badge personale per la Postazione magazzino (vedi _badge.js): servono utente verificato e squadra
   if (String(action || '').startsWith('badge-') && await handleBadgeAction(req, res, { db, teamId, uid, profile })) return
+  // Email di accesso degli utenti (vedi _users.js): solo admin
+  if (String(action || '').startsWith('user-') && await handleUserAction(req, res, { db, teamId, uid, profile })) return
   if (action === 'register' || action === 'unregister') return registerToken(req, res, db, teamId, uid)
   if (action === 'send') return sendPush(req, res, db, teamId, uid)
   return res.status(400).json({ error: 'Azione non valida' })

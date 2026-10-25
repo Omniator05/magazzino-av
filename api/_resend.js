@@ -132,3 +132,22 @@ export function welcomeEmailHtml({ adminName, teamName, appUrl }) {
     ctaUrl: appUrl,
   })
 }
+
+export function loginChangedEmailHtml({ workerName, teamName, email, loginUrl }) {
+  return emailShell({
+    logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,
+    title: `Ciao ${esc(workerName)},`,
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        L'accesso a Roadcase per la squadra <strong>${esc(teamName)}</strong> ora si fa con la tua email. La password non è cambiata.
+      </p>
+      <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
+        <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Entra con</p>
+        <p style="margin:0;color:#1a1a1a;font-size:14px;font-family:monospace;">${esc(email)}</p>
+      </div>
+      <p style="margin:10px 0 0;color:#9ca3af;font-size:12.5px;">Se hai dimenticato la password, dalla pagina di accesso puoi reimpostarla con "Password dimenticata?".</p>
+    `,
+    ctaLabel: 'Accedi',
+    ctaUrl: loginUrl,
+  })
+}
