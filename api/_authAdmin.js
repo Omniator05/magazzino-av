@@ -46,7 +46,7 @@ export async function requireTeamAdmin(req) {
 export async function requireTeamOwner(req) {
   const ctx = await requireTeamAdmin(req)
   // Il super admin vale sempre come il creatore.
-  if (!ctx.profile.superAdmin && ctx.team.createdByUid && ctx.team.createdByUid !== ctx.uid) {
+  if (!ctx.profile.superAdmin && ctx.team.createdByUid && ctx.team.createdByUid !== ctx.uid && !(ctx.team.ownerIds || []).includes(ctx.uid)) {
     const e = new Error('Solo il creatore della squadra può gestire l\'abbonamento'); e.status = 403; throw e
   }
   return ctx

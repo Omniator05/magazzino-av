@@ -115,14 +115,14 @@ export function AuthProvider({ children }) {
 
   // Squadra senza creatore (creata prima che esistesse): il server lo assegna all'admin più vecchio, la prima
   // volta che un admin apre l'app. Non serve nessuna operazione a mano; si fa una volta sola per squadra.
-  const ownerAskedRef = useRef(false)
+  const ownerAskedRef = useRef(null)
   useEffect(() => {
-    if (!user || !team?.id || team.createdByUid || profile?.role !== 'admin' || profile?.superAdmin || ownerAskedRef.current) return
-    ownerAskedRef.current = true
+    if (!user || !team?.id || team.createdByUid || profile?.role !== 'admin' || ownerAskedRef.current === team.id) return
+    ownerAskedRef.current = team.id          // una volta per squadra (il super admin può entrare in più squadre)
     user.getIdToken().then(idToken => fetch('/api/push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ action: 'user-ensure-owner' }),
+      body: JSON.stringify({ action: 'user-ensure-owner', teamId: team.id }),
     })).then(r => r.ok ? r.json() : null).then(d => {
       if (d?.createdByUid) setTeam(prev => prev ? { ...prev, createdByUid: d.createdByUid } : prev)
     }).catch(() => { /* senza rete o in locale: nessun creatore per ora, tutti gli admin valgono come prima */ })
@@ -269,6 +269,7 @@ export function AuthProvider({ children }) {
       isActive:   profile?.active !== false,
       isAdmin:  profile?.role === 'admin',
       isOwner:  isTeamOwner(team, profile, user?.uid),   // creatore della squadra: abbonamento e admin
+      patchTeam: data => setTeam(prev => prev ? { ...prev, ...data } : prev),   // solo in locale (per dati scritti dal server)
       isWorker: profile?.role === 'worker',
       isBrasserieOrganizer: profile?.role === 'organizzatore-brasserie',
       showOverlay, setShowOverlay, loginName,

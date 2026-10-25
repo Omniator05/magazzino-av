@@ -60,9 +60,13 @@ service cloud.firestore {
     function teamOwnerId(teamId) {
       return get(/databases/$(database)/documents/teams/$(teamId)).data.get('createdByUid', null);
     }
+    // Altri admin nominati creatori dal creatore (`ownerIds`, scritto solo dal server) valgono come lui.
     function canOwnTeam(teamId) {
       return isSuperAdmin()
-        || (canAdminTeam(teamId) && (teamOwnerId(teamId) == null || teamOwnerId(teamId) == request.auth.uid));
+        || (canAdminTeam(teamId)
+            && (teamOwnerId(teamId) == null
+                || teamOwnerId(teamId) == request.auth.uid
+                || request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.get('ownerIds', [])));
     }
 
     match /profiles/{uid} {
@@ -128,7 +132,7 @@ service cloud.firestore {
       // "abbonato" né cambiare chi è il creatore dal browser.
       allow update: if canAdminTeam(teamId)
         && (isSuperAdmin() || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-              'createdByUid', 'billingStatus', 'trialEndsAt', 'planTier', 'planPriceCents',
+              'createdByUid', 'ownerIds', 'billingStatus', 'trialEndsAt', 'planTier', 'planPriceCents',
               'currentPeriodEnd', 'cancelAtPeriodEnd', 'stripeCustomerId', 'stripeSubscriptionId'
             ]));
       // Eliminazione azienda: SOLO il super admin, mai un admin della propria

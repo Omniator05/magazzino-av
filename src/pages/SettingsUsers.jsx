@@ -17,6 +17,7 @@ import SaveButton from '../components/SaveButton'
 import PageHeader from '../components/PageHeader'
 import GuestInviteModal from '../components/GuestInviteModal'
 import StationLinkModal from '../components/StationLinkModal'
+import { isOwnerProfile } from '../utils/teamOwner'
 import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
 import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
@@ -128,7 +129,7 @@ function OwnerTag() {
 
 export default function SettingsUsers() {
   const { t, i18n } = useTranslation()
-  const { user, teamId, team, isOwner } = useAuth()
+  const { user, teamId, team, isOwner, patchTeam } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
   // Arrivando dal popup "Utente esterno inserito" l'utente temporaneo va portato
@@ -438,6 +439,31 @@ export default function SettingsUsers() {
     showToast(t('adminUsers.roleChangedToast', { name: showDetail.name, role: ROLE_LABELS[newRole] }))
   }
 
+  // Nomina o toglie un altro admin come "creatore" (solo un creatore; passa dal server: vedi api/_users.js).
+  const toggleCoOwner = async () => {
+    const makeOwner = !isOwnerProfile(team, showDetail.id)
+    if (!(await confirm({
+      title: makeOwner ? t('adminUsers.coOwnerOnTitle') : t('adminUsers.coOwnerOffTitle'),
+      message: makeOwner ? t('adminUsers.coOwnerOnMessage', { name: showDetail.name }) : t('adminUsers.coOwnerOffMessage', { name: showDetail.name }),
+      confirmLabel: makeOwner ? t('adminUsers.coOwnerOnConfirm') : t('adminUsers.coOwnerOffConfirm'),
+      danger: !makeOwner,
+    }))) return
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ action: 'user-set-owner', targetUid: showDetail.id, owner: makeOwner }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'error')
+      patchTeam({ ownerIds: data.ownerIds })
+      showToast(makeOwner ? t('adminUsers.coOwnerOnToast', { name: showDetail.name }) : t('adminUsers.coOwnerOffToast', { name: showDetail.name }))
+    } catch {
+      setDetailMsg({ text: t('adminUsers.coOwnerError'), type: 'error' })
+    }
+  }
+
   const toggleCanManageInventory = async () => {
     const next = !showDetail.canManageInventory
     await updateDoc(doc(db, 'profiles', showDetail.id), { canManageInventory: next })
@@ -647,7 +673,7 @@ export default function SettingsUsers() {
         <div style={{ flex:1, minWidth:0 }}>
           <p style={{ display:'flex', alignItems:'center', gap:7, fontWeight:700, fontSize:15, color: u.active !== false ? 'var(--text)' : 'var(--text2)', minWidth:0 }}>
             <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>{u.name}</span>
-            {team?.createdByUid === u.id && <OwnerTag />}
+            {(isOwnerProfile(team, u.id) || u.superAdmin) && <OwnerTag />}
           </p>
           <p style={{ color:'var(--text2)', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.username ? (u.username.includes('@') ? u.username : `@${u.username}`) : u.email}</p>
         </div>
@@ -965,7 +991,7 @@ export default function SettingsUsers() {
                   {(showDetail.name || showDetail.username || '?').charAt(0).toUpperCase()}
                 </div>
                 <h2 style={{ margin:0, fontSize:22 }}>{showDetail.name}</h2>
-                {team?.createdByUid === showDetail.id && <div style={{ marginTop:8 }}><OwnerTag /></div>}
+                {(isOwnerProfile(team, showDetail.id) || showDetail.superAdmin) && <div style={{ marginTop:8 }}><OwnerTag /></div>}
                 {showDetail.username && (
                   <p style={{ color:'var(--blue)', fontSize:15, fontFamily:'monospace', fontWeight:600, marginTop:6 }}>{showDetail.username.includes('@') ? showDetail.username : `@${showDetail.username}`}</p>
                 )}
@@ -1138,6 +1164,17 @@ export default function SettingsUsers() {
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Un altro admin può essere creatore come te (abbonamento e gestione degli admin) */}
+                {isOwner && showDetail.role === 'admin' && showDetail.id !== user.uid && showDetail.id !== team?.createdByUid && (
+                  <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'14px', marginBottom:16 }}>
+                    <p style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>{t('adminUsers.ownerBadge')}</p>
+                    <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginBottom:10 }}>{t('adminUsers.coOwnerText')}</p>
+                    <button type="button" onClick={toggleCoOwner} className="btn btn-secondary btn-full">
+                      {isOwnerProfile(team, showDetail.id) ? t('adminUsers.coOwnerOff') : t('adminUsers.coOwnerOn')}
+                    </button>
                   </div>
                 )}
 
