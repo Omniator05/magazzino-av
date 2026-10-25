@@ -187,7 +187,37 @@ async function sendForgotPassword(req, res) {
   return done()
 }
 
-const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword }
+// Accesso con il NOME UTENTE per chi è passato all'email (l'account Firebase ha ora un'email vera, quindi
+// "nome → email finta" non basta più). Il server trova il profilo dal nome utente, verifica la password
+// con Firebase e, se è giusta, restituisce un token di accesso: l'email dell'utente non esce mai dal
+// server. Ogni risposta negativa è identica (nessun indizio su quali nomi esistono).
+// La chiave web di Firebase è pubblica per natura (sta anche nel bundle dell'app).
+const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyA4pKUuEMrHDdjEdaI75bOE2xiWc_M_U3o'
+async function loginByUsername(req, res) {
+  const username = String(req.body?.username || '').trim().toLowerCase()
+  const password = String(req.body?.password || '')
+  if (!username || !password || username.length > 80) return res.status(400).json({ error: 'Dati mancanti' })
+  try {
+    const admin = getAdmin()
+    const found = await admin.firestore().collection('profiles').where('username', '==', username).limit(5).get()
+    for (const d of found.docs) {
+      let authEmail
+      try { authEmail = (await admin.auth().getUser(d.id)).email } catch { continue }
+      if (!authEmail) continue
+      const check = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${WEB_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password, returnSecureToken: false }),
+      })
+      if (check.ok) return res.status(200).json({ token: await admin.auth().createCustomToken(d.id) })
+    }
+  } catch (e) {
+    console.error('[send-email loginByUsername]', e.message)
+  }
+  return res.status(401).json({ error: 'invalid' })
+}
+
+const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword, loginByUsername }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

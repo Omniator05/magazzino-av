@@ -41,13 +41,13 @@ function esc(s) {
 // motivo, dato che Outlook desktop la ignora. `logoUrl` deve essere un URL
 // assoluto (le email non possono caricare risorse relative né data: URI
 // affidabilmente) — i chiamanti lo derivano dall'origin della richiesta.
+// (logoUrl non si usa più: l'immagine accanto a "ROADCASE" in molti client email non si caricava e restava l'icona rotta)
 function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl }) {
   return `
   <div style="background:#f5f5f3;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
     <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;">
       <div style="background:${BRAND_RED};padding:20px 28px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td style="padding-right:8px;vertical-align:middle;"><img src="${logoUrl}" width="15" height="14" alt="" style="display:block;"></td>
           <td style="vertical-align:middle;"><span style="color:#ffffff;font-size:13px;font-weight:700;letter-spacing:0.06em;">ROADCASE</span></td>
         </tr></table>
       </div>

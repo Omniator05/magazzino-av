@@ -1675,7 +1675,7 @@
     "forgotSent": "Ti abbiamo mandato un link per reimpostare la password. Controlla anche la posta indesiderata.",
     "forgotNoEmailHint": "Non hai un'email nel tuo profilo? Chiedi all'admin della tua squadra di reimpostare la tua password.",
     "forgotBack": "Torna all'accesso",
-    "errorInvalidCredentialTryEmail": "Nome utente o password errati. Se il tuo accesso è passato all'email, entra con la tua email."
+    "errorInvalidCredentialTryEmail": "Nome utente o password errati."
   },
   "superAdmin": {
     "title": "Aziende",

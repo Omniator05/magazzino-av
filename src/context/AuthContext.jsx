@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { auth, db } from '../firebase'
 import {
-  signInWithEmailAndPassword, signOut, onAuthStateChanged
+  signInWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged
 } from 'firebase/auth'
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import i18n from '../i18n'
@@ -175,14 +175,33 @@ export function AuthProvider({ children }) {
         try {
           result = await signInWithEmailAndPassword(auth, emailGuess, password)
         } catch(e) {
-          // Fallback: cerca per username esatto in Firestore (gestisce edge case)
-          const q = query(collection(db, 'profiles'), where('username', '==', input.toLowerCase()))
-          const snap = await getDocs(q)
-          if (!snap.empty) {
-            const p = snap.docs[0].data()
-            result = await signInWithEmailAndPassword(auth, p.internalEmail, password)
-          } else {
-            throw e
+          // Chi è passato all'email ha ancora il suo nome utente: lo verifica il server (la password
+          // si controlla lì e l'email non esce mai) e restituisce un token di accesso.
+          let viaServer = false
+          try {
+            const res = await fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'loginByUsername', username: input, password }),
+            })
+            if (res.ok) {
+              const { token } = await res.json()
+              result = await signInWithCustomToken(auth, token)
+              viaServer = true
+            }
+          } catch { /* rete assente o server non raggiungibile: si prosegue col ripiego */ }
+          if (!viaServer) {
+            // Ripiego storico: cerca per username esatto in Firestore (gestisce edge case)
+            let snap = null
+            try {
+              snap = await getDocs(query(collection(db, 'profiles'), where('username', '==', input.toLowerCase())))
+            } catch { /* senza login Firestore non lascia leggere i profili: vale l'errore di accesso originale */ }
+            if (snap && !snap.empty) {
+              const p = snap.docs[0].data()
+              result = await signInWithEmailAndPassword(auth, p.internalEmail, password)
+            } else {
+              throw e
+            }
           }
         }
       }

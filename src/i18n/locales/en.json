@@ -1675,7 +1675,7 @@
     "forgotSent": "We've sent you a link to reset your password. Check your spam folder too.",
     "forgotNoEmailHint": "No email on your profile? Ask your team's admin to reset your password.",
     "forgotBack": "Back to sign in",
-    "errorInvalidCredentialTryEmail": "Wrong username or password. If your sign-in moved to email, use your email."
+    "errorInvalidCredentialTryEmail": "Wrong username or password."
   },
   "superAdmin": {
     "title": "Companies",
