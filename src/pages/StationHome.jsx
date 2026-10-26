@@ -392,7 +392,7 @@ export default function StationHome() {
             {notFound && !item && (
               <p role="alert" style={{ margin: 0, padding: '14px 16px', borderRadius: 14, background: 'rgba(230,57,70,0.10)', color: '#e63946', fontSize: 15, fontWeight: 700 }}>{t('station.notFound', { code: notFound })}</p>
             )}
-        <div style={{ display: 'grid', gap: 16 }}>
+        {item && (<div style={{ display: 'grid', gap: 16 }}>
           <div style={{ ...card, padding: '22px 22px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0 }}>
@@ -494,7 +494,7 @@ export default function StationHome() {
               })}
             </div>
           </div>
-        </div>
+        </div>)}
           </aside>
           <style>{`@keyframes stationDrawerIn { from { transform: translateX(32px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
         </div>

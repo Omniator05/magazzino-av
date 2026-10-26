@@ -30,17 +30,23 @@ export function OperatorProvider({ children }) {
   operatorRef.current = operator
 
   const logout = useCallback(() => { setOperator(null); expiresRef.current = 0 }, [])
+  const busyRef = useRef(false)
   const login = useCallback(async code => {
+    // Un accesso alla volta: scrivere il PIN e premere Invio (o un lettore che ripete) non deve farne partire due,
+    // perché il secondo rifaceva l'operatore da capo e bloccava l'animazione della pillola a metà.
+    if (busyRef.current) return
+    busyRef.current = true
     try {
       const r = await badgeLogin(code)
-      setOperator({ userId: r.userId, name: r.name })
+      // Stessa persona già dentro: resta lo stesso oggetto (così nessuno riparte), si rinnova solo il tempo.
+      setOperator(prev => (prev && prev.userId === r.userId ? prev : { userId: r.userId, name: r.name }))
       setPromptOpen(false)
       expiresRef.current = Date.now() + IDLE_MS
       setLoginError('')
     } catch (e) {
       setLoginError(e.code === 'inactive' ? 'inactive' : e.code === 'locked' ? 'locked' : 'invalid')
       setTimeout(() => setLoginError(''), 4000)
-    }
+    } finally { busyRef.current = false }
   }, [])
 
   // I badge (e solo quelli) arrivano da qui, da qualunque pagina della postazione.
@@ -140,7 +146,7 @@ function OperatorBar() {
       }
     } else if (operator) setDisplay(operator)
     return () => timers.forEach(clearTimeout)
-  }, [operator])
+  }, [operator?.userId])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Misura dov'è la pillola e di quanto va spostata per stare al centro dello schermo.
   useLayoutEffect(() => {
@@ -257,7 +263,7 @@ export function BadgeEntry({ autoFocus }) {
   // Il codice a 4 cifre entra da solo appena è completo, senza premere altro.
   const change = async v => {
     setCode(v)
-    if (isPin(v)) { await login(v.trim()); setCode('') }
+    if (isPin(v)) { setCode(''); await login(v.trim()) }
   }
   return (
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
