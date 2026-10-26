@@ -2192,6 +2192,13 @@
     "preview": "Anteprima",
     "previewBlind": "La richiesta è partita, ma questo computer non permette di vedere l'anteprima da qui.",
     "sent": "Inviate {{count}} etichette alla stampante.",
-    "offline": "Non riesco a parlare con il servizio di stampa. Controlla che sia acceso e che il browser abbia il permesso di accedere ai dispositivi del computer."
+    "offline": "Non riesco a parlare con il servizio di stampa. Controlla che sia acceso e che il browser abbia il permesso di accedere ai dispositivi del computer.",
+    "printLabel": "Stampa l'etichetta",
+    "whichTitle": "Quali etichette stampare?",
+    "allNumbered": "Tutte e {{count}} (numerate)",
+    "onlyNumber": "Solo il numero",
+    "printThis": "Stampa questa",
+    "generalOne": "Una sola etichetta generale",
+    "downloadImage": "Scarica l'immagine"
   }
 }

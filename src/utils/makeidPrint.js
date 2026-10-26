@@ -1,4 +1,4 @@
-import { LABEL_MM } from './labelImage'
+import { LABEL_SPEC } from './labelImage'
 
 // Stampa diretta sulle stampanti MakeID (D50 e simili) dal browser, attraverso il "servizio di stampa" che il
 // produttore fornisce per Windows e Mac (https://github.com/MakeID-Developer/label-print, cartella JS: programma
@@ -13,7 +13,8 @@ const KEY = 'rcMakeidPrint'
 
 // Impostazioni di questo computer (stampante scelta e rotazione): sono del PC, non della squadra.
 export function loadPrintSettings() {
-  try { return { printer: '', rotation: 0, ...(JSON.parse(localStorage.getItem(KEY)) || {}) } } catch { return { printer: '', rotation: 0 } }
+  // rotation = etichetta 60×38 (QR), rotationBarcode = etichetta 41×13 (codice a barre): sono due cartucce diverse.
+  try { return { printer: '', rotation: 0, rotationBarcode: 0, ...(JSON.parse(localStorage.getItem(KEY)) || {}) } } catch { return { printer: '', rotation: 0, rotationBarcode: 0 } }
 }
 export function savePrintSettings(v) {
   try { localStorage.setItem(KEY, JSON.stringify(v)) } catch { /* memoria bloccata: si riparte dai valori di base */ }
@@ -87,14 +88,15 @@ export const printErrorText = code => ERRORS[code] || `La stampante ha risposto 
 
 // Una pagina per etichetta, a tutta pagina: l'immagine (PNG già disegnata a 60×38 mm) riempie l'etichetta.
 // rotation: 0, 90, 180, 270 (se l'etichetta esce girata). preview: true restituisce l'anteprima invece di stampare.
-export async function printLabelImages(dataUrls, { printer, rotation = 0, preview = false, readable = true } = {}) {
+export async function printLabelImages(dataUrls, { printer, rotation = 0, preview = false, readable = true, format = 'qr' } = {}) {
   if (!printer) throw new Error('no-printer')
   const dots = Number(printer.dots) || 8
   const turn = rotation === 90 || rotation === 270
   const o = { 0: 0, 90: 1, 180: 2, 270: 3 }[rotation] ?? 0
   // Con la stampante a 90° o 270° il foglio è "in piedi": larghezza e altezza si scambiano, come fa la loro libreria.
-  const wMm = turn ? LABEL_MM.h : LABEL_MM.w
-  const hMm = turn ? LABEL_MM.w : LABEL_MM.h
+  const size = LABEL_SPEC[format] || LABEL_SPEC.qr
+  const wMm = turn ? size.h : size.w
+  const hMm = turn ? size.w : size.h
   const W = Math.round(wMm * dots), H = Math.round(hMm * dots)
   const labels = dataUrls.map(path => ({
     labelWidth: W, labelHeight: H, rfid: '', ddfLength: '0',

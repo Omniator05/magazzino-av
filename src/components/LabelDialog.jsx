@@ -27,22 +27,39 @@ export default function LabelDialog({ item, onClose }) {
   const [msg, setMsg] = useState({ text: '', error: false })
   const [preview, setPreview] = useState('')
   const [showSettings, setShowSettings] = useState(false)
+  const [choosing, setChoosing] = useState(false)   // passo "quali etichette?" (oggetti da 2 a 20 pezzi)
+  const [unitNo, setUnitNo] = useState('1')
   useEffect(() => { let live = true; probeService().then(r => { if (live) setSvc(r) }); return () => { live = false } }, [])
   const printer = pickPrinter(svc.printers, settings.printer)
+  // Ogni cartuccia (60×38 con QR, 41×13 con codice a barre) può richiedere una rotazione diversa
+  const rotationKey = format === 'barcode' ? 'rotationBarcode' : 'rotation'
+  const rotationNow = settings[rotationKey] || 0
+  const direct = svc.state === 'up' && !!printer     // c'è una stampante collegata: un solo pulsante "Stampa"
   const updateSettings = patch => { const next = { ...settings, ...patch }; setSettings(next); savePrintSettings(next) }
 
+  // Regola di stampa: 1 pezzo → l'etichetta; da 2 a 20 pezzi → si sceglie (tutte, solo il numero n, o quella generale);
+  // oltre 20 → direttamente la generale (nessuno incolla 20+ etichette numerate su un oggetto).
+  const MAX_NUMBERED = 20
+  const startPrint = () => {
+    if (total > 1 && total <= MAX_NUMBERED) setChoosing(true)
+    else directPrint()
+  }
+
+  // `units`: true = tutte le etichette numerate; un numero = solo quel pezzo; altrimenti l'etichetta generale.
   const directPrint = async ({ units = false, asPreview = false } = {}) => {
     setBusy(true); setMsg({ text: '', error: false }); setPreview('')
     try {
-      const codes = units ? Array.from({ length: total }, (_, i) => generateUnitCode(baseCode, i + 1)) : [baseCode]
+      const codes = units === true ? Array.from({ length: total }, (_, i) => generateUnitCode(baseCode, i + 1))
+        : Number.isInteger(units) ? [generateUnitCode(baseCode, units)] : [baseCode]
       const images = []
       for (const code of asPreview ? [codes[0]] : codes) images.push(await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format }))
-      const res = await printLabelImages(images, { printer, rotation: settings.rotation, preview: asPreview, readable: svc.readable !== false })
+      const res = await printLabelImages(images, { printer, rotation: rotationNow, preview: asPreview, readable: svc.readable !== false, format })
       if (asPreview) {
         const img = res[0]?.content
         if (img) setPreview(img); else setMsg({ text: t('labelPrint.previewBlind'), error: false })
       } else {
         setMsg({ text: t('labelPrint.sent', { count: images.length }), error: false })
+        setChoosing(false)
       }
     } catch (e) {
       setMsg({ text: e.message === 'offline' || e.message === 'timeout' ? t('labelPrint.offline') : printErrorText(e.code), error: true })
@@ -92,19 +109,34 @@ export default function LabelDialog({ item, onClose }) {
             <h2 style={{ margin: '0 36px 4px 0', fontSize: 17 }}>{t('inventory.downloadLabel')}</h2>
             <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text2)', overflowWrap: 'anywhere' }}>{item.name}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {svc.state === 'up' && printer && (
+              {direct ? (
+                choosing ? (
+                  <>
+                    <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 700 }}>{t('labelPrint.whichTitle')}</p>
+                    <button onClick={() => directPrint({ units: true })} disabled={busy} className="btn btn-primary">{t('labelPrint.allNumbered', { count: total })}</button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <label style={{ flexShrink: 0, fontSize: 14 }}>{t('labelPrint.onlyNumber')}</label>
+                      <input type="number" inputMode="numeric" min={1} max={total} value={unitNo} onChange={e => setUnitNo(e.target.value)} aria-label={t('labelPrint.onlyNumber')} style={{ width: 70, textAlign: 'center' }} />
+                      <button onClick={() => directPrint({ units: Math.min(total, Math.max(1, parseInt(unitNo, 10) || 1)) })} disabled={busy} className="btn btn-secondary" style={{ flex: 1 }}>{t('labelPrint.printThis')}</button>
+                    </div>
+                    <button onClick={() => directPrint()} disabled={busy} className="btn btn-secondary">{t('labelPrint.generalOne')}</button>
+                    <button type="button" className="btn-no-anim" onClick={() => setChoosing(false)} style={{ background: 'transparent', color: 'var(--text2)', fontSize: 13, padding: 6 }}>{t('common.back')}</button>
+                  </>
+                ) : (
+                  <button onClick={startPrint} disabled={busy} className="btn btn-primary">{t('labelPrint.printLabel')}</button>
+                )
+              ) : svc.state === 'checking' ? (
+                <button disabled className="btn btn-secondary">{t('labelPrint.checking')}</button>
+              ) : (
                 <>
-                  <button onClick={() => directPrint()} disabled={busy} className="btn btn-primary">{t('labelPrint.printOne')}</button>
-                  {total > 1 && <button onClick={() => directPrint({ units: true })} disabled={busy} className="btn btn-primary">{t('labelPrint.printAll', { count: total })}</button>}
+                  <button onClick={downloadOne} disabled={busy} className="btn btn-secondary">{t('inventory.printOneLabel')}</button>
+                  {total > 1 && <button onClick={downloadUnits} disabled={busy} className="btn btn-secondary">{t('inventory.printAllUnits', { count: total })}</button>}
                 </>
               )}
-              <button onClick={downloadOne} disabled={busy} className="btn btn-secondary">{t('inventory.printOneLabel')}</button>
-              {total > 1 && <button onClick={downloadUnits} disabled={busy} className="btn btn-secondary">{t('inventory.printAllUnits', { count: total })}</button>}
             </div>
 
             {/* Stato della stampante diretta */}
             <div style={{ marginTop: 14, fontSize: 12.5, lineHeight: 1.5, color: 'var(--text2)' }}>
-              {svc.state === 'checking' && <span>{t('labelPrint.checking')}</span>}
               {svc.state === 'down' && (
                 <span>{t('labelPrint.notInstalled')} <a href="https://github.com/MakeID-Developer/label-print/tree/main/JS" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>{t('labelPrint.howTo')}</a></span>
               )}
@@ -122,11 +154,13 @@ export default function LabelDialog({ item, onClose }) {
                       )}
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ flexShrink: 0 }}>{t('labelPrint.rotation')}</span>
-                        <select value={settings.rotation} onChange={e => updateSettings({ rotation: Number(e.target.value) })}>
+                        <select value={rotationNow} onChange={e => updateSettings({ [rotationKey]: Number(e.target.value) })}>
                           {[0, 90, 180, 270].map(r => <option key={r} value={r}>{r}°</option>)}
                         </select>
                       </label>
                       <button type="button" onClick={() => directPrint({ asPreview: true })} disabled={busy} className="btn btn-secondary">{t('labelPrint.preview')}</button>
+                      <button type="button" onClick={downloadOne} disabled={busy} className="btn btn-secondary">{t('labelPrint.downloadImage')}</button>
+                      {total > 1 && <button type="button" onClick={downloadUnits} disabled={busy} className="btn btn-secondary">{t('inventory.printAllUnits', { count: total })}</button>}
                       {preview && <img src={preview} alt={t('labelPrint.preview')} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }} />}
                     </div>
                   )}

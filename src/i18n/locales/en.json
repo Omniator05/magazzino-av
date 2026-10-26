@@ -2192,6 +2192,13 @@
     "preview": "Preview",
     "previewBlind": "The request was sent, but this computer doesn't let us show the preview here.",
     "sent": "Sent {{count}} labels to the printer.",
-    "offline": "Can't reach the print service. Check that it's running and that the browser may access devices on this computer."
+    "offline": "Can't reach the print service. Check that it's running and that the browser may access devices on this computer.",
+    "printLabel": "Print label",
+    "whichTitle": "Which labels to print?",
+    "allNumbered": "All {{count}} (numbered)",
+    "onlyNumber": "Only number",
+    "printThis": "Print this one",
+    "generalOne": "One general label",
+    "downloadImage": "Download the image"
   }
 }

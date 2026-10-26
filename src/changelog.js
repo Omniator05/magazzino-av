@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-01',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Etichette: la posizione è molto più grande e con un segnaposto disegnato (prima l\'emoji usciva a macchia). Il QR passa a 30 mm per lasciare più spazio al testo',
+        'Stampa diretta: un solo pulsante "Stampa l\'etichetta". Per un oggetto da 2 a 20 pezzi chiede se stampare tutte le etichette numerate, solo un numero o quella generale; oltre 20 pezzi stampa subito la generale',
+        'Etichette con codice a barre per la cartuccia 41×13 mm: nome e codice a barre nel rettangolo, posizione e numero del pezzo nel cerchio. Il codice a barre non contiene più "WAV-" (l\'app lo riconosce comunque alla scansione)',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Labels: the location is much larger and has a drawn pin (the emoji used to print as a blob). The QR is now 30 mm to leave more room for text',
+        'Direct printing: a single "Print label" button. For an item with 2 to 20 pieces it asks whether to print all numbered labels, just one number, or the general one; over 20 pieces it prints the general label straight away',
+        'Barcode labels for the 41×13 mm cartridge: name and barcode in the rectangle, location and piece number in the circle. The barcode no longer contains "WAV-" (the app still recognises it when scanned)',
+      ],
+    },
+  },
+  {
     version: '2026-10-31',
     it: {
       title: 'Novità di oggi',
