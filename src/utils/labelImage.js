@@ -118,11 +118,11 @@ function drawLines(ctx, lines, x, y, lineHeight) {
 
 // Due formati, due cartucce diverse:
 //  - 'qr': etichetta 60×38 mm (cartuccia ZP38-60), QR a sinistra e titolo/posizione/codice a destra;
-//  - 'barcode': etichetta 41×13 mm (cartuccia ZP41-13), vedi renderBarcodeLabel più sotto.
+//  - 'barcode': etichetta piccola 27×15 mm (cartuccia ZP41-13), vedi renderBarcodeLabel più sotto.
 // Misure fisiche e risoluzione di disegno di ciascun formato (px per mm): servono anche alla stampa diretta.
 export const LABEL_SPEC = {
   qr:      { w: LABEL_W / 10, h: LABEL_H / 10, pxPerMm: 10 },
-  barcode: { w: 41, h: 13, pxPerMm: 8 },
+  barcode: { w: 27, h: 15, pxPerMm: 8 },   // adesivo piccolo della cartuccia ZP41-13
 }
 
 // Disegna l'etichetta e restituisce un data URL PNG pronto da scaricare/importare/stampare.
@@ -250,70 +250,59 @@ export function labelFilename(name, code) {
   return `${slugify(name)}-${code}.png`
 }
 
-// ── Etichetta con codice a barre: cartuccia ZP41-13, 41 × 13 mm ─────────────────────────────────────────────
-// Tutta l'etichetta serve al codice a barre: così i moduli sono larghi DUE punti (0,25 mm) invece di uno e il
-// lettore lo legge senza sforzo. Si disegna alla risoluzione esatta della stampante (8 punti per mm → 328 × 104):
-// nessuna scalatura, quindi i moduli restano netti. In alto il nome (a sinistra) e la posizione (a destra), poi il
-// codice a barre a tutta larghezza, e sotto il codice scritto.
-const BC_W = 328, BC_H = 104
-
-// Il codice a barre non porta il prefisso "WAV-" e, per un pezzo numerato, nemmeno il trattino ("ABCD1234" oppure
-// "ABCD123407"): meno caratteri = moduli più larghi. Alla scansione parseScannedCode rimette tutto com'era.
-export const barcodeText = code => String(code || '').replace(/^WAV-/i, '').replace(/-(\d{2,3})$/, '$1')
+// ── Etichetta piccola (cartuccia ZP41-13): adesivo 27 × 15 mm ───────────────────────────────────────────────
+// Misure reali dell'adesivo: 27 mm di lunghezza e 15 di altezza. Un codice a barre classico con un codice di 8-12
+// caratteri non ci sta con barre abbastanza larghe (servirebbero circa 31 mm): a un solo punto per modulo il lettore
+// non lo legge. Qui quindi il codice è un QR "pulito" (21 × 21 moduli da 3 punti = 9,4 mm, il lettore 2D lo legge
+// subito e perdona graffi e angoli) con accanto nome, posizione e numero del pezzo. Si disegna alla risoluzione
+// esatta della stampante (8 punti per mm → 216 × 120): nessuna scalatura, i moduli restano netti.
+const BC_W = 216, BC_H = 120
 
 async function renderBarcodeLabel({ name, location, code }) {
-  const SSB = 4                                   // il testo si disegna a 4× e poi si riduce (più morbido)
-  const text = document.createElement('canvas')
-  text.width = BC_W * SSB; text.height = BC_H * SSB
-  const tctx = text.getContext('2d')
-  tctx.fillStyle = '#fff'; tctx.fillRect(0, 0, text.width, text.height)
-  tctx.fillStyle = '#000'; tctx.textBaseline = 'top'; tctx.textAlign = 'left'
-  const FAMILY = 'Arial'
-  const padX = 8, top = 4
-  const value = barcodeText(code)
-
-  // Riga in alto: la posizione a destra (corpo fisso, in grassetto) e il nome a sinistra con lo spazio che resta.
-  const LINE = 22 * SSB
-  let locW = 0
-  if (location) {
-    const fit = fitFontSize(tctx, location, 120 * SSB, FAMILY, 800, LINE, 12 * SSB)
-    tctx.font = `800 ${fit}px ${FAMILY}`
-    locW = tctx.measureText(location).width
-    tctx.textAlign = 'right'
-    tctx.fillText(location, (BC_W - padX) * SSB, top * SSB)
-    tctx.textAlign = 'left'
-  }
-  const nameW = (BC_W - padX * 2) * SSB - (locW ? locW + 10 * SSB : 0)
-  const nameSize = fitFontSize(tctx, name, nameW, FAMILY, 800, LINE, 12 * SSB)
-  tctx.font = `800 ${nameSize}px ${FAMILY}`
-  let shown = name
-  while (tctx.measureText(shown).width > nameW && shown.length > 1) shown = shown.slice(0, -1)
-  if (shown !== name) shown = shown.slice(0, -1) + '…'
-  tctx.fillText(shown, padX * SSB, top * SSB)
-
-  // Il codice scritto sotto le barre
-  tctx.font = `700 ${14 * SSB}px monospace`
-  tctx.textAlign = 'center'
-  tctx.fillText(String(code || '').replace(/^WAV-/i, ''), (BC_W / 2) * SSB, 88 * SSB)   // con il trattino, più leggibile per chi guarda
-
   const out = document.createElement('canvas')
   out.width = BC_W; out.height = BC_H
   const ctx = out.getContext('2d')
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, BC_W, BC_H)
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(text, 0, 0, BC_W, BC_H)
 
-  // Codice a barre: moduli larghi quanto entrano (2 punti per i codici normali, 1 solo se il codice fosse molto lungo),
-  // centrato, con almeno 8 punti di margine bianco per lato.
-  const { default: JsBarcode } = await import('jsbarcode')
-  const probe = document.createElement('canvas')
-  JsBarcode(probe, value, { format: 'CODE128', width: 1, height: 10, displayValue: false, margin: 0 })
-  const modules = probe.width
-  const moduleW = Math.max(1, Math.min(3, Math.floor((BC_W - 16) / modules)))
-  const bc = document.createElement('canvas')
-  const barsTop = 30, barsH = 54
-  JsBarcode(bc, value, { format: 'CODE128', width: moduleW, height: barsH, displayValue: false, margin: 0 })
-  ctx.imageSmoothingEnabled = false
-  ctx.drawImage(bc, Math.round((BC_W - bc.width) / 2), barsTop)
+  // QR: solo il codice (non l'indirizzo lungo del QR grande), così il disegno resta di 21 × 21 moduli.
+  const QRCode = (await import('qrcode')).default
+  const qr = QRCode.create(String(code || '').toUpperCase(), { errorCorrectionLevel: 'M' })
+  const n = qr.modules.size
+  const mod = Math.max(2, Math.min(4, Math.floor(100 / n)))      // punti per modulo (3 per un QR da 21)
+  const qrPx = n * mod
+  const qx = 10, qy = Math.round((BC_H - qrPx) / 2)
+  ctx.fillStyle = '#000'
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.modules.get(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod)
+
+  // Testo a destra del QR: nome (fino a 3 righe), posizione in grassetto, e per un pezzo numerato "#n".
+  const SSB = 4
+  const tx = qx + qrPx + 10
+  const textW = (BC_W - tx - 6) * SSB
+  const text = document.createElement('canvas')
+  text.width = BC_W * SSB; text.height = BC_H * SSB
+  const t = text.getContext('2d')
+  t.fillStyle = '#fff'; t.fillRect(0, 0, text.width, text.height)
+  t.fillStyle = '#000'; t.textBaseline = 'top'; t.textAlign = 'left'
+  const FAMILY = 'Arial'
+  const unit = (String(code).match(/-(\d{2,3})$/) || [])[1]
+  const blocks = []
+  const nameFit = fitWrapped(t, name, textW, FAMILY, 800, 20 * SSB, 11 * SSB, 3)
+  blocks.push({ lines: nameFit.lines, size: nameFit.size, weight: 800 })
+  if (location) {
+    const loc = fitWrapped(t, location, textW, FAMILY, 800, 18 * SSB, 11 * SSB, 2, 14 * SSB)
+    blocks.push({ lines: loc.lines, size: loc.size, weight: 800, gap: 4 * SSB })
+  }
+  if (unit) blocks.push({ lines: [`#${parseInt(unit, 10)}`], size: 18 * SSB, weight: 800, gap: 4 * SSB })
+  const lh = b => Math.round(b.size * 1.12)
+  const total = blocks.reduce((sum, b) => sum + (b.gap || 0) + b.lines.length * lh(b), 0)
+  let y = Math.max(4 * SSB, Math.round((BC_H * SSB - total) / 2))
+  for (const b of blocks) {
+    y += b.gap || 0
+    t.font = `${b.weight} ${b.size}px ${FAMILY}`
+    for (const line of b.lines) { t.fillText(line, tx * SSB, y); y += lh(b) }
+  }
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
+  // il testo si sovrappone al QR solo in bianco: lo si disegna a parte nella colonna di destra
+  ctx.drawImage(text, tx * SSB, 0, BC_W * SSB - tx * SSB, BC_H * SSB, tx, 0, BC_W - tx, BC_H)
   return out.toDataURL('image/png')
 }

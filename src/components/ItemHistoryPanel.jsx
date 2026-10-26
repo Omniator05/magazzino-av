@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -9,7 +9,7 @@ import { eventRowIncludesItem, itemCommittedElsewhere } from '../utils/kitInvent
 import { ensureInstanceList } from '../utils/kitInstances'
 import { formatDate } from '../utils/formatDate'
 import { todayStr } from '../utils/workHours'
-import DateField from './DateField'
+import DateRangeField from './DateRangeField'
 import CreateEventFlow from './CreateEventFlow'
 import { Plus, Check, Warn } from '../components/Icon'
 
@@ -44,7 +44,6 @@ export default function ItemHistoryPanel({ itemId, embedded = false }) {
   const [showEventActivity, setShowEventActivity] = useState(null) // { id, name } | null
   const [checkStart, setCheckStart] = useState(() => todayStr())
   const [checkEnd, setCheckEnd] = useState(() => todayStr())
-  const endTouched = useRef(false)   // finché "A" non è stato scelto a mano segue "Da": per un solo giorno basta scegliere "Da"
   const [showCreateFlow, setShowCreateFlow] = useState(false)
 
   useEffect(() => {
@@ -141,15 +140,11 @@ export default function ItemHistoryPanel({ itemId, embedded = false }) {
       {item && (
         <div className="rc-hist-avail" style={{ margin:'0 16px 16px', background:'var(--card)', border:'1.5px solid var(--border2)', borderRadius:'var(--radius)', padding:'16px', boxShadow:'var(--shadow-sm)' }}>
           <p className="rc-hist-title" style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:12 }}>{t('inventory.availabilityCheckTitle')}</p>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-            <div>
-              <label className="rc-hist-lbl" style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'var(--text2)', marginBottom:6 }}>{t('inventory.availabilityFrom')}</label>
-              <DateField value={checkStart} onChange={v => { setCheckStart(v); if (!endTouched.current || checkEnd < v) setCheckEnd(v) }} />
-            </div>
-            <div>
-              <label className="rc-hist-lbl" style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'var(--text2)', marginBottom:6 }}>{t('inventory.availabilityTo')}</label>
-              <DateField value={checkEnd} min={checkStart} onChange={v => { endTouched.current = true; setCheckEnd(v) }} />
-            </div>
+          <div>
+            <label className="rc-hist-lbl" style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'var(--text2)', marginBottom:6 }}>{t('inventory.availabilityPeriod')}</label>
+            <DateRangeField start={checkStart} end={checkEnd} hint={t('inventory.availabilityRangeHint')}
+              onChange={(st, en) => { setCheckStart(st); setCheckEnd(en) }} />
+            <p style={{ margin:'6px 0 0', fontSize:12, color:'var(--text2)' }}>{t('inventory.availabilityRangeHint')}</p>
           </div>
           {checkRangeValid && maxAvail > 0 && (() => {
             const state = freeQty >= maxAvail ? 'free' : freeQty > 0 ? 'partial' : 'none'

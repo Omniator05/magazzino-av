@@ -89,7 +89,7 @@ export default function TabBar() {
   const { profile, user, team } = useAuth()
   const isWorker = profile?.role === 'worker'
   const tabs = isWorker
-    ? (isModuleEnabled(team, 'workHours')
+    ? (isModuleEnabled(team, 'workHours') && !profile?.isStation   // la Postazione magazzino non ha il timer delle ore
         ? [workerTabsBase[0], workerTabsBase[1], WORK_HOURS_TAB, workerTabsBase[2], workerTabsBase[3]]
         : workerTabsBase)
     : adminTabs

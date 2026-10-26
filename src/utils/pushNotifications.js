@@ -73,10 +73,12 @@ async function attachForegroundPush() {
       const body = d.body || payload.notification?.body
       const url = d.url || payload.fcmOptions?.link || '/'
       const reg = await navigator.serviceWorker.getRegistration(PUSH_SCOPE)
-      reg?.showNotification(title || 'Roadcase', {
+      const opts = {
         tag: d.tag || `${title || 'Roadcase'}|${body || ''}`,
-        body: body || '', icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', data: { url },
-      })
+        body: body || i18n.t('common.pushFallbackBody'), icon: '/pwa-192x192.png', badge: '/pwa-192x192.png', data: { url },
+      }
+      if (reg) reg.showNotification(title || 'Roadcase', opts)
+      else new Notification(title || 'Roadcase', opts)   // senza registrazione trovata non deve restare muta
     })
   } catch {
     // Non bloccante: resta il comportamento di prima (notifiche solo in background).
@@ -147,6 +149,10 @@ export async function maybeAutoEnablePush() {
     // collegato ora e si ascoltano i messaggi con l'app aperta.
     claimStoredToken().catch(() => {})
     attachForegroundPush()
+    // Nessuna pagina sta sotto lo scope di questo service worker, quindi il browser non lo
+    // ricontrolla da solo ad ogni apertura: senza questo restava la versione vecchia (che
+    // mostrava notifiche vuote) finché non arrivava una push.
+    navigator.serviceWorker?.getRegistration(PUSH_SCOPE).then(r => r?.update()).catch(() => {})
     return
   }
   if (localStorage.getItem(PUSH_OPT_OUT_KEY)) return

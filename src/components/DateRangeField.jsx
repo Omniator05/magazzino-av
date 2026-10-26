@@ -34,7 +34,7 @@ const fmtFull = ymd => new Date(ymd + 'T12:00:00').toLocaleDateString('it-IT', {
 // selezionato, i giorni prima dell'inizio non sono scelgibili e muovendo il
 // mouse si vede l'intervallo estendersi (anteprima "booking"). Un tocco sul
 // giorno d'inizio = giorno singolo (`singleDayLabel` lo fa anche da bottone).
-export default function DateRangeField({ start, end, onChange, min: minProp, placeholder = 'Seleziona periodo', endOnly = false, singleDayLabel = 'Solo un giorno' }) {
+export default function DateRangeField({ start, end, onChange, min: minProp, placeholder = 'Seleziona periodo', endOnly = false, singleDayLabel = 'Solo un giorno', hint }) {
   const min = endOnly ? start : minProp
   const [open, setOpen] = useState(false)
   const [selecting, setSelecting] = useState(false) // true = primo giorno già scelto, in attesa del secondo tap
@@ -58,19 +58,29 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
   // anche se aprire sopra invece che sotto quando non c'è spazio sotto.
   useLayoutEffect(() => {
     if (!open || !containerRef.current) return
-    const POPUP_W = 252, POPUP_H = 340, MARGIN = 8
+    const POPUP_W = 252, POPUP_H = hint ? 384 : 340, MARGIN = 8
     const compute = () => {
       const rect = containerRef.current.getBoundingClientRect()
       let left = rect.width - POPUP_W
       if (rect.left + left < MARGIN) left = MARGIN - rect.left
       setPopupLeft(left)
-      const spaceBelow = window.innerHeight - rect.bottom
-      setPopupAbove(spaceBelow < POPUP_H && rect.top > spaceBelow)
+      // Il calendario non deve finire sotto il bordo di una colonna che scorre (es. il foglio laterale
+      // dei dettagli oggetto), non solo sotto il bordo della finestra.
+      let bottom = window.innerHeight, top = 0
+      for (let el = containerRef.current.parentElement; el && el !== document.body; el = el.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) {
+          const r = el.getBoundingClientRect()
+          bottom = Math.min(bottom, r.bottom); top = Math.max(top, r.top)
+          break
+        }
+      }
+      const spaceBelow = bottom - rect.bottom
+      setPopupAbove(spaceBelow < POPUP_H && rect.top - top > spaceBelow)
     }
     compute()
     window.addEventListener('resize', compute)
     return () => window.removeEventListener('resize', compute)
-  }, [open])
+  }, [open, hint])
 
   const openPopup = () => {
     const initDate = start ? new Date(start + 'T12:00:00') : new Date()
@@ -194,6 +204,8 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
               )
             })}
           </div>
+
+          {hint && <p style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.4, color: 'var(--text2)', textAlign: 'center' }}>{hint}</p>}
 
           <div style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <button

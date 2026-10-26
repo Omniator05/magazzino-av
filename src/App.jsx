@@ -246,7 +246,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
     return (
       <>
         <WhatsNewModal />
-        <ActiveShiftBadge />
+        {!profile?.isStation && <ActiveShiftBadge />}
         <AbsenceEditedNotification />
         <AnimatedPage>
           <Routes>
@@ -262,7 +262,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/inventory/:itemId/history" element={<WorkerInventoryHistoryRoute />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendarRoute />} />
-            <Route path="/work-hours" element={<WorkHours />} />
+            <Route path="/work-hours" element={profile?.isStation ? <Navigate to="/" replace /> : <WorkHours />} />
             <Route path="/novita" element={<Novita />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
             <Route path="*" element={<NotFound />} />

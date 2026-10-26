@@ -159,6 +159,7 @@ export default function Inventory() {
   const [showPrintPopup, setShowPrintPopup] = useState(false)
   // Menu rapido "Segnala": rotti / con difetto / pezzi ancora fuori (rientro parziale)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
+  const [issueDlg, setIssueDlg] = useState(null) // 'broken' | 'defect': popup "Segnala rotto/difetto" della modifica oggetto
   const [statusDraft, setStatusDraft] = useState({ broken: 0, defect: 0, out: 0, note: '', issues: [], addOpen: false, addType: 'broken', addUnit: '', addNote: '' })
   // Formato scelto per il download etichetta corrente — null finché non si
   // sceglie (solo se la squadra ha impostato "entrambi"; altrimenti è già
@@ -217,7 +218,7 @@ export default function Inventory() {
   }, [])
   const historyRef = useRef(null)
   const importModal = useCenteredModal(() => setShowImportModal(false))
-  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showStatusMenu || showImportModal)
+  useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showStatusMenu || !!issueDlg || showImportModal)
   // Kit form: nome + componenti
 
   // Menu filtri: resta montato durante il fade out (invece di sparire di
@@ -339,6 +340,26 @@ export default function Inventory() {
     await updateDoc(doc(db, 'items', it.id), upd)
     setShowDetail(cur => ({ ...cur, ...upd }))
   }
+
+  // Modifica oggetto: rotti / difetti si segnalano dal popup e finiscono nel form (si salvano con "Salva").
+  // Un pezzo numerato rientra nel conteggio; "extra" sono i pezzi segnalati senza numero.
+  const applyIssueReport = ({ type, extra, pieces, comment }) => setForm(f => {
+    const qty = Math.max(1, parseInt(f.qty, 10) || 1)
+    const clamp = v => Math.min(qty, Math.max(0, v))
+    let issues = f.issues || []
+    pieces.forEach(p => { issues = addIssue(issues, { type, unit: p.unit, note: p.note }) })
+    const count = k => (f[k === 'broken' ? 'brokenQty' : 'defectQty'] || 0) + countIssues(issues, k) - countIssues(f.issues, k) + (k === type ? extra : 0)
+    const noteKey = type === 'broken' ? 'brokenNote' : 'defectNote'
+    const prev = (f[noteKey] || '').trim()
+    const c = comment.trim()
+    return { ...f, issues, brokenQty: clamp(count('broken')), defectQty: clamp(count('defect')), [noteKey]: c ? (prev && prev !== c ? `${prev} · ${c}` : c) : prev }
+  })
+  // "Riparato" (−1) o ✕ su un pezzo segnalato, dalla modifica oggetto
+  const clearFormIssue = (type, issueId) => setForm(f => {
+    const qtyKey = type === 'broken' ? 'brokenQty' : 'defectQty'
+    const left = Math.max(0, (f[qtyKey] || 0) - 1)
+    return { ...f, [qtyKey]: left, issues: issueId ? removeIssueById(f.issues, issueId) : dropLastIssue(f.issues, type), ...(left === 0 ? { [type === 'broken' ? 'brokenNote' : 'defectNote']: '' } : {}) }
+  })
 
   const openStatusMenu = () => {
     const it = showDetail
@@ -474,10 +495,14 @@ export default function Inventory() {
       await updateDoc(doc(db, 'items', selected.id), { name:form.name, category:form.category, totalQty:qty, availableQty:newAvailable, brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', issues: trimIssues(form.issues, broken, Math.min(parseInt(form.defectQty)||0, qty)), brand:form.brand, model:form.model, location:form.location, notes:form.notes, minStock:parseInt(form.minStock)||0, consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null, ...details, ...linkedItemsToFields(form.linkedItems), deadlines })
       // Solo admin, solo quando aumenta (non quando si segna "riparato"): è
       // l'unico verso che segnala davvero un problema da gestire.
+      // Pezzi segnalati nuovi (con numero e descrizione) per il testo: "n° 7: lente crepata"
+      const knownIds = new Set((selected.issues || []).map(i => i.id))
+      const describe = type => (form.issues || []).filter(i => i.type === type && !knownIds.has(i.id))
+        .map(i => (i.unit ? `n° ${i.unit}` : '') + (i.note ? `${i.unit ? ': ' : ''}${i.note}` : '')).filter(Boolean)
       if (broken > prevBroken) {
         notifyTeamPush({
           title: t('inventory.pushBrokenTitle'),
-          body: [form.name, (form.brokenNote || '').trim()].filter(Boolean).join(' — '),
+          body: [form.name, ...describe('broken'), (form.brokenNote || '').trim()].filter(Boolean).join(' — '),
           url: '/inventory?filter=broken',
           audience: { type: 'admins' },
         })
@@ -485,7 +510,7 @@ export default function Inventory() {
       if ((parseInt(form.defectQty)||0) > (selected.defectQty || 0)) {
         notifyTeamPush({
           title: t('inventory.pushDefectTitle'),
-          body: [form.name, (form.defectNote || '').trim()].filter(Boolean).join(' — '),
+          body: [form.name, ...describe('defect'), (form.defectNote || '').trim()].filter(Boolean).join(' — '),
           url: '/inventory?filter=defect',
           audience: { type: 'admins' },
         })
@@ -1149,38 +1174,38 @@ export default function Inventory() {
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:8 }}>
               {section('issues', t('inventory.issuesSectionTitle'), issuesOpen, issuesCount, (
                 <div style={{ paddingBottom:14 }}>
-                  <div className="form-group">
-                    <label style={{ color: form.brokenQty > 0 ? '#e63946' : undefined }}>
-                      {t('inventory.brokenLabel')} {form.brokenQty > 0 && <span style={{ fontWeight:800 }}>({form.brokenQty})</span>}
-                      <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}> · {t('inventory.brokenHint')}</span>
-                    </label>
-                    <Stepper tone="red" value={form.brokenQty} min={0} max={form.qty} onChange={brokenQty => setForm({...form, brokenQty})}
-                      decAria={t('inventory.decreaseBrokenAria')} incAria={t('inventory.increaseBrokenAria')} />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    <button type="button" className="btn-no-anim" onClick={() => setIssueDlg('broken')}
+                      style={{ minHeight:46, borderRadius:12, background:'rgba(230,57,70,0.10)', border:'1px solid rgba(230,57,70,0.3)', color:'#e63946', fontWeight:800, fontSize:13.5, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                      <Wrench size={15} /> {t('inventory.reportBrokenBtn')}
+                    </button>
+                    <button type="button" className="btn-no-anim" onClick={() => setIssueDlg('defect')}
+                      style={{ minHeight:46, borderRadius:12, background:'rgba(217,119,6,0.10)', border:'1px solid rgba(217,119,6,0.35)', color:'#b45309', fontWeight:800, fontSize:13.5, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                      <Warn size={15} /> {t('inventory.reportDefectBtn')}
+                    </button>
                   </div>
+                  {[['broken', 'brokenQty', 'brokenNote', '#e63946', 'rgba(230,57,70,0.08)', 'rgba(230,57,70,0.25)', 'brokenLabel', 'repairOneButton'],
+                    ['defect', 'defectQty', 'defectNote', '#b45309', 'rgba(217,119,6,0.08)', 'rgba(217,119,6,0.3)', 'defectLabel', 'defectFixedButton']].map(([type, qk, nk, color, bg, border, label, fixKey]) => (form[qk] || 0) > 0 && (
+                    <div key={type} style={{ marginTop:12, padding:'10px 12px', borderRadius:12, background:bg, border:`1px solid ${border}` }}>
+                      <p style={{ margin:0, fontSize:13.5, fontWeight:800, color }}>{t(`inventory.${label}`)}: {form[qk]}</p>
+                      {form[nk] && <p style={{ margin:'3px 0 0', fontSize:13, color:'var(--c-ink)', lineHeight:1.45, overflowWrap:'anywhere' }}>{form[nk]}</p>}
+                      {sortedIssues(form.issues).filter(i => i.type === type).map(i => (
+                        <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
+                          <span style={{ fontSize:12, fontWeight:800, color, whiteSpace:'nowrap' }}>{i.unit ? t('inventory.issuePieceNumber', { n: i.unit }) : t('inventory.issuePieceNoNumber')}</span>
+                          <span style={{ flex:1, minWidth:0, fontSize:12.5, color:'var(--c-ink)', overflowWrap:'anywhere' }}>{i.note || '—'}</span>
+                          <button type="button" className="btn-no-anim" aria-label={t('inventory.issueRemoveAria')} onClick={() => clearFormIssue(type, i.id)}
+                            style={{ background:'transparent', color:'var(--c-ink3)', fontSize:15, width:30, height:30, flexShrink:0 }}>✕</button>
+                        </div>
+                      ))}
+                      <button type="button" className="btn-no-anim" onClick={() => clearFormIssue(type)}
+                        style={{ marginTop:8, background:'var(--c-surface)', border:'1px solid var(--c-line)', color:'var(--c-ink)', borderRadius:10, padding:'8px 12px', fontWeight:800, fontSize:13 }}>
+                        {t(`inventory.${fixKey}`)}
+                      </button>
+                    </div>
+                  ))}
                   {form.brokenQty > 0 && (
-                    <div style={{ background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', borderRadius:10, padding:'9px 12px', marginBottom:12, fontSize:13, fontWeight:600, color:'#e63946', display:'flex', alignItems:'center', gap:6 }}>
+                    <div style={{ marginTop:12, background:'rgba(230,57,70,0.08)', border:'1px solid rgba(230,57,70,0.25)', borderRadius:10, padding:'9px 12px', fontSize:13, fontWeight:600, color:'#e63946', display:'flex', alignItems:'center', gap:6 }}>
                       <Wrench size={14} /> {t('inventory.availableOutOfUse', { available: form.qty - form.brokenQty, broken: form.brokenQty })}
-                    </div>
-                  )}
-                  {form.brokenQty > 0 && (
-                    <div className="form-group">
-                      <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
-                      <textarea value={form.brokenNote || ''} onChange={e => setForm({...form, brokenNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
-                    </div>
-                  )}
-                  {/* "Con difetto": ancora utilizzabile (resta nei disponibili) ma con un problema da sistemare */}
-                  <div className="form-group">
-                    <label style={{ color: (form.defectQty || 0) > 0 ? '#d97706' : undefined }}>
-                      {t('inventory.defectLabel')} {(form.defectQty || 0) > 0 && <span style={{ fontWeight:800 }}>({form.defectQty})</span>}
-                      <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}> · {t('inventory.defectHint')}</span>
-                    </label>
-                    <Stepper tone="amber" value={form.defectQty || 0} min={0} max={form.qty} onChange={defectQty => setForm({...form, defectQty})}
-                      decAria={t('inventory.decreaseDefectAria')} incAria={t('inventory.increaseDefectAria')} />
-                  </div>
-                  {(form.defectQty || 0) > 0 && (
-                    <div className="form-group">
-                      <label>{t('inventory.issueNoteLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500, textTransform:'none', letterSpacing:0 }}>{t('common.optional')}</span></label>
-                      <textarea value={form.defectNote || ''} onChange={e => setForm({...form, defectNote:e.target.value})} placeholder={t('inventory.issueNotePlaceholder')} rows={2} />
                     </div>
                   )}
                 </div>
@@ -1579,6 +1604,14 @@ export default function Inventory() {
           </div>
         )
       })()}
+
+      {/* Modifica oggetto: popup "Segnala rotto / Segnala difetto" (contatore, pezzi segnalati, commento) */}
+      {issueDlg && showModal && (
+        <IssueReportDialog type={issueDlg} name={form.name} qty={Math.max(1, parseInt(form.qty, 10) || 1)}
+          already={issueDlg === 'broken' ? (form.brokenQty || 0) : (form.defectQty || 0)}
+          onClose={() => setIssueDlg(null)}
+          onConfirm={r => { applyIssueReport({ type: issueDlg, ...r }); setIssueDlg(null) }} t={t} />
+      )}
 
       {/* Popup scelta stampa — volutamente leggero (niente bottom-sheet/drag),
           solo un riquadro centrato fisso. Due passaggi solo se la squadra usa
@@ -2083,6 +2116,87 @@ function Stepper({ value, onChange, min = 0, max, tone, decAria, incAria }) {
         onFocus={e => e.target.select()}
         style={{ flex:1, minWidth:0, textAlign:'center', fontWeight:800, fontSize:16, padding:'6px 2px', border:'none', background:'transparent', boxShadow:'none', color: red ? toneColor : 'var(--c-ink)' }} />
       <button type="button" className="btn-no-anim" onClick={() => onChange(clamp(value + 1))} aria-label={incAria} style={btn}>+</button>
+    </div>
+  )
+}
+
+// Popup "Segnala rotto / difetto" della modifica oggetto: quanti pezzi, (facoltativo) quali pezzi
+// numerati e con che problema, un commento. Stessa impostazione del menu rapido "Segnala".
+function IssueReportDialog({ type, name, qty, already, onClose, onConfirm, t }) {
+  const broken = type === 'broken'
+  const color = broken ? '#e63946' : '#d97706'
+  const room = Math.max(0, qty - already)
+  const [n, setN] = useState(room > 0 ? 1 : 0)
+  const [pieces, setPieces] = useState([])
+  const [addOpen, setAddOpen] = useState(false)
+  const [unit, setUnit] = useState('')
+  const [pieceNote, setPieceNote] = useState('')
+  const [comment, setComment] = useState('')
+  const unitNum = parseInt(unit, 10)
+  const unitOk = unitNum >= 1 && unitNum <= qty
+  const total = Math.max(n, pieces.length)
+  const addPiece = () => {
+    if (!unitOk) return
+    const next = addIssue(pieces, { type, unit: unitNum, note: pieceNote })
+    setPieces(next); setN(v => Math.max(v, next.length)); setUnit(''); setPieceNote(''); setAddOpen(false)
+  }
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:1100, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-label={t(broken ? 'inventory.brokenSingle' : 'inventory.defectSingle')}
+        style={{ position:'relative', width:'100%', maxWidth:340, maxHeight:'88dvh', overflowY:'auto', background:'var(--card)', borderRadius:16, padding:'20px 18px 18px', boxShadow:'0 12px 40px rgba(0,0,0,0.3)' }}>
+        <button onClick={onClose} aria-label={t('common.close')} className="btn-no-anim"
+          style={{ position:'absolute', top:6, right:6, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+        <h2 style={{ margin:'0 40px 2px 0', fontSize:17, color }}>{t(broken ? 'inventory.brokenSingle' : 'inventory.defectSingle')}</h2>
+        <p style={{ margin:'0 0 16px', fontSize:13, color:'var(--c-ink2)' }}>{name}</p>
+
+        <div style={{ marginBottom:14 }}>
+          <p style={{ fontSize:13, fontWeight:800, margin:'0 0 1px' }}>{t('inventory.issueHowMany')}</p>
+          <p style={{ fontSize:12, color:'var(--c-ink2)', margin:'0 0 7px' }}>{t(broken ? 'inventory.brokenHint' : 'inventory.defectHint')}</p>
+          <Stepper tone={broken ? 'red' : 'amber'} value={total} min={pieces.length} max={Math.max(pieces.length, room)} onChange={setN}
+            decAria={t(broken ? 'inventory.decreaseBrokenAria' : 'inventory.decreaseDefectAria')} incAria={t(broken ? 'inventory.increaseBrokenAria' : 'inventory.increaseDefectAria')} />
+        </div>
+
+        {qty > 1 && (
+          <div style={{ marginBottom:14 }}>
+            {pieces.map(i => (
+              <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', marginBottom:6, borderRadius:10, background: broken ? 'rgba(230,57,70,0.08)' : 'rgba(217,119,6,0.10)' }}>
+                <span style={{ fontSize:12, fontWeight:800, color, whiteSpace:'nowrap' }}>{t('inventory.issuePieceNumber', { n: i.unit })}</span>
+                <span style={{ flex:1, minWidth:0, fontSize:12.5, color:'var(--c-ink)', overflowWrap:'anywhere' }}>{i.note || '—'}</span>
+                <button type="button" className="btn-no-anim" aria-label={t('inventory.issueRemoveAria')} onClick={() => setPieces(removeIssueById(pieces, i.id))}
+                  style={{ background:'transparent', color:'var(--c-ink3)', fontSize:15, width:28, height:28, flexShrink:0 }}>✕</button>
+              </div>
+            ))}
+            {addOpen ? (
+              <div style={{ padding:10, borderRadius:12, border:'1px solid var(--c-line)', background:'var(--c-alt)', display:'flex', flexDirection:'column', gap:8 }}>
+                <input type="number" inputMode="numeric" min={1} max={qty} value={unit} onChange={e => setUnit(e.target.value)} autoFocus
+                  placeholder={t('inventory.issuePieceNumberPlaceholder', { total: qty })} aria-label={t('inventory.issuePieceNumberLabel')} style={{ fontSize:14 }} />
+                <input value={pieceNote} onChange={e => setPieceNote(e.target.value)} placeholder={t('inventory.issueNotePlaceholder')} aria-label={t('inventory.issueNoteLabel')} style={{ fontSize:14 }} />
+                <div style={{ display:'flex', gap:8 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAddOpen(false)} style={{ flex:1, minHeight:40, fontSize:13.5 }}>{t('common.cancel')}</button>
+                  <button type="button" className="btn btn-secondary" onClick={addPiece} disabled={!unitOk} style={{ flex:2, minHeight:40, fontSize:13.5, opacity: unitOk ? 1 : 0.5 }}>{t('inventory.issuesAddConfirm')}</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => setAddOpen(true)} style={{ minHeight:42, fontSize:13.5, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                <Plus size={14} /> {t('inventory.issuesAddReported')}
+              </button>
+            )}
+            <p style={{ fontSize:12, color:'var(--c-ink2)', margin:'6px 0 0' }}>{t('inventory.issuesPiecesHint')}</p>
+          </div>
+        )}
+
+        <div style={{ marginBottom:14 }}>
+          <label htmlFor="rc-issue-comment" style={{ display:'block', fontSize:12.5, fontWeight:800, color:'var(--c-ink2)', marginBottom:6 }}>
+            {t('inventory.issueCommentLabel')} <span style={{ color:'var(--c-ink3)', fontWeight:500 }}>{t('common.optional')}</span>
+          </label>
+          <textarea id="rc-issue-comment" rows={2} value={comment} onChange={e => setComment(e.target.value)} placeholder={t('inventory.issueNotePlaceholder')} />
+        </div>
+
+        <button type="button" className="btn btn-primary" disabled={total < 1} onClick={() => onConfirm({ extra: Math.max(0, total - pieces.length), pieces, comment })}
+          style={{ width:'100%', opacity: total < 1 ? 0.5 : 1 }}>
+          {t(broken ? 'inventory.reportBrokenBtn' : 'inventory.reportDefectBtn')}
+        </button>
+      </div>
     </div>
   )
 }

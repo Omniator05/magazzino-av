@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-03',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Etichetta piccola 27×15 mm: ora è un QR con nome, posizione e numero del pezzo accanto, molto più facile da leggere con il lettore',
+        'Rotto / Con difetto: due pulsanti "Segnala rotto" e "Segnala difetto" aprono un popup con quanti pezzi, i pezzi numerati con il loro problema e un commento. Gli admin ricevono la notifica con il testo completo',
+        'Disponibilità di un oggetto: un solo campo "Periodo" a calendario, tocca un secondo giorno per cercare più giorni (prima su telefono usciva dalla pagina)',
+        'Postazione magazzino: tolta la tab "Ore" (il timer delle ore non serve lì)',
+        'Notifiche: se il testo non arriva, la notifica dice comunque di aprire l\'app, e il servizio di notifiche si aggiorna da solo ad ogni apertura',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Small 27×15 mm label: now a QR with the name, location and piece number next to it, much easier to scan',
+        'Broken / Defective: two buttons, "Report broken" and "Report defect", open a popup with how many pieces, the numbered pieces with their problem, and a comment. Admins get a notification with the full text',
+        'Item availability: a single "Period" calendar field, tap a second day to check several days (on phones it used to overflow the page)',
+        'Warehouse station: removed the "Hours" tab (the hours timer is not needed there)',
+        'Notifications: if the text does not arrive, the notification still tells you to open the app, and the notification service now updates itself on every launch',
+      ],
+    },
+  },
+  {
     version: '2026-11-02',
     it: {
       title: 'Novità di oggi',

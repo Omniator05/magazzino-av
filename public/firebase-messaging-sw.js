@@ -26,13 +26,16 @@ const messaging = firebase.messaging()
 // I messaggi sono SOLO "data" (vedi api/push.js): l'SDK non mostra niente da
 // sé, la notifica la mostra questo handler una volta sola. (`payload.notification`
 // resta come ripiego per messaggi vecchi ancora in viaggio.)
+// Mai una notifica vuota: se per qualche motivo il testo non arriva, almeno dice cosa fare.
+const FALLBACK_BODY = (self.navigator?.language || 'it').startsWith('en') ? 'Open the app to see what changed.' : "Apri l'app per vedere cosa è cambiato."
+
 messaging.onBackgroundMessage(payload => {
   const d = payload.data || {}
   const title = d.title || payload.notification?.title
   const body = d.body || payload.notification?.body
   self.registration.showNotification(title || 'Roadcase', {
     tag: d.tag || `${title || 'Roadcase'}|${body || ''}`,
-    body: body || '',
+    body: body || FALLBACK_BODY,
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
     data: { url: d.url || payload.fcmOptions?.link || '/' },
