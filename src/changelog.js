@@ -7,6 +7,21 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-02',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Etichetta con codice a barre 41×13 mm: il codice a barre ora occupa tutta la larghezza (moduli doppi) e si legge con facilità; in alto nome e posizione, sotto il codice scritto',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        '41×13 mm barcode label: the barcode now spans the full width (double-width bars) and scans easily; name and location on top, the written code underneath',
+      ],
+    },
+  },
+  {
     version: '2026-11-01',
     it: {
       title: 'Novità di oggi',

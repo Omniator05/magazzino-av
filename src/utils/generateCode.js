@@ -50,9 +50,11 @@ export function parseScannedCode(decodedText) {
     if (param) code = param
   } catch { /* non è un URL: è già il codice grezzo (etichetta vecchia) */ }
   code = code.trim().toUpperCase()
-  // Le etichette con codice a barre piccole (41×13 mm) portano il codice SENZA "WAV-": 8 lettere/cifre ed eventuale
-  // numero del pezzo. Si rimette il prefisso qui, così il resto dell'app lo riconosce come ogni altro codice.
+  // Le etichette con codice a barre piccole (41×13 mm) portano il codice SENZA "WAV-" e, per un pezzo numerato, senza
+  // trattino: 8 lettere/cifre ed eventuale numero del pezzo. Si rimette tutto qui, così il resto dell'app lo riconosce
+  // come ogni altro codice.
   if (/^[A-Z0-9]{8}(-\d{2,3})?$/.test(code)) code = `WAV-${code}`
+  else if (/^[A-Z0-9]{8}\d{2,3}$/.test(code)) code = `WAV-${code.slice(0, 8)}-${code.slice(8)}`   // pezzo numerato: "ABCD123407"
   const unitMatch = code.match(/^(.*)-(\d{2,3})$/)
   const baseCode = unitMatch ? unitMatch[1] : code
   return { code, baseCode, unitNumber: unitMatch ? unitMatch[2] : null }

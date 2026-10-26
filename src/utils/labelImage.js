@@ -251,17 +251,15 @@ export function labelFilename(name, code) {
 }
 
 // ── Etichetta con codice a barre: cartuccia ZP41-13, 41 × 13 mm ─────────────────────────────────────────────
-// Sul rotolo ogni "etichetta" è una striscia con due adesivi già fustellati: a sinistra un RETTANGOLO di
-// 25,4 × 12,7 mm (nome sopra, codice a barre sotto) e a destra un CERCHIO di 12,7 mm (una sigla breve: la
-// posizione e, per un pezzo numerato, il numero). Si disegna alla risoluzione esatta della stampante (8 punti
-// per mm → 328 × 104): ogni modulo del codice a barre è UN punto, niente scalature che lo rovinerebbero.
+// Tutta l'etichetta serve al codice a barre: così i moduli sono larghi DUE punti (0,25 mm) invece di uno e il
+// lettore lo legge senza sforzo. Si disegna alla risoluzione esatta della stampante (8 punti per mm → 328 × 104):
+// nessuna scalatura, quindi i moduli restano netti. In alto il nome (a sinistra) e la posizione (a destra), poi il
+// codice a barre a tutta larghezza, e sotto il codice scritto.
 const BC_W = 328, BC_H = 104
-const BC_RECT = { x: 0, y: 1, w: 203, h: 102 }     // 25,4 × 12,7 mm
-const BC_CIRCLE = { d: 102, cx: 328 - 51, cy: 52 } // Ø 12,7 mm, appoggiato al bordo destro
 
-// Il codice a barre non porta il prefisso "WAV-" (sono 4 caratteri in meno: così anche il codice di un pezzo
-// numerato sta nei 25 mm del rettangolo); quando si scansiona, parseScannedCode rimette il prefisso.
-export const barcodeText = code => String(code || '').replace(/^WAV-/i, '')
+// Il codice a barre non porta il prefisso "WAV-" e, per un pezzo numerato, nemmeno il trattino ("ABCD1234" oppure
+// "ABCD123407"): meno caratteri = moduli più larghi. Alla scansione parseScannedCode rimette tutto com'era.
+export const barcodeText = code => String(code || '').replace(/^WAV-/i, '').replace(/-(\d{2,3})$/, '$1')
 
 async function renderBarcodeLabel({ name, location, code }) {
   const SSB = 4                                   // il testo si disegna a 4× e poi si riduce (più morbido)
@@ -271,37 +269,32 @@ async function renderBarcodeLabel({ name, location, code }) {
   tctx.fillStyle = '#fff'; tctx.fillRect(0, 0, text.width, text.height)
   tctx.fillStyle = '#000'; tctx.textBaseline = 'top'; tctx.textAlign = 'left'
   const FAMILY = 'Arial'
+  const padX = 8, top = 4
+  const value = barcodeText(code)
 
-  // Rettangolo: nome in una riga, il più grande che ci sta (da 22 a 12 px), poi tronca con "…".
-  const padX = 6, nameTop = 6
-  const nameW = (BC_RECT.w - padX * 2) * SSB
-  let nameSize = fitFontSize(tctx, name, nameW, FAMILY, 800, 22 * SSB, 12 * SSB)
+  // Riga in alto: la posizione a destra (corpo fisso, in grassetto) e il nome a sinistra con lo spazio che resta.
+  const LINE = 22 * SSB
+  let locW = 0
+  if (location) {
+    const fit = fitFontSize(tctx, location, 120 * SSB, FAMILY, 800, LINE, 12 * SSB)
+    tctx.font = `800 ${fit}px ${FAMILY}`
+    locW = tctx.measureText(location).width
+    tctx.textAlign = 'right'
+    tctx.fillText(location, (BC_W - padX) * SSB, top * SSB)
+    tctx.textAlign = 'left'
+  }
+  const nameW = (BC_W - padX * 2) * SSB - (locW ? locW + 10 * SSB : 0)
+  const nameSize = fitFontSize(tctx, name, nameW, FAMILY, 800, LINE, 12 * SSB)
   tctx.font = `800 ${nameSize}px ${FAMILY}`
   let shown = name
   while (tctx.measureText(shown).width > nameW && shown.length > 1) shown = shown.slice(0, -1)
   if (shown !== name) shown = shown.slice(0, -1) + '…'
-  tctx.fillText(shown, padX * SSB, nameTop * SSB)
+  tctx.fillText(shown, padX * SSB, top * SSB)
 
-  // Cerchio: posizione in 1–2 righe (la più grande che ci sta) e, per un pezzo numerato, il numero.
-  const unit = (String(code).match(/-(\d{2,3})$/) || [])[1]
-  const lines = []
-  if (location) {
-    const circleInner = 78 * SSB                  // larghezza utile al centro del cerchio
-    const fit = fitWrapped(tctx, location, circleInner, FAMILY, 800, 24 * SSB, 12 * SSB, 2, 20 * SSB)
-    lines.push(...fit.lines.map(l => ({ text: l, size: fit.size })))
-  }
-  if (unit) lines.push({ text: `#${parseInt(unit, 10)}`, size: 20 * SSB })
-  if (lines.length) {
-    const lh = l => Math.round(l.size * 1.1)
-    const total = lines.reduce((n, l) => n + lh(l), 0)
-    let y = BC_CIRCLE.cy * SSB - total / 2
-    tctx.textAlign = 'center'
-    for (const l of lines) {
-      tctx.font = `800 ${l.size}px ${FAMILY}`
-      tctx.fillText(l.text, BC_CIRCLE.cx * SSB, y)
-      y += lh(l)
-    }
-  }
+  // Il codice scritto sotto le barre
+  tctx.font = `700 ${14 * SSB}px monospace`
+  tctx.textAlign = 'center'
+  tctx.fillText(String(code || '').replace(/^WAV-/i, ''), (BC_W / 2) * SSB, 88 * SSB)   // con il trattino, più leggibile per chi guarda
 
   const out = document.createElement('canvas')
   out.width = BC_W; out.height = BC_H
@@ -310,14 +303,17 @@ async function renderBarcodeLabel({ name, location, code }) {
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(text, 0, 0, BC_W, BC_H)
 
-  // Codice a barre: moduli da un punto, alto quanto resta sotto il nome, centrato nel rettangolo.
+  // Codice a barre: moduli larghi quanto entrano (2 punti per i codici normali, 1 solo se il codice fosse molto lungo),
+  // centrato, con almeno 8 punti di margine bianco per lato.
   const { default: JsBarcode } = await import('jsbarcode')
+  const probe = document.createElement('canvas')
+  JsBarcode(probe, value, { format: 'CODE128', width: 1, height: 10, displayValue: false, margin: 0 })
+  const modules = probe.width
+  const moduleW = Math.max(1, Math.min(3, Math.floor((BC_W - 16) / modules)))
   const bc = document.createElement('canvas')
-  const barsTop = nameTop + Math.round(nameSize / SSB) + 8
-  const barsH = BC_RECT.y + BC_RECT.h - 6 - barsTop
-  JsBarcode(bc, barcodeText(code), { format: 'CODE128', width: 1, height: barsH, displayValue: false, margin: 0 })
+  const barsTop = 30, barsH = 54
+  JsBarcode(bc, value, { format: 'CODE128', width: moduleW, height: barsH, displayValue: false, margin: 0 })
   ctx.imageSmoothingEnabled = false
-  const bx = BC_RECT.x + Math.round((BC_RECT.w - bc.width) / 2)
-  ctx.drawImage(bc, bx, barsTop)
+  ctx.drawImage(bc, Math.round((BC_W - bc.width) / 2), barsTop)
   return out.toDataURL('image/png')
 }
