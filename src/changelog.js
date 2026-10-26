@@ -7,6 +7,21 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-31',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Stampa diretta delle etichette sulla stampante MakeID: dalla finestra "Scarica etichetta" compare il pulsante Stampa (un pezzo o tutti i pezzi), se sul computer è acceso il servizio di stampa MakeID. Serve installarlo una volta sul PC di magazzino',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Direct label printing on the MakeID printer: the "Download label" window shows a Print button (one piece or all pieces) when the MakeID print service is running on the computer. It needs to be installed once on the warehouse PC',
+      ],
+    },
+  },
+  {
     version: '2026-10-30',
     it: {
       title: 'Novità di oggi',

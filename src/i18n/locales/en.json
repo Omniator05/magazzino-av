@@ -2177,5 +2177,21 @@
     "unsavedMessage": "You've changed something. If you leave without saving, the changes are lost. To keep editing, tap outside this window.",
     "save": "Save",
     "discard": "Don't save"
+  },
+  "labelPrint": {
+    "printOne": "Print label",
+    "printAll": "Print all {{count}} pieces",
+    "checking": "Looking for the printer…",
+    "notInstalled": "To print directly the MakeID print service must be running on this computer.",
+    "howTo": "How to install it",
+    "noPrinter": "The print service is running but sees no printer: connect the MakeID and turn it on.",
+    "printerFound": "Printer: {{name}}.",
+    "settings": "Settings",
+    "printer": "Printer",
+    "rotation": "Rotation",
+    "preview": "Preview",
+    "previewBlind": "The request was sent, but this computer doesn't let us show the preview here.",
+    "sent": "Sent {{count}} labels to the printer.",
+    "offline": "Can't reach the print service. Check that it's running and that the browser may access devices on this computer."
   }
 }

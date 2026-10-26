@@ -7,6 +7,8 @@ import { generateQRDataURL, qrPayloadForCode, generateBarcodeDataURL } from './g
 // altrimenti l'app di stampa la importa storta rispetto alla cornice.
 const LABEL_W = 600
 const LABEL_H = 380
+// Misure fisiche dell'etichetta in millimetri (10 px per mm), usate anche per la stampa diretta (utils/makeidPrint.js)
+export const LABEL_MM = { w: LABEL_W / 10, h: LABEL_H / 10 }
 const PAD = 16
 // Disegniamo tutto a risoluzione doppia e poi rimpiccioliamo al formato
 // finale: il downscale con smoothing dà bordi di testo e QR molto più nitidi

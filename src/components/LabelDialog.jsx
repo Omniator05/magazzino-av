@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
@@ -6,6 +6,7 @@ import { generateItemCode, generateUnitCode } from '../utils/generateCode'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import { getCodeDisplay } from '../utils/codeDisplay'
 import { QrCode, Barcode } from './Icon'
+import { probeService, pickPrinter, printLabelImages, printErrorText, loadPrintSettings, savePrintSettings } from '../utils/makeidPrint'
 
 // Scarica l'etichetta di un oggetto (PNG pronta per la stampante termica), una sola o una per ogni pezzo in uno
 // zip. Disponibile a tutti — anche ai magazzinieri e alla postazione, che non possono modificare il magazzino:
@@ -19,6 +20,34 @@ export default function LabelDialog({ item, onClose }) {
   const [busy, setBusy] = useState(false)
   const baseCode = item.code || generateItemCode(item.id)
   const total = item.totalQty || 1
+
+  // Stampa diretta: se sul PC c'è il servizio di stampa MakeID (vedi utils/makeidPrint.js) compare il pulsante Stampa.
+  const [svc, setSvc] = useState({ state: 'checking', printers: [] })
+  const [settings, setSettings] = useState(loadPrintSettings)
+  const [msg, setMsg] = useState({ text: '', error: false })
+  const [preview, setPreview] = useState('')
+  const [showSettings, setShowSettings] = useState(false)
+  useEffect(() => { let live = true; probeService().then(r => { if (live) setSvc(r) }); return () => { live = false } }, [])
+  const printer = pickPrinter(svc.printers, settings.printer)
+  const updateSettings = patch => { const next = { ...settings, ...patch }; setSettings(next); savePrintSettings(next) }
+
+  const directPrint = async ({ units = false, asPreview = false } = {}) => {
+    setBusy(true); setMsg({ text: '', error: false }); setPreview('')
+    try {
+      const codes = units ? Array.from({ length: total }, (_, i) => generateUnitCode(baseCode, i + 1)) : [baseCode]
+      const images = []
+      for (const code of asPreview ? [codes[0]] : codes) images.push(await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format }))
+      const res = await printLabelImages(images, { printer, rotation: settings.rotation, preview: asPreview, readable: svc.readable !== false })
+      if (asPreview) {
+        const img = res[0]?.content
+        if (img) setPreview(img); else setMsg({ text: t('labelPrint.previewBlind'), error: false })
+      } else {
+        setMsg({ text: t('labelPrint.sent', { count: images.length }), error: false })
+      }
+    } catch (e) {
+      setMsg({ text: e.message === 'offline' || e.message === 'timeout' ? t('labelPrint.offline') : printErrorText(e.code), error: true })
+    } finally { setBusy(false) }
+  }
 
   const downloadOne = async () => {
     setBusy(true)
@@ -63,8 +92,47 @@ export default function LabelDialog({ item, onClose }) {
             <h2 style={{ margin: '0 36px 4px 0', fontSize: 17 }}>{t('inventory.downloadLabel')}</h2>
             <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text2)', overflowWrap: 'anywhere' }}>{item.name}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {svc.state === 'up' && printer && (
+                <>
+                  <button onClick={() => directPrint()} disabled={busy} className="btn btn-primary">{t('labelPrint.printOne')}</button>
+                  {total > 1 && <button onClick={() => directPrint({ units: true })} disabled={busy} className="btn btn-primary">{t('labelPrint.printAll', { count: total })}</button>}
+                </>
+              )}
               <button onClick={downloadOne} disabled={busy} className="btn btn-secondary">{t('inventory.printOneLabel')}</button>
               {total > 1 && <button onClick={downloadUnits} disabled={busy} className="btn btn-secondary">{t('inventory.printAllUnits', { count: total })}</button>}
+            </div>
+
+            {/* Stato della stampante diretta */}
+            <div style={{ marginTop: 14, fontSize: 12.5, lineHeight: 1.5, color: 'var(--text2)' }}>
+              {svc.state === 'checking' && <span>{t('labelPrint.checking')}</span>}
+              {svc.state === 'down' && (
+                <span>{t('labelPrint.notInstalled')} <a href="https://github.com/MakeID-Developer/label-print/tree/main/JS" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>{t('labelPrint.howTo')}</a></span>
+              )}
+              {svc.state === 'up' && !printer && <span>{t('labelPrint.noPrinter')}</span>}
+              {svc.state === 'up' && printer && (
+                <>
+                  <span>{t('labelPrint.printerFound', { name: printer.printer })}</span>{' '}
+                  <button type="button" className="btn-no-anim" onClick={() => setShowSettings(s => !s)} style={{ background: 'transparent', color: 'var(--blue)', fontSize: 12.5, padding: 0, textDecoration: 'underline' }}>{t('labelPrint.settings')}</button>
+                  {showSettings && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {svc.printers.length > 1 && (
+                        <select value={printer.printer} onChange={e => updateSettings({ printer: e.target.value })} aria-label={t('labelPrint.printer')}>
+                          {svc.printers.map(p => <option key={p.printer} value={p.printer}>{p.printer}</option>)}
+                        </select>
+                      )}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ flexShrink: 0 }}>{t('labelPrint.rotation')}</span>
+                        <select value={settings.rotation} onChange={e => updateSettings({ rotation: Number(e.target.value) })}>
+                          {[0, 90, 180, 270].map(r => <option key={r} value={r}>{r}°</option>)}
+                        </select>
+                      </label>
+                      <button type="button" onClick={() => directPrint({ asPreview: true })} disabled={busy} className="btn btn-secondary">{t('labelPrint.preview')}</button>
+                      {preview && <img src={preview} alt={t('labelPrint.preview')} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }} />}
+                    </div>
+                  )}
+                </>
+              )}
+              {msg.text && <p role={msg.error ? 'alert' : 'status'} style={{ margin: '10px 0 0', fontWeight: 700, color: msg.error ? '#e63946' : 'var(--green)' }}>{msg.text}</p>}
             </div>
           </>
         )}

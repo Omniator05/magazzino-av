@@ -2177,5 +2177,21 @@
     "unsavedMessage": "Hai cambiato qualcosa. Se esci senza salvare, le modifiche vanno perse. Per continuare a modificare tocca fuori da questa finestra.",
     "save": "Salva",
     "discard": "Non salvare"
+  },
+  "labelPrint": {
+    "printOne": "Stampa l'etichetta",
+    "printAll": "Stampa tutti i {{count}} pezzi",
+    "checking": "Cerco la stampante…",
+    "notInstalled": "Per stampare direttamente serve il servizio di stampa MakeID acceso su questo computer.",
+    "howTo": "Come installarlo",
+    "noPrinter": "Il servizio di stampa è acceso ma non vede nessuna stampante: collega la MakeID e accendila.",
+    "printerFound": "Stampante: {{name}}.",
+    "settings": "Impostazioni",
+    "printer": "Stampante",
+    "rotation": "Rotazione",
+    "preview": "Anteprima",
+    "previewBlind": "La richiesta è partita, ma questo computer non permette di vedere l'anteprima da qui.",
+    "sent": "Inviate {{count}} etichette alla stampante.",
+    "offline": "Non riesco a parlare con il servizio di stampa. Controlla che sia acceso e che il browser abbia il permesso di accedere ai dispositivi del computer."
   }
 }
