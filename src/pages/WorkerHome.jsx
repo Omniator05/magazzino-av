@@ -16,6 +16,7 @@ import Profile from './Profile'
 import { hasUnseenWhatsNew } from '../utils/whatsNew'
 import TodayReminderModal from '../components/TodayReminderModal'
 import ActivityCard from '../components/ActivityCard'
+import { doneFeedback } from '../utils/feedback'
 import { groupActivities, activitiesForDay, setActivityDone, isAssignedTo } from '../utils/activities'
 
 const EVENT_CAP = 5
@@ -174,9 +175,14 @@ export default function WorkerHome() {
   // lista. Un'attività a cavallo di mezzanotte compare anche il giorno dopo.
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
   // Le attività di oggi di TUTTA la squadra, con a chi sono assegnate: chi è assegnato può completarla.
-  const todayTasks = activitiesForDay(groupActivities(teamBlocks, uid => people[uid]), today, yesterday)
-    .sort((a, b) => (a.done - b.done) || (Number(isAssignedTo(b, user?.uid)) - Number(isAssignedTo(a, user?.uid))))
+  const [actHold, setActHold] = useState({})   // appena spuntate: restano un attimo al loro posto (si vede l'animazione)
+  const heldDone = a => (a.id in actHold ? actHold[a.id] : a.done)
+  const todayTasks = activitiesForDay(groupActivities(teamBlocks, uid => people[uid]), today, yesterday, actHold)
+    .sort((a, b) => (heldDone(a) - heldDone(b)) || (Number(isAssignedTo(b, user?.uid)) - Number(isAssignedTo(a, user?.uid))))
   const toggleActivity = async (act, done) => {
+    setActHold(h => ({ ...h, [act.id]: !!act.done }))
+    setTimeout(() => setActHold(h => { const n = { ...h }; delete n[act.id]; return n }), 1300)
+    if (done) doneFeedback()
     try { await setActivityDone(act, done, { uid: user.uid, name: profile?.name || profile?.username || '' }) } catch { /* senza rete riprova al prossimo tocco */ }
   }
   const recurringShown = pinnedRecurring.filter(e => !todayIds.has(e.id))

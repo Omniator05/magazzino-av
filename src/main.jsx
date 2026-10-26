@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import './i18n'
+import './utils/staleChunk'
 
 // Pagina ospite per il personale esterno (/ospite/<chiave>): sola lettura, senza
 // login — si monta da sola, fuori da App (nessun provider, nessuna navigazione).

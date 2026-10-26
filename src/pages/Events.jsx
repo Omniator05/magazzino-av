@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useModalDrag } from '../hooks/useModalDrag'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatDate } from '../utils/formatDate'
@@ -303,7 +304,12 @@ export default function Events() {
   const [events, setEvents]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const eventDrag = useModalDrag(() => setShowModal(false))
+  // Colonna "Modifica evento": col clic fuori chiude solo se non è cambiato nulla, altrimenti chiede se salvare
+  const eventBase = useRef('')
+  const eventGuard = useUnsavedGuard(() => showModal && JSON.stringify(form) !== eventBase.current)
+  const eventDrag = useModalDrag(() => setShowModal(false), eventGuard.guard)
+  eventGuard.attach(eventDrag)
+  useEffect(() => { if (showModal) eventBase.current = JSON.stringify(form) }, [showModal])   // eslint-disable-line react-hooks/exhaustive-deps
   const [showSearch, setShowSearch]     = useState(false)
   const [openSections, setOpenSections] = useState(() => {
     try {
@@ -707,20 +713,26 @@ export default function Events() {
           (seriesId): ricorrenza e rent/install sono mutuamente esclusive
           anche in creazione, vedi CreateEventFlow.jsx. */}
       {showModal && (
-        <div className={`modal-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={eventDrag.onOverlayClick}>
-          <div className={`modal${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
-            <button className="close-btn" onClick={eventDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{t('calendar.editEventTitle')}</h2>
+        <div className={`modal-overlay rc-drawer-overlay${eventDrag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) eventDrag.close() }}>
+          <div className={`modal rc-drawer rc-drawer-narrow${eventDrag.jiggling ? ' modal-jiggle' : ''}${eventDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...eventDrag.props}>
+            <div className="rc-drawer-head rc-dc"><div className="rc-drawer-titlebar rc-dc">
+              <button className="close-btn" onClick={eventDrag.close} aria-label={t("common.close")}>✕</button>
+              <h2>{t('calendar.editEventTitle')}</h2>
+            </div></div>
+            <div className="rc-drawer-body rc-dc">
             {/* Stessi campi della colonna del Calendario (EventFormFields). Il tipo
                 (evento/rent-install) si può cambiare solo se non è un'occorrenza
                 ricorrente. */}
             <div className="rc-ev-form" style={{ display:'flex', flexDirection:'column', gap:16 }}>
               <EventFormFields form={form} setForm={setForm} idp="ev" teamId={teamId} today={today} showType={!editing?.seriesId} useRange />
             </div>
+            </div>
+            <div className="rc-drawer-foot rc-dc">
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:20 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? t('common.saving') : t('calendar.saveChanges')}
             </button>
+            </div>
           </div>
         </div>
       )}

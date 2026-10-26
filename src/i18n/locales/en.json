@@ -499,11 +499,15 @@
     "warehousePosition": "Warehouse position",
     "brandModelLabel": "Brand/Model",
     "nameFieldLabel": "Name",
+    "historySection": "History",
     "historyPageTitle": "Details",
     "whereItIs": "Where it is",
     "whereItIsOutNow": "{{name}}{{extra}}",
     "whereItIsOutNowMore": " and {{count}} more",
     "whereItIsLastOut": "{{name}} · {{date}}",
+    "whereItIsOutLists": "{{count}} load lists",
+    "whereItIsInWarehouse": "In the warehouse",
+    "notesInline": "Notes:",
     "whereItIsNever": "Always in the warehouse",
     "seeFullHistory": "See full history",
     "noHistoryAvailable": "No history available for this item.",
@@ -511,6 +515,8 @@
     "historyItemNotFoundTitle": "Item not found",
     "tabEvents": "Events ({{count}})",
     "tabActivity": "Activity ({{count}})",
+    "availabilityFrom": "From",
+    "availabilityTo": "To",
     "availabilityCheckTitle": "Check availability",
     "availabilityCheckPeriodPlaceholder": "Select a period",
     "availabilityCheckFree": "{{free}} available on these dates",
@@ -1201,6 +1207,8 @@
     "loginEmailInUse": "This email is already used by another account.",
     "loginNoAccount": "This user has no sign-in account.",
     "loginSwitchError": "Couldn't change the sign-in. Try again.",
+    "loginChangeHint": "If the email is wrong (or made up), enter the real one: from now on they sign in with it and receive emails there, including password resets.",
+    "loginChangeButton": "Change email",
     "loginEmailBadge": "Signs in with email"
   },
   "events": {
@@ -1493,6 +1501,9 @@
     "openLinkedList": "Open the loading list"
   },
   "tasks": {
+    "menuLabel": "Actions",
+    "menuEdit": "Edit",
+    "menuDelete": "Delete",
     "title": "Tasks",
     "newButton": "+ Task",
     "priorityHigh": "High",
@@ -1532,7 +1543,7 @@
     "createTask": "Create task",
     "addTask": "Add task",
     "allAssignee": "Everyone",
-    "createdBy": "📝 by {{name}}",
+    "createdBy": "by {{name}}",
     "confirmDeleteTitle": "Delete task",
     "confirmDeleteMessage": "Delete this task?",
     "confirmDeleteLabel": "Delete",
@@ -2160,5 +2171,11 @@
     "reopen": "Reopen",
     "onlyAssigned": "Only the assigned people can complete it",
     "onlyAssignedMsg": "Only the people assigned to this task can complete it."
+  },
+  "drawer": {
+    "unsavedTitle": "Save your changes?",
+    "unsavedMessage": "You've changed something. If you leave without saving, the changes are lost. To keep editing, tap outside this window.",
+    "save": "Save",
+    "discard": "Don't save"
   }
 }

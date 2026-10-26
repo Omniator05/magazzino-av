@@ -14,6 +14,7 @@ import { todayStr } from '../utils/workHours'
 import { useOperator } from '../context/OperatorContext'
 import LogoutButton from '../components/LogoutButton'
 import ActivityCard from '../components/ActivityCard'
+import { doneFeedback } from '../utils/feedback'
 import { groupActivities, activitiesForDay, setActivityDone, isAssignedTo } from '../utils/activities'
 import { isModuleEnabled } from '../utils/modules'
 import { Wrench, Warn, Pin, QrCode, ChevronRight, Unload, Check } from '../components/Icon'
@@ -121,15 +122,19 @@ export default function StationHome() {
   }, [events, items, item])
 
   // ── Attività di oggi, con a chi sono assegnate: le completa chi è assegnato, dopo il badge ──
+  const [actHold, setActHold] = useState({})            // appena spuntate: restano un attimo al loro posto (si vede l'animazione)
   const todayActs = useMemo(() => {
     const today = todayStr()
     const yesterday = todayStr(new Date(Date.now() - 86400000))
-    return activitiesForDay(groupActivities(blocks, uid => people[uid]), today, yesterday)
-  }, [blocks, people])
+    return activitiesForDay(groupActivities(blocks, uid => people[uid]), today, yesterday, actHold)
+  }, [blocks, people, actHold])
   const toggleActivity = async (act, done) => {
     setActMsg('')
     if (!requireOperator()) return                      // senza badge si apre la richiesta e basta
     if (!isAssignedTo(act, operator?.userId)) { setActMsg(t('activities.onlyAssignedMsg')); return }
+    setActHold(h => ({ ...h, [act.id]: !!act.done }))
+    setTimeout(() => setActHold(h => { const n = { ...h }; delete n[act.id]; return n }), 1300)
+    if (done) doneFeedback({ sound: true })               // "din" + vibrazione: chi ha le mani occupate lo sente
     try { await setActivityDone(act, done, { uid: operator.userId, name: operator.name }) } catch { setActMsg(t('station.saveError')) }
   }
 

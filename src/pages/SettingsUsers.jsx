@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth, usernameToEmail } from '../context/AuthContext'
@@ -8,6 +8,7 @@ import { isModuleEnabled } from '../utils/modules'
 import { formatDate } from '../utils/formatDate'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
 import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
@@ -158,7 +159,12 @@ export default function SettingsUsers() {
   const [showCreate, setShowCreate]   = useState(false)
   const [stationOpen, setStationOpen] = useState(false)
   const [showDetail, setShowDetail]   = useState(null)
-  const createDrag = useModalDrag(() => setShowCreate(false))
+  // Colonna "Nuovo utente": col clic fuori chiude solo se non hai scritto niente, altrimenti chiede se salvare
+  const createBase = useRef('')
+  const createGuard = useUnsavedGuard(() => showCreate && JSON.stringify([form, noEmail, orgConfig, assignedEventId]) !== createBase.current)
+  const createDrag = useModalDrag(() => setShowCreate(false), createGuard.guard)
+  createGuard.attach(createDrag)
+  useEffect(() => { if (showCreate) createBase.current = JSON.stringify([form, noEmail, orgConfig, assignedEventId]) }, [showCreate])   // eslint-disable-line react-hooks/exhaustive-deps
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   useModalScrollLock(showCreate || !!showDetail || !!tempEdit)
   const [editMode, setEditMode]       = useState(false)
@@ -657,7 +663,7 @@ export default function SettingsUsers() {
     return (
       <div className="item-row" onClick={() => {
         if (locked) return
-        setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setRoleMenuOpen(false)
+        setShowDetail(u); setEditMode(false); clearDetailMsg(); setNewPw(''); setRoleMenuOpen(false); setLoginEmailInput('')
         setOrgConfig(u.organizerConfig || EMPTY_ORG_CONFIG)
         setAssignedEventId(u.assignedEventId || '')
         setMaxHours(u.maxMonthlyHours ?? '')
@@ -837,11 +843,14 @@ export default function SettingsUsers() {
 
       {/* ── Modal crea account ─────────────────────────────── */}
       {showCreate && (
-        <div className={`modal-overlay${createDrag.closing ? ' closing' : ''}`} onClick={createDrag.onOverlayClick}>
-          <div className={`modal admin-user-modal${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
-            <button className="close-btn" onClick={createDrag.close}>✕</button>
-            <h2>{t('adminUsers.newAccountTitle')}</h2>
+        <div className={`modal-overlay rc-drawer-overlay${createDrag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) createDrag.close() }}>
+          <div className={`modal admin-user-modal rc-drawer rc-drawer-narrow${createDrag.jiggling ? ' modal-jiggle' : ''}${createDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...createDrag.props}>
+            <div className="rc-drawer-head rc-dc"><div className="rc-drawer-titlebar rc-dc">
+              <button className="close-btn" onClick={createDrag.close}>✕</button>
+              <h2>{t('adminUsers.newAccountTitle')}</h2>
+            </div></div>
 
+            <div className="rc-drawer-body rc-dc">
             {error && (
               <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', color:'var(--red)', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13 }}>
                 {error}
@@ -959,9 +968,13 @@ export default function SettingsUsers() {
             </div>
             )}
 
-            <SaveButton onSave={form.role === 'temporaneo' ? createTemp : createAccount} onDone={createDrag.close} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
+            </div>
+
+            <div className="rc-drawer-foot rc-dc">
+            <SaveButton onSave={form.role === 'temporaneo' ? createTemp : createAccount} onDone={() => { createGuard.skip(); createDrag.close() }} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
               <Check size={16} /> {form.role === 'temporaneo' ? t('guest.tempCreateInvite') : t('adminUsers.createAccount')}
             </SaveButton>
+            </div>
           </div>
         </div>
       )}
@@ -1090,6 +1103,14 @@ export default function SettingsUsers() {
                     <div style={{ background:'var(--bg3)', borderRadius:'var(--radius)', padding:'12px 14px', marginBottom:16 }}>
                       <p style={{ fontSize:12, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.loginEmailBadge')}</p>
                       <p style={{ fontFamily:'monospace', fontSize:14, marginTop:4, wordBreak:'break-all' }}>{showDetail.internalEmail || showDetail.email}</p>
+                      {/* Email sbagliata o finta? Si cambia qui: da quel momento entra (e riceve le email) con quella nuova */}
+                      <p style={{ color:'var(--text2)', fontSize:12, lineHeight:1.5, margin:'12px 0 8px' }}>{t('adminUsers.loginChangeHint')}</p>
+                      <div style={{ display:'flex', gap:8 }}>
+                        <input type="email" value={loginEmailInput} onChange={e => setLoginEmailInput(e.target.value)} placeholder={t('adminUsers.emailPlaceholder')} autoCapitalize="none" style={{ flex:1, minWidth:0 }} />
+                        <button onClick={switchToEmailLogin} disabled={switchingLogin || !loginEmailInput.trim()} className="btn btn-secondary" style={{ flexShrink:0, padding:'9px 14px', fontWeight:800 }}>
+                          {switchingLogin ? t('common.saving') : t('adminUsers.loginChangeButton')}
+                        </button>
+                      </div>
                     </div>
                   )
                 )}

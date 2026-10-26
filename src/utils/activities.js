@@ -34,11 +34,13 @@ export function groupActivities(blocks, nameOf) {
 }
 
 // Quelle che interessano oggi: di oggi, oppure di ieri se vanno oltre la mezzanotte (con `cont`).
-export function activitiesForDay(acts, today, yesterday) {
+export function activitiesForDay(acts, today, yesterday, hold = {}) {
+  // `hold`: attività appena spuntate che restano un attimo dov'erano (si vede l'animazione, poi passano in fondo)
+  const isDone = a => (a.id in hold ? hold[a.id] : a.done)
   return acts
     .filter(a => a.date === today || (a.date === yesterday && a.overnight))
     .map(a => ({ ...a, cont: a.date !== today }))
-    .sort((a, b) => (a.done - b.done) || (a.cont ? '00:00' : a.startTime).localeCompare(b.cont ? '00:00' : b.startTime))
+    .sort((a, b) => (isDone(a) - isDone(b)) || (a.cont ? '00:00' : a.startTime).localeCompare(b.cont ? '00:00' : b.startTime))
 }
 
 // Segna fatta (o riapre) un'attività. `who` = { uid, name }.

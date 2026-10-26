@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
@@ -52,6 +53,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
   const today = new Date().toISOString().split('T')[0]
 
   const [pendingTemplateItems, setPendingTemplateItems] = useState(null)
+  const formBase = useRef('')   // fotografia del modulo all'apertura: serve a sapere se hai cambiato qualcosa
   const [form, setForm] = useState(() => blankForm(initialDate))
   const [saving, setSaving] = useState(false)
   // Liste di carico aggiuntive portate da un evento d'archivio usato come template
@@ -63,7 +65,9 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
   useEffect(() => {
     if (!open) return
     if (skipChoice && typeof skipChoice === 'object') {
-      setForm({ ...blankForm(initialDate), name: skipChoice.name || '' })
+      const initial = { ...blankForm(initialDate), name: skipChoice.name || '' }
+      formBase.current = JSON.stringify(initial)
+      setForm(initial)
       setPendingTemplateItems(skipChoice.items || [])
       setPendingLists({ lists: skipChoice.lists || [], mainListName: skipChoice.mainListName || '' })
     } else {
@@ -71,7 +75,9 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
       // Events.jsx) o comunque non un oggetto template: form vuoto.
       setPendingTemplateItems(null)
       setPendingLists({ lists: [], mainListName: '' })
-      setForm(blankForm(initialDate))
+      const initial = blankForm(initialDate)
+      formBase.current = JSON.stringify(initial)
+      setForm(initial)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -129,18 +135,24 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
     } finally { setSaving(false) }
   }
 
-  const formDrag = useModalDrag(() => onClose?.(), undefined, saveEvent, open)
+  // Colonna "Nuovo evento": col clic fuori chiude solo se non hai scritto niente, altrimenti chiede se salvare
+  const flowGuard = useUnsavedGuard(() => open && JSON.stringify(form) !== formBase.current)
+  const formDrag = useModalDrag(() => onClose?.(), flowGuard.guard, saveEvent, open)
+  flowGuard.attach(formDrag)
 
   useModalScrollLock(open)
 
   if (!open) return null
 
   return (
-        <div className={`modal-overlay${formDrag.closing ? ' closing' : ''}`} onClick={formDrag.onOverlayClick}>
-          <div className={`modal${formDrag.jiggling ? ' modal-jiggle' : ''}${formDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...formDrag.props}>
-            <button className="close-btn" onClick={formDrag.close} aria-label={t('common.close')}>✕</button>
-            <h2>{pendingTemplateItems && !allowTypeChoice ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
+        <div className={`modal-overlay rc-drawer-overlay${formDrag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) formDrag.close() }}>
+          <div className={`modal rc-drawer rc-drawer-narrow${formDrag.jiggling ? ' modal-jiggle' : ''}${formDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...formDrag.props}>
+            <div className="rc-drawer-head rc-dc"><div className="rc-drawer-titlebar rc-dc">
+              <button className="close-btn" onClick={formDrag.close} aria-label={t('common.close')}>✕</button>
+              <h2>{pendingTemplateItems && !allowTypeChoice ? t('events.newEventFromTemplateTitle') : t('calendar.newEventTitle')}</h2>
+            </div></div>
 
+            <div className="rc-drawer-body rc-dc">
             {pendingTemplateItems && (
               <div style={{ background:'rgba(79,195,247,0.08)', border:'1px solid rgba(79,195,247,0.2)', borderRadius:8, padding:'8px 12px', marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ color:'var(--blue)' }}><IconCheckSm /></span>
@@ -155,6 +167,8 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
               <EventFormFields form={form} setForm={setForm} idp="cef" teamId={teamId} today={today} futureDates={futureDates}
                 showType={!pendingTemplateItems || allowTypeChoice} showRecurrence useRange />
             </div>
+            </div>
+            <div className="rc-drawer-foot rc-dc">
             <button onClick={saveEvent} className="btn btn-primary btn-full" style={{ marginTop:20 }}
               disabled={saving || !form.name.trim() || !form.date}>
               {saving ? t('common.saving')
@@ -162,6 +176,7 @@ export default function CreateEventFlow({ open, onClose, initialDate, skipChoice
                 : futureDates.length > 0 ? t('events.createMultiple', { count: futureDates.length + 1 })
                 : t('calendar.createEvent')}
             </button>
+            </div>
           </div>
         </div>
   )

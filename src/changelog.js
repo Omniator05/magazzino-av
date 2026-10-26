@@ -7,6 +7,31 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-29',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Magazzino su computer: la scheda oggetto e i moduli (nuovo oggetto, kit, modifica) si aprono in una colonna a destra, larga fino a due terzi dello schermo. Un clic fuori la chiude; se hai cambiato qualcosa chiede "Salvare le modifiche?". Lo storico e il controllo disponibilità (Da / A) stanno nella colonna',
+        'Stessa colonna, con la stessa richiesta di salvataggio, per nuovo utente, nuovo evento, modifica evento e task',
+        'Task: card compatte con la casella per completare, animazione della spunta, e sotto "Completata da …" con data e ora; su telefono si tocca la card per modificare, su computer c\'è il menu ⋮',
+        'Attività di oggi con a chi sono assegnate nella home dei magazzinieri e nella postazione, con il bottone Completa; alla postazione c\'è anche un "din" di conferma',
+        'Scheda utente: puoi cambiare l\'email di accesso. Il creatore della squadra può nominare altri admin come creatori',
+        'Tornando indietro nelle pagine si riparte da dove si era; aprendo una pagina nuova si parte dall\'alto',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Warehouse on desktop: the item card and forms (new item, kit, edit) open in a right-hand column up to two thirds of the screen wide. Click outside to close it; if you changed something it asks "Save your changes?". History and the availability check (From / To) live in the column',
+        'The same column, with the same save prompt, for new user, new event, edit event and tasks',
+        'Tasks: compact cards with a checkbox, a drawn check animation, and "Completed by …" with date and time; on phones tap the card to edit, on desktop there is a ⋮ menu',
+        "Today's tasks with who they're assigned to on the warehouse staff home and at the station, with a Complete button; the station also plays a confirmation \"ding\"",
+        "User card: you can change the sign-in email. The team creator can appoint other admins as creators",
+        'Going back through pages returns you to where you were; opening a new page starts at the top',
+      ],
+    },
+  },
+  {
     version: '2026-10-28',
     it: {
       title: 'Novità di oggi',

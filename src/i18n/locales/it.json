@@ -499,11 +499,15 @@
     "warehousePosition": "Posizione magazzino",
     "brandModelLabel": "Marca/Modello",
     "nameFieldLabel": "Nome",
+    "historySection": "Storico",
     "historyPageTitle": "Dettagli",
     "whereItIs": "Dove si trova",
     "whereItIsOutNow": "{{name}}{{extra}}",
     "whereItIsOutNowMore": " e altri {{count}}",
     "whereItIsLastOut": "{{name}} · {{date}}",
+    "whereItIsOutLists": "{{count}} liste di carico",
+    "whereItIsInWarehouse": "In magazzino",
+    "notesInline": "Note:",
     "whereItIsNever": "Sempre in magazzino",
     "seeFullHistory": "Vedi storia completa",
     "noHistoryAvailable": "Nessuno storico disponibile per questo oggetto.",
@@ -511,6 +515,8 @@
     "historyItemNotFoundTitle": "Oggetto non trovato",
     "tabEvents": "Eventi ({{count}})",
     "tabActivity": "Attività ({{count}})",
+    "availabilityFrom": "Da",
+    "availabilityTo": "A",
     "availabilityCheckTitle": "Controlla disponibilità",
     "availabilityCheckPeriodPlaceholder": "Seleziona periodo",
     "availabilityCheckFree": "{{free}} disponibili in queste date",
@@ -1201,6 +1207,8 @@
     "loginEmailInUse": "Questa email è già usata da un altro account.",
     "loginNoAccount": "Questo utente non ha un account di accesso.",
     "loginSwitchError": "Non sono riuscito a cambiare l'accesso. Riprova.",
+    "loginChangeHint": "Se l'email non è quella giusta (o è inventata) scrivi quella vera: da subito entra con questa e riceve su questa le email, anche per reimpostare la password.",
+    "loginChangeButton": "Cambia email",
     "loginEmailBadge": "Entra con l'email"
   },
   "events": {
@@ -1493,6 +1501,9 @@
     "openLinkedList": "Apri la lista di carico"
   },
   "tasks": {
+    "menuLabel": "Azioni",
+    "menuEdit": "Modifica",
+    "menuDelete": "Elimina",
     "title": "Task",
     "newButton": "+ Task",
     "priorityHigh": "Alta",
@@ -1532,7 +1543,7 @@
     "createTask": "Crea task",
     "addTask": "Aggiungi task",
     "allAssignee": "Tutti",
-    "createdBy": "📝 da {{name}}",
+    "createdBy": "da {{name}}",
     "confirmDeleteTitle": "Elimina task",
     "confirmDeleteMessage": "Eliminare questa task?",
     "confirmDeleteLabel": "Elimina",
@@ -2160,5 +2171,11 @@
     "reopen": "Riapri",
     "onlyAssigned": "Solo chi è assegnato può completarla",
     "onlyAssignedMsg": "Questa attività la può completare solo chi è assegnato."
+  },
+  "drawer": {
+    "unsavedTitle": "Salvare le modifiche?",
+    "unsavedMessage": "Hai cambiato qualcosa. Se esci senza salvare, le modifiche vanno perse. Per continuare a modificare tocca fuori da questa finestra.",
+    "save": "Salva",
+    "discard": "Non salvare"
   }
 }

@@ -23,8 +23,10 @@ export default function ActivityCard({ act, meId, onToggle, onOpenList, linkedEv
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: large ? 16 : 15, color: 'var(--c-ink)', textDecoration: act.done ? 'line-through' : 'none', minWidth: 0, overflowWrap: 'anywhere' }}>{act.label || t('staffTimeline.untitledTask')}</p>
-            <span style={{ background: act.done ? 'rgba(47,158,91,0.14)' : 'rgba(230,57,70,0.12)', color: accent, borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 800, flexShrink: 0, textTransform: 'uppercase' }}>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: large ? 16 : 15, minWidth: 0, overflowWrap: 'anywhere' }}>
+              <span className="tk-title" data-done={act.done ? 1 : 0} style={{ color: act.done ? 'var(--c-ink3)' : 'var(--c-ink)' }}>{act.label || t('staffTimeline.untitledTask')}</span>
+            </p>
+            <span key={act.done ? 'd' : 'o'} className={act.done ? 'tk-fade' : undefined} style={{ background: act.done ? 'rgba(47,158,91,0.14)' : 'rgba(230,57,70,0.12)', color: accent, borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 800, flexShrink: 0, textTransform: 'uppercase' }}>
               {act.done ? t('activities.doneTag') : t('workerHome.taskTag')}
             </span>
           </div>
@@ -52,9 +54,9 @@ export default function ActivityCard({ act, meId, onToggle, onOpenList, linkedEv
       )}
 
       {act.done ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+        <div className="tk-fade" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: '#2f9e5b', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Check size={14} /> {t('activities.doneBy', { name: act.doneByName || t('common.unknown') })}{doneAt ? ` · ${doneAt}` : ''}
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path className="tk-draw" d="M5 12.5l4.5 4.5L19 7" pathLength="1" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" /></svg> {t('activities.doneBy', { name: act.doneByName || t('common.unknown') })}{doneAt ? ` · ${doneAt}` : ''}
           </p>
           {onToggle && canAct && (
             <button type="button" className="btn-no-anim" onClick={() => onToggle(act, false)}

@@ -14,6 +14,8 @@ import { notifyTeamPush } from '../utils/pushNotifications'
 import JSZip from 'jszip'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useModalDrag } from '../hooks/useModalDrag'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
+import ItemHistoryPanel from '../components/ItemHistoryPanel'
 import { useCenteredModal } from '../hooks/useCenteredModal'
 import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download, Plus, ChevronRight } from '../components/Icon'
 import FabButton from '../components/FabButton'
@@ -185,11 +187,33 @@ export default function Inventory() {
     }, 380)
     return () => clearTimeout(id)
   }, [scrollToSection, showModal])
-  const myDrag      = useModalDrag(() => setShowModal(false))
+  // Modifiche non salvate: se non è stato toccato nulla un clic fuori dalla colonna la chiude subito, altrimenti
+  // compare "Salvare le modifiche?" (vedi hooks/useUnsavedGuard.js). Si confronta il modulo con una fotografia
+  // scattata all'apertura (formBase) o, per i kit, quando la colonna si apre.
+  const formBase = useRef('')
+  const kitEditBase = useRef('')
+  const kitNewBase = useRef('')
+  const itemGuard = useUnsavedGuard(() => showModal && JSON.stringify(form) !== formBase.current)
+  const kitEditGuard = useUnsavedGuard(() => showKitEditModal && JSON.stringify([kitForm, kitEditComponents, kitEditInstances]) !== kitEditBase.current)
+  const kitNewGuard = useUnsavedGuard(() => showKitModal && JSON.stringify([kitForm, kitComponents]) !== kitNewBase.current)
+  const myDrag      = useModalDrag(() => setShowModal(false), itemGuard.guard)
   const detailDrag  = useModalDrag(() => setShowDetail(null))
   const addMenuDrag = useModalDrag(() => setShowAddMenu(false))
-  const kitEditDrag = useModalDrag(() => setShowKitEditModal(false))
-  const kitDrag     = useModalDrag(() => setShowKitModal(false))
+  const kitEditDrag = useModalDrag(() => setShowKitEditModal(false), kitEditGuard.guard)
+  const kitDrag     = useModalDrag(() => setShowKitModal(false), kitNewGuard.guard)
+  itemGuard.attach(myDrag); kitEditGuard.attach(kitEditDrag); kitNewGuard.attach(kitDrag)
+  useEffect(() => { if (showKitEditModal) kitEditBase.current = JSON.stringify([kitForm, kitEditComponents, kitEditInstances]) }, [showKitEditModal])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (showKitModal) kitNewBase.current = JSON.stringify([kitForm, kitComponents]) }, [showKitModal])   // eslint-disable-line react-hooks/exhaustive-deps
+  // Computer con il mouse: lo storico sta dentro la colonna della scheda oggetto invece che in un'altra pagina
+  const [desktopDrawer, setDesktopDrawer] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 900px) and (pointer: fine)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia?.('(min-width: 900px) and (pointer: fine)')
+    if (!mq) return
+    const on = () => setDesktopDrawer(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  const historyRef = useRef(null)
   const importModal = useCenteredModal(() => setShowImportModal(false))
   useModalScrollLock(showModal || showAddMenu || showKitModal || showKitEditModal || !!showDetail || showPrintPopup || showStatusMenu || showImportModal)
   // Kit form: nome + componenti
@@ -376,7 +400,7 @@ export default function Inventory() {
     return true
   }
 
-  const openAdd = () => { setSelected(null); setForm(emptyItemForm()); setLinkedSearch(''); setModalSectionToggle({}); setShowModal(true) }
+  const openAdd = () => { const f = emptyItemForm(); formBase.current = JSON.stringify(f); setSelected(null); setForm(f); setLinkedSearch(''); setModalSectionToggle({}); setShowModal(true) }
   const openEdit = (item, focusSection = null) => {
     if (item.isBundle) {
       // Kit — apri il builder dedicato
@@ -388,7 +412,8 @@ export default function Inventory() {
       setKitLinkedSearch('')
       setShowKitEditModal(true)
     } else {
-      setSelected(item); setForm(itemToForm(item)); setLinkedSearch(''); setModalSectionToggle(focusSection ? { [focusSection]: true } : {}); setScrollToSection(focusSection); setShowModal(true)
+      const f = itemToForm(item); formBase.current = JSON.stringify(f)
+      setSelected(item); setForm(f); setLinkedSearch(''); setModalSectionToggle(focusSection ? { [focusSection]: true } : {}); setScrollToSection(focusSection); setShowModal(true)
     }
   }
 
@@ -1047,24 +1072,26 @@ export default function Inventory() {
         // colonna del Calendario): intestazione sempre visibile, contenuto
         // dentro la scheda quando è aperta.
         const section = (key, label, open, count, body) => (
-          <div id={`rc-section-${key}`} style={{ border:'1px solid var(--c-line)', borderRadius:14, background:'var(--c-alt)', overflow:'hidden' }}>
-            <button type="button" className="btn-no-anim" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
+          <div id={`rc-section-${key}`} className="rc-acc" style={{ border:'1px solid var(--c-line)', borderRadius:14, background:'var(--c-alt)', overflow:'hidden' }}>
+            <button type="button" className="btn-no-anim rc-acc-head" onClick={() => setModalSectionToggle(s => ({ ...s, [key]: !open }))}
               aria-expanded={open}
               style={{ width:'100%', padding:'13px 14px', background:'transparent', display:'flex', alignItems:'center', gap:8, textAlign:'left', borderBottom: open ? '1px solid var(--c-line)' : 'none' }}>
               <span style={{ fontSize:12.5, fontWeight:800, color:'var(--c-ink)', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</span>
               {count > 0 && <span style={{ fontSize:11, fontWeight:800, color:'var(--c-ink2)', background:'var(--c-fill)', borderRadius:20, padding:'1px 8px' }}>{count}</span>}
               <span style={{ marginLeft:'auto', color:'var(--c-ink3)', display:'flex', transform: open ? 'rotate(90deg)' : 'none', transition:'transform 0.15s ease' }}><ChevronRight size={14} /></span>
             </button>
-            {open && <div style={{ padding:'14px 14px 2px' }}>{body}</div>}
+            {open && <div className="rc-acc-body" style={{ padding:'14px 14px 2px' }}>{body}</div>}
           </div>
         )
         return (
-        <div className={`modal-overlay${myDrag.closing ? ' closing' : ''}`} onClick={myDrag.onOverlayClick}>
-          <div className={`modal rc-sheet${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
-            <button className="close-btn" onClick={myDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
+        <div className={`modal-overlay rc-drawer-overlay${myDrag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) myDrag.close() }}>
+          <div className={`modal rc-sheet rc-drawer${myDrag.jiggling ? ' modal-jiggle' : ''}${myDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...myDrag.props}>
+            <div className="rc-drawer-head rc-dc"><div className="rc-drawer-titlebar rc-dc">
+              <button className="close-btn" onClick={myDrag.close} aria-label={t("common.close")}>✕</button>
+              <h2>{selected ? t('inventory.editItemTitle') : t('inventory.newItemTitle')}</h2>
+            </div></div>
 
-            <div>
+            <div className="rc-drawer-body rc-dc rc-cols">
               <div className="form-group"><label>{t('inventory.nameLabel')}</label><input value={form.name} onChange={e => setForm({...form,name:e.target.value})} placeholder={t('inventory.namePlaceholder')} /></div>
               <div className="form-group"><label>{t('inventory.categoryLabel')}</label>
                 <Picker
@@ -1116,7 +1143,6 @@ export default function Inventory() {
                   {(form.minStock||0) > 0 && <p style={{ color:'var(--c-ink2)', fontSize:12, marginTop:8 }}>{t('inventory.minStockHint', { count: form.minStock, unit: t(`inventory.unitShort_${form.consumableUnit || 'pezzi'}`) })}</p>}
                 </div>
               )}
-            </div>
 
             <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:8 }}>
               {section('issues', t('inventory.issuesSectionTitle'), issuesOpen, issuesCount, (
@@ -1181,10 +1207,11 @@ export default function Inventory() {
                 </div>
               ))}
             </div>
+            </div>
 
-            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+            <div className="rc-drawer-foot" style={{ display:'flex', gap:10, marginTop:20 }}>
               {selected && <button onClick={() => { setShowModal(false); deleteItem(selected) }} className="btn btn-red" style={{ flex:1 }}>{t('inventory.delete')}</button>}
-              <SaveButton onSave={saveItem} onDone={myDrag.close} onError={myDrag.triggerJiggle} className="btn btn-primary" style={{ flex:2 }}><Save size={16} /> {t('inventory.save')}</SaveButton>
+              <SaveButton onSave={saveItem} onDone={() => { itemGuard.skip(); myDrag.close() }} onError={myDrag.triggerJiggle} className="btn btn-primary" style={{ flex:2 }}><Save size={16} /> {t('inventory.save')}</SaveButton>
             </div>
           </div>
         </div>
@@ -1197,28 +1224,31 @@ export default function Inventory() {
           dietro un tap sulla disponibilità, in un pannello separato). */}
       {showDetail && (() => {
         const outCount = (showDetail.totalQty||0) - (showDetail.availableQty||0) - (showDetail.brokenQty||0)
-        // L'ultimo evento (per data) in cui l'oggetto risulta stato caricato,
-        // a prescindere dal fatto che sia già rientrato — usato per "Dove si
-        // trova" quando non è attualmente fuori da nessuna parte.
-        const lastOutEvent = detailEventHistory.find(ev => (ev.items || []).some(i => matchesDetailItem(i) && i.loaded))
-        const hasFullHistory = detailEventHistory.length > 0 || itemActivityLog.length > 0
         const row = (i) => ({ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14, padding:'12px 16px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' })
         const rowLabel = { color:'var(--text2)', fontSize:13, flexShrink:0 }
         const rowValue = { fontWeight:600, fontSize:13, color:'var(--text)', textAlign:'right' }
         let r = 0
+        const Where = 'button'
         return (
-        <div className={`modal-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={detailDrag.onOverlayClick}>
-          <div className={`modal rc-sheet${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
-            <button className="close-btn" onClick={detailDrag.close} aria-label={t("common.close")}>✕</button>
+        <div className={`modal-overlay rc-drawer-overlay${detailDrag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) detailDrag.close() }}>
+          <div className={`modal rc-sheet rc-drawer${detailDrag.jiggling ? ' modal-jiggle' : ''}${detailDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...detailDrag.props}>
+            <div className="rc-drawer-head rc-dc"><div className="rc-drawer-titlebar rc-dc">
+              <button className="close-btn" onClick={detailDrag.close} aria-label={t("common.close")}>✕</button>
 
-            {/* ── Titolo documento ── */}
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-              <span style={{ fontSize:26, flexShrink:0 }}>{ICONS[showDetail.category] || '📦'}</span>
-              <h2 style={{ margin:0, fontSize:19 }}>{showDetail.name}</h2>
-            </div>
+              {/* ── Titolo documento ── */}
+              <div className="rc-drawer-titleblock" style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                <span className="rc-emoji-phone" style={{ fontSize:26, flexShrink:0 }}>{ICONS[showDetail.category] || '📦'}</span>
+                <div style={{ minWidth:0 }}>
+                  <h2 style={{ margin:0, fontSize:19 }}>{showDetail.name}</h2>
+                  {/* Computer: la categoria sotto il nome (sul telefono c'è l'icona accanto) */}
+                  <p className="rc-sub-desktop">{showDetail.category}{showDetail.isBundle ? ' · Kit' : ''}</p>
+                </div>
+              </div>
+            </div></div>
 
+            <div className="rc-drawer-body rc-dc">
             {/* ── Scheda: una riga per campo, come un documento ── */}
-            <div style={{ background:'var(--c-alt)', border:'1px solid var(--c-line)', borderRadius:16, overflow:'hidden', marginBottom:14 }}>
+            <div className="rc-detail-card" style={{ background:'var(--c-alt)', border:'1px solid var(--c-line)', borderRadius:16, overflow:'hidden', marginBottom:14 }}>
               {(showDetail.brand || showDetail.model) && (
                 <div style={row(r++)}>
                   <span style={rowLabel}>{t('inventory.brandModelLabel')}</span>
@@ -1266,7 +1296,7 @@ export default function Inventory() {
                 </div>
               )}
               {getLinkedItems(showDetail).length > 0 && (
-                <div style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:6 }}>
+                <div className="rc-span" style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:6 }}>
                   <span style={rowLabel}>{t('inventory.linkedAutoAddLabel')}</span>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
                     {getLinkedItems(showDetail).map(l => {
@@ -1281,7 +1311,7 @@ export default function Inventory() {
                   </div>
                 </div>
               )}
-              <div style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:8 }}>
+              <div className="rc-span" style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:8 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14 }}>
                   <span style={rowLabel}>{t('inventory.detailAvailable')}</span>
                   <span style={rowValue}>
@@ -1299,9 +1329,13 @@ export default function Inventory() {
                   )}
                 </div>
                 <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} {t('inventory.available')}</span>
+                  <span style={{ fontSize:12, color:'var(--green)' }}>● {showDetail.availableQty} {t('inventory.available')}{desktopDrawer && outCount === 0 && detailEvents.length === 0 ? ` · ${t('inventory.whereItIsInWarehouse')}` : ''}</span>
                   {outCount > 0 && (
-                    <span style={{ fontSize:12, color:'var(--accent2)' }}>● {outCount} {t('inventory.out')}</span>
+                    <span style={{ fontSize:12, color:'var(--accent2)' }} title={detailEvents.map(e => e.name).join('\n') || undefined}>
+                      ● {outCount} {t('inventory.out')}
+                      {/* Computer: dove sono usciti, nella stessa riga (una lista = il suo titolo, più liste = quante) */}
+                      {desktopDrawer && detailEvents.length > 0 && ` · ${detailEvents.length === 1 ? detailEvents[0].name : t('inventory.whereItIsOutLists', { count: detailEvents.length })}`}
+                    </span>
                   )}
                   {showDetail.brokenQty > 0 && (
                     <span style={{ fontSize:12, color:'var(--red)' }}>● {brokenText(showDetail, t)}</span>
@@ -1311,25 +1345,27 @@ export default function Inventory() {
                   )}
                 </div>
               </div>
-              {hasFullHistory ? (
-                <button onClick={() => navigate(`/inventory/${showDetail.id}/history`)} style={{ ...row(r++), width:'100%', textAlign:'left', cursor:'pointer' }}>
-                  <span style={rowLabel}>{t('inventory.whereItIs')}</span>
-                  <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={rowValue}>
-                      {detailEvents.length > 0
-                        ? t('inventory.whereItIsOutNow', { name: detailEvents[0].name, extra: detailEvents.length > 1 ? t('inventory.whereItIsOutNowMore', { count: detailEvents.length - 1 }) : '' })
-                        : lastOutEvent
-                        ? t('inventory.whereItIsLastOut', { name: lastOutEvent.name, date: formatDate(lastOutEvent.date + 'T12:00:00', { day:'numeric', month:'short' }, i18n.language) })
-                        : t('inventory.whereItIsNever')
-                      }
-                    </span>
-                    <span style={{ color:'var(--text2)', flexShrink:0 }}>→</span>
+              {/* Sempre cliccabile (anche se l'oggetto non è mai uscito): la pagina dello storico ha il suo stato vuoto */}
+              {/* Telefono: bottone verso la pagina dello storico. Computer: la riga non c'è, dove si trova l'oggetto sta nella legenda della disponibilità qui sopra e lo storico è in fondo alla colonna. */}
+              {!desktopDrawer && <Where className="rc-span" onClick={() => navigate(`/inventory/${showDetail.id}/history`)}
+                style={{ ...row(r++), width:'100%', textAlign:'left', cursor:'pointer' }}>
+                <span style={rowLabel}>{t('inventory.whereItIs')}</span>
+                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={rowValue}>
+                    {/* Basta che ne esca anche solo 1 pezzo: compare il titolo della lista di carico (o delle liste, se sono più d'una). Altrimenti è in magazzino. */}
+                    {detailEvents.length > 0
+                      ? t('inventory.whereItIsOutNow', { name: detailEvents[0].name, extra: detailEvents.length > 1 ? t('inventory.whereItIsOutNowMore', { count: detailEvents.length - 1 }) : '' })
+                      : t('inventory.whereItIsInWarehouse')
+                    }
                   </span>
-                </button>
-              ) : (
-                <div style={row(r++)}>
-                  <span style={rowLabel}>{t('inventory.whereItIs')}</span>
-                  <span style={rowValue}>{t('inventory.whereItIsNever')}</span>
+                  <span style={{ color:'var(--text2)', flexShrink:0 }}>→</span>
+                </span>
+              </Where>}
+              {/* Note: come le altre righe, con il filo sopra e sotto */}
+              {showDetail.notes && (
+                <div className="rc-span rc-notes" style={{ ...row(r++), flexDirection:'column', alignItems:'stretch', gap:4 }}>
+                  <span style={rowLabel}>{t('inventory.notesInline')}</span>
+                  <span style={{ ...rowValue, textAlign:'left', fontWeight:500, lineHeight:1.5, whiteSpace:'pre-wrap', overflowWrap:'anywhere' }}>{showDetail.notes}</span>
                 </div>
               )}
             </div>
@@ -1391,11 +1427,20 @@ export default function Inventory() {
                 <Wrench size={15} /> {t('inventory.repairOneButton')}
               </button>
             )}
-            {showDetail.notes && <p style={{ color:'var(--c-ink2)', fontSize:13, marginBottom:14, padding:'10px 12px', background:'var(--c-alt)', border:'1px solid var(--c-line)', borderRadius:10 }}>{showDetail.notes}</p>}
+
+            {/* Computer: storico e controllo disponibilità direttamente qui, sotto le informazioni (sul telefono
+                "Dove si trova" apre la pagina dedicata) */}
+            {desktopDrawer && (
+              <div ref={historyRef} style={{ scrollMarginTop:8, marginTop:6 }}>
+                <ItemHistoryPanel itemId={showDetail.id} embedded />
+              </div>
+            )}
+
+            </div>
 
             {/* Tre azioni sempre su una riga (anche da telefono): etichetta,
                 menu rapido Segnala (rotto / difetto / rientro), modifica. */}
-            <div style={{ display:'grid', gridTemplateColumns: showDetail.isBundle ? '1fr 1fr' : '1fr 1fr 1fr', gap:8 }}>
+            <div className="rc-drawer-foot" style={{ display:'grid', gridTemplateColumns: showDetail.isBundle ? '1fr 1fr' : '1fr 1fr 1fr', gap:8 }}>
               <button
                 onClick={() => {
                   const display = getCodeDisplay(team)
@@ -1709,24 +1754,30 @@ export default function Inventory() {
 
       {/* Menu scelta: Oggetto o Kit */}
       {showAddMenu && (
-        <div className={`modal-overlay${addMenuDrag.closing ? ' closing' : ''}`} onClick={addMenuDrag.onOverlayClick}>
-          <div className={`modal rc-sheet${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
-            <button className="close-btn" onClick={addMenuDrag.close} aria-label={t("common.close")}>✕</button>
-            <h2>{t('inventory.addMenuTitle')}</h2>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
+        <div className={`modal-overlay rc-drawer-overlay${addMenuDrag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) addMenuDrag.close() }}>
+          <div className={`modal rc-sheet rc-drawer rc-drawer-narrow${addMenuDrag.jiggling ? ' modal-jiggle' : ''}${addMenuDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...addMenuDrag.props}>
+            <div className="rc-drawer-head rc-dc"><div className="rc-drawer-titlebar rc-dc">
+              <button className="close-btn" onClick={addMenuDrag.close} aria-label={t("common.close")}>✕</button>
+              <h2>{t('inventory.addMenuTitle')}</h2>
+            </div></div>
+            <div className="rc-drawer-body rc-dc"><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
               <button onClick={() => { setShowAddMenu(false); openAdd() }}
-                style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <span style={{ color:'var(--text)' }}><Box size={34} /></span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>{t('inventory.newItemOption')}</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newItemOptionDesc')}</span>
+                className="rc-choice" style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                <span className="rc-choice-icon" style={{ color:'var(--text)' }}><Box size={34} /></span>
+                <span className="rc-choice-text rc-dc">
+                  <span className="rc-choice-title" style={{ fontWeight:700, fontSize:15, color:'var(--text)' }}>{t('inventory.newItemOption')}</span>
+                  <span className="rc-choice-desc" style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newItemOptionDesc')}</span>
+                </span>
               </button>
               <button onClick={() => { setShowAddMenu(false); setKitForm({name:'',location:'',qty:1,category:'Altro',linkedItems:[]}); setKitComponents([]); setKitSearch(''); setKitLinkedSearch(''); setShowKitModal(true) }}
-                style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <span style={{ color:'var(--accent2)' }}><Kit size={34} /></span>
-                <span style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>{t('inventory.newKitOption')}</span>
-                <span style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newKitOptionDesc')}</span>
+                className="rc-choice" style={{ background:'rgba(245,166,35,0.08)', border:'2px solid rgba(245,166,35,0.3)', borderRadius:16, padding:'24px 12px', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                <span className="rc-choice-icon" style={{ color:'var(--accent2)' }}><Kit size={34} /></span>
+                <span className="rc-choice-text rc-dc">
+                  <span className="rc-choice-title" style={{ fontWeight:700, fontSize:15, color:'var(--accent2)' }}>{t('inventory.newKitOption')}</span>
+                  <span className="rc-choice-desc" style={{ fontSize:12, color:'var(--text2)', textAlign:'center', lineHeight:1.4 }}>{t('inventory.newKitOptionDesc')}</span>
+                </span>
               </button>
-            </div>
+            </div></div>
           </div>
         </div>
       )}
@@ -1809,7 +1860,7 @@ export default function Inventory() {
                 await updateDoc(ref, { code: generateItemCode(ref.id) })
                 return true
               }}
-              onDone={kitDrag.close}
+              onDone={() => { kitNewGuard.skip(); kitDrag.close() }}
               onError={kitDrag.triggerJiggle}
               className="btn btn-primary btn-full"
               disabled={!kitForm.name.trim() || kitComponents.length === 0}
@@ -1846,11 +1897,13 @@ function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, set
     .filter(i => !search || i.name?.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className={`modal-overlay${drag.closing ? ' closing' : ''}`} onClick={drag.onOverlayClick}>
-      <div className={`modal rc-sheet${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...drag.props}>
-        <div style={{ padding:'20px 20px 0', flexShrink:0 }}>
-          <button className="close-btn" onClick={drag.close} aria-label={t('common.close')}>✕</button>
-          <h2 style={{ margin:'0 0 12px', display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {isEdit ? t('inventory.editKitTitle') : t('inventory.newKitTitle')}</h2>
+    <div className={`modal-overlay rc-drawer-overlay${drag.closing ? ' closing' : ''}`} onClick={e => { if (e.target === e.currentTarget) drag.close() }}>
+      <div className={`modal rc-sheet rc-drawer${drag.jiggling ? ' modal-jiggle' : ''}${drag.closing ? ' closing' : ''}`} style={{ position:'relative', maxHeight:'92dvh', display:'flex', flexDirection:'column', padding:0 }} {...drag.props}>
+        <div className="rc-drawer-head" style={{ padding:'20px 20px 0', flexShrink:0 }}>
+          <div className="rc-drawer-titlebar rc-dc">
+            <button className="close-btn" onClick={drag.close} aria-label={t('common.close')}>✕</button>
+            <h2 style={{ margin:'0 0 12px', display:'flex', alignItems:'center', gap:8 }}><Kit size={20} /> {isEdit ? t('inventory.editKitTitle') : t('inventory.newKitTitle')}</h2>
+          </div>
           <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} aria-label={t('inventory.nameLabel')}
             placeholder={isEdit ? t('inventory.kitNamePlaceholder') : t('inventory.kitNamePlaceholderNew')} style={{ fontWeight:600, fontSize:16, marginBottom:12 }} />
           <div role="tablist" style={{ display:'flex', gap:3, padding:3, borderRadius:12, background:'var(--c-fill)' }}>
@@ -1869,7 +1922,7 @@ function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, set
           </div>
         </div>
 
-        <div style={{ flex:1, overflowY:'auto', minHeight:0, padding:'16px 16px 18px' }}>
+        <div className="rc-drawer-body" style={{ flex:1, overflowY:'auto', minHeight:0, padding:'16px 16px 18px' }}>
           {tab === 'content' && (
             <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
@@ -1900,7 +1953,7 @@ function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, set
                 {components.length === 0 ? (
                   <p style={{ margin:0, padding:'14px 12px', borderRadius:12, border:'1.5px dashed var(--c-dash)', color:'var(--c-ink2)', fontSize:13, textAlign:'center' }}>{t('inventory.kitNoComponents')}</p>
                 ) : (
-                  <div style={card}>
+                  <div className="rc-flatcard" style={card}>
                     {components.map((comp, i) => (
                       <div key={comp.itemId} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderTop: i > 0 ? '1px solid var(--c-line)' : 'none' }}>
                         <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:'var(--c-ink)', overflowWrap:'anywhere' }}>{comp.name}</span>
@@ -1999,7 +2052,7 @@ function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, set
           )}
         </div>
 
-        <div style={{ padding:'14px 16px', borderTop:'1px solid var(--c-line)', flexShrink:0, background:'var(--c-surface)' }}>{footer}</div>
+        <div className="rc-drawer-foot" style={{ padding:'14px 16px', borderTop:'1px solid var(--c-line)', flexShrink:0, background:'var(--c-surface)' }}>{footer}</div>
       </div>
     </div>
   )

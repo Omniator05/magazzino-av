@@ -9,7 +9,7 @@ import { sendEmail, loginChangedEmailHtml } from './_resend.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-async function setLoginEmail(req, res, { db, teamId, profile }) {
+async function setLoginEmail(req, res, { db, teamId, uid, profile }) {
   if (profile?.role !== 'admin') return res.status(403).json({ error: 'Solo un admin può cambiare l\'email di accesso' })
   const email = String(req.body?.email || '').trim().toLowerCase()
   const targetUid = String(req.body?.targetUid || '')
@@ -22,6 +22,11 @@ async function setLoginEmail(req, res, { db, teamId, profile }) {
   if (!target || target.teamId !== teamId) return res.status(404).json({ error: 'Utente non trovato' })
   // La postazione è un dispositivo (nome utente, niente email): resta com'è.
   if (target.isStation) return res.status(400).json({ error: 'La postazione entra con il nome utente', code: 'station' })
+  // Il profilo di un altro admin lo gestisce solo il creatore della squadra (vedi src/utils/teamOwner.js).
+  if (target.role === 'admin' && targetUid !== uid && !profile?.superAdmin) {
+    const team = (await db.collection('teams').doc(teamId).get()).data() || {}
+    if (team.createdByUid && team.createdByUid !== uid && !(team.ownerIds || []).includes(uid)) return res.status(403).json({ error: 'Solo il creatore della squadra può cambiare l\'accesso di un admin' })
+  }
 
   try {
     await getAdmin().auth().updateUser(targetUid, { email })

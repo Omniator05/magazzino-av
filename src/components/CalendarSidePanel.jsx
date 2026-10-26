@@ -383,14 +383,18 @@ export default function CalendarSidePanel({
                       Sotto al contenuto vero (z-index 1 contro 2), che ha pointerEvents:none
                       tranne sui controlli specifici (telefono/email/avatar/"Modifica"), così
                       il tap su un punto "vuoto" cade comunque qui. La modifica rapida
-                      dell'evento sta nella sigla "Modifica" in basso a destra. */}
+                      dell'evento sta nella sigla "Modifica" in alto a destra (lo stato della lista di carico è in basso a destra). */}
                   <Link to={`/events/${ev.id}`} aria-label={t('calendar.openEventLink')}
                     style={{ position: 'absolute', inset: 0, borderRadius: 12, cursor: 'pointer', zIndex: 1 }} />
 
                   <div style={{ position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-ink)' }}>{ev.name}</span>
-                      <span style={{ background: status.bg, color: status.color, fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0 }}>{status.label}</span>
+                      <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); readOnly ? onOpenEvent(ev) : onEditEvent(e, ev) }}
+                        aria-label={`${readOnly ? t('calendar.detailsTag') : t('common.edit')} · ${ev.name}`}
+                        style={{ pointerEvents: 'auto', flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>
+                        {readOnly ? t('calendar.detailsTag') : t('common.edit')}
+                      </button>
                     </div>
 
                     <div style={{ fontSize: 11, color: 'var(--c-ink2)', marginTop: 4 }}>
@@ -432,11 +436,7 @@ export default function CalendarSidePanel({
                           <PersonDot key={w.key} person={{ ...w, hours: w.hours || durationLabel }} className="rc-cal-avatar" style={{ pointerEvents: 'auto' }} />
                         ))}
                       </div>
-                      <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); readOnly ? onOpenEvent(ev) : onEditEvent(e, ev) }}
-                        aria-label={`${readOnly ? t('calendar.detailsTag') : t('common.edit')} · ${ev.name}`}
-                        style={{ pointerEvents: 'auto', flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>
-                        {readOnly ? t('calendar.detailsTag') : t('common.edit')}
-                      </button>
+                      <span style={{ background: status.bg, color: status.color, fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 7, whiteSpace: 'nowrap', flexShrink: 0 }}>{status.label}</span>
                     </div>
                   </div>
                 </div>
@@ -469,13 +469,15 @@ export default function CalendarSidePanel({
             {selectedDayTasks.map(tk => (
               <div key={tk.id} role="button" tabIndex={0} onClick={() => onOpenTask(tk)} onKeyDown={e => { if (e.key === 'Enter') onOpenTask(tk) }} className="rc-cal-card"
                 style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink)' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
-                  <span style={{ fontSize: 11, color: 'var(--c-ink2)' }}>{tk.startTime}–{tk.endTime}</span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink)' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
                   {!readOnly && onEditTask && (
                     <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); onEditTask(tk) }} aria-label={`${t('common.edit')} · ${tk.label || t('staffTimeline.untitledTask')}`}
                       style={{ flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>{t('common.edit')}</button>
                   )}
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ fontSize: 11, color: 'var(--c-ink2)' }}>{tk.startTime}–{tk.endTime}</span>
                 </div>
                 {/* Chi è assegnato all'attività: stessi pallini delle card degli eventi. */}
                 {(() => {

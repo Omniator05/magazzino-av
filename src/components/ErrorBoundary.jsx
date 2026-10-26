@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { isStaleChunkError, reloadForNewVersion } from '../utils/staleChunk'
 
 const SUPPORT_EMAIL = 'info@roadcase.it'
 
@@ -58,6 +59,8 @@ class Boundary extends Component {
   static getDerivedStateFromError(error) { return { error } }
   componentDidCatch(error, info) {
     console.error('Errore di pagina', error, info?.componentStack)
+    // Pezzo dell'app non più scaricabile dopo un aggiornamento: si ricarica da soli la versione nuova.
+    if (isStaleChunkError(error)) reloadForNewVersion()
     this.setState({ info })
   }
   componentDidUpdate(prev) {

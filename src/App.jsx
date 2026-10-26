@@ -1,8 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
 import { OperatorProvider } from './context/OperatorContext'
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react'
 // Pagine caricate on-demand (React.lazy), non tutte insieme in un unico
 // bundle da 900KB: prima ogni pagina — anche quelle che un dato utente non
 // aprirà mai (super admin, fatturazione, brasserie...) — veniva scaricata al
@@ -107,11 +107,42 @@ function GhostBanner() {
   )
 }
 
+/* Posizione di scorrimento di ogni schermata visitata (per location.key), per ripristinarla con "indietro" */
+const scrollByKey = new Map()
+
 /* Wrapper che riattiva l'animazione ad ogni cambio di route */
 function AnimatedPage({ children }) {
   const { pathname } = useLocation()
   const [key, setKey] = useState(pathname)
   const prev = useRef(pathname)
+
+  // Cambiando pagina si riparte sempre dall'alto: il browser tiene la posizione di scorrimento della finestra, e
+  // arrivando in una pagina che non scorre (come il Calendario su computer) restava "a metà" senza modo di tornare su.
+  // Con "indietro" del browser (o il tasto Indietro dell'app) si torna invece al punto dove si era: si ricorda la
+  // posizione di ogni schermata (per `location.key`) e la si rimette, riprovando per qualche istante finché la
+  // pagina (caricata a pezzi) non è abbastanza alta.
+  const { key: locKey } = useLocation()
+  const navType = useNavigationType()
+  const keyRef = useRef(locKey)
+  const scrolledFor = useRef(pathname)
+  useEffect(() => {
+    const onScroll = () => { scrollByKey.set(keyRef.current, window.scrollY) }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  useLayoutEffect(() => {
+    keyRef.current = locKey
+    if (scrolledFor.current === pathname) return
+    scrolledFor.current = pathname
+    const saved = navType === 'POP' ? scrollByKey.get(locKey) : undefined
+    if (!saved) { window.scrollTo(0, 0); return }
+    let tries = 0
+    const restore = () => {
+      window.scrollTo(0, saved)
+      if (Math.abs(window.scrollY - saved) > 2 && tries++ < 20) requestAnimationFrame(restore)
+    }
+    restore()
+  }, [pathname, locKey, navType])
 
   useEffect(() => {
     // Ignora cambio da/verso /login (gestito dall'overlay PageTransition)

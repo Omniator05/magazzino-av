@@ -1339,3 +1339,114 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
 @keyframes rowFlash { 0%, 55% { box-shadow: inset 0 0 0 100px rgba(34,197,94,0.16); } 100% { box-shadow: inset 0 0 0 100px rgba(34,197,94,0); } }
 .row-flash { animation: rowFlash 4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .row-flash { animation: none; } }
+
+/* Animazione di completamento (task e attività): la spunta e la linea sul titolo si disegnano piano */
+@keyframes tkFade { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
+.tk-row { animation: tkFade .35s ease both }
+.tk-fade { animation: tkFade .5s ease both }
+.tk-title { background-image: linear-gradient(currentColor, currentColor); background-repeat: no-repeat; background-position: 0 58%; background-size: 0% 2px; transition: background-size .6s ease .15s, color .4s ease }
+.tk-title[data-done="1"] { background-size: 100% 2px }
+.tk-box { transition: background-color .3s ease, border-color .3s ease }
+.tk-check { transition: stroke-dashoffset .5s ease .15s, opacity .2s ease }
+@media (prefers-reduced-motion: reduce) { .tk-row, .tk-fade { animation: none } .tk-title, .tk-box, .tk-check { transition: none !important } }
+@keyframes tkDraw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+.tk-draw { stroke-dasharray: 1; animation: tkDraw .5s ease .15s both }
+@media (prefers-reduced-motion: reduce) { .tk-draw { animation: none } }
+
+/* ── Colonna laterale (computer) ──────────────────────────────────────────────
+   Su computer con il mouse i fogli grandi (.modal.rc-drawer dentro .rc-drawer-overlay) diventano una colonna che
+   entra da destra: la lista resta visibile a sinistra, scurita e sfocata. Su telefono e tablet (dito) restano i fogli
+   dal basso di sempre. Si attiva aggiungendo le due classi al modal; il resto (chiusura, Esc, jiggle) è invariato. */
+@keyframes drawerIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes drawerOut { from { transform: translateX(0); } to { transform: translateX(105%); } }
+/* sfondo scuro e sfocatura svaniscono da soli: la colonna, figlia dell'overlay, deve restare piena mentre esce a destra */
+@keyframes drawerOverlayOut { from { background-color: rgba(20,20,18,0.30); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); } to { background-color: rgba(20,20,18,0); backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); } }
+/* Contenitori "invisibili" su telefono: servono solo alla colonna (testata, corpo, piede). */
+.rc-dc, .rc-drawer-titlebar { display: contents; }
+@media (min-width: 900px) and (pointer: fine) {
+  .modal-overlay.rc-drawer-overlay { align-items: stretch; justify-content: flex-end; background: rgba(20,20,18,0.30); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+  /* Stile della colonna del Calendario: fondo bianco, filo a sinistra, testata, corpo che scorre, piede con le azioni */
+  [data-theme] .modal.rc-sheet.rc-drawer, [data-theme] .modal.rc-drawer, .modal.rc-drawer {
+    width: min(66vw, 1040px); min-width: min(520px, 100vw); max-width: 1040px; height: 100dvh; max-height: 100dvh !important;
+    display: flex !important; flex-direction: column; overflow: hidden; padding: 0 !important;
+    background: var(--c-surface); border-radius: 0; border-top: none; border-left: 1px solid var(--c-line);
+    box-shadow: -10px 0 40px rgba(0,0,0,0.12);
+    animation: drawerIn 0.32s cubic-bezier(0.32,0.72,0,1);
+  }
+  .modal.rc-drawer::before { display: none; }
+  .rc-drawer .rc-dc { display: block; }
+  .rc-drawer .rc-drawer-head { padding: 0 28px !important; flex-shrink: 0; }
+  .rc-drawer .rc-drawer-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 12px; }
+  .rc-drawer .rc-drawer-titlebar h2 { margin: 0 !important; padding: 0; font-size: 15px; font-weight: 800; letter-spacing: 0; color: var(--c-ink); order: 1; min-width: 0; }
+  .rc-drawer .rc-drawer-titlebar .rc-drawer-titleblock { margin: 0 !important; order: 1; min-width: 0; }
+  .rc-drawer .rc-drawer-titlebar .rc-drawer-titleblock h2 { font-size: 16px !important; }
+  .rc-drawer .rc-drawer-titlebar .close-btn { position: static; order: 2; width: 28px; height: 28px; border-radius: 8px; background: var(--c-fill); color: var(--c-ink2); font-size: 15px; flex-shrink: 0; }
+  .rc-drawer .rc-drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 28px 24px !important; }
+  .rc-drawer .rc-drawer-foot { flex-shrink: 0; margin: 0 !important; padding: 14px 28px 22px !important; border-top: 1px solid var(--c-line); background: var(--c-surface); }
+  /* Campi come nel Calendario */
+  [data-theme] .modal.rc-drawer input:not([type="checkbox"]):not([type="radio"]),
+  [data-theme] .modal.rc-drawer textarea,
+  [data-theme] .modal.rc-drawer select { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 10px; font-size: 14px; padding: 10px 12px; }
+  [data-theme] .modal.rc-drawer input:not([type="checkbox"]):not([type="radio"]):focus,
+  [data-theme] .modal.rc-drawer textarea:focus { border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
+  .modal.rc-drawer .form-group label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px; color: var(--c-ink2); }
+  [data-theme] .modal.rc-drawer.closing, [data-theme] .modal.rc-sheet.rc-drawer.closing, .modal.rc-drawer.closing { animation: drawerOut 0.28s cubic-bezier(0.32,0.72,0,1) forwards; }
+  /* l'ombra e lo sfondo scuro si dissolvono mentre la colonna esce a destra */
+  .modal-overlay.rc-drawer-overlay.closing { animation: drawerOverlayOut 0.28s ease forwards; }
+  [data-theme] .modal.rc-drawer.modal-jiggle, [data-theme] .modal.rc-sheet.rc-drawer.modal-jiggle, .modal.rc-drawer.modal-jiggle { animation: drawerIn 0.32s cubic-bezier(0.32,0.72,0,1), modal-jiggle 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+}
+@media (prefers-reduced-motion: reduce) { .modal.rc-drawer, .modal.rc-drawer.closing { animation-duration: 0.01s !important; } }
+
+/* Scheda oggetto nella colonna (computer): titolo piccolo con la categoria sotto, poi le informazioni come righe
+   separate da fili, senza il riquadro grigio. Sul telefono resta com'era. */
+.rc-sub-desktop { display: none; }
+@media (min-width: 900px) and (pointer: fine) {
+  .rc-drawer .rc-emoji-phone { display: none; }
+  .rc-drawer .rc-sub-desktop { display: block; margin: 6px 0 0; font-size: 12.5px; font-weight: 600; color: var(--c-ink3); }
+  .rc-drawer .rc-drawer-titlebar .rc-drawer-titleblock h2 { font-size: 15px !important; }
+  .rc-drawer .rc-detail-card { background: transparent !important; border: none !important; border-radius: 0 !important; overflow: visible !important; margin: 0 0 18px !important; border-bottom: 1px solid var(--c-line) !important; }
+  .rc-drawer .rc-detail-card > * { border-top: 1px solid var(--c-line) !important; padding-left: 0 !important; padding-right: 0 !important; background: transparent; }
+  .rc-drawer .rc-detail-card > button:hover { background: var(--c-alt); }
+
+  /* La scelta Oggetto/Kit resta stretta: sono due tasti, non serve una colonna larga */
+  [data-theme] .modal.rc-sheet.rc-drawer.rc-drawer-narrow, .modal.rc-drawer.rc-drawer-narrow { width: min(480px, 100vw); min-width: 0; max-width: 480px; }
+  /* Colonna larga: i campi del modulo vanno su due colonne (testi lunghi e sezioni restano a tutta larghezza) */
+  .rc-drawer .rc-drawer-body.rc-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); column-gap: 24px; align-content: start; }
+  .rc-drawer .rc-drawer-body.rc-cols > :not(.form-group), .rc-drawer .rc-drawer-body.rc-cols > .form-group:has(textarea) { grid-column: 1 / -1; }
+  /* Scheda oggetto: le righe su due colonne; disponibilità, collegati e "dove si trova" a tutta larghezza */
+  .rc-drawer .rc-detail-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); column-gap: 0; }
+  /* i fili restano continui da un lato all'altro: lo spazio fra le due colonne è nel riempimento delle celle, non in un vuoto fra le colonne */
+  .rc-drawer .rc-detail-card > :not(.rc-span):nth-child(odd) { padding-right: 20px !important; }
+  .rc-drawer .rc-detail-card > :not(.rc-span):nth-child(even) { padding-left: 20px !important; }
+  /* se l'ultima riga normale resta da sola nella sua riga prende tutta la larghezza: nessun filo a metà */
+  .rc-drawer .rc-detail-card > :not(.rc-span):nth-child(odd):has(+ .rc-span) { grid-column: 1 / -1; padding-right: 0 !important; }
+  .rc-drawer .rc-detail-card > .rc-span { grid-column: 1 / -1; }
+  /* Storico e disponibilità dentro la colonna: sezioni piatte sul fondo della colonna, niente card con cornice */
+  .rc-hist-embed .rc-hist-avail, .rc-hist-embed .rc-hist-log { margin: 0 0 26px !important; background: transparent !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; overflow: visible !important; }
+  .rc-hist-embed .rc-hist-title { font-size: 11.5px !important; font-weight: 800 !important; text-transform: uppercase; letter-spacing: 0.06em; color: var(--c-ink3) !important; margin: 0 0 10px !important; }
+  .rc-hist-embed .rc-hist-row { background: transparent !important; border: none !important; border-top: 1px solid var(--c-line) !important; border-radius: 0 !important; padding: 12px 0 !important; }
+  .rc-hist-embed .rc-hist-row:hover { background: var(--c-alt) !important; }
+  .rc-hist-embed .rc-hist-log div:has(> .rc-hist-row) { gap: 0 !important; }
+  /* Sezioni a scomparsa del modulo oggetto: righe piatte con filo, non schede dentro la colonna */
+  .rc-drawer .rc-acc { border: none !important; border-top: 1px solid var(--c-line) !important; border-radius: 0 !important; background: transparent !important; overflow: visible !important; }
+  .rc-drawer .rc-acc-head { padding: 14px 0 !important; border-bottom: none !important; }
+  .rc-drawer .rc-acc-body { padding: 2px 0 8px !important; }
+  /* Kit: schede a sottolineatura e componenti come righe */
+  .rc-drawer [role="tablist"] { background: transparent !important; padding: 0 !important; border-radius: 0 !important; border-bottom: 1px solid var(--c-line); gap: 4px !important; }
+  .rc-drawer [role="tablist"] > button { border-radius: 0 !important; background: transparent !important; box-shadow: none !important; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .rc-drawer [role="tablist"] > button[aria-selected="true"] { border-bottom-color: var(--c-ink); }
+  .rc-drawer .rc-flatcard { background: transparent !important; border: none !important; border-top: 1px solid var(--c-line) !important; border-radius: 0 !important; overflow: visible !important; }
+  /* Scelta Oggetto / Kit: due righe invece di due grandi riquadri */
+  .rc-drawer-narrow .rc-drawer-body > div { grid-template-columns: 1fr !important; gap: 0 !important; margin-top: 0 !important; }
+  .rc-drawer .rc-choice { flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; text-align: left; gap: 16px !important; width: 100%; padding: 18px 4px !important; border: none !important; border-top: 1px solid var(--c-line) !important; border-radius: 0 !important; background: transparent !important; }
+  .rc-drawer .rc-choice:last-child { border-bottom: 1px solid var(--c-line) !important; }
+  .rc-drawer .rc-choice:hover { background: var(--c-alt) !important; }
+  .rc-drawer .rc-choice-icon { flex-shrink: 0; display: flex; }
+  .rc-drawer .rc-choice-text { display: flex !important; flex-direction: column; gap: 3px; min-width: 0; }
+  .rc-drawer .rc-choice-desc { text-align: left !important; }
+  .rc-drawer .rc-drawer-foot > .btn { margin-top: 0 !important; }
+  .rc-drawer .rc-drawer-foot.rc-dc { display: flex; flex-direction: row-reverse; gap: 10px; }
+  .rc-drawer .rc-drawer-foot.rc-dc > * { flex: 1; margin-top: 0 !important; }
+  .rc-hist-embed .rc-hist-tabs { gap: 4px; border-bottom: 1px solid var(--c-line) !important; }
+  .rc-hist-embed .rc-hist-log > div:last-child { padding: 14px 0 0 !important; }
+}

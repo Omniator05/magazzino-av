@@ -205,12 +205,18 @@ async function loginByUsername(req, res) {
       let authEmail
       try { authEmail = (await admin.auth().getUser(d.id)).email } catch { continue }
       if (!authEmail) continue
+      // Referer = il sito stesso: se la chiave web di Firebase è limitata ai "referrer" (come di solito), la richiesta
+      // dal server altrimenti verrebbe rifiutata e nessun nome utente funzionerebbe.
+      const origin = req.headers.origin || `https://${req.headers.host}`
       const check = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${WEB_API_KEY}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Referer: `${origin}/`, Origin: origin },
         body: JSON.stringify({ email: authEmail, password, returnSecureToken: false }),
       })
       if (check.ok) return res.status(200).json({ token: await admin.auth().createCustomToken(d.id) })
+      // Password sbagliata è normale (INVALID_PASSWORD / INVALID_LOGIN_CREDENTIALS); altri motivi sono un problema vero e si vedono nei log.
+      const why = (await check.json().catch(() => ({})))?.error?.message || `http-${check.status}`
+      if (!/INVALID_(PASSWORD|LOGIN_CREDENTIALS)|EMAIL_NOT_FOUND|USER_DISABLED/.test(why)) console.error('[send-email loginByUsername] Firebase ha rifiutato la verifica:', why)
     }
   } catch (e) {
     console.error('[send-email loginByUsername]', e.message)
