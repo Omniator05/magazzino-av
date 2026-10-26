@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
+import { useOperator } from '../context/OperatorContext'
 import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateUnitCode } from '../utils/generateCode'
@@ -124,6 +125,7 @@ export default function Inventory() {
   const { t, i18n } = useTranslation()
   const { user, teamId, team, profile, isOwner } = useAuth()
   const confirm = useConfirm()
+  const { operator } = useOperator()   // alla postazione: chi è collegato in quel momento (le aggiunte portano il suo nome)
   const navigate = useNavigate()
   const { state: navState, search: locationSearch } = useLocation()
   const [items, setItems] = useState([])
@@ -494,7 +496,7 @@ export default function Inventory() {
         name:form.name, category:form.category, totalQty:qty, availableQty:qty - broken, minStock:parseInt(form.minStock)||0,
         brokenQty:broken, brokenNote: broken > 0 ? (form.brokenNote || '').trim() : '', defectQty: Math.min(parseInt(form.defectQty)||0, qty), defectNote: (parseInt(form.defectQty)||0) > 0 ? (form.defectNote || '').trim() : '', issues: trimIssues(form.issues, broken, Math.min(parseInt(form.defectQty)||0, qty)), consumableUnit: form.category === 'Consumabili' ? form.consumableUnit : null,
         brand:form.brand, model:form.model, location:form.location, notes:form.notes, ...details, ...linkedItemsToFields(form.linkedItems),
-        deadlines:[], teamId, createdAt:serverTimestamp(), createdBy: user.uid
+        deadlines:[], teamId, createdAt:serverTimestamp(), createdBy: operator?.userId || user.uid
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
       if (form.deadlines.length > 0) {
@@ -639,7 +641,7 @@ export default function Inventory() {
       const ref = await addDoc(collection(db, 'items'), {
         name: it.name, category: it.category, totalQty: it.totalQty, availableQty: it.totalQty,
         minStock: 0, brokenQty: 0, brand: it.brand, model: it.model, location: it.location, notes: it.notes,
-        teamId, createdAt: serverTimestamp(), createdBy: user.uid,
+        teamId, createdAt: serverTimestamp(), createdBy: operator?.userId || user.uid,
       })
       await updateDoc(ref, { code: generateItemCode(ref.id) })
       setImportProgress(i + 1)
@@ -1855,7 +1857,7 @@ export default function Inventory() {
                   totalQty: kitQty, availableQty: kitQty,
                   instances: ensureInstanceList([], kitQty),
                   ...linkedItemsToFields(kitForm.linkedItems),
-                  teamId, createdAt: serverTimestamp(), createdBy: user.uid,
+                  teamId, createdAt: serverTimestamp(), createdBy: operator?.userId || user.uid,
                 })
                 await updateDoc(ref, { code: generateItemCode(ref.id) })
                 return true

@@ -39,7 +39,7 @@ export function OperatorProvider({ children }) {
     try {
       const r = await badgeLogin(code)
       // Stessa persona già dentro: resta lo stesso oggetto (così nessuno riparte), si rinnova solo il tempo.
-      setOperator(prev => (prev && prev.userId === r.userId ? prev : { userId: r.userId, name: r.name }))
+      setOperator(prev => (prev && prev.userId === r.userId ? prev : { userId: r.userId, name: r.name, canManageInventory: !!(r.canManageInventory || r.isAdmin) }))
       setPromptOpen(false)
       expiresRef.current = Date.now() + IDLE_MS
       setLoginError('')

@@ -104,7 +104,8 @@ async function loginWithBadge(req, res, { db, teamId, uid, profile }) {
     return res.status(403).json({ error: 'Utente non attivo', code: 'inactive' })
   }
   if (PIN_RE.test(pin)) await failRef.delete().catch(() => {})
-  return res.status(200).json({ userId: badge.userId, name: person.name || person.username || '' })
+  // Il ruolo e il permesso sul magazzino servono alla postazione per mostrare il magazzino completo a chi può modificarlo.
+  return res.status(200).json({ userId: badge.userId, name: person.name || person.username || '', isAdmin: person.role === 'admin', canManageInventory: !!person.canManageInventory })
 }
 
 // true se l'azione era "badge-*" e la risposta è già stata data.

@@ -14,10 +14,11 @@ import { todayStr } from '../utils/workHours'
 import { useOperator } from '../context/OperatorContext'
 import LogoutButton from '../components/LogoutButton'
 import ActivityCard from '../components/ActivityCard'
+import LabelDialog from '../components/LabelDialog'
 import { doneFeedback } from '../utils/feedback'
 import { groupActivities, activitiesForDay, setActivityDone, isAssignedTo } from '../utils/activities'
 import { isModuleEnabled } from '../utils/modules'
-import { Wrench, Warn, Pin, QrCode, ChevronRight, Unload, Check } from '../components/Icon'
+import { Wrench, Warn, Pin, QrCode, ChevronRight, Unload, Check, Download } from '../components/Icon'
 
 // Home della "Postazione magazzino" (account con isStation, vedi SettingsUsers.jsx):
 // pensata per un PC fisso in magazzino con un lettore USB. Il lettore "digita" il
@@ -59,6 +60,7 @@ export default function StationHome() {
   const [blocks, setBlocks] = useState([])      // assegnazioni di "Assegna personale" (le attività libere sono senza evento)
   const [people, setPeople] = useState({})      // uid → nome
   const [actMsg, setActMsg] = useState('')
+  const [labelFor, setLabelFor] = useState(null)   // etichetta da scaricare: sempre possibile, serve solo l'oggetto
 
   useEffect(() => {
     if (!teamId) return
@@ -400,7 +402,13 @@ export default function StationHome() {
                 <h2 style={{ margin: '2px 0 0', fontSize: 30, fontWeight: 800, letterSpacing: '-0.5px', overflowWrap: 'anywhere' }}>{item.name}</h2>
                 <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--c-ink3)', fontFamily: 'monospace' }}>{item.code || generateItemCode(item.id)}{unit ? ` · ${t('station.unitN', { n: unit })}` : ''}</p>
               </div>
-              {closeBtn}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setLabelFor(item)}
+                  style={{ minHeight: 38, padding: '0 14px', display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5 }}>
+                  <Download size={15} /> {t('inventory.downloadShort')}
+                </button>
+                {closeBtn}
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 16px', fontSize: 16, fontWeight: 700, color: item.location ? 'var(--c-ink)' : 'var(--c-ink3)' }}>
@@ -499,6 +507,7 @@ export default function StationHome() {
           <style>{`@keyframes stationDrawerIn { from { transform: translateX(32px); opacity: 0 } to { transform: none; opacity: 1 } }`}</style>
         </div>
       )}
+      {labelFor && <LabelDialog item={labelFor} onClose={() => setLabelFor(null)} />}
     </div>
   )
 }

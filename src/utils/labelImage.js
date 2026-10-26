@@ -64,7 +64,7 @@ function drawLines(ctx, lines, x, y, lineHeight) {
   lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight))
 }
 
-// Disegna l'etichetta e restituisce un data URL PNG 680×180 pronto da
+// Disegna l'etichetta e restituisce un data URL PNG 600×380 (60×38 mm a 10 px/mm) pronto da
 // scaricare/importare. Due layout secondo `format`: 'qr' (QR a sinistra,
 // blocco titolo/posizione/codice centrato verticalmente a destra — il
 // default storico) oppure 'barcode' (titolo/posizione sopra, barcode largo

@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-10-30',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Etichette: ora si possono scaricare da tutti, anche dalla vista dei magazzinieri e dalla postazione (scheda dell\'oggetto → Etichetta)',
+        'Postazione: chi si collega con badge o codice e può gestire il magazzino vede il magazzino completo (aggiungi, modifica, elimina); gli oggetti aggiunti portano il suo nome',
+        'Postazione: corretto il tag in alto a destra che a volte restava grande dopo il codice a 4 cifre, e la pagina che si rompeva scansionando un codice sconosciuto',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Labels: anyone can now download them, including from the warehouse staff view and the station (item card → Label)',
+        'Station: whoever signs in with a badge or code and can manage the warehouse sees the full warehouse (add, edit, delete); items they add carry their name',
+        'Station: fixed the top-right tag sometimes staying large after the 4-digit code, and the page breaking when scanning an unknown code',
+      ],
+    },
+  },
+  {
     version: '2026-10-29',
     it: {
       title: 'Novità di oggi',

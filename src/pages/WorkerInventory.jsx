@@ -6,7 +6,8 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDocs 
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useAuth } from '../context/AuthContext'
 import { useOperator } from '../context/OperatorContext'
-import { Pin, Cart, Box, Wrench, Warn, Check, Filter, Kit } from '../components/Icon'
+import { Pin, Cart, Box, Wrench, Warn, Check, Filter, Kit, Download } from '../components/Icon'
+import LabelDialog from '../components/LabelDialog'
 import { parseScannedCode } from '../utils/generateCode'
 import DailyQuip from '../components/DailyQuip'
 import { notifyTeamPush } from '../utils/pushNotifications'
@@ -54,6 +55,7 @@ export default function WorkerInventory() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [detail, setDetail] = useState(null)
+  const [labelFor, setLabelFor] = useState(null)   // oggetto di cui scaricare l'etichetta (sempre possibile, anche senza poter modificare)
   const [showScanner, setShowScanner] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState(null)
@@ -697,6 +699,11 @@ export default function WorkerInventory() {
             {/* Azioni */}
             <div style={{ borderTop:'1px solid var(--border)', paddingTop:14 }}>
 
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => setLabelFor(detail)}
+                style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8, minHeight:46, marginBottom:16 }}>
+                <Download size={16} /> {t('inventory.downloadLabel')}
+              </button>
+
               {/* Consumabili — aggiusta quantità */}
               {detail.category === 'Consumabili' && (
                 <div style={{ marginBottom:14 }}>
@@ -771,6 +778,7 @@ export default function WorkerInventory() {
           </div>
         </div>
       )}
+      {labelFor && <LabelDialog item={labelFor} onClose={() => setLabelFor(null)} />}
     </div>
   )
 }

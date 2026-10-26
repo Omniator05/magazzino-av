@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmProvider } from './context/ConfirmProvider'
-import { OperatorProvider } from './context/OperatorContext'
+import { OperatorProvider, useOperator } from './context/OperatorContext'
 import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react'
 // Pagine caricate on-demand (React.lazy), non tutte insieme in un unico
 // bundle da 900KB: prima ogni pagina — anche quelle che un dato utente non
@@ -105,6 +105,20 @@ function GhostBanner() {
       👻
     </button>
   )
+}
+
+/* Magazzino dei magazzinieri: la vista completa (aggiungi/modifica/elimina) la vede chi ha il permesso. Alla postazione
+   il permesso è di CHI è collegato in quel momento (badge o codice), non dell'account della postazione. */
+function useCanManageInventory() {
+  const { profile } = useAuth()
+  const { operator } = useOperator()
+  return profile?.isStation ? !!operator?.canManageInventory : !!profile?.canManageInventory
+}
+function WorkerInventoryRoute() {
+  return useCanManageInventory() ? <Inventory /> : <WorkerInventory />
+}
+function WorkerInventoryHistoryRoute() {
+  return useCanManageInventory() ? <InventoryItemHistory /> : <Navigate to="/inventory" replace />
 }
 
 /* Posizione di scorrimento di ogni schermata visitata (per location.key), per ripristinarla con "indietro" */
@@ -244,10 +258,8 @@ function PrivateRoutes({ toggleTheme, theme }) {
                 bauli, rotture) invece della vista di sola consultazione.
                 Pensato per chi lavora davvero il magazzino ma non deve avere
                 accesso a utenti/fatturazione/impostazioni squadra. */}
-            <Route path="/inventory" element={profile?.canManageInventory ? <Inventory /> : <WorkerInventory />} />
-            {profile?.canManageInventory && (
-              <Route path="/inventory/:itemId/history" element={<InventoryItemHistory />} />
-            )}
+            <Route path="/inventory" element={<WorkerInventoryRoute />} />
+            <Route path="/inventory/:itemId/history" element={<WorkerInventoryHistoryRoute />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<WorkerCalendarRoute />} />
             <Route path="/work-hours" element={<WorkHours />} />
