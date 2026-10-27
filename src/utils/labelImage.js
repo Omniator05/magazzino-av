@@ -118,11 +118,11 @@ function drawLines(ctx, lines, x, y, lineHeight) {
 
 // Due formati, due cartucce diverse:
 //  - 'qr': etichetta 60×38 mm (cartuccia ZP38-60), QR a sinistra e titolo/posizione/codice a destra;
-//  - 'barcode': etichetta piccola 27×15 mm (cartuccia ZP41-13), vedi renderBarcodeLabel più sotto.
+//  - 'barcode': cartuccia 41×13 mm (ZP41-13, rettangolo + cerchio), vedi renderBarcodeLabel più sotto.
 // Misure fisiche e risoluzione di disegno di ciascun formato (px per mm): servono anche alla stampa diretta.
 export const LABEL_SPEC = {
   qr:      { w: LABEL_W / 10, h: LABEL_H / 10, pxPerMm: 10 },
-  barcode: { w: 27, h: 15, pxPerMm: 8 },   // adesivo piccolo della cartuccia ZP41-13
+  barcode: { w: 41, h: 13, pxPerMm: 8 },   // cartuccia ZP41-13 intera: rettangolo + cerchio
   calib:   { w: 41, h: 13, pxPerMm: 8 },   // etichetta di prova con il righello: tutta la cartuccia ZP41-13
 }
 
@@ -279,13 +279,20 @@ export function labelFilename(name, code) {
   return `${slugify(name)}-${code}.png`
 }
 
-// ── Etichetta piccola (cartuccia ZP41-13): adesivo 27 × 15 mm ───────────────────────────────────────────────
-// Misure reali dell'adesivo: 27 mm di lunghezza e 15 di altezza. Un codice a barre classico con un codice di 8-12
-// caratteri non ci sta con barre abbastanza larghe (servirebbero circa 31 mm): a un solo punto per modulo il lettore
-// non lo legge. Qui quindi il codice è un QR "pulito" (21 × 21 moduli da 3 punti = 9,4 mm, il lettore 2D lo legge
-// subito e perdona graffi e angoli) con accanto nome, posizione e numero del pezzo. Si disegna alla risoluzione
-// esatta della stampante (8 punti per mm → 216 × 120): nessuna scalatura, i moduli restano netti.
-const BC_W = 216, BC_H = 120
+// ── Etichetta piccola (cartuccia ZP41-13) ────────────────────────────────────────────────────────────────────
+// La cartuccia è una striscia 41 × 13 mm con DUE adesivi: un rettangolo (25,4 × 12,7 mm) a sinistra e un cerchio
+// (Ø 12,4 mm) a destra. Misure ricavate stampando un righello sull'adesivo vero (vedi renderCalibrationLabel):
+//  - l'immagine è 328 × 104 punti (8 per mm) e riempie tutta la striscia, nessuna scalatura;
+//  - il punto 0 in orizzontale è il bordo sinistro del rettangolo; il rettangolo arriva a 203 punti, il cerchio va da
+//    226 a 324 (centro 273);
+//  - in verticale la testina non arriva alla parte alta del rettangolo: i primi ~22 punti non si stampano, e il
+//    rettangolo finisce a 94. Si disegna quindi solo tra 26 e 92.
+// Il codice è un QR "pulito" (21 × 21 moduli da 3 punti = 7,9 mm), accanto a nome (e posizione se c'è spazio);
+// nel cerchio va il numero del pezzo (#n) oppure, se non c'è, la posizione.
+const BC_W = 328, BC_H = 104
+const BC_TOP = 26, BC_BOTTOM = 92          // fascia stampabile del rettangolo
+const BC_RECT_LEFT = 5, BC_RECT_RIGHT = 199
+const BC_CIRCLE_X = 273, BC_CIRCLE_Y = 59, BC_CIRCLE_W = 52
 
 async function renderBarcodeLabel({ name, location, code }) {
   const out = document.createElement('canvas')
@@ -293,45 +300,61 @@ async function renderBarcodeLabel({ name, location, code }) {
   const ctx = out.getContext('2d')
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, BC_W, BC_H)
 
-  // QR: solo il codice (non l'indirizzo lungo del QR grande), così il disegno resta di 21 × 21 moduli.
+  // QR: solo il codice, livello di correzione basso → 21 × 21 moduli (versione 1) per i nostri codici.
   const QRCode = (await import('qrcode')).default
-  const qr = QRCode.create(String(code || '').toUpperCase(), { errorCorrectionLevel: 'M' })
+  const qr = QRCode.create(String(code || '').toUpperCase(), { errorCorrectionLevel: 'L' })
   const n = qr.modules.size
-  const mod = Math.max(2, Math.min(4, Math.floor(100 / n)))      // punti per modulo (3 per un QR da 21)
+  const band = BC_BOTTOM - BC_TOP
+  const mod = Math.max(2, Math.min(3, Math.floor(band / n)))      // punti per modulo
   const qrPx = n * mod
-  const qx = 10, qy = Math.round((BC_H - qrPx) / 2)
+  const qx = BC_RECT_LEFT, qy = BC_TOP + Math.round((band - qrPx) / 2)
   ctx.fillStyle = '#000'
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.modules.get(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod)
 
-  // Testo a destra del QR: nome (fino a 3 righe), posizione in grassetto, e per un pezzo numerato "#n".
+  // Il testo si disegna a 4× e poi si riduce: i bordi restano più netti.
   const SSB = 4
-  const tx = qx + qrPx + 10
-  const textW = (BC_W - tx - 6) * SSB
   const text = document.createElement('canvas')
   text.width = BC_W * SSB; text.height = BC_H * SSB
   const t = text.getContext('2d')
-  t.fillStyle = '#fff'; t.fillRect(0, 0, text.width, text.height)
   t.fillStyle = '#000'; t.textBaseline = 'top'; t.textAlign = 'left'
   const FAMILY = 'Arial'
   const unit = (String(code).match(/-(\d{2,3})$/) || [])[1]
-  const blocks = []
-  const nameFit = fitWrapped(t, name, textW, FAMILY, 800, 20 * SSB, 11 * SSB, 3)
-  blocks.push({ lines: nameFit.lines, size: nameFit.size, weight: 800 })
-  if (location) {
-    const loc = fitWrapped(t, location, textW, FAMILY, 800, 18 * SSB, 11 * SSB, 2, 14 * SSB)
-    blocks.push({ lines: loc.lines, size: loc.size, weight: 800, gap: 4 * SSB })
-  }
-  if (unit) blocks.push({ lines: [`#${parseInt(unit, 10)}`], size: 18 * SSB, weight: 800, gap: 4 * SSB })
   const lh = b => Math.round(b.size * 1.12)
-  const total = blocks.reduce((sum, b) => sum + (b.gap || 0) + b.lines.length * lh(b), 0)
-  let y = Math.max(4 * SSB, Math.round((BC_H * SSB - total) / 2))
+  const heightOf = blocks => blocks.reduce((sum, b) => sum + (b.gap || 0) + b.lines.length * lh(b), 0)
+
+  // Rettangolo: nome (fino a 3 righe) e, se il pezzo è numerato (la posizione non va nel cerchio), la posizione.
+  const tx = qx + qrPx + 7
+  const textW = (BC_RECT_RIGHT - tx) * SSB
+  let blocks = []
+  for (let top = 18; top >= 10; top--) {
+    const nameFit = fitWrapped(t, name, textW, FAMILY, 800, top * SSB, 10 * SSB, 3)
+    blocks = [{ lines: nameFit.lines, size: nameFit.size, weight: 800 }]
+    if (unit && location) {
+      const loc = fitWrapped(t, location, textW, FAMILY, 700, 12 * SSB, 9 * SSB, 1)
+      blocks.push({ lines: loc.lines, size: loc.size, weight: 700, gap: 3 * SSB })
+    }
+    if (heightOf(blocks) <= band * SSB) break
+  }
+  let y = BC_TOP * SSB + Math.max(0, Math.round((band * SSB - heightOf(blocks)) / 2))
   for (const b of blocks) {
     y += b.gap || 0
     t.font = `${b.weight} ${b.size}px ${FAMILY}`
     for (const line of b.lines) { t.fillText(line, tx * SSB, y); y += lh(b) }
   }
+
+  // Cerchio: #n in grande, oppure la posizione (fino a 3 righe).
+  const circleText = unit ? `#${parseInt(unit, 10)}` : (location || '')
+  if (circleText) {
+    const w = BC_CIRCLE_W * SSB
+    const fit = unit
+      ? { size: fitFontSize(t, circleText, w, FAMILY, 800, 26 * SSB, 12 * SSB), lines: [circleText] }
+      : fitWrapped(t, circleText, w, FAMILY, 800, 15 * SSB, 9 * SSB, 3)
+    t.font = `800 ${fit.size}px ${FAMILY}`
+    const h = fit.lines.length * Math.round(fit.size * 1.12)
+    t.textAlign = 'center'
+    fit.lines.forEach((line, i) => t.fillText(line, BC_CIRCLE_X * SSB, BC_CIRCLE_Y * SSB - h / 2 + i * Math.round(fit.size * 1.12)))
+  }
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
-  // il testo si sovrappone al QR solo in bianco: lo si disegna a parte nella colonna di destra
-  ctx.drawImage(text, tx * SSB, 0, BC_W * SSB - tx * SSB, BC_H * SSB, tx, 0, BC_W - tx, BC_H)
+  ctx.drawImage(text, 0, 0, BC_W * SSB, BC_H * SSB, 0, 0, BC_W, BC_H)
   return out.toDataURL('image/png')
 }

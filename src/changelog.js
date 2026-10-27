@@ -7,6 +7,21 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-05',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Etichetta piccola rifatta sulle misure vere della cartuccia 41×13 mm: QR e nome nel rettangolo, numero del pezzo (o posizione) nel cerchio, tutto dentro la zona che la stampante raggiunge davvero',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Small label redone to the real size of the 41×13 mm cartridge: QR and name in the rectangle, piece number (or location) in the circle, all inside the area the printer actually reaches',
+      ],
+    },
+  },
+  {
     version: '2026-11-04',
     it: {
       title: 'Novità di oggi',
