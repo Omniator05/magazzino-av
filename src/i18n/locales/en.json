@@ -1055,7 +1055,7 @@
     "codeDisplayTitle": "Item codes",
     "codeDisplayDesc": "Which code to generate and show for each warehouse item — pick based on what you actually scan with.",
     "codeDisplayQr": "QR",
-    "codeDisplayBarcode": "Barcode",
+    "codeDisplayBarcode": "Small 41×13",
     "codeDisplayBoth": "Both",
     "modulesRowAllOn": "All on",
     "modulesRowSomeOff": "Some turned off",
@@ -1191,7 +1191,7 @@
     "prefsLabelsSection": "Labels",
     "prefsLabelsQuestion": "What should each item label show?",
     "prefsHintQr": "Read with the phone camera",
-    "prefsHintBarcode": "Read with handheld scanners",
+    "prefsHintBarcode": "Small 41×13 cartridge, read with handheld scanners",
     "prefsHintBoth": "A label with both codes",
     "loginEmailLabel": "Email (used to sign in)",
     "loginEmailHint": "They'll sign in with this email and can reset their password by themselves.",
@@ -2128,6 +2128,7 @@
     "lockHome": "Back to home",
     "promptText": "Type your 4-digit code (you'll find it in the app's Profile) or scan your badge on the reader. Until you do, actions have no name attached.",
     "codePlaceholder": "4-digit code",
+    "loggingIn": "Signing in…",
     "codeGo": "Sign in",
     "needBadge": "Enter your code first"
   },
@@ -2207,6 +2208,8 @@
     "onlyNumber": "Only number",
     "printThis": "Print this one",
     "generalOne": "One general label",
+    "offsetX": "Move right (+) / left (−)",
+    "offsetY": "Move down (+) / up (−)",
     "calibrate": "Print test label (ruler)",
     "downloadImage": "Download the image"
   }

@@ -35,6 +35,7 @@ export default function LabelDialog({ item, onClose }) {
   const rotationKey = format === 'barcode' ? 'rotationBarcode' : 'rotation'
   const rotationNow = settings[rotationKey] || 0
   const direct = svc.state === 'up' && !!printer     // c'è una stampante collegata: un solo pulsante "Stampa"
+  const offset = { x: settings.offsetX || 0, y: settings.offsetY || 0 }   // solo l'etichetta piccola lo usa
   const updateSettings = patch => { const next = { ...settings, ...patch }; setSettings(next); savePrintSettings(next) }
 
   // Regola di stampa: 1 pezzo → l'etichetta; da 2 a 20 pezzi → si sceglie (tutte, solo il numero n, o quella generale);
@@ -52,7 +53,7 @@ export default function LabelDialog({ item, onClose }) {
       const codes = units === true ? Array.from({ length: total }, (_, i) => generateUnitCode(baseCode, i + 1))
         : Number.isInteger(units) ? [generateUnitCode(baseCode, units)] : [baseCode]
       const images = []
-      for (const code of asPreview ? [codes[0]] : codes) images.push(await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format }))
+      for (const code of asPreview ? [codes[0]] : codes) images.push(await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format, offset }))
       const res = await printLabelImages(images, { printer, rotation: rotationNow, preview: asPreview, readable: svc.readable !== false, format })
       if (asPreview) {
         const img = res[0]?.content
@@ -80,7 +81,7 @@ export default function LabelDialog({ item, onClose }) {
   const downloadOne = async () => {
     setBusy(true)
     try {
-      const png = await renderLabelPNG({ name: item.name, location: item.location, code: baseCode, teamId, format })
+      const png = await renderLabelPNG({ name: item.name, location: item.location, code: baseCode, teamId, format, offset })
       downloadDataUrl(png, labelFilename(item.name, baseCode))
       onClose()
     } finally { setBusy(false) }
@@ -92,7 +93,7 @@ export default function LabelDialog({ item, onClose }) {
       const zip = new JSZip()
       for (let i = 1; i <= total; i++) {
         const code = generateUnitCode(baseCode, i)
-        const png = await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format })
+        const png = await renderLabelPNG({ name: item.name, location: item.location, code, teamId, format, offset })
         zip.file(labelFilename(item.name, code), png.split(',')[1], { base64: true })
       }
       const blob = await zip.generateAsync({ type: 'blob' })
@@ -169,6 +170,18 @@ export default function LabelDialog({ item, onClose }) {
                           {[0, 90, 180, 270].map(r => <option key={r} value={r}>{r}°</option>)}
                         </select>
                       </label>
+                      {format === 'barcode' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {[['offsetX', 'labelPrint.offsetX'], ['offsetY', 'labelPrint.offsetY']].map(([k, label]) => (
+                            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ flex: 1, minWidth: 0 }}>{t(label)}</span>
+                              <button type="button" className="btn btn-secondary" aria-label={t(label) + ' −'} onClick={() => updateSettings({ [k]: Math.max(-30, (settings[k] || 0) - 1) })} style={{ width: 40, height: 36, padding: 0 }}>−</button>
+                              <span style={{ width: 54, textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{((settings[k] || 0) / 10).toFixed(1).replace('.', ',')} mm</span>
+                              <button type="button" className="btn btn-secondary" aria-label={t(label) + ' +'} onClick={() => updateSettings({ [k]: Math.min(30, (settings[k] || 0) + 1) })} style={{ width: 40, height: 36, padding: 0 }}>+</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <button type="button" onClick={() => directPrint({ asPreview: true })} disabled={busy} className="btn btn-secondary">{t('labelPrint.preview')}</button>
                       {format === 'barcode' && <button type="button" onClick={printCalibration} disabled={busy} className="btn btn-secondary">{t('labelPrint.calibrate')}</button>}
                       <button type="button" onClick={downloadOne} disabled={busy} className="btn btn-secondary">{t('labelPrint.downloadImage')}</button>

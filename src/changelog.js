@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-06',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Postazione: appena inserisci il codice il pulsante "Entra" mostra che sta caricando, e la pillola dell\'operatore entra in modo discreto dall\'angolo, senza più resettare la pagina. Ricerca, filtri, scheda aperta e posizione di scorrimento restano dove erano. Con un codice sbagliato il campo trema e si svuota',
+        'Postazione: le categorie del magazzino seguono lo stesso ordine dell\'admin, con "Altro" per ultimo',
+        'Etichette: il formato "Barcode" si chiama ora "Piccola 41×13" e nelle impostazioni di stampa si può spostare l\'etichetta a passi di 0,1 mm (su/giù, destra/sinistra) per centrarla sulla propria stampante',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Station: as soon as you enter the code the "Enter" button shows it is loading, and the operator pill slides in discreetly from the corner, no longer resetting the page. Search, filters, the open item and scroll position stay where they were. With a wrong code the field shakes and clears',
+        'Station: warehouse categories follow the same order as the admin, with "Other" last',
+        'Labels: the "Barcode" format is now called "Small 41×13" and the print settings let you nudge the label in 0.1 mm steps (up/down, left/right) to centre it on your printer',
+      ],
+    },
+  },
+  {
     version: '2026-11-05',
     it: {
       title: 'Novità di oggi',

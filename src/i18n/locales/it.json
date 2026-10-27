@@ -1055,7 +1055,7 @@
     "codeDisplayTitle": "Codici oggetti",
     "codeDisplayDesc": "Quale codice generare e mostrare per ogni oggetto di magazzino — scegli in base a cosa usate davvero per scansionare.",
     "codeDisplayQr": "QR",
-    "codeDisplayBarcode": "Barcode",
+    "codeDisplayBarcode": "Piccola 41×13",
     "codeDisplayBoth": "Entrambi",
     "modulesRowAllOn": "Tutte attive",
     "modulesRowSomeOff": "Alcune disattivate",
@@ -1191,7 +1191,7 @@
     "prefsLabelsSection": "Etichette",
     "prefsLabelsQuestion": "Cosa stampare sull'etichetta di ogni oggetto?",
     "prefsHintQr": "Si legge con la fotocamera del telefono",
-    "prefsHintBarcode": "Si legge con i lettori a pistola",
+    "prefsHintBarcode": "Cartuccia piccola 41×13, si legge con i lettori a pistola",
     "prefsHintBoth": "Un'etichetta con entrambi i codici",
     "loginEmailLabel": "Email (con questa entra)",
     "loginEmailHint": "Entrerà nell'app con questa email e potrà reimpostare da solo la password.",
@@ -2128,6 +2128,7 @@
     "lockHome": "Torna alla home",
     "promptText": "Digita il tuo codice a 4 cifre (lo trovi nel Profilo dell'app) oppure passa il badge sul lettore. Finché non lo fai, le azioni non hanno un nome.",
     "codePlaceholder": "Codice a 4 cifre",
+    "loggingIn": "Accesso in corso…",
     "codeGo": "Entra",
     "needBadge": "Inserisci prima il tuo codice"
   },
@@ -2207,6 +2208,8 @@
     "onlyNumber": "Solo il numero",
     "printThis": "Stampa questa",
     "generalOne": "Una sola etichetta generale",
+    "offsetX": "Sposta a destra (+) / sinistra (−)",
+    "offsetY": "Sposta in basso (+) / in alto (−)",
     "calibrate": "Stampa etichetta di prova (righello)",
     "downloadImage": "Scarica l'immagine"
   }

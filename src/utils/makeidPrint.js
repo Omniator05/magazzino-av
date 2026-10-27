@@ -14,7 +14,9 @@ const KEY = 'rcMakeidPrint'
 // Impostazioni di questo computer (stampante scelta e rotazione): sono del PC, non della squadra.
 export function loadPrintSettings() {
   // rotation = etichetta 60×38 (QR), rotationBarcode = etichetta 41×13 (codice a barre): sono due cartucce diverse.
-  try { return { printer: '', rotation: 0, rotationBarcode: 0, ...(JSON.parse(localStorage.getItem(KEY)) || {}) } } catch { return { printer: '', rotation: 0, rotationBarcode: 0 } }
+  // offsetX / offsetY = spostamento fine dell'etichetta piccola, in decimi di millimetro (per centrarla su questa stampante)
+  const base = { printer: '', rotation: 0, rotationBarcode: 0, offsetX: 0, offsetY: 0 }
+  try { return { ...base, ...(JSON.parse(localStorage.getItem(KEY)) || {}) } } catch { return base }
 }
 export function savePrintSettings(v) {
   try { localStorage.setItem(KEY, JSON.stringify(v)) } catch { /* memoria bloccata: si riparte dai valori di base */ }

@@ -33,6 +33,7 @@ import { QrCode, Barcode } from '../components/Icon'
 import DeadlinesField from '../components/DeadlinesField'
 import { syncDeadlineEvents } from '../utils/deadlines'
 import { addIssue, removeIssueById, dropLastIssue, trimIssues, sortedIssues, countIssues } from '../utils/itemIssues'
+import { useInventoryViewCarry, CARRIED_FILTERS } from '../hooks/useInventoryViewCarry'
 
 // Colori pallino per la sezione Cronologia (dettaglio oggetto) — stessa
 // mappa azione→colore usata nel modale modifica riga di EventDetail.jsx.
@@ -125,7 +126,7 @@ export default function Inventory() {
   const { t, i18n } = useTranslation()
   const { user, teamId, team, profile, isOwner } = useAuth()
   const confirm = useConfirm()
-  const { operator } = useOperator()   // alla postazione: chi è collegato in quel momento (le aggiunte portano il suo nome)
+  const { operator, isStation } = useOperator()   // alla postazione: chi è collegato in quel momento (le aggiunte portano il suo nome)
   const navigate = useNavigate()
   const { state: navState, search: locationSearch } = useLocation()
   const [items, setItems] = useState([])
@@ -686,6 +687,18 @@ export default function Inventory() {
   // per default sono tutte aperte, ma un tap sulla freccia vince sempre sul
   // default finché non cambia ricerca/filtro.
   const [manualCollapse, setManualCollapse] = useState({})
+  // Postazione: quando entra un operatore la vista di sola consultazione diventa questa e riprende da dove era
+  const [pendingDetailId, setPendingDetailId] = useState(null)
+  useInventoryViewCarry(isStation, { search, activeFilter, sortBy, filterCategory, filterLocation, filterKitOnly, detailId: showDetail?.id || null }, c => {
+    setSearch(c.search || ''); setActiveFilter(CARRIED_FILTERS.includes(c.activeFilter) ? c.activeFilter : 'all')
+    setSortBy(c.sortBy || ''); setFilterCategory(c.filterCategory || ''); setFilterLocation(c.filterLocation || ''); setFilterKitOnly(!!c.filterKitOnly)
+    setPendingDetailId(c.detailId || null)
+  })
+  useEffect(() => {
+    if (!pendingDetailId) return
+    const it = items.find(i => i.id === pendingDetailId)
+    if (it) { setShowDetail(it); setPendingDetailId(null) }
+  }, [pendingDetailId, items])
 
   const filtered = items.filter(i => {
     const matchSearch = !search ||

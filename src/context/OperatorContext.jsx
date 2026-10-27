@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from './AuthContext'
 import { useKeyboardWedgeScanner } from '../hooks/useKeyboardWedgeScanner'
@@ -15,7 +15,7 @@ import { badgeLogin, isBadgeCode, isPin } from '../utils/operatorBadge'
 // le pagine possono chiamare useOperator() ovunque senza controllare nulla.
 const IDLE_MS = 20 * 60 * 1000
 
-const EMPTY = { isStation: false, operator: null, login: async () => {}, logout: () => {}, loginError: '', getRemainingMs: () => 0, requireOperator: () => true }
+const EMPTY = { isStation: false, operator: null, login: async () => {}, logout: () => {}, loginError: '', logging: false, getRemainingMs: () => 0, requireOperator: () => true }
 const OperatorCtx = createContext(EMPTY)
 export const useOperator = () => useContext(OperatorCtx)
 
@@ -24,6 +24,7 @@ export function OperatorProvider({ children }) {
   const isStation = !!profile?.isStation
   const [operator, setOperator] = useState(null)       // { userId, name } | null
   const [loginError, setLoginError] = useState('')      // '' | 'invalid' | 'inactive'
+  const [logging, setLogging] = useState(false)         // accesso in corso: i pulsanti mostrano che sta caricando
   const [promptOpen, setPromptOpen] = useState(false)  // popup "scansiona il badge"
   const expiresRef = useRef(0)
   const operatorRef = useRef(null)
@@ -36,6 +37,7 @@ export function OperatorProvider({ children }) {
     // perché il secondo rifaceva l'operatore da capo e bloccava l'animazione della pillola a metà.
     if (busyRef.current) return
     busyRef.current = true
+    setLogging(true)
     try {
       const r = await badgeLogin(code)
       // Stessa persona già dentro: resta lo stesso oggetto (così nessuno riparte), si rinnova solo il tempo.
@@ -43,10 +45,12 @@ export function OperatorProvider({ children }) {
       setPromptOpen(false)
       expiresRef.current = Date.now() + IDLE_MS
       setLoginError('')
+      return true
     } catch (e) {
       setLoginError(e.code === 'inactive' ? 'inactive' : e.code === 'locked' ? 'locked' : 'invalid')
       setTimeout(() => setLoginError(''), 4000)
-    } finally { busyRef.current = false }
+      return false
+    } finally { busyRef.current = false; setLogging(false) }
   }, [])
 
   // I badge (e solo quelli) arrivano da qui, da qualunque pagina della postazione.
@@ -96,9 +100,9 @@ export function OperatorProvider({ children }) {
   }, [isStation])
 
   const value = useMemo(() => ({
-    isStation, operator, login, logout, loginError, requireOperator,
+    isStation, operator, login, logout, loginError, logging, requireOperator,
     getRemainingMs: () => Math.max(0, expiresRef.current - Date.now()),
-  }), [isStation, operator, login, logout, loginError, requireOperator])
+  }), [isStation, operator, login, logout, loginError, logging, requireOperator])
 
   return (
     <OperatorCtx.Provider value={value}>
@@ -113,18 +117,15 @@ export function OperatorProvider({ children }) {
 // (con il tempo che resta) oppure l'invito a scansionare il badge.
 function OperatorBar() {
   const { t } = useTranslation()
-  const { operator, logout, loginError, getRemainingMs } = useOperator()
+  const { operator, logout, loginError, logging, getRemainingMs } = useOperator()
   const [, tick] = useState(0)
   const [open, setOpen] = useState(false)
-  // Animazioni: all'ingresso la pillola dell'operatore parte grande al centro dello schermo e
-  // si sistema nell'angolo ('center' → 'fly' → 'idle'); all'uscita la pillola sfuma mentre
-  // ricompare quella "scansiona il tuo badge" (`leaving`). `display` tiene l'operatore a
-  // schermo anche mentre sta uscendo.
+  // Animazioni, discrete: all'ingresso la pillola dell'operatore scivola dentro dall'angolo (`entering`) senza
+  // toccare il resto della pagina; all'uscita sfuma mentre ricompare quella "scansiona il tuo badge" (`leaving`).
+  // `display` tiene l'operatore a schermo anche mentre sta uscendo.
   const [display, setDisplay] = useState(operator)
-  const [phase, setPhase] = useState('idle')
+  const [entering, setEntering] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const [offset, setOffset] = useState(null)
-  const pillRef = useRef(null)
   const prevOp = useRef(operator)
   const lastTime = useRef('0:00')
 
@@ -135,25 +136,15 @@ function OperatorBar() {
     const timers = []
     if (operator && !was) {
       setDisplay(operator); setLeaving(false); setOpen(false)
-      if (!calm) {
-        setOffset(null); setPhase('center')
-        timers.push(setTimeout(() => setPhase('fly'), 1100), setTimeout(() => setPhase('idle'), 1800))
-      }
+      if (!calm) { setEntering(true); timers.push(setTimeout(() => setEntering(false), 450)) }
     } else if (!operator && was) {
       if (calm) { setDisplay(null) } else {
-        setLeaving(true); setPhase('idle')
+        setLeaving(true); setEntering(false)
         timers.push(setTimeout(() => { setDisplay(null); setLeaving(false) }, 500))
       }
     } else if (operator) setDisplay(operator)
     return () => timers.forEach(clearTimeout)
   }, [operator?.userId])   // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Misura dov'è la pillola e di quanto va spostata per stare al centro dello schermo.
-  useLayoutEffect(() => {
-    if (phase !== 'center' || !pillRef.current) return
-    const r = pillRef.current.getBoundingClientRect()
-    setOffset({ x: window.innerWidth / 2 - (r.left + r.width / 2), y: window.innerHeight / 2 - (r.top + r.height / 2) })
-  }, [phase, display])
 
   useEffect(() => {
     if (!operator) return
@@ -171,34 +162,28 @@ function OperatorBar() {
   const shownOp = display || operator
 
   const base = { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px 8px 8px', borderRadius: 999, background: 'var(--c-surface)', border: '1px solid var(--c-line)', boxShadow: '0 6px 20px rgba(0,0,0,0.14)', maxWidth: 'calc(100vw - 32px)' }
-  const centered = phase === 'center'
   const opStyle = {
     ...base,
     ...(leaving ? { position: 'absolute', right: 0, top: 0, opacity: 0, transform: 'scale(0.9)', transformOrigin: 'right center', transition: 'opacity .4s ease, transform .4s ease', pointerEvents: 'none' } : {}),
-    ...(!leaving && phase !== 'idle' ? {
-      transformOrigin: 'center center',
-      transform: centered ? (offset ? `translate(${offset.x}px, ${offset.y}px) scale(2.4)` : 'none') : 'none',
-      opacity: centered && !offset ? 0 : 1,
-      transition: centered ? 'none' : 'transform .7s cubic-bezier(.22,1,.36,1)',
-    } : {}),
+    ...(entering && !leaving ? { animation: 'opPillIn .4s cubic-bezier(.22,1,.36,1)' } : {}),
     ...(warn ? { border: '1px solid #e63946', animation: 'opWarnPulse 1.4s ease-in-out infinite' } : {}),
   }
   const showNone = !shownOp || leaving
 
   return (
     <div style={{ position: 'fixed', right: 16, top: 12, zIndex: 900, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-      {centered && offset && <div aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(28,28,26,0.22)', pointerEvents: 'none', animation: 'opScrimIn .3s ease-out' }} />}
       <div style={{ position: 'relative' }}>
         {showNone && (
-          <button type="button" className="btn-no-anim" aria-expanded={open} onClick={() => setOpen(o => !o)}
+          <button type="button" className={`btn-no-anim${loginError ? ' rc-btn-fail' : ''}`} aria-expanded={open} onClick={() => setOpen(o => !o)}
             style={{ ...base, padding: '10px 16px', border: `1px dashed ${loginError ? '#e63946' : '#d97706'}`, background: 'rgba(255,247,230,0.97)', ...(leaving ? { animation: 'opNoneIn .45s ease-out' } : {}) }}>
+            {logging && !loginError && <span aria-hidden="true" style={{ width: 13, height: 13, flexShrink: 0, border: '2px solid #92400e', borderTopColor: 'transparent', borderRadius: '50%', animation: 'rc-btn-spin .6s linear infinite' }} />}
             <span style={{ fontSize: 13.5, fontWeight: 800, color: loginError ? '#e63946' : '#92400e' }}>
-              {loginError ? t(`operator.${loginError}`) : t('operator.barNone')}
+              {loginError ? t(`operator.${loginError}`) : logging ? t('operator.loggingIn') : t('operator.barNone')}
             </span>
           </button>
         )}
         {shownOp && (
-          <div ref={pillRef} style={opStyle}>
+          <div style={opStyle}>
             <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, background: warn ? '#e63946' : 'var(--c-green, #22c55e)', color: '#fff', fontWeight: 800, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .4s' }}>
               {(shownOp.name || '?').trim().charAt(0).toUpperCase()}
             </span>
@@ -218,7 +203,7 @@ function OperatorBar() {
         </div>
       )}
       <style>{`
-        @keyframes opScrimIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes opPillIn { from { opacity: 0; transform: translateX(18px) scale(0.96) } to { opacity: 1; transform: none } }
         @keyframes opNoneIn { from { opacity: 0; transform: scale(0.92) } to { opacity: 1; transform: none } }
         @keyframes opWarnPulse { 0%, 100% { box-shadow: 0 6px 20px rgba(0,0,0,0.14) } 50% { box-shadow: 0 0 0 4px rgba(230,57,70,0.22), 0 6px 20px rgba(0,0,0,0.14) } }
       `}</style>
@@ -256,22 +241,27 @@ function BadgePrompt({ onClose }) {
 // che si apre dalla pillola in alto a destra.
 export function BadgeEntry({ autoFocus }) {
   const { t } = useTranslation()
-  const { login, loginError } = useOperator()
+  const { login, loginError, logging } = useOperator()
   const [code, setCode] = useState('')
   const valid = isBadgeCode(code) || isPin(code)
-  const submit = async e => { e.preventDefault(); if (!valid) return; await login(code); setCode('') }
+  const [shake, setShake] = useState(false)
+  // Codice sbagliato: il campo si svuota e trema un attimo, così si capisce subito che non è entrato
+  const failed = ok => { if (ok === false) { setShake(true); setTimeout(() => setShake(false), 550) } }
+  const submit = async e => { e.preventDefault(); if (!valid) return; const ok = await login(code); setCode(''); failed(ok) }
   // Il codice a 4 cifre entra da solo appena è completo, senza premere altro.
   const change = async v => {
     setCode(v)
-    if (isPin(v)) { setCode(''); await login(v.trim()) }
+    if (isPin(v)) { setCode(''); failed(await login(v.trim())) }
   }
   return (
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className={shake ? 'rc-btn-fail' : undefined} style={{ display: 'flex', gap: 8 }}>
         <input value={code} onChange={e => change(e.target.value)} autoFocus={autoFocus} autoComplete="off" spellCheck={false} inputMode="text"
           placeholder={t('operator.codePlaceholder')} aria-label={t('operator.codePlaceholder')}
           style={{ flex: 1, minWidth: 0, fontFamily: 'monospace', fontSize: 14, textTransform: 'uppercase', letterSpacing: isPin(code) ? '0.3em' : 0 }} />
-        <button type="submit" className="btn btn-secondary" disabled={!valid} style={{ flexShrink: 0 }}>{t('operator.codeGo')}</button>
+        <button type="submit" className="btn btn-secondary" disabled={!valid || logging} aria-busy={logging} style={{ flexShrink: 0, minWidth: 76, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          {logging ? <span aria-hidden="true" style={{ width: 14, height: 14, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'rc-btn-spin .6s linear infinite' }} /> : t('operator.codeGo')}
+        </button>
       </div>
       {loginError && <p role="alert" style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#e63946' }}>{t(`operator.${loginError}`)}</p>}
     </form>

@@ -122,7 +122,7 @@ function drawLines(ctx, lines, x, y, lineHeight) {
 // Misure fisiche e risoluzione di disegno di ciascun formato (px per mm): servono anche alla stampa diretta.
 export const LABEL_SPEC = {
   qr:      { w: LABEL_W / 10, h: LABEL_H / 10, pxPerMm: 10 },
-  barcode: { w: 41, h: 13, pxPerMm: 8 },   // cartuccia ZP41-13 intera: rettangolo + cerchio
+  barcode: { w: 41, h: 15, pxPerMm: 8 },   // cartuccia ZP41-13: pagina 41 × 15 mm (vedi renderBarcodeLabel)
   calib:   { w: 41, h: 13, pxPerMm: 8 },   // etichetta di prova con il righello: tutta la cartuccia ZP41-13
 }
 
@@ -154,8 +154,8 @@ function renderCalibrationLabel() {
 }
 
 // Disegna l'etichetta e restituisce un data URL PNG pronto da scaricare/importare/stampare.
-export async function renderLabelPNG({ name, location, code, teamId, format = 'qr' }) {
-  if (format === 'barcode') return renderBarcodeLabel({ name, location, code })
+export async function renderLabelPNG({ name, location, code, teamId, format = 'qr', offset }) {
+  if (format === 'barcode') return renderBarcodeLabel({ name, location, code, offset })
   if (format === 'calib') return renderCalibrationLabel()
   const W = LABEL_W * SS, H = LABEL_H * SS, pad = PAD * SS
 
@@ -281,20 +281,25 @@ export function labelFilename(name, code) {
 
 // ── Etichetta piccola (cartuccia ZP41-13) ────────────────────────────────────────────────────────────────────
 // La cartuccia è una striscia 41 × 13 mm con DUE adesivi: un rettangolo (25,4 × 12,7 mm) a sinistra e un cerchio
-// (Ø 12,4 mm) a destra. Misure ricavate stampando un righello sull'adesivo vero (vedi renderCalibrationLabel):
-//  - l'immagine è 328 × 104 punti (8 per mm) e riempie tutta la striscia, nessuna scalatura;
-//  - il punto 0 in orizzontale è il bordo sinistro del rettangolo; il rettangolo arriva a 203 punti, il cerchio va da
-//    226 a 324 (centro 273);
-//  - in verticale la testina non arriva alla parte alta del rettangolo: i primi ~22 punti non si stampano, e il
-//    rettangolo finisce a 94. Si disegna quindi solo tra 26 e 92.
-// Il codice è un QR "pulito" (21 × 21 moduli da 3 punti = 7,9 mm), accanto a nome (e posizione se c'è spazio);
-// nel cerchio va il numero del pezzo (#n) oppure, se non c'è, la posizione.
-const BC_W = 328, BC_H = 104
-const BC_TOP = 26, BC_BOTTOM = 92          // fascia stampabile del rettangolo
-const BC_RECT_LEFT = 5, BC_RECT_RIGHT = 199
-const BC_CIRCLE_X = 273, BC_CIRCLE_Y = 59, BC_CIRCLE_W = 52
+// (Ø 12,5 mm) a destra. Misure ricavate stampando righelli e disegni di prova sull'adesivo vero:
+//  - il punto 0 in orizzontale è il bordo sinistro del rettangolo; il rettangolo arriva a 203 punti (8 per mm), il
+//    cerchio ha il centro a 276;
+//  - la testina non stampa le prime ~22 righe di una pagina (in alto nell'adesivo). Si manda quindi una pagina più
+//    alta del necessario (15 mm = 120 punti, quanto il nastro): la stampante la centra sulla striscia, quindi la
+//    parte persa cade sopra il rettangolo e quasi tutta l'altezza dell'adesivo diventa utilizzabile. Le
+//    coordinate qui sotto sono quelle della pagina (= adesivo + 8 punti in verticale);
+//  - il centro verticale del rettangolo e del cerchio è a 47 + 8 = 55.
+// Il codice è un QR "pulito" (21 × 21 moduli da 3 punti = 7,9 mm); nome (e posizione) accanto, il tutto centrato
+// nel rettangolo. Nel cerchio il numero del pezzo (#n) oppure la posizione, in grande.
+const BC_W = 328, BC_H = 120
+const BC_TOP = 26, BC_BOTTOM = 92            // fascia sicura per QR e testo (coordinate di pagina)
+const BC_RECT_CX = 101.5, BC_RECT_INNER = 193 // centro orizzontale del rettangolo e larghezza utile (margine 5 + 5)
+const BC_CIRCLE_X = 276, BC_CIRCLE_Y = 55, BC_CIRCLE_W = 64
 
-async function renderBarcodeLabel({ name, location, code }) {
+// offset: spostamento a mano in decimi di millimetro { x, y } (impostazioni di stampa), per centrare l'etichetta
+// su quella stampante: +x verso destra, +y verso il basso.
+async function renderBarcodeLabel({ name, location, code, offset }) {
+  const dx = Math.round((offset?.x || 0) * 0.8), dy = Math.round((offset?.y || 0) * 0.8)   // 8 punti per mm
   const out = document.createElement('canvas')
   out.width = BC_W; out.height = BC_H
   const ctx = out.getContext('2d')
@@ -307,9 +312,7 @@ async function renderBarcodeLabel({ name, location, code }) {
   const band = BC_BOTTOM - BC_TOP
   const mod = Math.max(2, Math.min(3, Math.floor(band / n)))      // punti per modulo
   const qrPx = n * mod
-  const qx = BC_RECT_LEFT, qy = BC_TOP + Math.round((band - qrPx) / 2)
-  ctx.fillStyle = '#000'
-  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.modules.get(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod)
+  const GAP = 7
 
   // Il testo si disegna a 4× e poi si riduce: i bordi restano più netti.
   const SSB = 4
@@ -321,38 +324,46 @@ async function renderBarcodeLabel({ name, location, code }) {
   const unit = (String(code).match(/-(\d{2,3})$/) || [])[1]
   const lh = b => Math.round(b.size * 1.12)
   const heightOf = blocks => blocks.reduce((sum, b) => sum + (b.gap || 0) + b.lines.length * lh(b), 0)
+  const widthOf = blocks => Math.max(...blocks.flatMap(b => b.lines.map(l => { t.font = `${b.weight} ${b.size}px ${FAMILY}`; return t.measureText(l).width })))
 
-  // Rettangolo: nome (fino a 3 righe) e, se il pezzo è numerato (la posizione non va nel cerchio), la posizione.
-  const tx = qx + qrPx + 7
-  const textW = (BC_RECT_RIGHT - tx) * SSB
+  // Rettangolo: nome (fino a 3 righe) e, se il pezzo è numerato (la posizione va nel cerchio altrimenti), la posizione.
+  const textW = (BC_RECT_INNER - qrPx - GAP) * SSB
   let blocks = []
   for (let top = 18; top >= 10; top--) {
     const nameFit = fitWrapped(t, name, textW, FAMILY, 800, top * SSB, 10 * SSB, 3)
     blocks = [{ lines: nameFit.lines, size: nameFit.size, weight: 800 }]
     if (unit && location) {
-      const loc = fitWrapped(t, location, textW, FAMILY, 700, 12 * SSB, 9 * SSB, 1)
+      const loc = fitWrapped(t, location, textW, FAMILY, 700, 14 * SSB, 9 * SSB, 1)
       blocks.push({ lines: loc.lines, size: loc.size, weight: 700, gap: 3 * SSB })
     }
     if (heightOf(blocks) <= band * SSB) break
   }
-  let y = BC_TOP * SSB + Math.max(0, Math.round((band * SSB - heightOf(blocks)) / 2))
+  // QR + testo come un blocco solo, centrato nel rettangolo in orizzontale (e il testo in verticale sul QR)
+  const contentW = qrPx + GAP + widthOf(blocks) / SSB
+  const qx = Math.round(BC_RECT_CX - contentW / 2) + dx
+  const qy = BC_TOP + Math.round((band - qrPx) / 2) + dy
+  ctx.fillStyle = '#000'
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.modules.get(r, c)) ctx.fillRect(qx + c * mod, qy + r * mod, mod, mod)
+  const tx = qx + qrPx + GAP
+  let y = Math.round((qy + qrPx / 2) * SSB - heightOf(blocks) / 2)
   for (const b of blocks) {
     y += b.gap || 0
     t.font = `${b.weight} ${b.size}px ${FAMILY}`
     for (const line of b.lines) { t.fillText(line, tx * SSB, y); y += lh(b) }
   }
 
-  // Cerchio: #n in grande, oppure la posizione (fino a 3 righe).
+  // Cerchio: #n in grande, oppure la posizione (una riga se ci sta in grande, altrimenti fino a 3).
   const circleText = unit ? `#${parseInt(unit, 10)}` : (location || '')
   if (circleText) {
     const w = BC_CIRCLE_W * SSB
     const fit = unit
-      ? { size: fitFontSize(t, circleText, w, FAMILY, 800, 26 * SSB, 12 * SSB), lines: [circleText] }
-      : fitWrapped(t, circleText, w, FAMILY, 800, 15 * SSB, 9 * SSB, 3)
+      ? { size: fitFontSize(t, circleText, w, FAMILY, 800, 44 * SSB, 14 * SSB), lines: [circleText] }
+      : fitWrapped(t, circleText, w, FAMILY, 800, 40 * SSB, 10 * SSB, 3, 20 * SSB)
     t.font = `800 ${fit.size}px ${FAMILY}`
-    const h = fit.lines.length * Math.round(fit.size * 1.12)
+    const step = Math.round(fit.size * 1.12)
     t.textAlign = 'center'
-    fit.lines.forEach((line, i) => t.fillText(line, BC_CIRCLE_X * SSB, BC_CIRCLE_Y * SSB - h / 2 + i * Math.round(fit.size * 1.12)))
+    // l'asse del testo è a metà del corpo: per centrare otticamente si parte dal centro della prima riga
+    fit.lines.forEach((line, i) => t.fillText(line, (BC_CIRCLE_X + dx) * SSB, (BC_CIRCLE_Y + dy) * SSB - (fit.lines.length * step) / 2 + i * step + Math.round(fit.size * 0.06)))
   }
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(text, 0, 0, BC_W * SSB, BC_H * SSB, 0, 0, BC_W, BC_H)

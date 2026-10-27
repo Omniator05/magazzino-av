@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useInventoryViewCarry, CARRIED_FILTERS } from '../hooks/useInventoryViewCarry'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
@@ -74,6 +75,19 @@ export default function WorkerInventory() {
   const [filterLocation, setFilterLocation] = useState('')
   const [filterKitOnly, setFilterKitOnly] = useState(false)
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
+  // Postazione: quando l'operatore ha i permessi la vista diventa quella completa, e viceversa; ricerca, filtri e scheda
+  // aperta passano dall'una all'altra senza ripartire da zero.
+  const [pendingDetailId, setPendingDetailId] = useState(null)
+  useInventoryViewCarry(isStation, { search, activeFilter: filter, sortBy, filterCategory, filterLocation, filterKitOnly, detailId: detail?.id || null }, c => {
+    setSearch(c.search || ''); setFilter(CARRIED_FILTERS.includes(c.activeFilter) ? c.activeFilter : 'all')
+    setSortBy(c.sortBy || ''); setFilterCategory(c.filterCategory || ''); setFilterLocation(c.filterLocation || ''); setFilterKitOnly(!!c.filterKitOnly)
+    setPendingDetailId(c.detailId || null)
+  })
+  useEffect(() => {
+    if (!pendingDetailId) return
+    const it = items.find(i => i.id === pendingDetailId)
+    if (it) { setDetail(it); setPendingDetailId(null) }
+  }, [pendingDetailId, items])
 
   useEffect(() => {
     if (!teamId) return
@@ -580,7 +594,9 @@ export default function WorkerInventory() {
         if (advancedFiltersActive) return card('flat', null, displayItems)
         const groups = {}
         displayItems.forEach(it => { (groups[it.category || '—'] ||= []).push(it) })
-        return Object.keys(groups).sort((x, y) => x.localeCompare(y)).map(cat => card(cat, cat, groups[cat]))
+        // Stesso ordine della vista completa (Audio, Microfoni… Altro per ultimo); categorie sconosciute prima di Altro
+        const rank = c => { const i = CATEGORIES.indexOf(c); return i === -1 ? CATEGORIES.length - 1.5 : i }
+        return Object.keys(groups).sort((x, y) => rank(x) - rank(y) || x.localeCompare(y)).map(cat => card(cat, cat, groups[cat]))
       })()}
       <div style={{ height:8 }} />
 
