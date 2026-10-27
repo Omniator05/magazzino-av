@@ -66,6 +66,17 @@ export default function LabelDialog({ item, onClose }) {
     } finally { setBusy(false) }
   }
 
+  // Righello sull'adesivo vero (vedi renderCalibrationLabel): mostra dove cade ogni punto dell'immagine
+  const printCalibration = async () => {
+    setBusy(true); setMsg({ text: '', error: false })
+    try {
+      await printLabelImages([await renderLabelPNG({ format: 'calib' })], { printer, rotation: rotationNow, readable: svc.readable !== false, format: 'calib' })
+      setMsg({ text: t('labelPrint.sent', { count: 1 }), error: false })
+    } catch (e) {
+      setMsg({ text: e.message === 'offline' || e.message === 'timeout' ? t('labelPrint.offline') : printErrorText(e.code), error: true })
+    } finally { setBusy(false) }
+  }
+
   const downloadOne = async () => {
     setBusy(true)
     try {
@@ -159,6 +170,7 @@ export default function LabelDialog({ item, onClose }) {
                         </select>
                       </label>
                       <button type="button" onClick={() => directPrint({ asPreview: true })} disabled={busy} className="btn btn-secondary">{t('labelPrint.preview')}</button>
+                      {format === 'barcode' && <button type="button" onClick={printCalibration} disabled={busy} className="btn btn-secondary">{t('labelPrint.calibrate')}</button>}
                       <button type="button" onClick={downloadOne} disabled={busy} className="btn btn-secondary">{t('labelPrint.downloadImage')}</button>
                       {total > 1 && <button type="button" onClick={downloadUnits} disabled={busy} className="btn btn-secondary">{t('inventory.printAllUnits', { count: total })}</button>}
                       {preview && <img src={preview} alt={t('labelPrint.preview')} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }} />}

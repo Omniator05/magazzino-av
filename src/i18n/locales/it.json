@@ -2207,6 +2207,7 @@
     "onlyNumber": "Solo il numero",
     "printThis": "Stampa questa",
     "generalOne": "Una sola etichetta generale",
+    "calibrate": "Stampa etichetta di prova (righello)",
     "downloadImage": "Scarica l'immagine"
   }
 }

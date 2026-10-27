@@ -7,6 +7,21 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-04',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Etichette piccole: nelle impostazioni di stampa c\'è "Stampa etichetta di prova (righello)", che stampa un righello sull\'adesivo per misurare con precisione dove cade il rettangolo e il cerchio',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Small labels: the print settings now have "Print test label (ruler)", which prints a ruler on the sticker so the rectangle and circle can be measured precisely',
+      ],
+    },
+  },
+  {
     version: '2026-11-03',
     it: {
       title: 'Novità di oggi',

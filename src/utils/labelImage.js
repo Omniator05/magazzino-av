@@ -123,11 +123,40 @@ function drawLines(ctx, lines, x, y, lineHeight) {
 export const LABEL_SPEC = {
   qr:      { w: LABEL_W / 10, h: LABEL_H / 10, pxPerMm: 10 },
   barcode: { w: 27, h: 15, pxPerMm: 8 },   // adesivo piccolo della cartuccia ZP41-13
+  calib:   { w: 41, h: 13, pxPerMm: 8 },   // etichetta di prova con il righello: tutta la cartuccia ZP41-13
+}
+
+// Etichetta di prova: righello a 1 punto di spessore, un tacco ogni mm (più lungo ogni 5), tutta la cartuccia.
+// Serve per vedere sull'adesivo vero quale parte dell'immagine finisce sul rettangolo e quale sul cerchio.
+function renderCalibrationLabel() {
+  const W = 328, H = 104
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, W, 1); ctx.fillRect(0, H - 1, W, 1); ctx.fillRect(0, 0, 1, H); ctx.fillRect(W - 1, 0, 1, H)
+  ctx.font = 'bold 10px Arial'; ctx.textBaseline = 'top'
+  for (let mm = 0; mm <= 41; mm++) {
+    const x = Math.min(mm * 8, W - 1), len = mm % 5 === 0 ? 10 : 5
+    ctx.fillRect(x, 0, 1, len); ctx.fillRect(x, H - len, 1, len)
+    if (mm % 5 === 0 && mm > 0 && mm < 40) { ctx.textAlign = 'center'; ctx.fillText(String(mm), x, 12); ctx.fillText(String(mm), x, H - 23) }
+  }
+  for (let mm = 0; mm <= 13; mm++) {
+    const y = Math.min(mm * 8, H - 1), len = mm % 5 === 0 ? 10 : 5
+    ctx.fillRect(0, y, len, 1); ctx.fillRect(W - len, y, len, 1)
+  }
+  // Un quadrato pieno in alto a sinistra e una freccia: si capisce se è girata
+  ctx.fillRect(14, 44, 12, 12)
+  ctx.textAlign = 'center'; ctx.font = 'bold 13px Arial'
+  ctx.fillText('41 x 13 mm  ->', W / 2, 44)
+  return canvas.toDataURL('image/png')
 }
 
 // Disegna l'etichetta e restituisce un data URL PNG pronto da scaricare/importare/stampare.
 export async function renderLabelPNG({ name, location, code, teamId, format = 'qr' }) {
   if (format === 'barcode') return renderBarcodeLabel({ name, location, code })
+  if (format === 'calib') return renderCalibrationLabel()
   const W = LABEL_W * SS, H = LABEL_H * SS, pad = PAD * SS
 
   const canvas = document.createElement('canvas')

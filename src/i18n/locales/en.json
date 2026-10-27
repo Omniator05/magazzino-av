@@ -2207,6 +2207,7 @@
     "onlyNumber": "Only number",
     "printThis": "Print this one",
     "generalOne": "One general label",
+    "calibrate": "Print test label (ruler)",
     "downloadImage": "Download the image"
   }
 }
