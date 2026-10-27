@@ -791,7 +791,7 @@ export default function Inventory() {
   const narrowed = search.trim() !== '' || activeFilter !== 'all'
 
   return (
-    <div className="page">
+    <div className="page rc-inv">
       <div className="page-header rc-page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div><h1>{t('inventory.title')}</h1><p>{t('inventory.itemsCount', { count: items.length })}</p></div>

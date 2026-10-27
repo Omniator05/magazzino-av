@@ -3,11 +3,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, where } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, deleteDoc, deleteField, serverTimestamp, where } from 'firebase/firestore'
 import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
 import { Pin, User, List, Wrench, Check, Search, Clock } from '../components/Icon'
-import { eventHoursLabel, phaseHoursLabel, isRentLastDay } from '../utils/assignmentTimes'
+import { eventHoursLabel, phaseHoursLabel, isRentLastDay, eventTimeForDay, DEFAULT_START, DEFAULT_END } from '../utils/assignmentTimes'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
@@ -313,10 +313,13 @@ export default function Calendar() {
     if (!editForm.name.trim() || !editForm.date) return
     setSaving(true)
     try {
+      // Evento su più giorni aperto da un giorno: l'orario cambia solo quello (dayTimes.<data>); gli altri restano.
+      const perDay = !!editForm.dayDate && !editForm.applyAll
+      const day = editForm.dayDate
       const updated = {
         name: editForm.name.trim(), date: editForm.date,
         dateEnd: editForm.dateEnd || null,
-        allDay: editForm.allDay, timeStart: editForm.allDay ? null : (editForm.timeStart || null), timeEnd: editForm.allDay ? null : (editForm.timeEnd || null),
+        ...(perDay ? {} : { allDay: editForm.allDay, timeStart: editForm.allDay ? null : (editForm.timeStart || null), timeEnd: editForm.allDay ? null : (editForm.timeEnd || null) }),
         location: editForm.location.trim(), notes: editForm.notes.trim(),
         phases: editForm.phases || {},
         quoteRef: (editForm.quoteRef || '').trim(),
@@ -324,9 +327,26 @@ export default function Calendar() {
           name: (editForm.managerName || '').trim(), phone: (editForm.managerPhone || '').trim(), email: (editForm.managerEmail || '').trim(),
         },
       }
+      let dayChange = null
+      if (perDay) {
+        const dayAllDay = editForm.dayAllDay !== false
+        const [oldS, oldE] = eventTimeForDay(editingEvent, day)
+        if (dayAllDay) {
+          // senza un orario proprio il giorno prende quello dell'evento: se quello non è "tutto il giorno" serve un segno esplicito
+          const [defS, defE] = eventTimeForDay({ ...editingEvent, dayTimes: undefined }, day)
+          const needsMarker = !(defS === DEFAULT_START && defE === DEFAULT_END)
+          updated[`dayTimes.${day}`] = needsMarker ? { timeStart: DEFAULT_START, timeEnd: DEFAULT_END } : deleteField()
+          dayChange = { old: [oldS, oldE], next: [DEFAULT_START, DEFAULT_END] }
+        } else if (editForm.dayTimeStart && editForm.dayTimeEnd) {
+          updated[`dayTimes.${day}`] = { timeStart: editForm.dayTimeStart, timeEnd: editForm.dayTimeEnd }
+          dayChange = { old: [oldS, oldE], next: [editForm.dayTimeStart, editForm.dayTimeEnd] }
+        }
+      }
       await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), updated), isOnline)
       if (updated.eventManager.name) rememberEventManager(teamId, user.uid, updated.eventManager).catch(() => {})
-      notifyEventTimeChangedIfNeeded(editingEvent.id, editingEvent, updated)
+      if (perDay) {
+        if (dayChange) notifyEventTimeChangedIfNeeded(editingEvent.id, { name: updated.name, timeStart: dayChange.old[0], timeEnd: dayChange.old[1] }, { name: updated.name, timeStart: dayChange.next[0], timeEnd: dayChange.next[1] })
+      } else notifyEventTimeChangedIfNeeded(editingEvent.id, editingEvent, updated)
       if (!isOnline) showToast(t('common.savedOfflineToast'))
       setEditingEvent(null)
     } finally { setSaving(false) }
@@ -360,7 +380,13 @@ export default function Calendar() {
   const openEdit = (e, ev) => {
     e.stopPropagation()
     setEditingEvent(ev)
+    // Evento su più giorni aperto da un giorno preciso: gli orari che si impostano valgono per quel giorno
+    const last = ev.dateEnd && ev.dateEnd > ev.date ? ev.dateEnd : null
+    const dayDate = last && ev.type !== 'installation' && !ev.isDeadlineReminder && selectedDate && selectedDate >= ev.date && selectedDate <= last ? selectedDate : null
+    const [dayS, dayE] = dayDate ? eventTimeForDay(ev, dayDate) : [DEFAULT_START, DEFAULT_END]
+    const dayAllDay = dayS === DEFAULT_START && dayE === DEFAULT_END
     setEditForm({
+      dayDate, applyAll: false, dayAllDay, dayTimeStart: dayAllDay ? '' : dayS, dayTimeEnd: dayAllDay ? '' : dayE,
       name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'',
       allDay: ev.allDay !== false, timeStart: ev.timeStart||'', timeEnd: ev.timeEnd||'',
       location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
@@ -451,6 +477,41 @@ export default function Calendar() {
   // eventi dello stesso rango resta quello originale.
   const eventRank = e => e.isDeadlineReminder ? 4 : e.type === 'installation' ? 3 : 0
   Object.values(eventsByDate).forEach(list => list.sort((a, b) => eventRank(a) - eventRank(b)))
+
+  // Eventi su più giorni: nella griglia mensile sono UNA barra che attraversa le celle dei giorni (come in Google
+  // Calendar), non una scritta ripetuta in ognuna — si capisce subito che è un evento solo. Ogni settimana ha le sue
+  // barre (un evento che va a capo continua nella riga sotto), ognuna sempre sulla stessa corsia in tutti i suoi giorni
+  // così restano allineate. I rent/install (compaiono solo a inizio e fine) e i promemoria non sono barre; se le corsie
+  // non bastano (più di 3, o 2 da telefono) l'evento resta una riga normale in ogni cella.
+  const SPAN_LANES = isMobile ? 2 : 3
+  const eventLastDay = e => (e.dateEnd && e.dateEnd >= e.date ? e.dateEnd : e.date)
+  const weekSegs = []
+  for (let w = 0; w < Math.ceil(cells.length / 7); w++) {
+    const days = cells.slice(w * 7, w * 7 + 7).map(c => toDateStr(c.dateObj))
+    const segs = []
+    events.forEach(ev => {
+      if (!ev.date || ev.isDeadlineReminder || ev.type === 'installation' || eventLastDay(ev) <= ev.date) return
+      const last = eventLastDay(ev)
+      if (ev.date > days[6] || last < days[0]) return
+      const startCol = ev.date <= days[0] ? 0 : days.indexOf(ev.date)
+      const endCol = last >= days[6] ? 6 : days.indexOf(last)
+      // La barra si disegna nella prima cella "piena" del tratto (non sfumata: giorno passato o di un altro mese), altrimenti
+      // la sfumatura della cella la farebbe sembrare sbiadita anche sui giorni normali; da lì si estende a sinistra e a destra.
+      let anchorCol = startCol
+      for (let c = startCol; c <= endCol; c++) { if (cells[w * 7 + c].current && days[c] >= todayStr) { anchorCol = c; break } }
+      segs.push({ ev, startCol, endCol, anchorCol, contL: ev.date < days[0], contR: last > days[6], lane: -1 })
+    })
+    segs.sort((a, b) => a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol) || (a.ev.name || '').localeCompare(b.ev.name || ''))
+    const laneEnd = []
+    segs.forEach(sg => {
+      let lane = laneEnd.findIndex(end => end < sg.startCol)
+      if (lane === -1) lane = laneEnd.length
+      if (lane >= SPAN_LANES) return
+      laneEnd[lane] = sg.endCol
+      sg.lane = lane
+    })
+    weekSegs.push(segs.filter(sg => sg.lane >= 0))
+  }
 
   // Futuri (oggi compreso) prima, dal più vicino — poi i passati, dal più
   // recente: aprendo la ricerca si cerca quasi sempre un evento che deve
@@ -755,7 +816,7 @@ export default function Calendar() {
         </div>
 
         {/* Griglia mese — puntini colorati, tap per selezionare il giorno; swipe orizzontale per cambiare mese */}
-        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)' }}>
+        <div key={`${cursor.year}-${cursor.month}`} className="cal-grid-swipe" {...swipeMonth} style={{ display:'grid', gridTemplateColumns:'repeat(7,minmax(0,1fr))' }}>
           {cells.map((cell, i) => {
             const isLastCol = i % 7 === 6
             const isLastRow = Math.floor(i / 7) === Math.ceil(cells.length / 7) - 1
@@ -770,6 +831,11 @@ export default function Calendar() {
               const end = ev.dateEnd && ev.dateEnd >= ev.date ? ev.dateEnd : ev.date
               return dStr === ev.date || dStr === end
             })
+            // Barre degli eventi su più giorni che attraversano questa cella (vedi weekSegs)
+            const col = i % 7
+            const segsHere = (weekSegs[Math.floor(i / 7)] || []).filter(sg => sg.startCol <= col && sg.endCol >= col)
+            const spanIds = new Set(segsHere.map(sg => sg.ev.id))
+            const startsBar = segsHere.some(sg => sg.anchorCol === col)
             const dayGoogleEvents = googleEventsByDate[dStr] || []
             const dayAbsences = absencesOnDate(dStr)
             const hasMyAbsence = dayAbsences.some(a => a.workerId === user?.uid)
@@ -806,7 +872,10 @@ export default function Calendar() {
                   flexDirection:'column',
                   alignItems:'center',
                   gap: isMobile ? 2 : 3,
-                  overflow:'hidden',
+                  // le barre degli eventi su più giorni escono dalla cella: sopra quelle accanto
+                  overflow:'visible',
+                  minWidth: 0,
+                  zIndex: startsBar ? 3 : undefined,
                   cursor:'pointer',
                   transition:'background 0.1s ease, box-shadow 0.1s ease',
                 }}
@@ -856,7 +925,7 @@ export default function Calendar() {
                   // evento. mergedEventIds tiene traccia di chi è già stato
                   // "assorbito" così dopo non viene ripetuto tra le fasi.
                   const mergedEventIds = new Set()
-                  const eventRows = dayEvents.map(ev => {
+                  const eventRows = dayEvents.filter(ev => !spanIds.has(ev.id)).map(ev => {
                     const isAssigned = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
                     const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
                     const baseColor = ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)'
@@ -891,22 +960,45 @@ export default function Calendar() {
                       return { key: `tk${group.id}`, name: group.label || t('staffTimeline.untitledTask'), rank: 2, color: isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--blue)', isTask: true, task: group }
                     }),
                   ].sort((a, b) => a.rank - b.rank)
-                  if (titleRows.length === 0) return null
+                  if (titleRows.length === 0 && segsHere.length === 0) return null
                   // Cella alta come prima: su computer entrano 3 card per giorno, su telefono 2.
                   const maxRows = isMobile ? 2 : 3
+                  // Le corsie delle barre stanno in alto; le righe normali occupano quelle che restano.
+                  const lanes = segsHere.length ? Math.max(...segsHere.map(sg => sg.lane)) + 1 : 0
+                  const room = Math.max(0, maxRows - lanes)
+                  const rowStyle = { display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.3, padding:'1.5px 4px', borderRadius:4, maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
+                  const padX = isMobile ? 3 : 6   // stessa imbottitura laterale della cella (vedi sopra)
                   return (
                     <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>
-                      {titleRows.slice(0, maxRows).map(row => (
+                      {Array.from({ length: lanes }, (_, lane) => {
+                        const sg = segsHere.find(s => s.lane === lane)
+                        // Corsia vuota o barra già iniziata in una cella prima: resta lo spazio, la barra la disegna la prima cella
+                        if (!sg || sg.anchorCol !== col) return <span key={`ln${lane}`} aria-hidden="true" style={{ ...rowStyle, visibility:'hidden' }}>&nbsp;</span>
+                        const n = sg.endCol - sg.startCol + 1
+                        const extraL = sg.contL ? padX : 0, extraR = sg.contR ? padX : 0
+                        const back = sg.anchorCol - sg.startCol   // celle sfumate prima di questa che la barra copre comunque
+                        const evPast = eventLastDay(sg.ev) < todayStr
+                        const isAssigned = isWorker && (sg.ev.assignedWorkers || []).includes(user?.uid)
+                        const color = isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)'
+                        return (
+                          <span key={`bar${sg.ev.id}`} style={{
+                            ...rowStyle, position:'relative', zIndex:2, pointerEvents:'none',
+                            maxWidth:'none', width:`calc(${n * 100}% + ${(n - 1) * (padX * 2 + 1) + extraL + extraR}px)`, marginLeft:`calc(${-back * 100}% - ${back * (padX * 2 + 1) + extraL}px)`,
+                            borderTopLeftRadius: sg.contL ? 0 : 4, borderBottomLeftRadius: sg.contL ? 0 : 4,
+                            borderTopRightRadius: sg.contR ? 0 : 4, borderBottomRightRadius: sg.contR ? 0 : 4,
+                            background: evPast ? 'var(--text2)' : color, color:'#fff',
+                          }}>{sg.contL ? '‹ ' : ''}{sg.ev.name}{sg.contR ? ' ›' : ''}</span>
+                        )
+                      })}
+                      {titleRows.slice(0, room).map(row => (
                         <span key={row.key} style={{
-                          display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.3,
-                          padding:'1.5px 4px', borderRadius:4, maxWidth:'100%',
-                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                          ...rowStyle,
                           background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.split ? `linear-gradient(90deg, ${row.split[0]} 50%, ${row.split[1]} 50%)` : row.color,
                           color: row.isReminder ? 'var(--text3)' : '#fff',
                         }}>{row.name}</span>
                       ))}
-                      {titleRows.length > maxRows && (
-                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - maxRows}</span>
+                      {titleRows.length > room && (
+                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - room}</span>
                       )}
                     </div>
                   )

@@ -95,6 +95,8 @@
     },
     "brokenAlert_one": "1 broken item to repair",
     "brokenAlert_other": "{{count}} broken items to repair",
+    "defectAlert_one": "1 item with a defect",
+    "defectAlert_other": "{{count}} items with a defect",
     "reorderSingle": "\"{{name}}\" to reorder",
     "reorderMultiple": "{{count}} consumables to reorder",
     "view": "View",

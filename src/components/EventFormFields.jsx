@@ -117,17 +117,24 @@ export default function EventFormFields({ form, setForm, idp, teamId, showType, 
               </div>
             </div>
           )}
-          <div style={{ borderTop: '1px solid var(--c-fill)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-ink)', flex: form.allDay !== false ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
-            {form.allDay === false && (
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ flex: 1, minWidth: 0 }}><TimeField value={form.timeStart || ''} onChange={v => set({ timeStart: v })} compact /></div>
-                <span aria-hidden="true" style={{ color: 'var(--c-ink3)' }}>–</span>
-                <div style={{ flex: 1, minWidth: 0 }}><TimeField value={form.timeEnd || ''} onChange={v => set({ timeEnd: v })} clearable compact /></div>
+          {(() => {
+            const perDay = !!form.dayDate && !form.applyAll
+            const K = perDay ? { all: 'dayAllDay', s: 'dayTimeStart', e: 'dayTimeEnd' } : { all: 'allDay', s: 'timeStart', e: 'timeEnd' }
+            const isAll = form[K.all] !== false
+            return (
+              <div style={{ borderTop: '1px solid var(--c-fill)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-ink)', flex: isAll ? 1 : '0 0 auto' }}>{t('events.allDayLabel')}</span>
+                {!isAll && (
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}><TimeField value={form[K.s] || ''} onChange={v => set({ [K.s]: v })} compact /></div>
+                    <span aria-hidden="true" style={{ color: 'var(--c-ink3)' }}>–</span>
+                    <div style={{ flex: 1, minWidth: 0 }}><TimeField value={form[K.e] || ''} onChange={v => set({ [K.e]: v })} clearable={!perDay} compact /></div>
+                  </div>
+                )}
+                <Switch on={isAll} onChange={v => set({ [K.all]: v, ...(!v && !form[K.s] && !form[K.e] ? { [K.s]: '09:00', [K.e]: '18:00' } : {}) })} label={t('events.allDayLabel')} />
               </div>
-            )}
-            <Switch on={form.allDay !== false} onChange={v => set({ allDay: v, ...(!v && !form.timeStart && !form.timeEnd ? { timeStart: '09:00', timeEnd: '18:00' } : {}) })} label={t('events.allDayLabel')} />
-          </div>
+            )
+          })()}
         </div>
       </div>
 

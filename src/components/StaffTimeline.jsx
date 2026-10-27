@@ -78,10 +78,12 @@ function pad(n) { return String(n).padStart(2, '0') }
 // Ora intera della griglia → "HH:00". Il bordo destro (24) non è un orario
 // valido: l'ultimo minuto utile della giornata è 23:59.
 function hourToTime(h) { return h >= 24 ? '23:59' : `${pad(h)}:00` }
-// Un'attività LIBERA (task) può scavalcare la mezzanotte: se l'ora di fine è
-// uguale o precedente a quella d'inizio finisce il giorno dopo (23:00–02:00).
-// Vale solo per i task — eventi e fasi restano dentro il loro giorno.
+// Un'attività può scavalcare la mezzanotte: se l'ora di fine è precedente a quella
+// d'inizio finisce il giorno dopo (18:00–02:00, una festa che finisce a notte fonda).
+// Per un'attività libera (task) anche la stessa ora vale "24 ore dopo" (fine ≤ inizio);
+// per eventi e fasi la stessa ora non è un orario valido, quindi conta solo fine < inizio.
 function isOvernight(startTime, endTime) { return toMin(endTime) <= toMin(startTime) }
+function endsNextDay(startTime, endTime) { return toMin(endTime) < toMin(startTime) }
 // Posizione/larghezza (frazioni della colonna, 0–1) di una card che copre
 // [startMin, endMin] di UNA giornata, con la larghezza minima di sopra;
 // se non ci sta più a destra viene spostata a sinistra, mai tagliata.
@@ -133,7 +135,7 @@ function hourSlotFromClientX(clientX, rect) {
 // altrimenti ne apre una nuova. Ordinati prima per priorità (evento > fase >
 // rent > task) e solo a parità per orario, così le corsie in alto sono
 // sempre quelle "più importanti", non solo le più mattiniere.
-function packLanes(items) {
+function packLanes(items, fixed = {}) {
   // Eventi, fasi e attività si dispongono per ORARIO d'inizio: il più presto in
   // alto, poi a scendere (a parità, evento prima di fase prima di task). I
   // rent/install (rank 3) restano sempre in fondo, sotto tutte le altre
@@ -143,9 +145,19 @@ function packLanes(items) {
   const regular = items.filter(i => i.rank !== 3).sort(byStart)
   const rents = items.filter(i => i.rank === 3).sort(byStart)
   const laneOf = {}
+  // `fixed`: pezzi "continua" (attività a cavallo della mezzanotte) che devono restare sulla STESSA corsia del giorno
+  // prima, così la pillola prosegue sulla stessa riga attraverso il confine fra i giorni.
   const place = (list, offset) => {
     const laneEnds = []
     list.forEach(it => {
+      if (fixed[it.key] == null) return
+      const lane = fixed[it.key]
+      while (laneEnds.length <= lane) laneEnds.push(0)
+      laneEnds[lane] = Math.max(laneEnds[lane], it.geoRight)
+      laneOf[it.key] = offset + lane
+    })
+    list.forEach(it => {
+      if (fixed[it.key] != null) return
       let lane = laneEnds.findIndex(end => end <= it.geoLeft + 1e-6)
       if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.geoRight) }
       else laneEnds[lane] = it.geoRight
@@ -397,8 +409,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           // quelle dell'evento vero e proprio.
           const assigned = blocks.filter(b => b.eventId === ev.id && b.date === date && !b.phase)
           const sm = toMin(startTime), em = toMin(endTime)
-          return finishItem({ key: `ev${ev.id}`, type: 'event', event: ev, date, startTime, endTime, rank, assigned },
-            { winStart: sm, winEnd: em, geoStartMin: sm, geoEndMin: em, anchor: { overnight: false, startMin: 0 } })
+          const overnight = endsNextDay(startTime, endTime)   // festa 18:00–02:00: la card arriva a mezzanotte e continua il giorno dopo
+          return finishItem({ key: `ev${ev.id}`, type: 'event', event: ev, date, startTime, endTime, overnight, rank, assigned },
+            overnight
+              ? { winStart: sm, winEnd: 1440 + em, geoStartMin: sm, geoEndMin: 1440, anchor: { overnight: true, startMin: sm } }
+              : { winStart: sm, winEnd: em, geoStartMin: sm, geoEndMin: em, anchor: { overnight: false, startMin: 0 } })
         })
       // Le fasi hanno SEMPRE la propria card (anche nello stesso giorno
       // dell'evento) con orario e persone indipendenti dall'evento. Le
@@ -412,8 +427,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
             const assigned = blocks.filter(b => b.eventId === ev.id && b.date === date && (b.phase === key || (!b.phase && !eventOnDay)))
             const [startTime, endTime] = phaseTimeFor(ev, key, date)
             const sm = toMin(startTime), em = toMin(endTime)
-            return finishItem({ key: `ph${ev.id}-${key}`, type: 'phase', event: ev, phaseKey: key, date, startTime, endTime, rank: 1, assigned },
-              { winStart: sm, winEnd: em, geoStartMin: sm, geoEndMin: em, anchor: { overnight: false, startMin: 0 } })
+            const overnight = endsNextDay(startTime, endTime)
+            return finishItem({ key: `ph${ev.id}-${key}`, type: 'phase', event: ev, phaseKey: key, date, startTime, endTime, overnight, rank: 1, assigned },
+              overnight
+                ? { winStart: sm, winEnd: 1440 + em, geoStartMin: sm, geoEndMin: 1440, anchor: { overnight: true, startMin: sm } }
+                : { winStart: sm, winEnd: em, geoStartMin: sm, geoEndMin: em, anchor: { overnight: false, startMin: 0 } })
           }))
       // Più persone sullo stesso task libero: i blocchi che condividono
       // taskGroupId sono la STESSA commissione (una card, una riga a testa,
@@ -440,8 +458,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         const anchor = { overnight, startMin: sm }
         const base = { key: `tk${gid}`, type: 'task', block: group[0], group, taskGroupId: gid, date, startTime, endTime, overnight, rank: 2, assigned,
           linkedEventId: group.find(b => b.linkedEventId)?.linkedEventId || null, linkedListId: group.find(b => b.linkedListId)?.linkedListId || null }
+        // La finestra delle persone arriva fino a fine attività (anche dopo la mezzanotte): la pillola è una sola
         return finishItem(base, overnight
-          ? { winStart: sm, winEnd: 1440, geoStartMin: sm, geoEndMin: 1440, anchor }
+          ? { winStart: sm, winEnd: 1440 + em, geoStartMin: sm, geoEndMin: 1440, anchor }
           : { winStart: sm, winEnd: em, geoStartMin: sm, geoEndMin: em, anchor })
       })
       map[date] = [...dayEventItems, ...dayPhaseItems, ...dayTasks]
@@ -451,7 +470,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     // chiave, `date` resta quello d'origine per colonna laterale e scritture).
     allDates.slice(1).forEach((date, i) => {
       const prev = allDates[i]
-      const conts = map[prev].filter(it => it.type === 'task' && it.overnight && !it.cont).map(it => {
+      const conts = map[prev].filter(it => it.overnight && !it.cont && !map[date].some(x => x.key === it.key)).map(it => {
         const em = toMin(it.endTime)
         return finishItem({ ...it, cont: true, assigned: it.assigned },
           { winStart: 1440, winEnd: 1440 + em, geoStartMin: 0, geoEndMin: em, anchor: { overnight: true, startMin: toMin(it.startTime) } })
@@ -467,9 +486,18 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // render sia per capire a quale corsia corrisponde un click in verticale.
   const dayLaneInfo = useMemo(() => {
     const info = {}
-    weekDates.forEach(date => { info[date] = packLanes(itemsByDay[date]) })
+    // Giorni in ordine: un pezzo "continua" prende la corsia che il suo inizio aveva il giorno prima
+    // (per il primo giorno della settimana si guarda il giorno che lo precede, fuori vista).
+    const beforeWeek = itemsByDay[toDateStr(addDays(weekStart, -1))]
+    let prev = beforeWeek ? packLanes(beforeWeek) : null
+    weekDates.forEach(date => {
+      const fixed = {}
+      if (prev) itemsByDay[date].forEach(it => { if (it.cont && prev.laneOf[it.key] != null) fixed[it.key] = prev.laneOf[it.key] })
+      info[date] = { ...packLanes(itemsByDay[date], fixed), fixed }
+      prev = info[date]
+    })
     return info
-  }, [itemsByDay, weekDates])
+  }, [itemsByDay, weekDates, weekStart])
 
   // +1 oltre la corsia più piena della settimana: garantisce una riga
   // sempre libera in fondo anche nel giorno più occupato, pronta per
@@ -517,7 +545,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // sopra le altre card, così si capisce sempre che si è in creazione.
   const previewLane = (date, hour) => {
     const g = cardGeometry(hour * 60, (hour + 1) * 60)
-    const { laneOf } = packLanes([...itemsByDay[date], { key: '__preview__', rank: 2, sortStart: hour * 60, geoLeft: g.left, geoRight: g.right }])
+    const { laneOf } = packLanes([...itemsByDay[date], { key: '__preview__', rank: 2, sortStart: hour * 60, geoLeft: g.left, geoRight: g.right }], dayLaneInfo[date]?.fixed)
     return Math.min(laneOf.__preview__, laneTop.length - 1)
   }
 
@@ -887,7 +915,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // Sulla settimana corrente "Oggi" è già dove siamo (rosso, informativo);
   // appena ci si allontana diventa grigio, un invito a tornare — l'hover lo
   // riaccende di rosso per far capire che il tap riporta alla data odierna.
-  const isCurrentWeek = weekDates[0] === todayStr
+  const isCurrentWeek = weekDates.includes(todayStr)   // rossa in qualunque giorno della settimana che contiene oggi
 
   return (
     <div className="rc-view-in" style={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -1097,6 +1125,13 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                         if (selectedPerson) { handleDropOrTap(item, selectedPerson); return }
                         requestPanel({ key: item.key, date: item.date, isNew: false })
                       }
+                      // Attività che scavalca la mezzanotte: è UNA pillola sola, che dal suo giorno si allunga oltre la linea
+                      // che separa i giorni fino a coprire anche la parte del giorno dopo (titolo e persone compresi). Il
+                      // pezzo "continua" del giorno dopo non si disegna (resta solo la sua corsia riservata, vedi packLanes),
+                      // a meno che il giorno d'inizio sia fuori dalla settimana mostrata: lì serve come card a sé.
+                      const spansNext = !!item.overnight && !item.cont && date !== weekDates[weekDates.length - 1]
+                      if (item.cont && date !== weekDates[0]) return null
+                      const spanRight = spansNext ? cardGeometry(0, toMin(item.endTime)).right : 0
                       const timeLabel = item.cont ? `‹ 00:00–${item.endTime}` : item.overnight ? `${item.startTime}–${item.endTime} +1` : `${item.startTime}–${item.endTime}`
                       return (
                         <div key={item.key} data-card={`${item.key}|${item.date}`}
@@ -1106,7 +1141,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                           onDragLeave={e => { if (e.currentTarget.contains(e.relatedTarget)) return; setDragOverKey(k => k === item.key ? null : k) }}
                           onDrop={e => { e.preventDefault(); setDragOverKey(null); handleDropOrTap(item, draggedPerson); setDraggedPerson(null) }}
                           style={{
-                            position: 'absolute', top: laneTop[lane] + ITEM_MARGIN, height: item.contentHeight, left: `${item.geoLeft * 100}%`, width: `${item.geoWidth * 100}%`,
+                            position: 'absolute', top: laneTop[lane] + ITEM_MARGIN, height: item.contentHeight,
+                            left: `${item.geoLeft * 100}%`, zIndex: spansNext ? 3 : undefined,
+                            // +1px = la linea che separa i due giorni, che la pillola attraversa
+                            width: spansNext ? `calc(${(1 - item.geoLeft + spanRight) * 100}% + 1px)` : `${item.geoWidth * 100}%`,
                             background: 'var(--c-surface)', color: isPast ? 'var(--c-ink3)' : 'var(--c-ink)', borderRadius: 10, padding: `${CARD_PAD}px 12px ${CARD_PAD}px 10px`,
                             display: 'flex', flexDirection: 'column', gap: ROW_GAP,
                             overflow: 'hidden', cursor: 'pointer',

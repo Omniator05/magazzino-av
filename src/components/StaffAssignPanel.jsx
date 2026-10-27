@@ -139,12 +139,12 @@ export default function StaffAssignPanel({
   const submit = async () => {
     setError('')
     if (isTask && !label.trim()) { setError(t('staffTimeline.errorNoLabel')); return }
-    // Un'attività libera può scavalcare la mezzanotte (fine ≤ inizio = giorno
-    // dopo), basta che inizio e fine non coincidano; eventi e fasi no.
-    const badRange = (s0, e0) => (isTask ? e0 === s0 : e0 <= s0)
+    // Si può scavalcare la mezzanotte (18:00–02:00 = finisce il giorno dopo): basta che
+    // inizio e fine non coincidano.
+    const badRange = (s0, e0) => e0 === s0
     const keptRows = rows.filter(r => !removedIds.has(r.blockId))
     if (badRange(startTime, endTime) || keptRows.some(r => badRange(r.startTime, r.endTime)) || (draftReady && badRange(draft.startTime, draft.endTime))) {
-      setError(t(isTask ? 'staffTimeline.errorTimeEqual' : 'staffTimeline.errorTimeRange'))
+      setError(t('staffTimeline.errorTimeEqual'))
       return
     }
     setSaving(true)
@@ -280,7 +280,7 @@ export default function StaffAssignPanel({
               <TimeField value={endTime} onChange={v => setShared('endTime', v)} />
             </div>
           </div>
-          {isTask && endTime <= startTime && (
+          {(isTask ? endTime <= startTime : endTime < startTime) && (
             <p style={{ margin: '8px 0 0', fontSize: 11.5, fontWeight: 700, color: '#0066cc' }}>{t('staffTimeline.endsNextDay')}</p>
           )}
         </div>

@@ -5,7 +5,7 @@ import { useConfirm } from '../context/ConfirmProvider'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, where, serverTimestamp } from 'firebase/firestore'
 import { Pin, User, Calendar, Wrench, Check, List, Clock } from '../components/Icon'
-import { eventHoursLabel, phaseHoursLabel, isRentLastDay } from '../utils/assignmentTimes'
+import { eventHoursLabel, phaseHoursLabel, isRentLastDay, endsAfterMidnight } from '../utils/assignmentTimes'
 import { assigneesOnDay } from '../utils/workerAssignment'
 import AssigneeAvatars from '../components/AssigneeAvatars'
 import { useSwipeMonth } from '../hooks/useSwipeMonth'
@@ -384,6 +384,12 @@ export default function WorkerCalendar() {
       else cur.coincides = true
       m.set(it.event.id, cur)
     })
+    // Serata che è finita dopo la mezzanotte (18:00–02:00) il giorno prima: oggi compare come "continua".
+    const yesterday = selectedDate ? toDateStr(new Date(new Date(selectedDate + 'T12:00:00').getTime() - 86400000)) : null
+    allEvents.forEach(e => {
+      if (!e.date || e.date !== yesterday || m.has(e.id) || !endsAfterMidnight(e)) return
+      m.set(e.id, { event: e, assigned: isAssignedToMe(e), phases: [], coincides: true, cont: true })
+    })
     const rank = ({ event: ev, assigned }) => ev.isDeadlineReminder ? 3 : ev.type === 'installation' ? 2 : assigned ? 0 : 1
     return [...m.values()].sort((a, b) => rank(a) - rank(b))
   })()
@@ -646,7 +652,7 @@ export default function WorkerCalendar() {
           {selectedEvents.length === 0 && selectedGoogleEvents.length === 0 && selectedMyTasks.length === 0 ? (
             <p style={{ fontSize:13, color:'var(--text3)', fontStyle:'italic', padding:'8px 0' }}>{t('calendar.noEventsToday')}</p>
           ) : (
-            selectedEvents.map(({ event: ev, assigned: mine, phases, coincides }) => {
+            selectedEvents.map(({ event: ev, assigned: mine, phases, coincides, cont }) => {
               // Promemoria scadenza (vedi utils/deadlines.js): non è una vera
               // lista di carico, non si apre — si cambia dalla scheda
               // furgone/oggetto che l'ha generato.
@@ -677,7 +683,7 @@ export default function WorkerCalendar() {
                     <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:6 }}>
                       {ev.type === 'installation' && <Wrench size={13} />}{ev.name}
                     </p>
-                    <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4, fontVariantNumeric:'tabular-nums' }}><Clock size={12} /> {eventHoursLabel(ev, selectedDate, t('events.allDayLabel'))}</p>
+                    <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4, fontVariantNumeric:'tabular-nums' }}><Clock size={12} /> {cont ? `${t('workerCalendar.taskContinues')} · 00:00–${ev.timeEnd}` : eventHoursLabel(ev, selectedDate, t('events.allDayLabel'))}</p>
                     {isRentLastDay(ev, selectedDate) && <div style={{ marginTop:5 }}><span style={{ display:'inline-block', background:'rgba(124,111,205,0.14)', color:'#5b4fcf', border:'1px solid rgba(124,111,205,0.35)', borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:800 }}>{t('calendar.rentLastDay')}</span></div>}
                     {ev.location && <p style={{ fontSize:12, color:'var(--text2)', marginTop:1, display:'flex', alignItems:'center', gap:4 }}><Pin size={12} /> {ev.location}</p>}
                     {phases.length > 0 && (
@@ -701,7 +707,7 @@ export default function WorkerCalendar() {
                         ))}
                       </div>
                     )}
-                    <AssigneeAvatars people={peopleOfEvent(ev, selectedDate, phases, coincides)} style={{ marginTop:8 }} />
+                    <AssigneeAvatars people={peopleOfEvent(ev, cont ? ev.date : selectedDate, phases, coincides)} style={{ marginTop:8 }} />
                     {mine && <p style={{ fontSize:11, color:'var(--accent)', fontWeight:700, marginTop:4, display:'flex', alignItems:'center', gap:4 }}><User size={12} /> {t('workerCalendar.assignedToYouInline')}</p>}
                   </div>
                   <span style={{ color:'var(--text3)', fontSize:20, flexShrink:0 }}>›</span>

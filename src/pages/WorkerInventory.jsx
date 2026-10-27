@@ -332,7 +332,7 @@ export default function WorkerInventory() {
   }, [showScanner, detail])
 
   return (
-    <div className="page">
+    <div className="page rc-inv">
       <div className="page-header rc-page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>

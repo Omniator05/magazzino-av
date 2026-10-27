@@ -7,6 +7,33 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-07',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Calendario: un evento su più giorni è ora una barra unica che attraversa le celle dei giorni, non una scritta ripetuta; toccando un giorno si apre il dettaglio di quel giorno',
+        'Eventi su più giorni: modificando un evento dopo aver scelto un giorno, l\'orario che imposti vale solo per quel giorno. L\'orario dell\'evento vale per ogni giorno che non ne ha uno suo',
+        'Assegna personale: le attività e le feste che finiscono dopo la mezzanotte (18:00–02:00) si possono impostare anche per eventi e fasi, e sono una pillola sola che passa oltre la linea dei giorni, con titolo e persone',
+        'Calendario del magazziniere: una serata finita dopo la mezzanotte compare anche il giorno dopo come "continua"',
+        'Timeline: "Oggi" diventa rosso in qualsiasi giorno della settimana che contiene oggi, grigio sulle altre',
+        'Hover più calmo su tutta l\'app: niente ombre né schiariture sui pulsanti, e le righe del Magazzino si colorano piano al passaggio del mouse',
+        'Dashboard: nella sezione "Da vedere" compaiono anche gli oggetti con difetto',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Calendar: a multi-day event is now a single bar crossing the day cells instead of a repeated label; tapping a day opens that day\'s details',
+        'Multi-day events: when you edit an event after picking a day, the hours you set apply to that day only. The event\'s hours apply to every day that has none of its own',
+        'Assign staff: activities and parties that end after midnight (18:00–02:00) now also work for events and phases, and appear as a single pill that crosses the day line, with title and people',
+        'Worker calendar: an evening that ran past midnight also shows on the next day as "continues"',
+        'Timeline: "Today" turns red on any day of the week containing today, grey on the others',
+        'Calmer hover across the whole app: no shadows or brightening on buttons, and Warehouse rows tint softly under the mouse',
+        'Dashboard: the "To review" section now also lists items with a defect',
+      ],
+    },
+  },
+  {
     version: '2026-11-06',
     it: {
       title: 'Novità di oggi',

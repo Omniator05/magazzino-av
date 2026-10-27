@@ -210,6 +210,9 @@ export default function Dashboard({ toggleTheme, theme }) {
   const name         = profile?.name?.split(' ')[0] || profile?.username || 'Admin'
   const brokenItems  = items.filter(i => (i.brokenQty || 0) > 0)
   const totalBroken  = brokenItems.reduce((sum, i) => sum + (i.brokenQty || 0), 0)
+  // "Con difetto": ancora utilizzabili, ma con un problema da sistemare
+  const defectItems  = items.filter(i => (i.defectQty || 0) > 0)
+  const totalDefect  = defectItems.reduce((sum, i) => sum + (i.defectQty || 0), 0)
   const reorderItems = items.filter(i => i.category === 'Consumabili' && i.minStock > 0 && (i.availableQty ?? i.totalQty) <= i.minStock)
   const openTasks    = tasks.filter(t => !t.done)
   // Un rent/install non ha bisogno di personale ogni giorno finché dura —
@@ -410,7 +413,7 @@ export default function Dashboard({ toggleTheme, theme }) {
     </>
   )
 
-  const attentionBlock = (brokenItems.length > 0 || reorderItems.length > 0) ? (
+  const attentionBlock = (brokenItems.length > 0 || defectItems.length > 0 || reorderItems.length > 0) ? (
     <>
       <p style={sectionLabel}>{t('dashboard.attentionSection')}</p>
       <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:32 }}>
@@ -418,6 +421,13 @@ export default function Dashboard({ toggleTheme, theme }) {
           <button type="button" className="btn-no-anim" onClick={() => navigate('/inventory', { state: { filter: 'broken' } })} style={attentionRow}>
             <span style={{ ...attentionDot, background:'#e63946' }} />
             <span style={{ flex:1, textAlign:'left' }}>{t('dashboard.brokenAlert', { count: totalBroken })}</span>
+            <span style={{ color:'var(--c-ink3)', display:'flex' }}><IconChevron /></span>
+          </button>
+        )}
+        {defectItems.length > 0 && (
+          <button type="button" className="btn-no-anim" onClick={() => navigate('/inventory', { state: { filter: 'defect' } })} style={attentionRow}>
+            <span style={{ ...attentionDot, background:'#d97706' }} />
+            <span style={{ flex:1, textAlign:'left' }}>{t('dashboard.defectAlert', { count: totalDefect })}</span>
             <span style={{ color:'var(--c-ink3)', display:'flex' }}><IconChevron /></span>
           </button>
         )}

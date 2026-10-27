@@ -19,7 +19,11 @@ export function toMin(hm) {
 export function eventTimeForDay(ev, date) {
   const custom = ev.dayTimes?.[date]
   if (custom?.timeStart && custom?.timeEnd) return [custom.timeStart, custom.timeEnd]
-  if (ev.date === date && ev.allDay === false && ev.timeStart && ev.timeEnd) return [ev.timeStart, ev.timeEnd]
+  // L'orario dell'evento vale per ogni giorno che non ne ha uno suo (un festival su 3 giorni 18:00–02:00 è così
+  // tutti e tre i giorni); i rent/install fanno eccezione, l'orario è quello della consegna del primo giorno.
+  const multiDay = !!ev.dateEnd && ev.dateEnd > ev.date
+  const applies = ev.date === date || (multiDay && ev.type !== 'installation' && date > ev.date && date <= ev.dateEnd)
+  if (applies && ev.allDay === false && ev.timeStart && ev.timeEnd) return [ev.timeStart, ev.timeEnd]
   return [DEFAULT_START, DEFAULT_END]
 }
 // Orario di una FASE (montaggio/smontaggio): quello impostato dal pannello
@@ -33,9 +37,18 @@ export function phaseTimeFor(ev, key, date) {
   if (date >= ev.date && date <= end) {
     const [es, ee] = eventTimeForDay(ev, date)
     if (key === 'montaggio' && toMin(es) > 0) return [DEFAULT_START, es]
-    if (key === 'smontaggio' && toMin(ee) < 1439) return [ee, DEFAULT_END]
+    // Evento che finisce dopo la mezzanotte (18:00–02:00): le 02:00 sono del giorno dopo, quindi lo smontaggio
+    // dello stesso giorno non può partire da lì — resta la giornata intera.
+    if (key === 'smontaggio' && toMin(ee) >= toMin(es) && toMin(ee) < 1439) return [ee, DEFAULT_END]
   }
   return [DEFAULT_START, DEFAULT_END]
+}
+
+// Evento di un solo giorno che finisce dopo la mezzanotte (18:00–02:00): le ore piccole sono già del giorno dopo.
+export function endsAfterMidnight(ev) {
+  if (ev.allDay !== false || !ev.timeStart || !ev.timeEnd) return false
+  if (ev.dateEnd && ev.dateEnd !== ev.date) return false
+  return toMin(ev.timeEnd) < toMin(ev.timeStart)
 }
 
 // Testo dell'orario di un evento in UN giorno, per le card del calendario
@@ -45,7 +58,7 @@ export function phaseTimeFor(ev, key, date) {
 // laterale del Calendario su computer.
 export function eventHoursLabel(ev, date, allDayText) {
   const custom = ev.dayTimes?.[date]
-  if (custom?.timeStart && custom?.timeEnd) return `${custom.timeStart}–${custom.timeEnd}`
+  if (custom?.timeStart && custom?.timeEnd) return custom.timeStart === DEFAULT_START && custom.timeEnd === DEFAULT_END ? allDayText : `${custom.timeStart}–${custom.timeEnd}`
   if (ev.allDay === false && ev.timeStart && ev.timeEnd) return `${ev.timeStart}–${ev.timeEnd}`
   return allDayText
 }

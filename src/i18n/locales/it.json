@@ -95,6 +95,8 @@
     },
     "brokenAlert_one": "1 oggetto rotto da riparare",
     "brokenAlert_other": "{{count}} oggetti rotti da riparare",
+    "defectAlert_one": "1 oggetto con difetto",
+    "defectAlert_other": "{{count}} oggetti con difetto",
     "reorderSingle": "\"{{name}}\" da riordinare",
     "reorderMultiple": "{{count}} consumabili da riordinare",
     "view": "Vedi",
