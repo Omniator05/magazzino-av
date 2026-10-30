@@ -7,6 +7,21 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-09',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Sito pubblico: nuova pagina iniziale con lo stile dell\'app, chiara o scura in base al telefono o al computer, con uno sfondo leggero in movimento e la lista di carico che si compila scorrendo. La lingua si chiede alla prima visita e si cambia dal fondo della pagina',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Public site: new home page in the style of the app, light or dark following your phone or computer, with a light moving background and the load list filling in as you scroll. The language is asked on the first visit and can be changed from the bottom of the page',
+      ],
+    },
+  },
+  {
     version: '2026-11-08',
     it: {
       title: 'Novità di oggi',

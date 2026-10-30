@@ -2230,7 +2230,6 @@
     "seoDescription": "Gestão de armazém para empresas de aluguer de áudio, vídeo e iluminação: inventário, calendário de eventos, listas de carga e leitor de QR/código de barras numa só aplicação. Experimente grátis durante 30 dias.",
     "login": "Entrar",
     "tryFree": "Experimentar",
-    "langLabel": "Idioma",
     "eyebrow": "Software de armazém para aluguer de áudio, vídeo e iluminação",
     "title": "Do armazém à carrinha, sem esquecer nada.",
     "text": "O Roadcase junta inventário, calendário de eventos e listas de carga. O trabalhador do armazém lê os códigos e a aplicação regista o que está pronto, carregado e devolvido.",
@@ -2365,6 +2364,37 @@
     "contact": "Contactos:",
     "privacy": "Privacidade",
     "terms": "Termos",
-    "cookies": "Cookies"
+    "cookies": "Cookies",
+    "heroA": "Do armazém para a carrinha,",
+    "heroB": "sem esquecer nada.",
+    "navFeatures": "Funções",
+    "navPricing": "Preços",
+    "navFaq": "Perguntas",
+    "faqTitle": "Perguntas frequentes",
+    "faq": [
+      {
+        "q": "Preciso de instalar alguma coisa?",
+        "a": "Não. O Roadcase é uma aplicação web: abre-a no navegador e, se quiser, adicione-a ao ecrã inicial do iPhone ou do Android. Não passa por nenhuma loja."
+      },
+      {
+        "q": "Como leio os artigos?",
+        "a": "Com a câmara do telemóvel ou com um leitor Bluetooth, através de QR e código de barras. As etiquetas são geradas diretamente na aplicação."
+      },
+      {
+        "q": "Colegas que falam outro idioma podem usá-la?",
+        "a": "Sim. O Roadcase está em italiano, inglês, português e árabe, e cada pessoa escolhe o seu idioma no próprio perfil."
+      },
+      {
+        "q": "Quanto custa? Posso experimentar?",
+        "a": "Tem 30 dias de teste gratuito, sem cartão. Depois pode ficar no plano Free ou passar para o Team (45 € por mês) ou o Business (129 € por mês)."
+      },
+      {
+        "q": "Os meus dados estão seguros?",
+        "a": "Cada empresa vê apenas os seus próprios dados, e pode descarregar uma cópia completa de tudo a qualquer momento."
+      }
+    ],
+    "langPick": "Escolha o idioma",
+    "langPickClose": "Fechar",
+    "ctaFinal": "Experimente o Roadcase com a sua equipa"
   }
 }

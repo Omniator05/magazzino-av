@@ -2230,7 +2230,6 @@
     "seoDescription": "Gestionale di magazzino per aziende di noleggio audio, video e luci: inventario, calendario eventi, liste di carico e scanner QR/barcode in un'unica app. Prova gratis per 30 giorni.",
     "login": "Accedi",
     "tryFree": "Prova gratis",
-    "langLabel": "Lingua",
     "eyebrow": "Gestionale magazzino per noleggio audio, video e luci",
     "title": "Dal magazzino al furgone, senza dimenticare niente.",
     "text": "Roadcase tiene insieme inventario, calendario eventi e liste di carico. Il magazziniere scansiona, l'app segna cosa è pronto, caricato e rientrato.",
@@ -2365,6 +2364,37 @@
     "contact": "Contatti:",
     "privacy": "Privacy",
     "terms": "Termini",
-    "cookies": "Cookie"
+    "cookies": "Cookie",
+    "heroA": "Dal magazzino al furgone,",
+    "heroB": "senza dimenticare niente.",
+    "navFeatures": "Funzioni",
+    "navPricing": "Prezzi",
+    "navFaq": "Domande",
+    "faqTitle": "Domande frequenti",
+    "faq": [
+      {
+        "q": "Devo installare qualcosa?",
+        "a": "No. Roadcase è un'app web: la apri dal browser e, se vuoi, la aggiungi alla schermata Home di iPhone o Android. Non passa dallo store."
+      },
+      {
+        "q": "Come scansiono gli oggetti?",
+        "a": "Con la fotocamera dello smartphone o con un lettore Bluetooth, tramite QR e codice a barre. Le etichette si generano direttamente dall'app."
+      },
+      {
+        "q": "I colleghi che parlano un'altra lingua possono usarla?",
+        "a": "Sì. Roadcase è in italiano, inglese, portoghese e arabo, e ogni persona sceglie la sua lingua dal proprio profilo."
+      },
+      {
+        "q": "Quanto costa? Posso provarla?",
+        "a": "Hai 30 giorni di prova gratuita, senza carta. Poi puoi restare nel piano Free oppure passare a Team (45 € al mese) o Business (129 € al mese)."
+      },
+      {
+        "q": "I miei dati sono al sicuro?",
+        "a": "Ogni azienda vede soltanto i propri dati, e puoi scaricare una copia completa di tutto in qualsiasi momento."
+      }
+    ],
+    "langPick": "Scegli la lingua",
+    "langPickClose": "Chiudi",
+    "ctaFinal": "Prova Roadcase con la tua squadra"
   }
 }

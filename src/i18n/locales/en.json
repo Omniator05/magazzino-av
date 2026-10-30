@@ -2230,7 +2230,6 @@
     "seoDescription": "Warehouse management for audio, video and lighting rental companies: inventory, event calendar, load lists and QR/barcode scanner in a single app. Free for 30 days.",
     "login": "Sign in",
     "tryFree": "Try it free",
-    "langLabel": "Language",
     "eyebrow": "Warehouse software for audio, video and lighting rental",
     "title": "From the warehouse to the van, without forgetting a thing.",
     "text": "Roadcase brings together inventory, the event calendar and load lists. The warehouse worker scans, and the app marks what is ready, loaded and back.",
@@ -2365,6 +2364,37 @@
     "contact": "Contact:",
     "privacy": "Privacy",
     "terms": "Terms",
-    "cookies": "Cookies"
+    "cookies": "Cookies",
+    "heroA": "From the warehouse to the van,",
+    "heroB": "without forgetting a thing.",
+    "navFeatures": "Features",
+    "navPricing": "Pricing",
+    "navFaq": "FAQ",
+    "faqTitle": "Frequently asked questions",
+    "faq": [
+      {
+        "q": "Do I need to install anything?",
+        "a": "No. Roadcase is a web app: open it in your browser and, if you like, add it to the Home screen of your iPhone or Android. It doesn't go through a store."
+      },
+      {
+        "q": "How do I scan items?",
+        "a": "With your smartphone camera or a Bluetooth reader, using QR codes and barcodes. Labels are generated right from the app."
+      },
+      {
+        "q": "Can colleagues who speak another language use it?",
+        "a": "Yes. Roadcase is available in Italian, English, Portuguese and Arabic, and everyone picks their own language from their profile."
+      },
+      {
+        "q": "How much does it cost? Can I try it?",
+        "a": "You get a 30-day free trial, no card needed. After that you can stay on the Free plan or move to Team (€45 a month) or Business (€129 a month)."
+      },
+      {
+        "q": "Is my data safe?",
+        "a": "Each company sees only its own data, and you can download a full copy of everything at any time."
+      }
+    ],
+    "langPick": "Choose your language",
+    "langPickClose": "Close",
+    "ctaFinal": "Try Roadcase with your crew"
   }
 }
