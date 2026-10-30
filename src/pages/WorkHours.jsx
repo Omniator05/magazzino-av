@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
+import { localeFor } from '../utils/formatDate'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import { useModalDrag } from '../hooks/useModalDrag'
@@ -426,7 +428,7 @@ function EntryCard({ entry, onEdit, onDelete }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--text)' }}>
-          {new Date(entry.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}
+          {new Date(entry.date + 'T12:00:00').toLocaleDateString(localeFor(i18n.language), { weekday: 'short', day: 'numeric', month: 'short' })}
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 3 }}>
           {timeRange && <span style={{ color: 'var(--text2)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>{timeRange}</span>}

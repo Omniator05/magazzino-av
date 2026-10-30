@@ -1162,6 +1162,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                           </span>
                           <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--c-ink3)', height: SUBTITLE_ROW_H, lineHeight: `${SUBTITLE_ROW_H}px`, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                             {timeLabel}
+                            {/* Giorno di un evento su più giorni con un orario suo (impostato dalla modifica o da qui) */}
+                            {item.type === 'event' && item.event.dateEnd && item.event.dateEnd > item.event.date && item.event.dayTimes?.[item.date] && (
+                              <span title={t('staffTimeline.customDayHours')} aria-label={t('staffTimeline.customDayHours')} style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#0066cc', marginLeft: 5, verticalAlign: 'middle' }} />
+                            )}
                           </span>
                           {/* Persone assegnate: avatar sovrapposti, sempre su UNA riga così
                               tutte le card hanno la stessa altezza. Puntino arancione = orario diverso da

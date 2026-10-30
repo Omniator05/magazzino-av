@@ -14,7 +14,7 @@ import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
-import DateField from '../components/DateField'
+import DateRangeField from '../components/DateRangeField'
 import TimeField from '../components/TimeField'
 import EventFormFields from '../components/EventFormFields'
 import StaffTimeline from '../components/StaffTimeline'
@@ -1363,13 +1363,11 @@ export default function Calendar() {
             <button className="close-btn" onClick={absenceDrag.close} aria-label={t("common.close")}>✕</button>
             <h2>{editingAbsenceId ? t('calendar.absenceModalEditTitle') : t('calendar.absenceModalTitle')}</h2>
             <p style={{ color:'var(--text2)', fontSize:13, marginBottom:16, lineHeight:1.5 }}>{t('calendar.absenceModalDesc')}</p>
+            {/* Un solo campo "Periodo", lo stesso calendario della scheda Storico dell'oggetto: un giorno, o un secondo tocco per estendere */}
             <div className="form-group">
-              <label>{t('calendar.firstDay')}</label>
-              <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({...f, startDate:v, endDate: f.endDate < v ? v : f.endDate}))} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
-              <DateField value={absenceForm.endDate} min={absenceForm.startDate} clearable placeholder={t('calendar.singleDayPlaceholder')} onChange={v => setAbsenceForm(f => ({...f, endDate:v}))} />
+              <label>{t('inventory.availabilityPeriod')}</label>
+              <DateRangeField start={absenceForm.startDate} end={absenceForm.endDate || absenceForm.startDate}
+                onChange={(st, en) => setAbsenceForm(f => ({ ...f, startDate: st, endDate: en === st ? '' : en }))} />
             </div>
             {/* Solo per un'assenza di un giorno solo — "qualche ora" su più
                 giorni non ha senso con un unico orario, vedi commento su

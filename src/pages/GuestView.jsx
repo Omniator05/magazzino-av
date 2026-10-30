@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { detectDeviceLanguage } from '../i18n'
 import { fetchGuestView } from '../utils/guestLinks'
 import { applyTheme, watchSystemTheme } from '../utils/theme'
 import { formatDate, capitalize } from '../utils/formatDate'
@@ -24,7 +25,8 @@ export default function GuestView({ token }) {
     applyTheme('auto')
     const stop = watchSystemTheme()
     // Un ospite non ha una preferenza salvata: segue la lingua del dispositivo.
-    if ((navigator.language || '').toLowerCase().startsWith('en')) i18n.changeLanguage('en')
+    const dl = detectDeviceLanguage()
+    if (dl !== 'it') i18n.changeLanguage(dl)
     return stop
   }, [i18n])
 

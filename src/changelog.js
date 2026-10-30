@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-08',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Nuove lingue: l\'app e il sito sono ora anche in portoghese e in arabo (l\'arabo si legge da destra a sinistra). Si sceglie dal Profilo; chi apre un link ospite o della postazione vede la lingua del proprio telefono',
+        'Etichette: dalla vista completa del magazzino (admin, o magazziniere con permessi alla postazione) ora c\'è la stampa diretta sulla MakeID, come nelle altre pagine',
+        'Notifiche: toccando una notifica si apre la pagina giusta (la lista modificata, l\'evento, il magazzino già filtrato su rotti o difetti) e non più la home. Se l\'app è già aperta ci si sposta lì senza ripartire da capo',
+        'Sito pubblico: presentazione in italiano, inglese, portoghese e arabo (roadcase.it, /en, /pt, /ar), con icona e dati per i motori di ricerca e anteprima nei messaggi. La lingua si sceglie da un menu',
+        'Periodo nei calendari: le assenze da telefono usano lo stesso campo "Periodo" della scheda Storico. Scelto il primo giorno, il suggerimento "Tocca un secondo giorno" diventa rosso e sfuma in 5 secondi, per far capire come scegliere più giorni',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'New languages: the app and the website are now also in Portuguese and Arabic (Arabic reads right to left). You choose from the Profile; people opening a guest or station link see their phone\'s language',
+        'Labels: the full warehouse view (admins, or a warehouse worker with permissions at the station) now has direct printing on the MakeID, like the other pages',
+        'Notifications: tapping a notification opens the right page (the updated list, the event, the warehouse already filtered on broken or defective) instead of the home. If the app is already open it moves there without starting over',
+        'Public site: introduction in Italian, English, Portuguese and Arabic (roadcase.it, /en, /pt, /ar), with an icon and data for search engines and a preview in messages. The language is picked from a menu',
+        'Period in calendars: absences on phones use the same "Period" field as the item History tab. Once the first day is picked, the "Tap a second day" hint turns red and fades over 5 seconds to show how to pick several days',
+      ],
+    },
+  },
+  {
     version: '2026-11-07',
     it: {
       title: 'Novità di oggi',

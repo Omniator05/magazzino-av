@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import i18n from '../i18n'
+import { localeFor } from '../utils/formatDate'
 import { db } from '../firebase'
 import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
@@ -102,7 +104,7 @@ export default function EventOrganizerHome() {
           <h1 style={{ fontSize: 20, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event?.name || 'Caricamento…'}</h1>
           {event && (
             <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>
-              {new Date(event.date + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+              {new Date(event.date + 'T12:00:00').toLocaleDateString(localeFor(i18n.language), { day: 'numeric', month: 'long', year: 'numeric' })}
               {event.location ? ` · ${event.location}` : ''}
             </p>
           )}

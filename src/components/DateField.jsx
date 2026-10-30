@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 
-const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+import { useTranslation } from 'react-i18next'
+import { monthNames, weekdayInitials, localeFor } from '../utils/formatDate'
 
 const pad = n => String(n).padStart(2, '0')
 const toYMD = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`
@@ -17,7 +17,10 @@ function monthGrid(year, month) {
   return cells
 }
 
-export default function DateField({ value, onChange, min, placeholder = 'Seleziona data', clearable = false }) {
+export default function DateField({ value, onChange, min, placeholder, clearable = false }) {
+  const { t, i18n } = useTranslation()
+  const MONTHS = monthNames(i18n.language)
+  const WEEKDAYS = weekdayInitials(i18n.language)
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
   const [popupLeft, setPopupLeft] = useState(null)
@@ -59,8 +62,8 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
   }, [open])
 
   const label = value
-    ? new Date(value + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    : placeholder
+    ? new Date(value + 'T12:00:00').toLocaleDateString(localeFor(i18n.language), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : (placeholder ?? t('dateField.selectDate'))
 
   const prevMonth = () => setView(v => v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 })
   const nextMonth = () => setView(v => v.month === 11 ? { year: v.year + 1, month: 0 } : { ...v, month: v.month + 1 })
@@ -169,7 +172,7 @@ export default function DateField({ value, onChange, min, placeholder = 'Selezio
             <button type="button" className="df-action" onClick={() => { const t = today; if (!(min && t < min)) { onChange(t); setOpen(false) } }}
               disabled={min && today < min}
               style={{ flex: 1, padding: '6px', borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 12, fontWeight: 700, opacity: (min && today < min) ? 0.4 : 1 }}>
-              Oggi
+              {t('calendar.today')}
             </button>
             {clearable && value && (
               <button type="button" className="df-action" onClick={() => { onChange(''); setOpen(false) }}

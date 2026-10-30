@@ -1,18 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://magazzino-av.vercel.app/</loc>
+    <loc>https://www.roadcase.it/</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://www.roadcase.it/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://magazzino-av.vercel.app/login</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://www.roadcase.it/en</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://www.roadcase.it/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://magazzino-av.vercel.app/signup</loc>
+    <loc>https://www.roadcase.it/pt</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://www.roadcase.it/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.roadcase.it/ar</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://www.roadcase.it/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.roadcase.it/signup</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.roadcase.it/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.2</priority>
+  </url>
+  <url>
+    <loc>https://www.roadcase.it/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.2</priority>
   </url>
 </urlset>

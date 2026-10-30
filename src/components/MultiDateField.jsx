@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
-const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+import { useTranslation } from 'react-i18next'
+import { monthNames, weekdayInitials, localeFor } from '../utils/formatDate'
 
 const pad = n => String(n).padStart(2, '0')
 const toYMD = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`
@@ -25,6 +25,9 @@ function monthGrid(year, month) {
 // mostrata ma non è selezionabile qui: conta già come prima occorrenza,
 // aggiungerla anche alla lista creerebbe un doppione.
 export default function MultiDateField({ dates, onChange, anchorDate }) {
+  const { i18n } = useTranslation()
+  const MONTHS = monthNames(i18n.language)
+  const WEEKDAYS = weekdayInitials(i18n.language)
   const init = anchorDate ? new Date(anchorDate + 'T12:00:00') : new Date()
   const [view, setView] = useState({ year: init.getFullYear(), month: init.getMonth() })
 

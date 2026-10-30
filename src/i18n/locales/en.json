@@ -97,6 +97,7 @@
     "brokenAlert_other": "{{count}} broken items to repair",
     "defectAlert_one": "1 item with a defect",
     "defectAlert_other": "{{count}} items with a defect",
+    "defectSingle": "{{name}}: {{count}} with a defect",
     "reorderSingle": "\"{{name}}\" to reorder",
     "reorderMultiple": "{{count}} consumables to reorder",
     "view": "View",
@@ -266,6 +267,7 @@
     "searchHint": "Search for a person to assign",
     "peopleHint": "— tap an event or task to assign them",
     "rangeSelectHint": "— tap the end time to create a task, or the next day to go past midnight (Esc to cancel)",
+    "customDayHours": "Custom hours for this day",
     "untitledTask": "Task",
     "addExternal": "Add external staff",
     "externalQuickChip": "External",
@@ -1855,7 +1857,9 @@
     "sectionAppearance": "Appearance",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeAuto": "Auto"
+    "themeAuto": "Auto",
+    "languagePortuguese": "Português",
+    "languageArabic": "العربية"
   },
   "workHours": {
     "title": "Work hours",
@@ -2214,5 +2218,153 @@
     "offsetY": "Move down (+) / up (−)",
     "calibrate": "Print test label (ruler)",
     "downloadImage": "Download the image"
+  },
+  "dateField": {
+    "selectDate": "Select date",
+    "selectPeriod": "Select period",
+    "selectTime": "Select time",
+    "pickSecondDay": "Tap a second day to pick a period"
+  },
+  "landing": {
+    "seoTitle": "Roadcase — Warehouse management software for audio, video and lighting rental",
+    "seoDescription": "Warehouse management for audio, video and lighting rental companies: inventory, event calendar, load lists and QR/barcode scanner in a single app. Free for 30 days.",
+    "login": "Sign in",
+    "tryFree": "Try it free",
+    "langLabel": "Language",
+    "eyebrow": "Warehouse software for audio, video and lighting rental",
+    "title": "From the warehouse to the van, without forgetting a thing.",
+    "text": "Roadcase brings together inventory, the event calendar and load lists. The warehouse worker scans, and the app marks what is ready, loaded and back.",
+    "ctaStart": "Start free for 30 days",
+    "ctaLogin": "Sign in",
+    "heroNote": "No card required. From €45 a month per company.",
+    "previewLabel": "Load list",
+    "previewName": "Concert in the square",
+    "previewDay": "Saturday",
+    "previewTabs": "Load list stage",
+    "phases": [
+      {
+        "label": "Ready",
+        "desc": "The warehouse worker prepares the equipment and marks it ready, item by item."
+      },
+      {
+        "label": "Loaded",
+        "desc": "Every piece scanned onto the van is marked loaded and comes off the stock."
+      },
+      {
+        "label": "Returned",
+        "desc": "At the end of the event you scan on return: stock goes back to full and you see what is missing."
+      }
+    ],
+    "demoRows": [
+      "Line array",
+      "Digital mixer",
+      "Moving heads",
+      "XLR cables"
+    ],
+    "stepsTitle": "Every load in three steps",
+    "stepsText": "Anyone who opens the event sees how far the work has got, even if a colleague started it.",
+    "step": "STEP {{n}}",
+    "featuresTitle": "Everything a rental warehouse needs",
+    "featuresText": "From managing equipment to organising the crew, in a single app.",
+    "features": [
+      {
+        "title": "Warehouse",
+        "desc": "Audio, video and lighting inventory with real-time availability, broken pieces and minimum stock for consumables."
+      },
+      {
+        "title": "Event calendar",
+        "desc": "Events, rentals and installations in a single calendar, with an availability check for any period."
+      },
+      {
+        "title": "Load lists",
+        "desc": "Even several lists per event (one tent, one list). Partial returns and a transport document in PDF."
+      },
+      {
+        "title": "Scanner",
+        "desc": "Load and unload with your smartphone camera or a Bluetooth reader, via QR and barcode."
+      },
+      {
+        "title": "Kits and cases",
+        "desc": "Know which physical case went to which event and which components are missing inside each one."
+      },
+      {
+        "title": "Linked items",
+        "desc": "Add a platform and its 4 legs come along. The delivery note, instead, only once per event."
+      },
+      {
+        "title": "Vans",
+        "desc": "Assign each item to the right van, and get a warning if the same vehicle is already busy."
+      },
+      {
+        "title": "Staff and hours",
+        "desc": "Assign warehouse staff to events and keep track of working hours."
+      }
+    ],
+    "strengthsTitle": "Built for people who really work in the warehouse",
+    "strengths": [
+      {
+        "title": "Made for the warehouse",
+        "text": "Weak Wi‑Fi and busy hands are the norm. Every save is confirmed and, if it fails, the app tells you instead of pretending nothing happened."
+      },
+      {
+        "title": "Installs like an app",
+        "text": "Add it to the Home screen of your iPhone or Android: it opens full screen, without going through a store."
+      },
+      {
+        "title": "Everyone sees what they need",
+        "text": "Admin, warehouse worker and organiser have different access. You only turn on the modules you really use."
+      },
+      {
+        "title": "Speaks your crew's language",
+        "text": "Italian, English, Portuguese and Arabic: everyone picks theirs from their own profile, so nobody is left behind."
+      }
+    ],
+    "trialTitle": "30-day free trial",
+    "betaBadge": "Beta price",
+    "trialText": "No card required to start. A single limit across the paid plans: how many administrators — warehouse workers, items and load lists always stay uncapped. Cancel whenever you like.",
+    "perMonth": "/month",
+    "plans": [
+      {
+        "name": "Free",
+        "price": "€0",
+        "tagline": "To get started on your own.",
+        "features": [
+          "1 administrator",
+          "Up to 3 warehouse workers",
+          "Up to 50 warehouse items",
+          "Load lists up to 20 items"
+        ],
+        "cta": "Start free"
+      },
+      {
+        "name": "Team",
+        "price": "€45",
+        "tagline": "For a real crew.",
+        "badge": "Recommended",
+        "features": [
+          "Up to 5 administrators",
+          "Up to 10 warehouse workers",
+          "Up to 300 warehouse items",
+          "Scanner, kits and multiple lists"
+        ],
+        "cta": "30-day free trial"
+      },
+      {
+        "name": "Business",
+        "price": "€129",
+        "tagline": "For more structured companies.",
+        "features": [
+          "Unlimited administrators",
+          "Unlimited warehouse workers",
+          "Unlimited warehouse and lists",
+          "Everything in Team"
+        ],
+        "cta": "30-day free trial"
+      }
+    ],
+    "contact": "Contact:",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "cookies": "Cookies"
   }
 }

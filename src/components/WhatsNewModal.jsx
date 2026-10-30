@@ -21,7 +21,7 @@ const CHANGELOG_SEEN_KEY = 'changelog_last_seen' // versione (data) dell'ultima 
 // "novità" da recuperare, è tutto nuovo per lui.
 export default function WhatsNewModal() {
   const { t, i18n } = useTranslation()
-  const lang = i18n.language?.startsWith('en') ? 'en' : 'it'
+  const lang = i18n.language?.startsWith('it') ? 'it' : 'en'   // il changelog è scritto in italiano e inglese: le altre lingue leggono l'inglese
   const [pending, setPending] = useState([])
   const [step, setStep] = useState(0)
   const [closing, setClosing] = useState(false)

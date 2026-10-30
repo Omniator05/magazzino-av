@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useInventoryViewCarry, CARRIED_FILTERS } from '../hooks/useInventoryViewCarry'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -54,7 +55,9 @@ export default function WorkerInventory() {
   const reporter = isStation ? operator?.name : profile?.name
   const [items, setItems]   = useState([])
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
+  // dalle notifiche "rotto/difetto" si arriva con ?filter=broken|defect
+  const { search: locationSearch } = useLocation()
+  const [filter, setFilter] = useState(() => { const f = new URLSearchParams(locationSearch).get('filter'); return CARRIED_FILTERS.includes(f) ? f : 'all' })
   const [detail, setDetail] = useState(null)
   const [labelFor, setLabelFor] = useState(null)   // oggetto di cui scaricare l'etichetta (sempre possibile, anche senza poter modificare)
   const [showScanner, setShowScanner] = useState(false)

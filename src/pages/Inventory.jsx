@@ -29,7 +29,7 @@ import { warehouseLimit, promptLimitReached } from '../utils/planLimits'
 import { getCodeDisplay } from '../utils/codeDisplay'
 import LinkedItemsEditor from '../components/LinkedItemsEditor'
 import { getLinkedItems, linkedItemsToFields } from '../utils/linkedItems'
-import { QrCode, Barcode } from '../components/Icon'
+import LabelDialog from '../components/LabelDialog'
 import DeadlinesField from '../components/DeadlinesField'
 import { syncDeadlineEvents } from '../utils/deadlines'
 import { addIssue, removeIssueById, dropLastIssue, trimIssues, sortedIssues, countIssues } from '../utils/itemIssues'
@@ -162,10 +162,6 @@ export default function Inventory() {
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [issueDlg, setIssueDlg] = useState(null) // 'broken' | 'defect': popup "Segnala rotto/difetto" della modifica oggetto
   const [statusDraft, setStatusDraft] = useState({ broken: 0, defect: 0, out: 0, note: '', issues: [], addOpen: false, addType: 'broken', addUnit: '', addNote: '' })
-  // Formato scelto per il download etichetta corrente — null finché non si
-  // sceglie (solo se la squadra ha impostato "entrambi"; altrimenti è già
-  // deciso dall'impostazione, vedi il click che apre il popup più sotto).
-  const [printFormat, setPrintFormat] = useState(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [importStep, setImportStep] = useState('instructions') // instructions | preview | importing | done
   const [importParsed, setImportParsed] = useState(null) // { items, warnings }
@@ -545,29 +541,6 @@ export default function Inventory() {
 
   const openDetail = item => {
     setShowDetail(item)
-  }
-
-  // Etichette come immagine PNG 680×180 pronta per il software della stampante
-  // termica — niente dialogo di stampa del browser, che dipende da formato
-  // pagina/margini ed è inaffidabile per etichette di quella dimensione.
-  const printCode = async (format) => {
-    const code = showDetail.code || generateItemCode(showDetail.id)
-    const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId, format })
-    downloadDataUrl(png, labelFilename(showDetail.name, code))
-  }
-
-  const printUnitLabels = async (format) => {
-    const baseCode = showDetail.code || generateItemCode(showDetail.id)
-    const totalUnits = showDetail.totalQty || 1
-    const unitCodes = Array.from({ length: totalUnits }, (_, i) => generateUnitCode(baseCode, i + 1))
-
-    const zip = new JSZip()
-    for (const code of unitCodes) {
-      const png = await renderLabelPNG({ name: showDetail.name, location: showDetail.location, code, teamId, format })
-      zip.file(labelFilename(showDetail.name, code), png.split(',')[1], { base64: true })
-    }
-    const blob = await zip.generateAsync({ type: 'blob' })
-    downloadDataUrl(URL.createObjectURL(blob), `etichette-${labelFilename(showDetail.name, baseCode).replace('.png', '')}.zip`)
   }
 
   const printAllLabels = async () => {
@@ -1482,11 +1455,7 @@ export default function Inventory() {
                 menu rapido Segnala (rotto / difetto / rientro), modifica. */}
             <div className="rc-drawer-foot" style={{ display:'grid', gridTemplateColumns: showDetail.isBundle ? '1fr 1fr' : '1fr 1fr 1fr', gap:8 }}>
               <button
-                onClick={() => {
-                  const display = getCodeDisplay(team)
-                  setPrintFormat(display === 'both' ? null : display)
-                  setShowPrintPopup(true)
-                }}
+                onClick={() => setShowPrintPopup(true)}
                 className="btn btn-secondary" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, padding:'12px 6px', fontSize:13.5, whiteSpace:'nowrap' }}
               ><Download size={15} /> {t('inventory.downloadShort')}</button>
               {!showDetail.isBundle && (
@@ -1626,68 +1595,9 @@ export default function Inventory() {
           onConfirm={r => { applyIssueReport({ type: issueDlg, ...r }); setIssueDlg(null) }} t={t} />
       )}
 
-      {/* Popup scelta stampa — volutamente leggero (niente bottom-sheet/drag),
-          solo un riquadro centrato fisso. Due passaggi solo se la squadra usa
-          "entrambi" i formati (altrimenti il formato è già deciso e si vede
-          subito la scelta uno/tutti): 1) QR o Barcode, 2) una etichetta o
-          tutte le unità. */}
-      {showPrintPopup && showDetail && (
-        <div
-          onClick={() => setShowPrintPopup(false)}
-          style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ position:'relative', width:'100%', maxWidth:300, background:'var(--card)', borderRadius:16, padding:20, boxShadow:'0 12px 40px rgba(0,0,0,0.3)' }}
-          >
-            <button
-              onClick={() => setShowPrintPopup(false)}
-              aria-label={t('common.close')}
-              className="btn-no-anim"
-              style={{ position:'absolute', top:10, right:10, background:'transparent', color:'var(--text2)', fontSize:16, width:44, height:44, display:'flex', alignItems:'center', justifyContent:'center' }}
-            >
-              ✕
-            </button>
-            {printFormat === null ? (
-              <>
-                <h2 style={{ marginBottom:16, fontSize:17 }}>{t('inventory.chooseCodeFormat')}</h2>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                  <button onClick={() => setPrintFormat('qr')}
-                    style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:14, padding:'18px 10px', display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
-                    <QrCode size={26} />
-                    <span style={{ fontWeight:700, fontSize:13 }}>{t('adminUsers.codeDisplayQr')}</span>
-                  </button>
-                  <button onClick={() => setPrintFormat('barcode')}
-                    style={{ background:'var(--card2)', border:'2px solid var(--border)', borderRadius:14, padding:'18px 10px', display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
-                    <Barcode size={26} />
-                    <span style={{ fontWeight:700, fontSize:13 }}>{t('adminUsers.codeDisplayBarcode')}</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h2 style={{ marginBottom:16, fontSize:17 }}>{t('inventory.downloadLabel')}</h2>
-                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                  <button
-                    onClick={() => { printCode(printFormat); setShowPrintPopup(false) }}
-                    className="btn btn-secondary"
-                  >
-                    {t('inventory.printOneLabel')}
-                  </button>
-                  {(showDetail.totalQty || 1) > 1 && (
-                    <button
-                      onClick={() => { printUnitLabels(printFormat); setShowPrintPopup(false) }}
-                      className="btn btn-secondary"
-                    >
-                      {t('inventory.printAllUnits', { count: showDetail.totalQty })}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Etichetta dell'oggetto: stampa diretta sulla MakeID se c'è il servizio, altrimenti scarica (stesso dialogo di
+          Postazione e Magazzino dei magazzinieri, così la stampa diretta c'è sempre, anche con i permessi di modifica) */}
+      {showPrintPopup && showDetail && <LabelDialog item={showDetail} onClose={() => setShowPrintPopup(false)} />}
 
       {/* Importa lista da CSV — finestra centrata (non bottom-sheet): prima
           le istruzioni sul formato, poi l'anteprima di cosa verrà importato,

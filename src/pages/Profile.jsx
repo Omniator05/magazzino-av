@@ -7,6 +7,7 @@ import { reauthenticateWithCredential, EmailAuthProvider, updatePassword as fbUp
 import { useCenteredModal } from '../hooks/useCenteredModal'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import SegmentedControl from '../components/SegmentedControl'
+import Picker from '../components/Picker'
 import LogoutButton from '../components/LogoutButton'
 import { getThemePref, setThemePref } from '../utils/theme'
 import { hasUnseenWhatsNew } from '../utils/whatsNew'
@@ -254,16 +255,18 @@ export default function Profile({ onClose, showLogout }) {
         </GroupCard>
 
         {/* Gruppo: Lingua — stesso controllo a scorrimento usato in Impostazioni */}
-        <GroupCard label={t('profile.sectionLanguage')}>
+        <GroupCard label={t('profile.sectionLanguage')} visible>
           <div style={{ padding: 14 }}>
-            <SegmentedControl
+            <Picker
               options={[
                 { value: 'it', label: t('profile.languageItalian') },
                 { value: 'en', label: t('profile.languageEnglish') },
+                { value: 'pt', label: t('profile.languagePortuguese') },
+                { value: 'ar', label: t('profile.languageArabic') },
               ]}
               value={profile?.language || 'it'}
               onChange={selectLanguage}
-              disabled={savingLang}
+              ariaLabel={t('profile.sectionLanguage')}
             />
           </div>
         </GroupCard>
@@ -436,11 +439,12 @@ const nameInputStyle = { width: '100%' }
 // Stile "lista raggruppata" (come le impostazioni di iOS/Android): un unico
 // card per gruppo, righe separate da un filo invece di più card impilate —
 // occupa meno spazio verticale e rende la pagina meno "centrale/a blocchi".
-function GroupCard({ label, children }) {
+// `visible`: il contenuto può uscire dal riquadro (es. un menu a tendina che si apre verso il basso)
+function GroupCard({ label, children, visible }) {
   return (
     <div style={{ padding: '0 0 20px' }}>
       <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-ink3)', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px 2px' }}>{label}</p>
-      <div style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 16, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 16, overflow: visible ? 'visible' : 'hidden' }}>
         {children}
       </div>
     </div>

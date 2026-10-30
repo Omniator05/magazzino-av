@@ -13,13 +13,14 @@ import DeleteButton from '../components/DeleteButton'
 import EditButton from '../components/EditButton'
 import SaveButton from '../components/SaveButton'
 import DateField from '../components/DateField'
+import DateRangeField from '../components/DateRangeField'
 import TimeField from '../components/TimeField'
 import Picker from '../components/Picker'
 import Toast from '../components/Toast'
 import SegmentedControl from '../components/SegmentedControl'
 import AbsenceTypeBadge, { absenceTypeOptions } from '../components/AbsenceTypeBadge'
 import CapMeter from '../components/CapMeter'
-import { formatDate, capitalize } from '../utils/formatDate'
+import { formatDate, capitalize, localeFor } from '../utils/formatDate'
 import { timeStr, computeHours, fmtHours, monthKey } from '../utils/workHours'
 
 // Dettaglio di un singolo lavoratore, raggiunto dall'elenco in
@@ -347,7 +348,7 @@ export default function SettingsWorkHoursWorker() {
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                      {new Date(entry.date + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
+                      {new Date(entry.date + 'T12:00:00').toLocaleDateString(localeFor(i18n.language), { day: 'numeric', month: 'short' })}
                       {entry.clockIn && <span style={{ color: 'var(--text2)', fontWeight: 400 }}> · {timeStr(new Date(entry.clockIn))}{entry.clockOut ? `–${timeStr(new Date(entry.clockOut))}` : '…'}</span>}
                     </p>
                     {entry.eventName && (
@@ -482,12 +483,9 @@ export default function SettingsWorkHoursWorker() {
             <button className="close-btn" onClick={absenceDrag.close} aria-label={t('common.close')}>✕</button>
             <h2>{creatingAbsence ? t('workHours.newAbsenceTitle') : t('workHours.editAbsenceTitle')}</h2>
             <div className="form-group">
-              <label>{t('calendar.firstDay')}</label>
-              <DateField value={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, startDate: v, endDate: f.endDate < v ? v : f.endDate }))} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.lastDay')}</label>
-              <DateField value={absenceForm.endDate} min={absenceForm.startDate} onChange={v => setAbsenceForm(f => ({ ...f, endDate: v }))} />
+              <label>{t('inventory.availabilityPeriod')}</label>
+              <DateRangeField start={absenceForm.startDate} end={absenceForm.endDate || absenceForm.startDate}
+                onChange={(st, en) => setAbsenceForm(f => ({ ...f, startDate: st, endDate: en }))} />
             </div>
             {(!absenceForm.endDate || absenceForm.endDate === absenceForm.startDate) && (
               <div className="form-group">

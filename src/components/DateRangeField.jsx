@@ -1,7 +1,7 @@
 import { useState, useLayoutEffect, useEffect, useRef } from 'react'
 
-const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D']
-const MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+import { useTranslation } from 'react-i18next'
+import { monthNames, weekdayInitials, localeFor } from '../utils/formatDate'
 
 const pad = n => String(n).padStart(2, '0')
 const toYMD = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`
@@ -17,8 +17,8 @@ function monthGrid(year, month) {
   return cells
 }
 
-const fmtShort = ymd => new Date(ymd + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
-const fmtFull = ymd => new Date(ymd + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtShort = (ymd, lang) => new Date(ymd + 'T12:00:00').toLocaleDateString(localeFor(lang), { day: 'numeric', month: 'short' })
+const fmtFull = (ymd, lang) => new Date(ymd + 'T12:00:00').toLocaleDateString(localeFor(lang), { day: 'numeric', month: 'short', year: 'numeric' })
 
 // Selettore di intervallo a calendario unico, stile "booking": stessa logica
 // di selezione già usata in Calendar.jsx/WorkerCalendar.jsx per il periodo
@@ -34,11 +34,17 @@ const fmtFull = ymd => new Date(ymd + 'T12:00:00').toLocaleDateString('it-IT', {
 // selezionato, i giorni prima dell'inizio non sono scelgibili e muovendo il
 // mouse si vede l'intervallo estendersi (anteprima "booking"). Un tocco sul
 // giorno d'inizio = giorno singolo (`singleDayLabel` lo fa anche da bottone).
-export default function DateRangeField({ start, end, onChange, min: minProp, placeholder = 'Seleziona periodo', endOnly = false, singleDayLabel = 'Solo un giorno', hint }) {
+export default function DateRangeField({ start, end, onChange, min: minProp, placeholder, endOnly = false, singleDayLabel, hint }) {
+  const { t, i18n } = useTranslation()
+  const MONTHS = monthNames(i18n.language)
+  const WEEKDAYS = weekdayInitials(i18n.language)
+  // Il suggerimento c'è sempre quando si sceglie un periodo (non per il solo campo "fine"), salvo testo diverso dal chiamante
+  const hintText = hint ?? (endOnly ? null : t('dateField.pickSecondDay'))
   const min = endOnly ? start : minProp
   const [open, setOpen] = useState(false)
   const [selecting, setSelecting] = useState(false) // true = primo giorno già scelto, in attesa del secondo tap
   const [hoverDate, setHoverDate] = useState(null)
+  const [pulse, setPulse] = useState(0)   // riparte l'animazione del suggerimento ad ogni primo tocco
   const containerRef = useRef(null)
   const [popupLeft, setPopupLeft] = useState(null)
   const [popupAbove, setPopupAbove] = useState(false)
@@ -58,7 +64,7 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
   // anche se aprire sopra invece che sotto quando non c'è spazio sotto.
   useLayoutEffect(() => {
     if (!open || !containerRef.current) return
-    const POPUP_W = 252, POPUP_H = hint ? 384 : 340, MARGIN = 8
+    const POPUP_W = 252, POPUP_H = hintText ? 384 : 340, MARGIN = 8
     const compute = () => {
       const rect = containerRef.current.getBoundingClientRect()
       let left = rect.width - POPUP_W
@@ -80,7 +86,7 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
     compute()
     window.addEventListener('resize', compute)
     return () => window.removeEventListener('resize', compute)
-  }, [open, hint])
+  }, [open, hintText])
 
   const openPopup = () => {
     const initDate = start ? new Date(start + 'T12:00:00') : new Date()
@@ -104,6 +110,7 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
     if (!selecting) {
       onChange(ymd, ymd)
       setSelecting(true)
+      setPulse(p => p + 1)
       setHoverDate(null)
     } else {
       const lo = ymd <= start ? ymd : start
@@ -125,10 +132,10 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
   const hi = start && previewEnd ? (start <= previewEnd ? previewEnd : start) : start
 
   const label = endOnly
-    ? (end && end !== start ? fmtFull(end) : placeholder)
+    ? (end && end !== start ? fmtFull(end, i18n.language) : (placeholder ?? t('calendar.endPlaceholder')))
     : start
-    ? (!end || start === end ? fmtFull(start) : `${fmtShort(start)} – ${fmtFull(end)}`)
-    : placeholder
+    ? (!end || start === end ? fmtFull(start, i18n.language) : `${fmtShort(start, i18n.language)} – ${fmtFull(end, i18n.language)}`)
+    : (placeholder ?? t('dateField.selectPeriod'))
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
@@ -139,6 +146,15 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
         .drf-day { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
         .drf-day:not(:disabled):not(.drf-endpoint):hover { background: var(--card2) !important; }
         .drf-nav-btn:hover { opacity: 0.65; }
+        /* Dopo il primo giorno il suggerimento "tocca un secondo giorno" si accende, per far capire che il periodo si estende */
+        /* Appena si sceglie il primo giorno il suggerimento diventa rosso e sfuma piano fino a tornare normale (5 secondi) */
+        @keyframes drf-fade {
+          0%   { color: var(--accent); background: rgba(230,57,70,0.16); }
+          30%  { color: var(--accent); background: rgba(230,57,70,0.12); }
+          100% { color: var(--text2);  background: rgba(230,57,70,0); }
+        }
+        .drf-hint-glow { animation: drf-fade 5s ease-out; }
+        @media (prefers-reduced-motion: reduce) { .drf-hint-glow { animation: none; } }
       `}</style>
 
       <button
@@ -205,7 +221,7 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
             })}
           </div>
 
-          {hint && <p style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.4, color: 'var(--text2)', textAlign: 'center' }}>{hint}</p>}
+          {hintText && <p key={pulse} className={`drf-hint${selecting ? ' drf-hint-glow' : ''}`} role={selecting ? 'status' : undefined} style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.4, color: 'var(--text2)', textAlign: 'center', padding: '5px 8px', borderRadius: 8 }}>{hintText}</p>}
 
           <div style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <button
@@ -218,7 +234,7 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
               disabled={!endOnly && min && today < min}
               style={{ flex: 1, padding: '6px', borderRadius: 8, background: 'var(--card2)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 12, fontWeight: 700, opacity: (!endOnly && min && today < min) ? 0.4 : 1 }}
             >
-              {endOnly ? singleDayLabel : 'Oggi'}
+              {endOnly ? (singleDayLabel ?? t('calendar.singleDay')) : t('calendar.today')}
             </button>
             {selecting && !endOnly && (
               <button
@@ -227,7 +243,7 @@ export default function DateRangeField({ start, end, onChange, min: minProp, pla
                 onClick={() => { setSelecting(false); setHoverDate(null) }}
                 style={{ flex: 1, padding: '6px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text2)', fontSize: 12, fontWeight: 700 }}
               >
-                Annulla
+                {t('common.cancel')}
               </button>
             )}
           </div>

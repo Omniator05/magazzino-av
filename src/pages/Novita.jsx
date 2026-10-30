@@ -22,7 +22,7 @@ const KIND_STYLE = {
 
 export default function Novita() {
   const { t, i18n } = useTranslation()
-  const lang = i18n.language?.startsWith('en') ? 'en' : 'it'
+  const lang = i18n.language?.startsWith('it') ? 'it' : 'en'   // il changelog è scritto in italiano e inglese: le altre lingue leggono l'inglese
   const [filter, setFilter] = useState('all')
   const [openReleases, setOpenReleases] = useState(() => new Set([CHANGELOG[0]?.id]))
 

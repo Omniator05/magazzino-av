@@ -9,7 +9,7 @@ import { parseScannedCode, generateItemCode } from '../utils/generateCode'
 import { eventRowIncludesItem } from '../utils/kitInventory'
 import { addIssue, removeIssueById, sortedIssues } from '../utils/itemIssues'
 import { notifyTeamPush } from '../utils/pushNotifications'
-import { formatDate, capitalize } from '../utils/formatDate'
+import { formatDate, capitalize, localeFor } from '../utils/formatDate'
 import { todayStr } from '../utils/workHours'
 import { useOperator } from '../context/OperatorContext'
 import LogoutButton from '../components/LogoutButton'
@@ -494,7 +494,7 @@ export default function StationHome() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, overflowWrap: 'anywhere' }}>{t(`eventDetail.activity_${a.action}`, { name: a.userName || t('eventDetail.unknownUser') })}</p>
                       <p style={{ margin: '1px 0 0', fontSize: 12.5, color: 'var(--c-ink2)' }}>
-                        {a.eventName || ''}{a.eventName && when ? ' · ' : ''}{when ? when.toLocaleString(lang === 'en' ? 'en-US' : 'it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                        {a.eventName || ''}{a.eventName && when ? ' · ' : ''}{when ? when.toLocaleString(localeFor(lang), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                       </p>
                     </div>
                   </div>

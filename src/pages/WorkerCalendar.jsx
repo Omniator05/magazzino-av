@@ -12,7 +12,7 @@ import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
-import DateField from '../components/DateField'
+import DateRangeField from '../components/DateRangeField'
 import TimeField from '../components/TimeField'
 import Toast from '../components/Toast'
 import EventSummaryModal from '../components/EventSummaryModal'
@@ -813,12 +813,9 @@ export default function WorkerCalendar() {
                 prima di confermare) sia per una nuova assenza sia in
                 modifica — identico al flusso admin in Calendar.jsx. */}
             <div className="form-group">
-              <label>{t('calendar.firstDay')}</label>
-              <DateField value={pendingRange.start} onChange={v => setPendingRange(r => ({ start:v, end: r.end < v ? v : r.end }))} />
-            </div>
-            <div className="form-group">
-              <label>{t('calendar.lastDay')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('calendar.lastDayHint')}</span></label>
-              <DateField value={pendingRange.end} min={pendingRange.start} onChange={v => setPendingRange(r => ({ ...r, end:v }))} />
+              <label>{t('inventory.availabilityPeriod')}</label>
+              <DateRangeField start={pendingRange.start} end={pendingRange.end}
+                onChange={(st, en) => setPendingRange(r => ({ ...r, start: st, end: en }))} />
             </div>
             {pendingRange.end === pendingRange.start && (
               <div className="form-group">

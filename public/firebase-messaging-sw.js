@@ -42,8 +42,20 @@ messaging.onBackgroundMessage(payload => {
   })
 })
 
+// Toccare la notifica porta alla pagina giusta (la lista, l'evento, il magazzino filtrato…), non alla home.
+// Se l'app è già aperta (anche in background) la si porta in primo piano e le si dice dove andare, così
+// non riparte da capo; se non c'è nessuna finestra se ne apre una sull'indirizzo preciso.
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const url = event.notification.data?.url || '/'
-  event.waitUntil(clients.openWindow(url))
+  const target = new URL(event.notification.data?.url || '/', self.location.origin).href
+  event.waitUntil((async () => {
+    const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const app = wins.find(w => w.url.startsWith(self.location.origin))
+    if (app) {
+      try { await app.focus() } catch (e) { /* alcuni browser non lo permettono */ }
+      app.postMessage({ type: 'rc-open-url', url: target })
+      return
+    }
+    await clients.openWindow(target)
+  })())
 })

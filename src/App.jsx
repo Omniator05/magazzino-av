@@ -174,6 +174,13 @@ function AnimatedPage({ children }) {
   )
 }
 
+// Presentazione del prodotto in una lingua: per chi è già dentro l'app non ha senso, si torna alla home.
+function LandingLang({ lang }) {
+  const { user, loading } = useAuth()
+  if (loading) return <RouteLoadingFallback />
+  return user ? <Navigate to="/" replace /> : <Landing lang={lang} />
+}
+
 function PrivateRoutes({ toggleTheme, theme }) {
   const { user, profile, team, loading, signupInProgress, ghostTeamId, isOwner } = useAuth()
   const { pathname, search } = useLocation()
@@ -189,6 +196,20 @@ function PrivateRoutes({ toggleTheme, theme }) {
   // se già negato, già attivo, o spento a mano in passato — vedi
   // pushNotifications.js). Deve stare PRIMA di qualunque return sotto: gli
   // hook non possono seguire un return condizionale.
+  // Notifica toccata con l'app già aperta: il service worker ci dice dove andare (vedi firebase-messaging-sw.js).
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = e => {
+      if (e.data?.type !== 'rc-open-url') return
+      try {
+        const u = new URL(e.data.url, window.location.origin)
+        if (u.origin === window.location.origin) navigate(u.pathname + u.search + u.hash)
+      } catch { /* indirizzo non valido: si resta dove si è */ }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [navigate])
   const pushReady = !loading && !!user && !!profile && profile.approved !== false && profile.active !== false
   // Per uid (non un semplice booleano): se sullo stesso dispositivo/scheda si
   // esce e si accede con un account diverso, deve poter riprovare per quello
@@ -265,6 +286,8 @@ function PrivateRoutes({ toggleTheme, theme }) {
             <Route path="/work-hours" element={profile?.isStation ? <Navigate to="/" replace /> : <WorkHours />} />
             <Route path="/novita" element={<Novita />} />
             <Route path="/events/:id" element={<WorkerScanner />} />
+            {/* le notifiche "lista modificata" puntano a /events/:id/scan: per i magazzinieri è la stessa pagina */}
+            <Route path="/events/:id/scan" element={<WorkerScanner />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AnimatedPage>
@@ -384,6 +407,10 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Auth initialMode="login" />} />
               <Route path="/signup" element={<Auth initialMode="signup" />} />
+              {/* Pagina pubblica nelle altre lingue (la home "/" è l'italiano): indirizzi propri, indicizzabili */}
+              <Route path="/en" element={<LandingLang lang="en" />} />
+              <Route path="/pt" element={<LandingLang lang="pt" />} />
+              <Route path="/ar" element={<LandingLang lang="ar" />} />
               {/* Pagine legali: sempre raggiungibili, loggati o no — stesso
                   motivo per cui login/signup sono qui e non dentro
                   PrivateRoutes (che richiederebbe di essere autenticati). */}

@@ -54,7 +54,7 @@ export default function Picker({ value, onChange, options, placeholder, ariaLabe
         style={{
           display:'flex', alignItems:'center', gap:8, width:'100%',
           border:'1px solid var(--border2)', background:'var(--card)', color: selected ? 'var(--text)' : 'var(--text3)',
-          borderRadius:'var(--radius-sm)', padding:'12px 14px', fontSize:15, fontFamily:'inherit', textAlign:'left',
+          borderRadius:'var(--radius-sm)', padding:'12px 14px', fontSize:15, fontFamily:'inherit', textAlign:'start',
         }}
       >
         {selected?.icon && <span style={{ fontSize:17, flexShrink:0, display:'flex' }}>{selected.icon}</span>}
@@ -103,7 +103,7 @@ export default function Picker({ value, onChange, options, placeholder, ariaLabe
                   onClick={() => { onChange(o.value); setOpen(false) }}
                   className="btn-no-anim picker-option"
                   style={{
-                    display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'left',
+                    display:'flex', alignItems:'center', gap:10, width:'100%', textAlign:'start',
                     padding:'10px', borderRadius:8, fontFamily:'inherit',
                     background: isSelected ? 'rgba(230,57,70,0.08)' : undefined,
                     color: isSelected ? 'var(--accent)' : 'var(--text)',

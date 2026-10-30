@@ -1,14 +1,17 @@
+import i18n from '../i18n'
+import { localeFor } from '../utils/formatDate'
+
 export default function DateBadge({ dateStr, dateEndStr, location, today }) {
   if (!dateStr) return null
   const d = new Date(dateStr + 'T12:00:00')
   const isToday = dateStr === today
   const isPast  = dateStr < today
   const monthBg = isToday ? 'var(--c-danger)' : isPast ? '#ea580c' : '#7c3aed'
-  const month = d.toLocaleDateString('it-IT', { month:'short' }).toUpperCase()
+  const month = d.toLocaleDateString(localeFor(i18n.language), { month:'short' }).toUpperCase()
   const day   = d.getDate()
-  const long  = d.toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'long', year:'numeric' })
+  const long  = d.toLocaleDateString(localeFor(i18n.language), { weekday:'short', day:'numeric', month:'long', year:'numeric' })
   const dEnd  = dateEndStr && dateEndStr !== dateStr
-    ? new Date(dateEndStr + 'T12:00:00').toLocaleDateString('it-IT', { day:'numeric', month:'short' })
+    ? new Date(dateEndStr + 'T12:00:00').toLocaleDateString(localeFor(i18n.language), { day:'numeric', month:'short' })
     : null
 
   return (

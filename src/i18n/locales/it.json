@@ -97,6 +97,7 @@
     "brokenAlert_other": "{{count}} oggetti rotti da riparare",
     "defectAlert_one": "1 oggetto con difetto",
     "defectAlert_other": "{{count}} oggetti con difetto",
+    "defectSingle": "{{name}}: {{count}} con difetto",
     "reorderSingle": "\"{{name}}\" da riordinare",
     "reorderMultiple": "{{count}} consumabili da riordinare",
     "view": "Vedi",
@@ -266,6 +267,7 @@
     "searchHint": "Cerca una persona per assegnarla",
     "peopleHint": "— tocca un evento o un task per assegnarla",
     "rangeSelectHint": "— tocca l'ora di fine per creare un task, oppure il giorno dopo per andare oltre la mezzanotte (Esc per annullare)",
+    "customDayHours": "Orario personalizzato per questo giorno",
     "untitledTask": "Task",
     "addExternal": "Aggiungi esterno",
     "externalQuickChip": "Esterno",
@@ -1855,7 +1857,9 @@
     "sectionAppearance": "Aspetto",
     "themeLight": "Chiaro",
     "themeDark": "Scuro",
-    "themeAuto": "Automatico"
+    "themeAuto": "Automatico",
+    "languagePortuguese": "Português",
+    "languageArabic": "العربية"
   },
   "workHours": {
     "title": "Ore di lavoro",
@@ -2214,5 +2218,153 @@
     "offsetY": "Sposta in basso (+) / in alto (−)",
     "calibrate": "Stampa etichetta di prova (righello)",
     "downloadImage": "Scarica l'immagine"
+  },
+  "dateField": {
+    "selectDate": "Seleziona data",
+    "selectPeriod": "Seleziona periodo",
+    "selectTime": "Seleziona ora",
+    "pickSecondDay": "Tocca un secondo giorno per scegliere un periodo"
+  },
+  "landing": {
+    "seoTitle": "Roadcase — Gestionale magazzino per noleggio audio, video e luci",
+    "seoDescription": "Gestionale di magazzino per aziende di noleggio audio, video e luci: inventario, calendario eventi, liste di carico e scanner QR/barcode in un'unica app. Prova gratis per 30 giorni.",
+    "login": "Accedi",
+    "tryFree": "Prova gratis",
+    "langLabel": "Lingua",
+    "eyebrow": "Gestionale magazzino per noleggio audio, video e luci",
+    "title": "Dal magazzino al furgone, senza dimenticare niente.",
+    "text": "Roadcase tiene insieme inventario, calendario eventi e liste di carico. Il magazziniere scansiona, l'app segna cosa è pronto, caricato e rientrato.",
+    "ctaStart": "Inizia gratis per 30 giorni",
+    "ctaLogin": "Accedi",
+    "heroNote": "Nessuna carta richiesta. Da 45 € al mese per azienda.",
+    "previewLabel": "Lista di carico",
+    "previewName": "Concerto in piazza",
+    "previewDay": "Sabato",
+    "previewTabs": "Fase della lista di carico",
+    "phases": [
+      {
+        "label": "Pronto",
+        "desc": "Il magazziniere prepara l'attrezzatura e la segna pronta, oggetto per oggetto."
+      },
+      {
+        "label": "Carico",
+        "desc": "Ogni pezzo scansionato sul furgone risulta caricato e scala la giacenza."
+      },
+      {
+        "label": "Rientro",
+        "desc": "A fine evento si scansiona al rientro: la giacenza torna piena e vedi cosa manca."
+      }
+    ],
+    "demoRows": [
+      "Line array",
+      "Mixer digitale",
+      "Teste mobili",
+      "Cavi XLR"
+    ],
+    "stepsTitle": "Ogni carico in tre passaggi",
+    "stepsText": "Chiunque apra l'evento vede a che punto è il lavoro, anche se a cominciarlo è stato un collega.",
+    "step": "PASSO {{n}}",
+    "featuresTitle": "Tutto quello che serve a un magazzino di noleggio",
+    "featuresText": "Dalla gestione dell'attrezzatura all'organizzazione della squadra, in un'unica app.",
+    "features": [
+      {
+        "title": "Magazzino",
+        "desc": "Inventario di audio, video e luci con disponibilità in tempo reale, pezzi rotti e scorta minima dei consumabili."
+      },
+      {
+        "title": "Calendario eventi",
+        "desc": "Eventi, noleggi e installazioni in un unico calendario, con controllo della disponibilità per qualsiasi periodo."
+      },
+      {
+        "title": "Liste di carico",
+        "desc": "Anche più liste per evento (un tendone, una lista). Rientro parziale e documento di trasporto in PDF."
+      },
+      {
+        "title": "Scanner",
+        "desc": "Carico e scarico con la fotocamera dello smartphone o con un lettore Bluetooth, via QR e codice a barre."
+      },
+      {
+        "title": "Kit e bauli",
+        "desc": "Sai quale baule fisico è finito su quale evento e quali componenti mancano dentro ciascuno."
+      },
+      {
+        "title": "Oggetti collegati",
+        "desc": "Aggiungi una pedana e arrivano le sue 4 gambe. La bolla, invece, una sola volta per evento."
+      },
+      {
+        "title": "Furgoni",
+        "desc": "Assegni ogni oggetto al furgone giusto e ti avvisa se lo stesso mezzo è già impegnato."
+      },
+      {
+        "title": "Personale e ore",
+        "desc": "Assegni i magazzinieri agli eventi e tieni traccia delle ore di lavoro."
+      }
+    ],
+    "strengthsTitle": "Costruita per chi lavora davvero in magazzino",
+    "strengths": [
+      {
+        "title": "Pensata per il magazzino",
+        "text": "Wi‑Fi debole e mani occupate sono la norma. Ogni salvataggio viene confermato e, se non va a buon fine, l'app te lo dice invece di far finta di niente."
+      },
+      {
+        "title": "Si installa come un'app",
+        "text": "Aggiungila alla schermata Home di iPhone o Android: si apre a schermo intero, senza passare dallo store."
+      },
+      {
+        "title": "Ognuno vede ciò che gli serve",
+        "text": "Admin, magazziniere e organizzatore hanno accessi diversi. Attivi solo i moduli che usi davvero."
+      },
+      {
+        "title": "Parla la lingua della tua squadra",
+        "text": "Italiano, inglese, portoghese e arabo: ogni persona sceglie la sua dal proprio profilo, così nessuno resta indietro."
+      }
+    ],
+    "trialTitle": "30 giorni di prova gratuita",
+    "betaBadge": "Prezzo beta",
+    "trialText": "Nessuna carta richiesta all'attivazione. Un unico limite tra i piani a pagamento: quanti amministratori — magazzinieri, oggetti e liste di carico restano sempre senza tetto. Disdici quando vuoi.",
+    "perMonth": "/mese",
+    "plans": [
+      {
+        "name": "Free",
+        "price": "0€",
+        "tagline": "Per iniziare da soli.",
+        "features": [
+          "1 amministratore",
+          "Fino a 3 magazzinieri",
+          "Fino a 50 oggetti in magazzino",
+          "Liste di carico fino a 20 oggetti"
+        ],
+        "cta": "Inizia gratis"
+      },
+      {
+        "name": "Team",
+        "price": "45€",
+        "tagline": "Per una squadra vera.",
+        "badge": "Consigliato",
+        "features": [
+          "Fino a 5 amministratori",
+          "Fino a 10 magazzinieri",
+          "Fino a 300 oggetti in magazzino",
+          "Scanner, kit e liste multiple"
+        ],
+        "cta": "30 giorni di prova gratuita"
+      },
+      {
+        "name": "Business",
+        "price": "129€",
+        "tagline": "Per aziende più strutturate.",
+        "features": [
+          "Amministratori illimitati",
+          "Magazzinieri illimitati",
+          "Magazzino e liste senza limiti",
+          "Tutto quello che c'è in Team"
+        ],
+        "cta": "30 giorni di prova gratuita"
+      }
+    ],
+    "contact": "Contatti:",
+    "privacy": "Privacy",
+    "terms": "Termini",
+    "cookies": "Cookie"
   }
 }

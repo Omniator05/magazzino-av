@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Clock } from './Icon'
+import { useTranslation } from 'react-i18next'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5) // passi da 5 minuti — abbastanza precisi per un orario di lavoro, senza 60 righe da scorrere
@@ -37,7 +38,8 @@ function parseTypedTime(raw) {
 // gli orari per-persona dentro una riga stretta (StaffAssignPanel), dove
 // non c'è spazio per l'icona e la ghiera è scomoda da aprire/richiudere per
 // un tocco così piccolo — qui il tocco apre direttamente la tastiera.
-export default function TimeField({ value, onChange, placeholder = 'Seleziona ora', clearable = false, compact = false }) {
+export default function TimeField({ value, onChange, placeholder, clearable = false, compact = false }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState(value || '')
   const containerRef = useRef(null)
@@ -122,7 +124,7 @@ export default function TimeField({ value, onChange, placeholder = 'Seleziona or
             if (e.key === 'Enter') { commitTyped(); setOpen(false); e.currentTarget.blur() }
             if (e.key === 'Escape') { setTyped(value || ''); setOpen(false); e.currentTarget.blur() }
           }}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('dateField.selectTime')}
           style={{
             flex: 1, minWidth: 0, width: '100%', background: 'transparent', border: 'none', padding: 0,
             color: value ? 'var(--text)' : 'var(--text3)', fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums',

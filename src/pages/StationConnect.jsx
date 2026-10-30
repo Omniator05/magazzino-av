@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { detectDeviceLanguage } from '../i18n'
 import { fetchStationInfo, connectStation } from '../utils/stationLink'
 import { applyTheme, watchSystemTheme } from '../utils/theme'
 
@@ -15,7 +16,8 @@ export default function StationConnect({ token }) {
   useEffect(() => {
     applyTheme('auto')
     const stop = watchSystemTheme()
-    if ((navigator.language || '').toLowerCase().startsWith('en')) i18n.changeLanguage('en')
+    const dl = detectDeviceLanguage()
+    if (dl !== 'it') i18n.changeLanguage(dl)
     return stop
   }, [i18n])
 

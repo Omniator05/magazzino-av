@@ -427,7 +427,11 @@ export default function Dashboard({ toggleTheme, theme }) {
         {defectItems.length > 0 && (
           <button type="button" className="btn-no-anim" onClick={() => navigate('/inventory', { state: { filter: 'defect' } })} style={attentionRow}>
             <span style={{ ...attentionDot, background:'#d97706' }} />
-            <span style={{ flex:1, textAlign:'left' }}>{t('dashboard.defectAlert', { count: totalDefect })}</span>
+            <span style={{ flex:1, textAlign:'left' }}>
+              {defectItems.length === 1
+                ? t('dashboard.defectSingle', { name: defectItems[0].name, count: totalDefect })
+                : t('dashboard.defectAlert', { count: totalDefect })}
+            </span>
             <span style={{ color:'var(--c-ink3)', display:'flex' }}><IconChevron /></span>
           </button>
         )}
