@@ -1,6 +1,6 @@
 // Lingue dell'app. Arabo con cifre latine (0-9): più leggibili per date e orari accanto ai numeri del resto dell'app.
 // Portoghese europeo; la maggior parte delle parole coincide con quello brasiliano.
-const LOCALES = { it: 'it-IT', en: 'en-US', pt: 'pt-PT', ar: 'ar-u-nu-latn' }
+const LOCALES = { it: 'it-IT', en: 'en-US', pt: 'pt-PT', ar: 'ar-u-nu-latn', de: 'de-DE' }
 export const RTL_LANGUAGES = ['ar']
 
 export function localeFor(lang) {

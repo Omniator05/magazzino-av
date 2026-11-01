@@ -50,8 +50,8 @@ const TAB_GREY = 'var(--c-ink2)'
 
 // Colore dell'icona: dal grigio del tema → bianco man mano che il cerchio le
 // passa sotto (color-mix, così il grigio di partenza segue chiaro/scuro).
-function mixColor(k) {
-  return `color-mix(in srgb, #ffffff ${Math.round(k * 100)}%, ${TAB_GREY})`
+function mixColor(k, from = TAB_GREY) {
+  return `color-mix(in srgb, #ffffff ${Math.round(k * 100)}%, ${from})`
 }
 
 // Contorno della barra: rettangolo (angoli opzionali) con una tacca circolare
@@ -184,7 +184,8 @@ export default function TabBar() {
       const prox = Math.max(0, 1 - Math.abs(i - pos)) * vis
       const lift = (m.H / 2 - cy) * prox
       el.style.transform = `translateY(${-lift}px) scale(${0.74 + 0.26 * prox})`
-      el.style.color = el.dataset.shift === '1' ? 'var(--accent)' : mixColor(prox)
+      // Turno in corso: icona rossa, bianca quando ci passa sotto il cerchio (rosso anche lui)
+      el.style.color = mixColor(prox, el.dataset.shift === '1' ? 'var(--accent)' : TAB_GREY)
     })
   }
 
@@ -247,7 +248,7 @@ export default function TabBar() {
         </svg>
         <span ref={circleRef} aria-hidden="true" style={{
           position:'absolute', left:0, top:0, width: m.D, height: m.D, borderRadius:'50%', zIndex:2, pointerEvents:'none',
-          background:'linear-gradient(135deg,#3b4a66 0%,#222c42 100%)', boxShadow:'0 6px 16px rgba(34,44,66,0.32)',
+          background:'linear-gradient(135deg,#ee4a58 0%,#d62f3d 100%)', boxShadow:'0 6px 16px rgba(230,57,70,0.4)',
           transformOrigin:'50% 50%', willChange:'transform',
         }} />
         {tabs.map((t, i) => {

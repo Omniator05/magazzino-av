@@ -6,6 +6,7 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
     <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
     <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://www.roadcase.it/de" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
@@ -16,6 +17,7 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
     <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
     <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://www.roadcase.it/de" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -26,6 +28,7 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
     <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
     <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://www.roadcase.it/de" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -36,6 +39,18 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
     <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
     <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://www.roadcase.it/de" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.roadcase.it/de</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://www.roadcase.it/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.roadcase.it/en" />
+    <xhtml:link rel="alternate" hreflang="pt" href="https://www.roadcase.it/pt" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://www.roadcase.it/ar" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://www.roadcase.it/de" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://www.roadcase.it/" />
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

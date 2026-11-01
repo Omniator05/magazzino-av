@@ -731,7 +731,10 @@
     "kitInstanceMissingTotal_zero": "{{count}} قطع بحاجة إلى إصلاح",
     "kitInstanceMissingTotal_two": "{{count}} قطع بحاجة إلى إصلاح",
     "kitInstanceMissingTotal_few": "{{count}} قطع بحاجة إلى إصلاح",
-    "kitInstanceMissingTotal_many": "{{count}} قطع بحاجة إلى إصلاح"
+    "kitInstanceMissingTotal_many": "{{count}} قطع بحاجة إلى إصلاح",
+    "dmxChannelsLabel": "قنوات DMX",
+    "dmxChannelsPlaceholder": "مثال: 16",
+    "dmxChannelsValue": "{{value}} قناة"
   },
   "eventDetail": {
     "loading": "جارٍ التحميل...",
@@ -795,7 +798,6 @@
     "apply": "تطبيق",
     "selectItems": "تحديد",
     "assignVehicleToMultiple": "تعيين شاحنة",
-    "moveToListExisting": "قائمة موجودة",
     "moveToListNew": "قائمة جديدة",
     "moveSelectedMessage": "ستنتقل الأصناف المحددة إلى القائمة الجديدة.",
     "bulkStatusAction": "تغيير الحالة",
@@ -963,7 +965,8 @@
     "templateItemCount_zero": "{{count}} أصناف",
     "templateItemCount_two": "{{count}} أصناف",
     "templateItemCount_few": "{{count}} أصناف",
-    "templateItemCount_many": "{{count}} أصناف"
+    "templateItemCount_many": "{{count}} أصناف",
+    "moveToList": "نقل إلى قائمة"
   },
   "eventSummary": {
     "timeLabel": "الوقت",
@@ -2095,7 +2098,8 @@
     "themeDark": "داكن",
     "themeAuto": "تلقائي",
     "languagePortuguese": "Português",
-    "languageArabic": "العربية"
+    "languageArabic": "العربية",
+    "languageGerman": "Deutsch"
   },
   "workHours": {
     "title": "ساعات العمل",
@@ -2575,7 +2579,7 @@
       },
       {
         "title": "يتحدث لغة فريقك",
-        "text": "الإيطالية والإنجليزية والبرتغالية والعربية: يختار كل شخص لغته من ملفه الشخصي، فلا يتخلف أحد."
+        "text": "الإيطالية والإنجليزية والبرتغالية والعربية والألمانية: يختار كل شخص لغته من ملفه الشخصي، فلا يتخلف أحد."
       }
     ],
     "trialTitle": "فترة تجريبية مجانية لمدة 30 يوماً",
@@ -2642,7 +2646,7 @@
       },
       {
         "q": "هل يستطيع الزملاء الذين يتحدثون لغة أخرى استخدامه؟",
-        "a": "نعم. يتوفر Roadcase بالإيطالية والإنجليزية والبرتغالية والعربية، ويختار كل شخص لغته من ملفه الشخصي."
+        "a": "نعم. يتوفر Roadcase بالإيطالية والإنجليزية والبرتغالية والعربية والألمانية، ويختار كل شخص لغته من ملفه الشخصي."
       },
       {
         "q": "كم التكلفة؟ وهل أستطيع التجربة؟",
@@ -2656,5 +2660,36 @@
     "langPick": "اختر لغتك",
     "langPickClose": "إغلاق",
     "ctaFinal": "جرّب Roadcase مع فريقك"
+  },
+  "powerPatch": {
+    "title": "الطاقة وباتش DMX",
+    "powerTab": "الطاقة",
+    "patchTab": "باتش DMX",
+    "amps": "≈ {{amps}} أمبير عند 230 فولت",
+    "totalLabel": "الإجمالي عند الحمل الأقصى",
+    "socketLabel": "مقبس الطور الواحد لديّ",
+    "socketCap": "يتحمّل حتى {{watts}} واط",
+    "socketsNeeded": "عدد المقابس اللازمة: {{count}}",
+    "colItem": "الصنف",
+    "colQty": "الكمية",
+    "colEach": "واط للقطعة",
+    "colTotal": "الإجمالي (واط)",
+    "powerNote": "مجموع القدرة القصوى المحدّدة لكل صنف × الكمية. الطقم بلا بيانات خاصة يُحسب بمكوّناته.",
+    "missingTitle": "بلا قدرة محدّدة، غير محسوبة ({{count}})",
+    "startUniverse": "Universe البداية",
+    "startAddress": "عنوان البداية",
+    "colFixture": "الكشاف",
+    "colChannels": "القنوات",
+    "colUniverse": "Universe",
+    "colAddress": "العنوان",
+    "copy": "نسخ القائمة",
+    "copied": "تم النسخ",
+    "csv": "تنزيل CSV",
+    "csvName": "dmx-patch",
+    "patchEmpty": "لا توجد كشافات بقنوات DMX في القائمة. أدخل قنوات DMX في تفاصيل كل كشاف.",
+    "tooBig": "أكثر من 512 قناة، لا يمكن تعيينها: {{names}}",
+    "patchNote": "يشغل كل كشاف قنوات متتالية؛ وإذا لم يتسع في المتبقي ينتقل إلى العنوان 1 في الـ Universe التالي.",
+    "chip": "الطاقة والباتش",
+    "scopeSelected": "الأصناف المحددة: {{count}}"
   }
 }

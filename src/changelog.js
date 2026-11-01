@@ -7,6 +7,35 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-10',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Nuova lingua: tedesco. Si sceglie dal Profilo; il sito ha anche la pagina roadcase.it/de',
+        'Potenza e patch DMX: dalla lista di carico, in "Seleziona", scegli gli oggetti e tocca "Potenza e patch". Vedi i watt totali al carico massimo (e quante prese monofase servono) e la lista degli indirizzi DMX dei fari, da copiare o scaricare in CSV. Nella scheda oggetto, in "Dettagli oggetto", c\'è il nuovo campo "Canali DMX"',
+        'Lista di carico, "Seleziona": un solo pulsante "Sposta in lista" con le altre liste dell\'evento e la possibilità di crearne una nuova con gli oggetti scelti. Senza oggetti selezionati le azioni restano spente',
+        'Dashboard: header rosso e sfondo con macchie rosse in movimento dietro le card; la tab selezionata ha il cerchio rosso. Il popup del profilo non finisce più sotto la tab bar',
+        'Calendario su computer: scorre solo il calendario, così l\'ultima settimana del mese si vede intera',
+        'Importazione CSV del magazzino: riconosce anche le intestazioni in tedesco',
+        'Sito pubblico: il menu in alto è centrato, gli spazi su telefono sono corretti, il tema chiaro/scuro è lo stesso di login e app',
+        'Nuovo evento da modello: corretti gli spazi del pannello',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'New language: German. Pick it from the Profile; the website also has roadcase.it/de',
+        'Power and DMX patch: in the load list, under "Select", pick the items and tap "Power and patch". You see the total watts at max load (and how many single-phase sockets you need) and the DMX address list for the fixtures, ready to copy or download as CSV. Item details have a new "DMX channels" field',
+        'Load list, "Select": a single "Move to list" button with the event\'s other lists and the option to create a new one with the chosen items. With nothing selected, the actions stay off',
+        'Dashboard: red header and a background with moving red blobs behind the cards; the selected tab has a red circle. The profile popup no longer ends up under the tab bar',
+        'Calendar on computer: only the calendar scrolls, so the last week of the month is fully visible',
+        'Warehouse CSV import: also recognises German headers',
+        'Public site: the top menu is centred, spacing on phones is fixed, and the light/dark theme matches login and the app',
+        'New event from template: the panel spacing is fixed',
+      ],
+    },
+  },
+  {
     version: '2026-11-09',
     it: {
       title: 'Novità di oggi',

@@ -37,17 +37,17 @@ export function parseCSV(text) {
   return rows.filter(r => r.some(v => v.trim() !== ''))
 }
 
-// Alias riconosciuti per ogni colonna — case-insensitive, IT/EN, e le
+// Alias riconosciuti per ogni colonna — case-insensitive, IT/EN/DE, e le
 // etichette che il nostro stesso "Esporta CSV" genera, così una lista
 // esportata da qui si può reimportare senza modifiche.
 const COLUMN_ALIASES = {
-  name:     ['nome', 'name', 'oggetto', 'articolo', 'item'],
-  category: ['categoria', 'category'],
-  brand:    ['marca', 'brand', 'produttore', 'manufacturer'],
-  model:    ['modello', 'model'],
-  qty:      ['quantità totale', 'quantita totale', 'quantità', 'quantita', 'qty', 'quantity', 'pezzi', 'q.ta'],
-  location: ['posizione', 'location', 'ubicazione'],
-  notes:    ['note', 'notes', 'appunti'],
+  name:     ['nome', 'name', 'oggetto', 'articolo', 'item', 'artikel', 'bezeichnung'],
+  category: ['categoria', 'category', 'kategorie'],
+  brand:    ['marca', 'brand', 'produttore', 'manufacturer', 'marke', 'hersteller'],
+  model:    ['modello', 'model', 'modell'],
+  qty:      ['quantità totale', 'quantita totale', 'quantità', 'quantita', 'qty', 'quantity', 'pezzi', 'q.ta', 'gesamtmenge', 'menge', 'anzahl', 'stück'],
+  location: ['posizione', 'location', 'ubicazione', 'standort', 'lagerort', 'lagerplatz'],
+  notes:    ['note', 'notes', 'appunti', 'notizen', 'anmerkungen'],
 }
 
 function findColumn(headerRow, keys) {

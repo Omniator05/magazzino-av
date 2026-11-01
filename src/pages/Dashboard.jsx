@@ -483,22 +483,26 @@ export default function Dashboard({ toggleTheme, theme }) {
   )
 
   return (
-    <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom: isMobile ? 150 : 110 }}>
+    <>
+      {/* Sfondo vivo dietro le card: macchie rosse molto morbide che si spostano piano (ferme se si riduce il movimento).
+          Sta FUORI dal contenuto e i popup (profilo, riepilogo…) stanno fuori dal contenitore sotto: un contenitore
+          con z-index/isolation chiuderebbe i popup nel suo livello, e la tab bar (z-index 100) li coprirebbe. */}
+      <div className="dash-bg" aria-hidden="true"><span className="dash-blob dash-blob-a" /><span className="dash-blob dash-blob-b" /><span className="dash-blob dash-blob-c" /></div>
+      <div style={{ position:'relative', zIndex:1, minHeight:'100dvh', paddingBottom: isMobile ? 150 : 110 }}>
 
-      {/* ── Header: stesso stile delle altre pagine (bianco, filo sottile).
-          Saluto, nome, data e meteo a sinistra; l'avatar a destra apre il
-          profilo (da lì anche l'uscita). Niente più scena animata. ── */}
-      <div className="page-header rc-page-header" style={{ position:'relative', overflow:'hidden', ...(isMobile ? { padding:'calc(env(safe-area-inset-top) + 36px) 22px 24px' } : {}) }}>
+      {/* ── Header rosso (colore del marchio), testi bianchi. Saluto, nome, data e meteo a
+          sinistra; l'avatar a destra apre il profilo (da lì anche l'uscita). ── */}
+      <div className="page-header rc-page-header" style={{ position:'relative', overflow:'hidden', background:'linear-gradient(135deg, #ee4a58 0%, #d62f3d 100%)', borderBottom:'none', ...(isMobile ? { padding:'calc(env(safe-area-inset-top) + 36px) 22px 26px' } : { paddingBottom:22 }) }}>
         <SkyArc weather={weather} isMobile={isMobile} />
         <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <div style={{ minWidth:0 }}>
-            <p style={{ fontSize:12.5, color:'var(--c-ink3)', fontWeight:600, margin:0 }}>{t(greetingKey())}</p>
-            <h1 style={{ fontSize:isMobile ? 28 : 26, margin:'4px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</h1>
-            <p style={{ fontSize:12.5, color:'var(--c-ink3)', fontWeight:500, margin:'6px 0 0', textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
+            <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.82)', fontWeight:600, margin:0 }}>{t(greetingKey())}</p>
+            <h1 style={{ fontSize:isMobile ? 28 : 26, margin:'4px 0 0', color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</h1>
+            <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.82)', fontWeight:500, margin:'6px 0 0', textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
             {profile?.superAdmin && (
-              <button onClick={() => navigate('/super')} aria-label={t('dashboard.superAdminAria')} className="rc-pill-btn" style={{ width:38, height:38, padding:0 }}>
+              <button onClick={() => navigate('/super')} aria-label={t('dashboard.superAdminAria')} className="rc-pill-btn" style={{ width:38, height:38, padding:0, background:'rgba(255,255,255,0.18)', border:'none', color:'#fff' }}>
                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>
                   <line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="12" x2="9" y2="12.01"/><line x1="9" y1="15" x2="9" y2="15.01"/>
@@ -506,9 +510,9 @@ export default function Dashboard({ toggleTheme, theme }) {
               </button>
             )}
             <button onClick={() => setShowProfile(true)} aria-label={t('dashboard.openSettings')} className="btn-no-anim"
-              style={{ position:'relative', width:46, height:46, borderRadius:'50%', background:'var(--c-surface)', color:'var(--c-ink)', border:'1px solid var(--c-line)', fontSize:16, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              style={{ position:'relative', width:46, height:46, borderRadius:'50%', background:'#fff', color:'#d62f3d', border:'none', fontSize:16, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>
               {name.charAt(0).toUpperCase()}
-              {hasUnseenWhatsNew() && <span aria-hidden="true" style={{ position:'absolute', top:-2, right:-2, width:13, height:13, borderRadius:'50%', background:'#e63946', border:'2px solid var(--c-surface)' }} />}
+              {hasUnseenWhatsNew() && <span aria-hidden="true" style={{ position:'absolute', top:-2, right:-2, width:13, height:13, borderRadius:'50%', background:'#ffd27a', border:'2px solid #d62f3d' }} />}
             </button>
           </div>
         </div>
@@ -558,8 +562,18 @@ export default function Dashboard({ toggleTheme, theme }) {
           </div>
         </div>
       </div>
+      </div>
 
       <style>{`
+        .dash-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .dash-blob { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, var(--rc-wash), transparent); will-change: transform; }
+        .dash-blob-a { width: 640px; height: 640px; top: -200px; right: -160px; animation: dash-float-a 26s ease-in-out infinite alternate; }
+        .dash-blob-b { width: 520px; height: 520px; top: 38%; left: -220px; animation: dash-float-b 32s ease-in-out infinite alternate; }
+        .dash-blob-c { width: 460px; height: 460px; bottom: -180px; right: 4%; animation: dash-float-c 38s ease-in-out infinite alternate; }
+        @keyframes dash-float-a { from { transform: translate(0, 0) scale(1); } to { transform: translate(-90px, 120px) scale(1.15); } }
+        @keyframes dash-float-b { from { transform: translate(0, 0) scale(1.05); } to { transform: translate(140px, -90px) scale(0.92); } }
+        @keyframes dash-float-c { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(-120px, -70px) scale(1.12); } }
+        @media (prefers-reduced-motion: reduce) { .dash-blob { animation: none; } }
         .dash-tool-tile { transition: background-color 0.15s ease; }
         .dash-tool-tile:active { background: var(--c-fill-hover) !important; }
         .dash-stat, .dash-tool-tile { transition: border-color 0.15s ease, background-color 0.15s ease; }
@@ -706,6 +720,6 @@ export default function Dashboard({ toggleTheme, theme }) {
           `}</style>
         </div>
       )}
-    </div>
+    </>
   )
 }

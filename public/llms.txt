@@ -9,7 +9,7 @@ Pensato per la realtà fisica del lavoro in magazzino: resistente a connessioni 
 ## Pagine
 
 - [Home](https://www.roadcase.it/): presentazione del prodotto, funzionalità principali, prezzi.
-- [English](https://www.roadcase.it/en), [Português](https://www.roadcase.it/pt), [العربية](https://www.roadcase.it/ar): la stessa presentazione nelle altre lingue.
+- [English](https://www.roadcase.it/en), [Português](https://www.roadcase.it/pt), [العربية](https://www.roadcase.it/ar), [Deutsch](https://www.roadcase.it/de): la stessa presentazione nelle altre lingue.
 - [Registrazione](https://www.roadcase.it/signup): inizio prova gratuita di 30 giorni, nessuna carta richiesta.
 - [Accesso](https://www.roadcase.it/login): accesso per aziende già registrate.
 

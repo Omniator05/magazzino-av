@@ -31,6 +31,7 @@ import { notifyTeamPush } from '../utils/pushNotifications'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import ListNameModal from '../components/ListNameModal'
 import EventAssignSheet from '../components/EventAssignSheet'
+import EventPowerPatch from '../components/EventPowerPatch'
 import { linkedAdditionsFor } from '../utils/linkedItems'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, listRowId, moveRowToList } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
@@ -181,9 +182,9 @@ export default function EventDetail() {
   // sotto i chip (null = solo i chip, nessun pannello aperto).
   const [selectMode, setSelectMode] = useState(false)
   const [bulkSelectedIds, setBulkSelectedIds] = useState(new Set())
-  const [bulkAction, setBulkAction] = useState(null) // null | 'vehicle' | 'moveExisting' | 'status' ('vehicle' solo su computer, vedi showBulkVehiclePicker sotto)
+  const [bulkAction, setBulkAction] = useState(null) // null | 'vehicle' | 'move' | 'status' ('vehicle' solo su computer, vedi showBulkVehiclePicker sotto)
   const [bulkVehicleId, setBulkVehicleId] = useState('')
-  const [bulkMoveListId, setBulkMoveListId] = useState('')
+  const [powerOpen, setPowerOpen] = useState(false) // finestra "Potenza e patch DMX" (dalla modalità Seleziona)
   // "Assegna furgone" in blocco: su telefono apre un popup a elenco invece
   // del select inline (troppo piccolo da toccare) — un tap sceglie e applica
   // subito, niente "Applica" separato. Il select rimane così com'era su
@@ -395,6 +396,10 @@ export default function EventDetail() {
     document.body.classList.toggle('select-mode', selectMode)
     return () => document.body.classList.remove('select-mode')
   }, [selectMode])
+  // Se si deseleziona tutto, i pannelli delle azioni (furgone, sposta, stato) si richiudono: le azioni sono spente.
+  useEffect(() => {
+    if (bulkSelectedIds.size === 0) { setBulkAction(null); setMobileMoreOpen(false) }
+  }, [bulkSelectedIds])
   // Esc esce dalla selezione multipla (solo utile su computer, su telefono
   // non c'è una tastiera che la invii).
   useEffect(() => {
@@ -854,7 +859,6 @@ export default function EventDetail() {
     setBulkSelectedIds(new Set())
     setBulkAction(null)
     setBulkVehicleId('')
-    setBulkMoveListId('')
     setLastBulkClickId(null)
     setMobileMoreOpen(false)
     setShowBulkVehiclePicker(false)
@@ -907,11 +911,11 @@ export default function EventDetail() {
   // Sposta tutti gli oggetti selezionati in un'altra lista GIÀ ESISTENTE, in
   // un'unica scrittura — stesso schema di applyBulkVehicle sopra, ma su
   // moveRowToList (già gestisce id univoci/itemRef, vedi utils/eventLists.js).
-  const applyBulkMove = async () => {
-    if (bulkSelectedIds.size === 0 || !bulkMoveListId) return
+  const applyBulkMove = async (targetListId) => {
+    if (bulkSelectedIds.size === 0 || !targetListId) return
     await updateEventItems(current => {
       const taken = new Set(current.map(i => i.id))
-      return current.map(i => bulkSelectedIds.has(i.id) ? moveRowToList(i, bulkMoveListId, taken) : i)
+      return current.map(i => bulkSelectedIds.has(i.id) ? moveRowToList(i, targetListId, taken) : i)
     })
     exitSelectMode()
   }
@@ -2070,12 +2074,19 @@ export default function EventDetail() {
       {loadListsOn && <>
       {/* Ricerca oggetti + selezione multipla */}
       {eventItems.length > 0 && (() => {
+        // Senza oggetti selezionati le azioni sono spente (grigie, trasparenti, non cliccabili) e
+        // si accendono con una breve dissolvenza non appena se ne sceglie uno.
+        const hasSel = bulkSelectedIds.size > 0
         const chipStyle = (active, danger) => ({
+          opacity: hasSel ? 1 : 0.35, pointerEvents: hasSel ? 'auto' : 'none', transition:'opacity 0.2s ease, background 0.2s ease, color 0.2s ease',
           flexShrink:0, whiteSpace:'nowrap', padding:'8px 14px', borderRadius:20, fontSize:13, fontWeight:700,
           background: active ? 'var(--accent)' : danger ? 'rgba(220,38,38,0.08)' : 'var(--card2)',
           color: active ? '#fff' : danger ? 'var(--red)' : 'var(--text2)',
           border: `1px solid ${active ? 'var(--accent)' : danger ? 'rgba(220,38,38,0.25)' : 'var(--border)'}`,
         })
+        // Liste dove spostare i selezionati: tutte tranne quelle che li contengono già tutti.
+        const selectedRows = eventItems.filter(i => bulkSelectedIds.has(i.id))
+        const moveTargets = eventLists.filter(l => !selectedRows.every(r => rowListId(r) === l.id))
         // Chip del pannello furgoni (computer): stessa forma dei bottoni stato,
         // un tap sceglie E applica a tutti i selezionati.
         const bulkBigBtn = { flex:'0 1 auto', minHeight:40, padding:'8px 18px', borderRadius:12, fontSize:13.5, fontWeight:700, display:'inline-flex', alignItems:'center', justifyContent:'center' }
@@ -2087,33 +2098,23 @@ export default function EventDetail() {
         const actionChips = (
           <div style={{ display:'flex', gap:6, overflowX:'auto', WebkitOverflowScrolling:'touch', paddingBottom:2 }}>
             <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', flexShrink:0, alignSelf:'center', paddingRight:2 }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
-            <button onClick={() => setBulkAction(a => a === 'vehicle' ? null : 'vehicle')} aria-pressed={bulkAction === 'vehicle'} style={chipStyle(bulkAction === 'vehicle')}>{t('eventDetail.assignVehicleToMultiple')}</button>
-            {multiList && (
-              <button onClick={() => setBulkAction(a => a === 'moveExisting' ? null : 'moveExisting')} aria-pressed={bulkAction === 'moveExisting'} style={chipStyle(bulkAction === 'moveExisting')}>{t('eventDetail.moveToListExisting')}</button>
-            )}
-            <button onClick={() => setListModal({ mode:'moveSelected', name:'' })} style={chipStyle(false)}>{t('eventDetail.moveToListNew')}</button>
-            <button onClick={copySelected} title="⌘/Ctrl+C" style={chipStyle(false)}>{t('eventDetail.copyAction')}</button>
-            <button onClick={() => setBulkAction(a => a === 'status' ? null : 'status')} aria-pressed={bulkAction === 'status'} style={chipStyle(bulkAction === 'status')}>{t('eventDetail.bulkStatusAction')}</button>
-            <PendingButton onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
+            <button disabled={!hasSel} onClick={() => setBulkAction(a => a === 'vehicle' ? null : 'vehicle')} aria-pressed={bulkAction === 'vehicle'} style={chipStyle(bulkAction === 'vehicle')}>{t('eventDetail.assignVehicleToMultiple')}</button>
+            <button disabled={!hasSel} onClick={() => { if (moveTargets.length === 0) setListModal({ mode:'moveSelected', name:'' }); else setBulkAction(a => a === 'move' ? null : 'move') }} aria-pressed={bulkAction === 'move'} style={chipStyle(bulkAction === 'move')}>{t('eventDetail.moveToList')}</button>
+            <button disabled={!hasSel} onClick={copySelected} title="⌘/Ctrl+C" style={chipStyle(false)}>{t('eventDetail.copyAction')}</button>
+            <button disabled={!hasSel} onClick={() => setBulkAction(a => a === 'status' ? null : 'status')} aria-pressed={bulkAction === 'status'} style={chipStyle(bulkAction === 'status')}>{t('eventDetail.bulkStatusAction')}</button>
+            <button disabled={!hasSel} onClick={() => setPowerOpen(true)} style={chipStyle(false)}>{t('powerPatch.chip')}</button>
+            <PendingButton disabled={!hasSel} onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={chipStyle(false, true)}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
           </div>
         )
-        // Select "sposta in lista esistente" — unico tra i pannelli ancora
-        // uguale su computer e telefono (serve comunque una select, quindi
-        // tanto vale la stessa base bianca su entrambi).
-        const moveExistingPanel = (
-          <div style={{ display:'flex', gap:8 }}>
-            <select
-              value={bulkMoveListId}
-              onChange={e => setBulkMoveListId(e.target.value)}
-              style={{ flex:1, fontSize:13, borderRadius:10, padding:'9px 10px', border:'1.5px solid var(--border)', background:'var(--card2)', color:'var(--text)' }}
-            >
-              <option value="">{t('eventDetail.chooseTargetList')}</option>
-              {eventLists.map(l => <option key={l.id} value={l.id}>{listLabel(l)}</option>)}
-            </select>
-            <PendingButton onClick={applyBulkMove} disabled={!bulkMoveListId} className="btn btn-primary" style={{ padding:'9px 16px', fontSize:13, flexShrink:0, opacity: bulkMoveListId ? 1 : 0.5 }}>
-              {t('eventDetail.apply')}
-            </PendingButton>
-          </div>
+        // "Sposta in lista": le altre liste dell'evento (quelle dove i selezionati non sono già tutti)
+        // più "Nuova lista" con gli oggetti scelti. Un tap su una lista sposta subito.
+        const moveOptions = (rowStyle) => (
+          <>
+            {moveTargets.map(l => (
+              <PendingButton key={l.id} onClick={() => applyBulkMove(l.id)} style={rowStyle}>{listLabel(l)}</PendingButton>
+            ))}
+            <button onClick={() => { setBulkAction(null); setMobileMoreOpen(false); setListModal({ mode:'moveSelected', name:'' }) }} style={{ ...rowStyle, border:'1.5px dashed var(--accent)', background:'transparent', color:'var(--accent)' }}>+ {t('eventDetail.moveToListNew')}</button>
+          </>
         )
         // Pannello completo per il computer: select furgone inline (niente
         // popup lì, c'è spazio) + sposta lista + i 4 bottoni stato affiancati.
@@ -2149,7 +2150,7 @@ export default function EventDetail() {
                 </PendingButton>
               </div>
             )}
-            {bulkAction === 'moveExisting' && moveExistingPanel}
+            {bulkAction === 'move' && <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>{moveOptions(vehicleChipStyle)}</div>}
             {bulkAction === 'status' && (
               <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                 <PendingButton onClick={() => applyBulkStatus('pending')} className="btn btn-secondary" style={bulkBigBtn}>{t('eventDetail.statusPending')}</PendingButton>
@@ -2180,20 +2181,17 @@ export default function EventDetail() {
         const mobileMoreMenu = (
           <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
             <button onClick={() => { setMobileMoreOpen(false); setShowBulkVehiclePicker(true) }} style={menuRowStyle}>{t('eventDetail.assignVehicleToMultiple')}</button>
-            {multiList && (
-              <button onClick={() => { setBulkAction('moveExisting'); setMobileMoreOpen(false) }} style={menuRowStyle}>{t('eventDetail.moveToListExisting')}</button>
-            )}
-            <button onClick={() => { setMobileMoreOpen(false); setListModal({ mode:'moveSelected', name:'' }) }} style={menuRowStyle}>{t('eventDetail.moveToListNew')}</button>
+            <button onClick={() => { setMobileMoreOpen(false); if (moveTargets.length === 0) setListModal({ mode:'moveSelected', name:'' }); else setBulkAction('move') }} style={menuRowStyle}>{t('eventDetail.moveToList')}</button>
             <button onClick={() => { setMobileMoreOpen(false); copySelected() }} style={menuRowStyle}>{t('eventDetail.copyAction')}</button>
             <button onClick={() => { setBulkAction('status'); setMobileMoreOpen(false) }} style={menuRowStyle}>{t('eventDetail.bulkStatusAction')}</button>
+            <button onClick={() => { setMobileMoreOpen(false); setPowerOpen(true) }} style={menuRowStyle}>{t('powerPatch.chip')}</button>
           </div>
         )
-        // Versione telefono del pannello sopra la barra: solo moveExisting
-        // (select, serve la base bianca) e stato (pillole verticali come il
-        // menu sopra, niente base bianca) — il furgone passa dal popup.
-        const mobileActionPanel = bulkAction === 'moveExisting' ? (
-          <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:10, boxShadow:'0 6px 20px rgba(0,0,0,0.12)', width:'min(320px, 100%)' }}>
-            {moveExistingPanel}
+        // Versione telefono del pannello sopra la barra: "sposta in lista" e stato
+        // (pillole verticali come il menu sopra) — il furgone passa dal popup.
+        const mobileActionPanel = bulkAction === 'move' ? (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+            {moveOptions(menuRowStyle)}
           </div>
         ) : bulkAction === 'status' ? (
           <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
@@ -2250,8 +2248,8 @@ export default function EventDetail() {
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
                     <span style={{ fontSize:12, fontWeight:700, color:'var(--text2)', background:'var(--card)', border:'1px solid var(--border)', borderRadius:20, padding:'7px 12px', boxShadow:'0 4px 14px rgba(0,0,0,0.10)', whiteSpace:'nowrap' }}>{t('eventDetail.bulkSelectedCount', { count: bulkSelectedIds.size })}</span>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <PendingButton onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
-                      <button onClick={toggleMobileMore} aria-expanded={mobileMoreOpen || !!bulkAction}
+                      <PendingButton disabled={!hasSel} onClick={applyBulkDelete} busy={bulkBusy === 'delete'} style={{ ...chipStyle(false, true), boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>{t('eventDetail.bulkDeleteAction')}</PendingButton>
+                      <button disabled={!hasSel} onClick={toggleMobileMore} aria-expanded={mobileMoreOpen || !!bulkAction}
                         style={{ ...chipStyle(mobileMoreOpen || !!bulkAction), padding:'8px 16px', fontSize:18, lineHeight:1, boxShadow:'0 4px 14px rgba(0,0,0,0.10)' }}>⋯</button>
                     </div>
                   </div>
@@ -2321,6 +2319,11 @@ export default function EventDetail() {
       {showAssignSheet && (
         <EventAssignSheet event={event} blocks={assignmentBlocks} workers={workers} unavailability={unavailability} teamId={teamId} user={user} onClose={() => setShowAssignSheet(false)} />
       )}
+      {/* Potenza e patch DMX: sugli oggetti selezionati */}
+      <EventPowerPatch open={powerOpen && bulkSelectedIds.size > 0} onClose={() => setPowerOpen(false)}
+        scopeLabel={t('powerPatch.scopeSelected', { count: bulkSelectedIds.size })}
+        eventItems={eventItems.filter(i => bulkSelectedIds.has(i.id))}
+        catalog={allItems} eventName={event.name} />
       <ListNameModal
         open={!!listModal}
         title={listModal?.mode === 'rename' ? t('eventDetail.renameListTitle') : listModal?.mode === 'moveUnloaded' ? t('eventDetail.moveUnloadedTitle') : t('eventDetail.newListTitle')}

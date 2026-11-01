@@ -639,7 +639,10 @@
     "kitLinkedHint": "When you add this kit to a load list, these items are added automatically.",
     "availabilityCheckStockNow": "In the warehouse right now: {{available}} available (the rest are already out)",
     "availabilityCheckStockPartial": "{{free}} available — the rest are already out of the warehouse",
-    "availabilityCheckStockNone": "None available — all already out of the warehouse"
+    "availabilityCheckStockNone": "None available — all already out of the warehouse",
+    "dmxChannelsLabel": "DMX channels",
+    "dmxChannelsPlaceholder": "e.g. 16",
+    "dmxChannelsValue": "{{value}} channels"
   },
   "eventDetail": {
     "loading": "Loading...",
@@ -703,7 +706,6 @@
     "apply": "Apply",
     "selectItems": "Select",
     "assignVehicleToMultiple": "Assign van",
-    "moveToListExisting": "Existing list",
     "moveToListNew": "New list",
     "moveSelectedMessage": "Selected items will move to the new list.",
     "bulkStatusAction": "Change status",
@@ -839,7 +841,8 @@
     "pasteAria": "Paste {{count}} copied items",
     "pasteNothing": "The copied items no longer exist in the warehouse.",
     "pasteSkipped": "{{count}} items no longer exist in the warehouse and were skipped.",
-    "pasteCountItems": "{{count}} items"
+    "pasteCountItems": "{{count}} items",
+    "moveToList": "Move to list"
   },
   "eventSummary": {
     "timeLabel": "Time",
@@ -1859,7 +1862,8 @@
     "themeDark": "Dark",
     "themeAuto": "Auto",
     "languagePortuguese": "Português",
-    "languageArabic": "العربية"
+    "languageArabic": "العربية",
+    "languageGerman": "Deutsch"
   },
   "workHours": {
     "title": "Work hours",
@@ -2315,7 +2319,7 @@
       },
       {
         "title": "Speaks your crew's language",
-        "text": "Italian, English, Portuguese and Arabic: everyone picks theirs from their own profile, so nobody is left behind."
+        "text": "Italian, English, Portuguese, Arabic and German: everyone picks theirs from their own profile, so nobody is left behind."
       }
     ],
     "trialTitle": "30-day free trial",
@@ -2382,7 +2386,7 @@
       },
       {
         "q": "Can colleagues who speak another language use it?",
-        "a": "Yes. Roadcase is available in Italian, English, Portuguese and Arabic, and everyone picks their own language from their profile."
+        "a": "Yes. Roadcase is available in Italian, English, Portuguese, Arabic and German, and everyone picks their own language from their profile."
       },
       {
         "q": "How much does it cost? Can I try it?",
@@ -2396,5 +2400,36 @@
     "langPick": "Choose your language",
     "langPickClose": "Close",
     "ctaFinal": "Try Roadcase with your crew"
+  },
+  "powerPatch": {
+    "title": "Power and DMX patch",
+    "powerTab": "Power",
+    "patchTab": "DMX patch",
+    "amps": "≈ {{amps}} A at 230 V",
+    "totalLabel": "Total at max load",
+    "socketLabel": "My single-phase socket",
+    "socketCap": "Handles up to {{watts}} W",
+    "socketsNeeded": "Sockets needed: {{count}}",
+    "colItem": "Item",
+    "colQty": "Qty",
+    "colEach": "W each",
+    "colTotal": "Total W",
+    "powerNote": "Sum of the peak power set on each item × quantity. A kit with no data of its own counts through its components.",
+    "missingTitle": "No power set, not counted ({{count}})",
+    "startUniverse": "Start universe",
+    "startAddress": "Start address",
+    "colFixture": "Fixture",
+    "colChannels": "Channels",
+    "colUniverse": "Universe",
+    "colAddress": "Address",
+    "copy": "Copy list",
+    "copied": "Copied",
+    "csv": "Download CSV",
+    "csvName": "dmx-patch",
+    "patchEmpty": "No fixtures with DMX channels in the list. Set the DMX channels in each fixture's item details.",
+    "tooBig": "More than 512 channels, can't be assigned: {{names}}",
+    "patchNote": "Each fixture takes consecutive channels; if it doesn't fit in what's left, it moves to address 1 of the next universe.",
+    "chip": "Power and patch",
+    "scopeSelected": "Selected items: {{count}}"
   }
 }

@@ -411,6 +411,7 @@ export default function App() {
               <Route path="/en" element={<LandingLang lang="en" />} />
               <Route path="/pt" element={<LandingLang lang="pt" />} />
               <Route path="/ar" element={<LandingLang lang="ar" />} />
+              <Route path="/de" element={<LandingLang lang="de" />} />
               {/* Pagine legali: sempre raggiungibili, loggati o no — stesso
                   motivo per cui login/signup sono qui e non dentro
                   PrivateRoutes (che richiederebbe di essere autenticati). */}

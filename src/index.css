@@ -797,6 +797,7 @@ button.rc-action-btn:not(:disabled):active {
   --c-violet-bg: #ede9fe; --c-blue-bg: #dbeafe; --c-orange-bg: #ffedd5;
   --c-t-red: #fdecee;    --c-t-blue: #eaf1fb; --c-t-amber: #fbf1dc;  --c-t-green: #e9f5ec;
   --tab-shadow: rgba(34,44,66,0.18);
+  --rc-wash: rgba(230,57,70,0.16);
   --ov-1: #ffd9d6; --ov-2: #f28b86; --ov-3: #b9d2f5; --ov-4: #6f9fe6;
 }
 
@@ -848,6 +849,7 @@ button.rc-action-btn:not(:disabled):active {
   --c-violet-bg: rgba(124,111,205,0.24); --c-blue-bg: rgba(37,99,235,0.26); --c-orange-bg: rgba(234,88,12,0.24);
   --c-t-red: rgba(230,57,70,0.18);  --c-t-blue: rgba(37,99,235,0.20); --c-t-amber: rgba(245,166,35,0.17); --c-t-green: rgba(62,207,142,0.15);
   --tab-shadow: rgba(0,0,0,0.55);
+  --rc-wash: rgba(230,57,70,0.24);
   --ov-1: #32191c; --ov-2: #5b2a30; --ov-3: #1a2740; --ov-4: #28446c;
 }
 
@@ -1440,7 +1442,7 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
   .rc-drawer [role="tablist"] > button[aria-selected="true"] { border-bottom-color: var(--c-ink); }
   .rc-drawer .rc-flatcard { background: transparent !important; border: none !important; border-top: 1px solid var(--c-line) !important; border-radius: 0 !important; overflow: visible !important; }
   /* Scelta Oggetto / Kit: due righe invece di due grandi riquadri */
-  .rc-drawer-narrow .rc-drawer-body > div { grid-template-columns: 1fr !important; gap: 0 !important; margin-top: 0 !important; }
+  .rc-drawer-narrow .rc-drawer-body > div:not(.rc-ev-form) { grid-template-columns: 1fr !important; gap: 0 !important; margin-top: 0 !important; }
   .rc-drawer .rc-choice { flex-direction: row !important; align-items: center !important; justify-content: flex-start !important; text-align: left; gap: 16px !important; width: 100%; padding: 18px 4px !important; border: none !important; border-top: 1px solid var(--c-line) !important; border-radius: 0 !important; background: transparent !important; }
   .rc-drawer .rc-choice:last-child { border-bottom: 1px solid var(--c-line) !important; }
   .rc-drawer .rc-choice:hover { background: var(--c-alt) !important; }

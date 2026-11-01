@@ -17,6 +17,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { detectDeviceLanguage } from '../i18n'
+import { resolveTheme } from '../utils/theme'
 
 // Pagina pubblica mostrata a chi visita il sito SENZA essere loggato (vedi
 // App.jsx → PrivateRoutes: solo il path "/" mostra questa invece del redirect
@@ -41,6 +42,7 @@ export const LANDING_LANGS = [
   { code: 'en', path: '/en', label: 'English' },
   { code: 'pt', path: '/pt', label: 'Português' },
   { code: 'ar', path: '/ar', label: 'العربية' },
+  { code: 'de', path: '/de', label: 'Deutsch' },
 ]
 const SITE = 'https://www.roadcase.it'
 
@@ -52,18 +54,18 @@ const saveLangPref = code => savePref(LANG_PREF_KEY, code)
 
 const prefersReducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-// Tema: segue quello del dispositivo (anche se cambia mentre la pagina è aperta).
-function useSystemTheme() {
-  const query = () => typeof window !== 'undefined' ? window.matchMedia?.('(prefers-color-scheme: dark)') : null
-  const [dark, setDark] = useState(() => !!query()?.matches)
+// Tema: lo stesso di login e app (utils/theme.js). Di base segue il dispositivo, anche se cambia
+// mentre la pagina è aperta; se chi usa l'app ha scelto chiaro o scuro dal Profilo, vale quella scelta.
+function useAppTheme() {
+  const [theme, setTheme] = useState(() => resolveTheme())
   useEffect(() => {
-    const mq = query()
-    if (!mq) return undefined
-    const on = e => setDark(e.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+    const sync = () => setTheme(resolveTheme())
+    mq?.addEventListener('change', sync)
+    window.addEventListener('storage', sync)
+    return () => { mq?.removeEventListener('change', sync); window.removeEventListener('storage', sync) }
   }, [])
-  return dark ? 'dark' : 'light'
+  return theme
 }
 
 // Righe della finta lista di carico nell'anteprima: quanti pezzi risultano
@@ -276,6 +278,7 @@ const PICK_LINES = [
   { code: 'en', text: 'Choose your language' },
   { code: 'pt', text: 'Escolha o idioma' },
   { code: 'ar', text: 'اختر لغتك' },
+  { code: 'de', text: 'Sprache wählen' },
 ]
 function LangPrompt({ suggested, closeLabel, onPick, onClose }) {
   const ref = useRef(null)
@@ -392,12 +395,12 @@ const LANDING_CSS = `
   .lp-display { font-family: var(--lp-display); font-weight: 800; letter-spacing: -0.035em; }
   .lp-ar .lp-display { letter-spacing: 0; }
   .lp-ar .lp-arrow { transform: scaleX(-1); }
-  .lp-wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; position: relative; }
+  .lp-wrap { max-width: 1160px; margin: 0 auto; padding-inline: 20px; position: relative; }
   .lp [id] { scroll-margin-top: 80px; }
   .lp-h2 { font-size: clamp(30px, 4.8vw, 46px); line-height: 1.06; margin-bottom: 14px; text-wrap: balance; }
   .lp-ar .lp-h2 { line-height: 1.3; }
   .lp-lead { font-size: 17px; line-height: 1.65; color: var(--lp-ink2); max-width: 540px; }
-  .lp-section { padding: 80px 0; }
+  .lp-section { padding-block: 80px; }
 
   /* Barra in alto */
   .lp-header { position: sticky; top: 0; z-index: 20; background: var(--lp-header-bg); border-bottom: 1px solid var(--lp-line); }
@@ -405,7 +408,7 @@ const LANDING_CSS = `
   .lp-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
   .lp-brand img { border-radius: 8px; display: block; }
   .lp-nav { display: flex; align-items: center; gap: 6px; }
-  .lp-links { display: none; align-items: center; gap: 2px; margin-inline-end: 14px; }
+  .lp-links { display: none; align-items: center; gap: 2px; }
   .lp-navlink, .lp-link { font-size: 14.5px; font-weight: 600; color: var(--lp-ink2); text-decoration: none; padding: 10px 12px; white-space: nowrap; transition: color 0.15s ease; }
   .lp-iconbtn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 40px; height: 40px; padding: 0 10px; border-radius: 10px; background: transparent; border: 1px solid var(--lp-line2); color: var(--lp-ink); }
 
@@ -550,7 +553,7 @@ const LANDING_CSS = `
   @keyframes lp-settle { from { opacity: 0; transform: translateY(26px) rotate(2.5deg); } to { opacity: 1; transform: none; } }
 
   /* Piè di pagina: due colonne anche da telefono */
-  .lp-footer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 24px; align-items: start; padding: 28px 20px 40px; }
+  .lp-footer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 24px; align-items: start; padding-top: 44px; padding-bottom: 56px; }
   .lp-footer-col { display: flex; flex-direction: column; gap: 12px; }
   .lp-footer p { font-size: 14px; color: var(--lp-ink2); display: flex; flex-wrap: wrap; gap: 4px 14px; }
 
@@ -562,8 +565,10 @@ const LANDING_CSS = `
     .lp-footer-col { flex-direction: row; align-items: center; gap: 24px; }
   }
   @media (min-width: 900px) {
+    .lp-header-in { display: grid; grid-template-columns: 1fr auto 1fr; }
     .lp-links { display: flex; }
-    .lp-section { padding: 112px 0; }
+    .lp-nav { justify-self: end; }
+    .lp-section { padding-block: 112px; }
     .lp-hero-grid { grid-template-columns: 1.15fr 0.85fr; gap: 56px; padding: 72px 0 104px; }
     .lp-strengths { grid-template-columns: repeat(4, 1fr); gap: 32px; }
     .lp-faq-grid { grid-template-columns: 0.8fr 1.2fr; gap: 64px; }
@@ -577,8 +582,7 @@ const LANDING_CSS = `
     .lp-brand img { display: none; }
     .lp-nav { gap: 6px; }
     .lp-btn-sm { padding: 10px 12px; font-size: 14px; }
-    .lp-wrap { padding: 0 16px; }
-    .lp-footer { padding-inline: 16px; }
+    .lp-wrap { padding-inline: 16px; }
     .lp-story-sheet .lp-sheet-lg { padding: 20px 16px 16px; }
     .lp-rail li h3 { font-size: 19px; }
   }
@@ -597,8 +601,8 @@ export default function Landing({ lang = 'it' }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [askLang, setAskLang] = useState(false)
-  const theme = useSystemTheme()
-  // La lingua della pagina è quella dell'indirizzo (/, /en, /pt, /ar): chi arriva da un link in portoghese la vede in portoghese.
+  const theme = useAppTheme()
+  // La lingua della pagina è quella dell'indirizzo (/, /en, /pt, /ar, /de): chi arriva da un link in portoghese la vede in portoghese.
   useEffect(() => { if (i18n.language !== lang) i18n.changeLanguage(lang) }, [lang, i18n])
   useLandingSeo(lang, t)
 
@@ -631,15 +635,15 @@ export default function Landing({ lang = 'it' }) {
             <img src="/pwa-192x192.png" alt="" width={32} height={32} />
             <Wordmark size={24} />
           </Link>
-          <nav className="lp-nav">
-            <span className="lp-links">
-              <a href="#funzioni" className="lp-navlink">{t('landing.navFeatures')}</a>
-              <a href="#prezzi" className="lp-navlink">{t('landing.navPricing')}</a>
-              <a href="#faq" className="lp-navlink">{t('landing.navFaq')}</a>
-            </span>
+          <nav className="lp-links" aria-label="Roadcase">
+            <a href="#funzioni" className="lp-navlink">{t('landing.navFeatures')}</a>
+            <a href="#prezzi" className="lp-navlink">{t('landing.navPricing')}</a>
+            <a href="#faq" className="lp-navlink">{t('landing.navFaq')}</a>
+          </nav>
+          <div className="lp-nav">
             <Link to="/login" className="lp-link">{t('landing.login')}</Link>
             <Link to="/signup" className="lp-btn lp-btn-primary lp-btn-sm">{t('landing.tryFree')}</Link>
-          </nav>
+          </div>
         </div>
       </header>
 
@@ -682,7 +686,7 @@ export default function Landing({ lang = 'it' }) {
 
         {/* Punti di forza */}
         <section className="lp-band">
-          <div className="lp-wrap lp-section" style={{ paddingInline: 20 }}>
+          <div className="lp-wrap lp-section">
             <h2 className="lp-display lp-h2" style={{ maxWidth: 720, marginBottom: 44 }}>{t('landing.strengthsTitle')}</h2>
             <div className="lp-strengths">
               {strengths.map(s => (

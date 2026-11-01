@@ -4,10 +4,11 @@ import it from './locales/it.json'
 import en from './locales/en.json'
 import pt from './locales/pt.json'
 import ar from './locales/ar.json'
+import de from './locales/de.json'
 import { RTL_LANGUAGES } from '../utils/formatDate'
 
 i18n.use(initReactI18next).init({
-  resources: { it: { translation: it }, en: { translation: en }, pt: { translation: pt }, ar: { translation: ar } },
+  resources: { it: { translation: it }, en: { translation: en }, pt: { translation: pt }, ar: { translation: ar }, de: { translation: de } },
   lng: 'it',
   fallbackLng: 'it',
   interpolation: { escapeValue: false },
@@ -27,6 +28,7 @@ export function detectDeviceLanguage() {
   const l = (typeof navigator !== 'undefined' ? navigator.language || '' : '').toLowerCase()
   if (l.startsWith('pt')) return 'pt'
   if (l.startsWith('ar')) return 'ar'
+  if (l.startsWith('de')) return 'de'
   if (l.startsWith('en')) return 'en'
   return 'it'
 }

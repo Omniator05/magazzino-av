@@ -730,7 +730,10 @@ export default function Calendar() {
 
       {mode === 'grid' && (
       <div style={{ padding: isMobile ? '0 0 16px' : '0 0 16px 16px', display: isMobile ? 'block' : 'flex', gap: isMobile ? 0 : 16, alignItems: isMobile ? undefined : 'stretch' }}>
-      <div style={{ flex: isMobile ? undefined : 1, minWidth: 0 }}>
+      {/* Su computer la pagina non scorre (vedi useModalScrollLock sopra): scorre solo
+          questa colonna, alta quanto lo schermo sotto l'header e con spazio in fondo
+          per la barra delle schede, così l'ultima settimana del mese si vede intera. */}
+      <div style={{ flex: isMobile ? undefined : 1, minWidth: 0, ...(isMobile ? null : { maxHeight:'calc(100vh - 76px)', overflowY:'auto', overscrollBehavior:'contain', paddingBottom:124 }) }}>
         {/* Navigazione mese — dentro la colonna griglia (non più una riga a
             parte sopra tutta la pagina): così la colonna laterale bianca
             parte subito sotto l'header, senza il grigio dello sfondo pagina

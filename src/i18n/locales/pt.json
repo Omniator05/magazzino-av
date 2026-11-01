@@ -639,7 +639,10 @@
     "kitLinkedHint": "Quando adiciona este kit a uma lista de carga, estes artigos são adicionados automaticamente.",
     "availabilityCheckStockNow": "No armazém neste momento: {{available}} disponíveis (os restantes já estão fora)",
     "availabilityCheckStockPartial": "{{free}} disponíveis — os restantes já estão fora do armazém",
-    "availabilityCheckStockNone": "Nenhum disponível — todos já estão fora do armazém"
+    "availabilityCheckStockNone": "Nenhum disponível — todos já estão fora do armazém",
+    "dmxChannelsLabel": "Canais DMX",
+    "dmxChannelsPlaceholder": "ex.: 16",
+    "dmxChannelsValue": "{{value}} canais"
   },
   "eventDetail": {
     "loading": "A carregar...",
@@ -703,7 +706,6 @@
     "apply": "Aplicar",
     "selectItems": "Selecionar",
     "assignVehicleToMultiple": "Atribuir carrinha",
-    "moveToListExisting": "Lista existente",
     "moveToListNew": "Nova lista",
     "moveSelectedMessage": "Os artigos selecionados passarão para a nova lista.",
     "bulkStatusAction": "Alterar estado",
@@ -839,7 +841,8 @@
     "pasteAria": "Colar {{count}} artigos copiados",
     "pasteNothing": "Os artigos copiados já não existem no armazém.",
     "pasteSkipped": "{{count}} artigos já não existem no armazém e foram ignorados.",
-    "pasteCountItems": "{{count}} artigos"
+    "pasteCountItems": "{{count}} artigos",
+    "moveToList": "Mover para lista"
   },
   "eventSummary": {
     "timeLabel": "Horário",
@@ -1859,7 +1862,8 @@
     "themeDark": "Escuro",
     "themeAuto": "Automático",
     "languagePortuguese": "Português",
-    "languageArabic": "العربية"
+    "languageArabic": "العربية",
+    "languageGerman": "Deutsch"
   },
   "workHours": {
     "title": "Horas de trabalho",
@@ -2315,7 +2319,7 @@
       },
       {
         "title": "Fala a língua da sua equipa",
-        "text": "Italiano, inglês, português e árabe: cada pessoa escolhe a sua no próprio perfil, para ninguém ficar para trás."
+        "text": "Italiano, inglês, português, árabe e alemão: cada pessoa escolhe a sua no próprio perfil, para ninguém ficar para trás."
       }
     ],
     "trialTitle": "30 dias de teste gratuito",
@@ -2382,7 +2386,7 @@
       },
       {
         "q": "Colegas que falam outro idioma podem usá-la?",
-        "a": "Sim. O Roadcase está em italiano, inglês, português e árabe, e cada pessoa escolhe o seu idioma no próprio perfil."
+        "a": "Sim. O Roadcase está disponível em italiano, inglês, português, árabe e alemão, e cada pessoa escolhe a sua língua no próprio perfil."
       },
       {
         "q": "Quanto custa? Posso experimentar?",
@@ -2396,5 +2400,36 @@
     "langPick": "Escolha o idioma",
     "langPickClose": "Fechar",
     "ctaFinal": "Experimente o Roadcase com a sua equipa"
+  },
+  "powerPatch": {
+    "title": "Potência e patch DMX",
+    "powerTab": "Potência",
+    "patchTab": "Patch DMX",
+    "amps": "≈ {{amps}} A a 230 V",
+    "totalLabel": "Total à carga máxima",
+    "socketLabel": "A minha tomada monofásica",
+    "socketCap": "Suporta até {{watts}} W",
+    "socketsNeeded": "Tomadas necessárias: {{count}}",
+    "colItem": "Artigo",
+    "colQty": "Qtd.",
+    "colEach": "W cada",
+    "colTotal": "Total W",
+    "powerNote": "Soma da potência máxima indicada em cada artigo × quantidade. Um kit sem dados próprios conta pelos seus componentes.",
+    "missingTitle": "Sem potência indicada, não contados ({{count}})",
+    "startUniverse": "Universo inicial",
+    "startAddress": "Endereço inicial",
+    "colFixture": "Projetor",
+    "colChannels": "Canais",
+    "colUniverse": "Universo",
+    "colAddress": "Endereço",
+    "copy": "Copiar lista",
+    "copied": "Copiada",
+    "csv": "Descarregar CSV",
+    "csvName": "patch-dmx",
+    "patchEmpty": "Nenhum projetor com canais DMX na lista. Indique os canais DMX nos detalhes de cada projetor.",
+    "tooBig": "Mais de 512 canais, não atribuíveis: {{names}}",
+    "patchNote": "Cada projetor ocupa canais consecutivos; se não couber no que resta, passa ao endereço 1 do universo seguinte.",
+    "chip": "Potência e patch",
+    "scopeSelected": "Artigos selecionados: {{count}}"
   }
 }

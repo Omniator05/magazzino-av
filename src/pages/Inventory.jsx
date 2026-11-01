@@ -48,15 +48,15 @@ const ACTIVITY_COLORS = {
 // seriale) restano stringhe finché non si salva (vuoto = non compilato,
 // null su Firestore) — elenco riusato per decidere se la sezione "Dettagli
 // oggetto" del modal parte aperta o chiusa (vedi sotto).
-const DETAIL_FIELDS = ['weightKg', 'peakPowerW', 'loadCapacityKg', 'widthM', 'lengthM', 'heightM', 'serialNumber']
+const DETAIL_FIELDS = ['weightKg', 'peakPowerW', 'dmxChannels', 'loadCapacityKg', 'widthM', 'lengthM', 'heightM', 'serialNumber']
 const emptyItemForm = () => ({
   name:'', category:'Altro', qty:1, brand:'', model:'', location:'', notes:'', brokenQty:0, defectQty:0, brokenNote:'', defectNote:'', issues:[], minStock:0, consumableUnit:'pezzi',
-  weightKg:'', peakPowerW:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[], deadlines:[],
+  weightKg:'', peakPowerW:'', dmxChannels:'', loadCapacityKg:'', widthM:'', lengthM:'', heightM:'', serialNumber:'', linkedItems:[], deadlines:[],
 })
 const itemToForm = item => ({
   name:item.name, category:item.category, qty:item.totalQty, brand:item.brand||'', model:item.model||'', location:item.location||'', notes:item.notes||'',
   brokenQty:item.brokenQty||0, defectQty:item.defectQty||0, brokenNote:item.brokenNote||'', defectNote:item.defectNote||'', issues:item.issues||[], minStock:item.minStock||0, consumableUnit:item.consumableUnit||'pezzi',
-  weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', loadCapacityKg:item.loadCapacityKg ?? '',
+  weightKg:item.weightKg ?? '', peakPowerW:item.peakPowerW ?? '', dmxChannels:item.dmxChannels ?? '', loadCapacityKg:item.loadCapacityKg ?? '',
   widthM:item.widthM ?? '', lengthM:item.lengthM ?? '', heightM:item.heightM ?? '', serialNumber:item.serialNumber || '',
   linkedItems:getLinkedItems(item), deadlines:item.deadlines || [],
 })
@@ -467,6 +467,7 @@ export default function Inventory() {
     const details = {
       weightKg: parseDecimal(form.weightKg),
       peakPowerW: form.peakPowerW !== '' ? (parseInt(form.peakPowerW) || null) : null,
+      dmxChannels: form.dmxChannels !== '' ? (Math.min(512, parseInt(form.dmxChannels) || 0) || null) : null,
       loadCapacityKg: parseDecimal(form.loadCapacityKg),
       widthM: parseDecimal(form.widthM),
       lengthM: parseDecimal(form.lengthM),
@@ -1200,6 +1201,7 @@ export default function Inventory() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                   <div className="form-group"><label>{t('inventory.weightLabel')}</label><input type="text" inputMode="decimal" value={form.weightKg} onChange={e => setForm({...form,weightKg:e.target.value})} placeholder={t('inventory.weightPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.peakPowerLabel')}</label><input type="text" inputMode="numeric" value={form.peakPowerW} onChange={e => setForm({...form,peakPowerW:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.peakPowerPlaceholder')} /></div>
+                  <div className="form-group"><label>{t('inventory.dmxChannelsLabel')}</label><input type="text" inputMode="numeric" value={form.dmxChannels} onChange={e => setForm({...form,dmxChannels:e.target.value.replace(/[^0-9]/g,'')})} placeholder={t('inventory.dmxChannelsPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.loadCapacityLabel')}</label><input type="text" inputMode="decimal" value={form.loadCapacityKg} onChange={e => setForm({...form,loadCapacityKg:e.target.value})} placeholder={t('inventory.loadCapacityPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.serialNumberLabel')}</label><input value={form.serialNumber} onChange={e => setForm({...form,serialNumber:e.target.value})} placeholder={t('inventory.serialNumberPlaceholder')} /></div>
                   <div className="form-group"><label>{t('inventory.widthLabel')}</label><input type="text" inputMode="decimal" value={form.widthM} onChange={e => setForm({...form,widthM:e.target.value})} placeholder={t('inventory.dimensionPlaceholder')} /></div>
@@ -1284,6 +1286,12 @@ export default function Inventory() {
                 <div style={row(r++)}>
                   <span style={rowLabel}>{t('inventory.peakPowerLabel')}</span>
                   <span style={rowValue}>{t('inventory.peakPowerValue', { value: showDetail.peakPowerW })}</span>
+                </div>
+              )}
+              {showDetail.dmxChannels != null && (
+                <div style={row(r++)}>
+                  <span style={rowLabel}>{t('inventory.dmxChannelsLabel')}</span>
+                  <span style={rowValue}>{t('inventory.dmxChannelsValue', { value: showDetail.dmxChannels })}</span>
                 </div>
               )}
               {showDetail.loadCapacityKg != null && (

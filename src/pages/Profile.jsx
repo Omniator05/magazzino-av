@@ -263,6 +263,7 @@ export default function Profile({ onClose, showLogout }) {
                 { value: 'en', label: t('profile.languageEnglish') },
                 { value: 'pt', label: t('profile.languagePortuguese') },
                 { value: 'ar', label: t('profile.languageArabic') },
+                { value: 'de', label: t('profile.languageGerman') },
               ]}
               value={profile?.language || 'it'}
               onChange={selectLanguage}

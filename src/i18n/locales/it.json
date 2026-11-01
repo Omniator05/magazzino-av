@@ -639,7 +639,10 @@
     "kitLinkedHint": "Quando aggiungi questo kit a una lista di carico, questi oggetti vengono aggiunti in automatico.",
     "availabilityCheckStockNow": "In magazzino adesso: {{available}} disponibili (gli altri sono già fuori)",
     "availabilityCheckStockPartial": "{{free}} disponibili — gli altri sono già fuori dal magazzino",
-    "availabilityCheckStockNone": "Nessuno disponibile — sono tutti già fuori dal magazzino"
+    "availabilityCheckStockNone": "Nessuno disponibile — sono tutti già fuori dal magazzino",
+    "dmxChannelsLabel": "Canali DMX",
+    "dmxChannelsPlaceholder": "es. 16",
+    "dmxChannelsValue": "{{value}} canali"
   },
   "eventDetail": {
     "loading": "Caricamento...",
@@ -703,7 +706,6 @@
     "apply": "Applica",
     "selectItems": "Seleziona",
     "assignVehicleToMultiple": "Assegna furgone",
-    "moveToListExisting": "Lista esistente",
     "moveToListNew": "Nuova lista",
     "moveSelectedMessage": "Gli oggetti selezionati si spostano nella nuova lista.",
     "bulkStatusAction": "Cambia stato",
@@ -839,7 +841,8 @@
     "pasteAria": "Incolla {{count}} oggetti copiati",
     "pasteNothing": "Gli oggetti copiati non esistono più in magazzino.",
     "pasteSkipped": "{{count}} oggetti non esistono più in magazzino e sono stati saltati.",
-    "pasteCountItems": "{{count}} oggetti"
+    "pasteCountItems": "{{count}} oggetti",
+    "moveToList": "Sposta in lista"
   },
   "eventSummary": {
     "timeLabel": "Orario",
@@ -1859,7 +1862,8 @@
     "themeDark": "Scuro",
     "themeAuto": "Automatico",
     "languagePortuguese": "Português",
-    "languageArabic": "العربية"
+    "languageArabic": "العربية",
+    "languageGerman": "Deutsch"
   },
   "workHours": {
     "title": "Ore di lavoro",
@@ -2315,7 +2319,7 @@
       },
       {
         "title": "Parla la lingua della tua squadra",
-        "text": "Italiano, inglese, portoghese e arabo: ogni persona sceglie la sua dal proprio profilo, così nessuno resta indietro."
+        "text": "Italiano, inglese, portoghese, arabo e tedesco: ogni persona sceglie la sua dal proprio profilo, così nessuno resta indietro."
       }
     ],
     "trialTitle": "30 giorni di prova gratuita",
@@ -2382,7 +2386,7 @@
       },
       {
         "q": "I colleghi che parlano un'altra lingua possono usarla?",
-        "a": "Sì. Roadcase è in italiano, inglese, portoghese e arabo, e ogni persona sceglie la sua lingua dal proprio profilo."
+        "a": "Sì. Roadcase è disponibile in italiano, inglese, portoghese, arabo e tedesco, e ognuno sceglie la propria lingua dal proprio profilo."
       },
       {
         "q": "Quanto costa? Posso provarla?",
@@ -2396,5 +2400,36 @@
     "langPick": "Scegli la lingua",
     "langPickClose": "Chiudi",
     "ctaFinal": "Prova Roadcase con la tua squadra"
+  },
+  "powerPatch": {
+    "title": "Potenza e patch DMX",
+    "powerTab": "Potenza",
+    "patchTab": "Patch DMX",
+    "amps": "≈ {{amps}} A a 230 V",
+    "totalLabel": "Totale al carico massimo",
+    "socketLabel": "La mia presa monofase",
+    "socketCap": "Regge fino a {{watts}} W",
+    "socketsNeeded": "Prese necessarie: {{count}}",
+    "colItem": "Oggetto",
+    "colQty": "Qtà",
+    "colEach": "W cad.",
+    "colTotal": "Totale W",
+    "powerNote": "Somma della potenza massima indicata su ogni oggetto × quantità. Un kit senza dati propri conta per i suoi componenti.",
+    "missingTitle": "Senza potenza indicata, non conteggiati ({{count}})",
+    "startUniverse": "Universo iniziale",
+    "startAddress": "Indirizzo iniziale",
+    "colFixture": "Faro",
+    "colChannels": "Canali",
+    "colUniverse": "Universo",
+    "colAddress": "Indirizzo",
+    "copy": "Copia lista",
+    "copied": "Copiata",
+    "csv": "Scarica CSV",
+    "csvName": "patch-dmx",
+    "patchEmpty": "Nessun faro con canali DMX nella lista. Indica i canali DMX nella scheda di ogni faro (Dettagli oggetto).",
+    "tooBig": "Più di 512 canali, non assegnabili: {{names}}",
+    "patchNote": "Ogni faro occupa canali consecutivi; se non ci sta in quelli rimasti, passa all'indirizzo 1 dell'universo dopo.",
+    "chip": "Potenza e patch",
+    "scopeSelected": "Oggetti selezionati: {{count}}"
   }
 }
