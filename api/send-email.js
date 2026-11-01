@@ -11,7 +11,8 @@
 // impedire agli altri di funzionare.
 import { requireTeamAdmin, requireTeamMember, getAdmin } from './_authAdmin.js'
 import crypto from 'node:crypto'
-import { sendEmail, inviteEmailHtml, absenceNotificationEmailHtml, passwordResetEmailHtml, welcomeEmailHtml } from './_resend.js'
+import { sendEmail, inviteEmailHtml, absenceNotificationEmailHtml, passwordResetEmailHtml, welcomeEmailHtml, joinRequestThanksEmailHtml, joinRequestAdminEmailHtml, joinApprovedEmailHtml, joinRejectedEmailHtml } from './_resend.js'
+import { pushToAdmins } from './push.js'
 
 async function sendWelcome(req, res) {
   let ctx
@@ -224,7 +225,114 @@ async function loginByUsername(req, res) {
   return res.status(401).json({ error: 'invalid' })
 }
 
-const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword, loginByUsername }
+// Richiesta d'accesso a una squadra esistente (Signup → "Unisciti a una squadra"). Chi chiede ha appena creato
+// l'account e il profilo è ancora "in attesa" (approved: false): non è un membro, quindi niente requireTeamMember —
+// si verifica il suo token e che il profilo sia davvero in attesa. Tutto lato server perché il client in attesa
+// non può scrivere notifiche né mandare push alla squadra. Una sola volta per profilo (joinRequestNotifiedAt), così
+// un doppio clic o un secondo tentativo non riempie di email gli admin. Ogni passo è indipendente e best-effort.
+async function joinRequest(req, res) {
+  const idToken = (req.headers.authorization || '').replace(/^Bearer /, '')
+  if (!idToken) return res.status(401).json({ error: 'Token mancante' })
+  const admin = getAdmin()
+  let uid
+  try { uid = (await admin.auth().verifyIdToken(idToken)).uid } catch { return res.status(401).json({ error: 'Token non valido' }) }
+
+  const db = admin.firestore()
+  const profileRef = db.collection('profiles').doc(uid)
+  const profile = (await profileRef.get()).data()
+  if (!profile || profile.approved !== false || !profile.teamId) return res.status(200).json({ sent: false, reason: 'not-pending' })
+  if (profile.joinRequestNotifiedAt) return res.status(200).json({ sent: false, reason: 'already-sent' })
+  const teamSnap = await db.collection('teams').doc(profile.teamId).get()
+  if (!teamSnap.exists) return res.status(404).json({ error: 'Squadra non trovata' })
+  const teamName = teamSnap.data().name || ''
+
+  // Il segno va messo prima degli invii: se qualcosa fallisce a metà, meglio un avviso in meno che duplicati.
+  await profileRef.update({ joinRequestNotifiedAt: admin.firestore.FieldValue.serverTimestamp() })
+
+  const origin = req.headers.origin || `https://${req.headers.host}`
+  const requesterName = profile.name || profile.email || ''
+  const adminsSnap = await db.collection('profiles').where('teamId', '==', profile.teamId).where('role', '==', 'admin').get()
+  const adminEmails = [...new Set(adminsSnap.docs
+    .map(d => d.data())
+    .filter(p => p.approved !== false && p.active !== false)
+    .map(p => p.email).filter(Boolean))]
+
+  const steps = [
+    // Avviso in app (popup agli admin, vedi JoinRequestNotifications.jsx)
+    db.collection('notifications').add({
+      teamId: profile.teamId, type: 'join_request',
+      requesterId: uid, requesterName, requesterEmail: profile.email || '',
+      seenBy: [], createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    }),
+    pushToAdmins(profile.teamId, {
+      title: 'Nuova richiesta di accesso',
+      body: `${requesterName} · ${teamName}`,
+      url: '/admin/settings/users',
+    }),
+    ...adminEmails.map(to => sendEmail({
+      to,
+      subject: `New access request — ${requesterName}`,
+      html: joinRequestAdminEmailHtml({ requesterName, requesterEmail: profile.email, teamName, appUrl: origin }),
+    })),
+    ...(profile.email ? [sendEmail({
+      to: profile.email,
+      subject: 'Thanks for requesting access — Roadcase',
+      html: joinRequestThanksEmailHtml({ name: requesterName, teamName, appUrl: origin }),
+    })] : []),
+  ]
+  const results = await Promise.allSettled(steps)
+  results.filter(r => r.status === 'rejected').forEach(r => console.error('[send-email joinRequest]', r.reason?.message || r.reason))
+  return res.status(200).json({ sent: true })
+}
+
+// Esito di una richiesta d'accesso, a chi l'aveva fatta: lo chiama un admin dopo aver approvato (profilo già
+// approved: true) o PRIMA di rifiutare (il profilo viene cancellato subito dopo, vedi utils/joinRequests.js).
+// Si controlla che sia davvero un utente della sua squadra nello stato giusto e si manda una sola volta.
+async function joinDecision(req, res) {
+  let ctx
+  try { ctx = await requireTeamAdmin(req) } catch (e) { return res.status(e.status || 500).json({ error: e.message }) }
+
+  const { targetUid, decision } = req.body || {}
+  if (!targetUid || !['approved', 'rejected'].includes(decision)) return res.status(400).json({ error: 'Dati mancanti' })
+
+  const targetRef = ctx.db.collection('profiles').doc(targetUid)
+  const target = (await targetRef.get()).data()
+  if (!target || target.teamId !== ctx.teamId) return res.status(404).json({ error: 'Utente non trovato' })
+  // Rifiuto: deve essere ancora in attesa. Approvazione: deve risultare già approvata.
+  const stateOk = decision === 'rejected' ? target.approved === false : target.approved !== false
+  if (!stateOk) return res.status(409).json({ error: 'Stato della richiesta non coerente' })
+  // L'approvazione scrive solo a chi è passato dalla richiesta d'accesso (porta il segno di joinRequest), non a un
+  // utente qualunque della squadra.
+  if (decision === 'approved' && !target.joinRequestNotifiedAt) return res.status(200).json({ sent: false })
+  const origin = req.headers.origin || `https://${req.headers.host}`
+  const name = target.name || target.email
+  let sent = false
+  if (target.email && !target.joinDecisionEmailedAt) {
+    await targetRef.update({ joinDecisionEmailedAt: getAdmin().firestore.FieldValue.serverTimestamp() })
+    try {
+      await sendEmail(decision === 'approved'
+        ? { to: target.email, subject: `You're in — welcome to ${ctx.team.name}`, html: joinApprovedEmailHtml({ name, teamName: ctx.team.name, loginUrl: `${origin}/login` }) }
+        : { to: target.email, subject: `About your request to join ${ctx.team.name}`, html: joinRejectedEmailHtml({ name, teamName: ctx.team.name }) })
+      sent = true
+    } catch (e) {
+      console.error('[send-email joinDecision]', e.message)
+    }
+  }
+
+  // Rifiuto: via anche l'account di accesso e il profilo, così la stessa email può riprovare da zero invece di
+  // restare bloccata da un account orfano ("email già in uso"). Mai un admin, un super admin o se stessi.
+  let removed = false
+  if (decision === 'rejected' && targetUid !== ctx.uid && target.role !== 'admin' && !target.superAdmin) {
+    try { await getAdmin().auth().deleteUser(targetUid) } catch (e) {
+      if (e.code !== 'auth/user-not-found') console.error('[send-email joinDecision] deleteUser', e.message)
+    }
+    await targetRef.delete()
+    removed = true
+  }
+  return res.status(200).json({ sent, removed })
+}
+
+const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword, loginByUsername, joinRequest, joinDecision }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

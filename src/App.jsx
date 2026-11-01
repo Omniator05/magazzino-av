@@ -63,6 +63,7 @@ import BillingGate from './components/BillingGate'
 import QrRedirect from './components/QrRedirect'
 import WhatsNewModal from './components/WhatsNewModal'
 import AbsenceNotifications from './components/AbsenceNotifications'
+import JoinRequestNotifications from './components/JoinRequestNotifications'
 import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
@@ -344,6 +345,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
     <>
       <WhatsNewModal />
       <AbsenceNotifications />
+      <JoinRequestNotifications />
       <AbsenceEditedNotification />
       <ActiveShiftBadge />
       <GhostBanner />

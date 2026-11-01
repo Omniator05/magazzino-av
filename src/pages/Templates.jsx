@@ -11,18 +11,13 @@ import EditButton from '../components/EditButton'
 import DeleteButton from '../components/DeleteButton'
 import { List } from '../components/Icon'
 import PageHeader from '../components/PageHeader'
+import { useCategories } from '../hooks/useCategories'
 import FabButton from '../components/FabButton'
-
-const ICONS = {
-  'Audio':'🔊','Video':'📺','Luci':'🔦','Rigging':'⛓️','Corrente':'⚡',
-  'Effetti':'🎉','Consumabili':'🪣',
-  'Microfoni':'🎤','Traduzione':'🌐','Connettività':'📶','Comunicazione':'📡','Strumenti':'🎸',
-  'Kit':'🧰','Altro':'📦',
-}
 
 export default function Templates() {
   const { t } = useTranslation()
   const { user, teamId } = useAuth()
+  const { iconOf } = useCategories()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
@@ -121,7 +116,7 @@ export default function Templates() {
                   <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
                     {(tpl.components||[]).slice(0,6).map((c,i) => (
                       <span key={i} style={{ background:'var(--card2)', borderRadius:6, padding:'2px 8px', fontSize:12, color:'var(--text2)' }}>
-                        {ICONS[c.category]||'📦'} {c.name}{c.qty > 1 ? ` ×${c.qty}` : ''}
+                        {iconOf(c.category)} {c.name}{c.qty > 1 ? ` ×${c.qty}` : ''}
                       </span>
                     ))}
                     {(tpl.components||[]).length > 6 && (
@@ -165,7 +160,7 @@ export default function Templates() {
                 <div style={{ overflowY:'auto', maxHeight:220, padding:'0 16px 10px' }}>
                 {components.map(c => (
                   <div key={c.id} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                    <span style={{ fontSize:16 }}>{ICONS[c.category]||'📦'}</span>
+                    <span style={{ fontSize:16 }}>{iconOf(c.category)}</span>
                     <span style={{ flex:1, fontSize:14, fontWeight:600, color:'var(--text)' }}>{c.name}</span>
                     <div style={{ display:'flex', alignItems:'center', gap:5 }}>
                       <button onClick={() => setComponents(prev => prev.map(x => x.id===c.id ? {...x,qty:Math.max(1,x.qty-1)} : x))}
@@ -196,7 +191,7 @@ export default function Templates() {
             <div style={{ overflowY:'auto', flex:1, minHeight:0 }}>
               {notInTemplate.map(item => (
                 <div key={item.id} className="item-row" onClick={() => addComponent(item)}>
-                  <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category]||'📦'}</span>
+                  <span style={{ fontSize:20, flexShrink:0 }}>{iconOf(item.category)}</span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
                     <p style={{ color:'var(--text2)', fontSize:12 }}>{item.category} · {t('templates.availableShort', { count: item.availableQty ?? item.totalQty })}</p>

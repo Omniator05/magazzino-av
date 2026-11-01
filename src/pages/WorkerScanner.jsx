@@ -21,6 +21,7 @@ import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
 import { useConfirm } from '../context/ConfirmProvider'
 import { syncKitAwareInventory, writeOffConsumable, closeInstallationEvent, rentReadyToClose } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
+import { useCategories } from '../hooks/useCategories'
 import { todayStr } from '../utils/workHours'
 
 // Sentinella solo-UI (non un vero id di lista, mai scritta su Firestore):
@@ -30,34 +31,11 @@ import { todayStr } from '../utils/workHours'
 // facoltativo. Pronto/Carico restano invece separati per lista come prima.
 const ALL_LISTS_ID = '__all__'
 
-const ICONS = {
-  'Audio':    '🔊',
-  'Video':    '📺',
-  'Luci':     '🔦',
-  'Rigging':  '⛓️',
-  'Corrente': '⚡',
-  'Effetti':  '🎉',
-  'Consumabili': '🪣',
-  'Microfoni':   '🎤',
-  'Traduzione':  '🌐',
-  'Connettività':'📶',
-  'Comunicazione':'📡',
-  'Strumenti':   '🎸',
-  'Kit':      '🧰',
-  'Altro':    '📦',
-  // legacy
-  'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
-  'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
-  'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
-  'Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜',
-  'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
-  'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
-}
-
 export default function WorkerScanner() {
   const { t } = useTranslation()
   const { id } = useParams()
   const { user, profile, teamId, team, isOwner } = useAuth()
+  const { names: catNames, iconOf, groupOf } = useCategories()   // categorie scelte dalla squadra
   // Alla Postazione magazzino chi lavora è l'operatore del badge, non l'account del PC: le azioni
   // registrate nello storico portano il suo nome. Altrove è l'utente normale.
   const { operator, requireOperator } = useOperator()
@@ -918,7 +896,8 @@ export default function WorkerScanner() {
 
   const firstUnloadedRef = useRef(null)
   const stepperBtnRefs = useRef({})
-  const WS_ORDER_CONST = ['Kit','Audio','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Extra','Altro']
+  // Ordine dei gruppi: Kit, le categorie della squadra, righe Extra, e Altro per ultimo.
+  const WS_ORDER = ['Kit', ...catNames.filter(n => n !== 'Altro'), 'Extra', 'Altro']
 
   const [confirmingExtra, setConfirmingExtra] = useState(false)
   const addExtraWorkerItem = async () => {
@@ -958,9 +937,9 @@ export default function WorkerScanner() {
   const allLoadedDrag   = useModalDrag(() => setShowAllLoadedPopup(false), undefined, undefined, showAllLoadedPopup)
   const allReturnedDrag = useModalDrag(() => setShowAllReturnedPopup(false), undefined, undefined, showAllReturnedPopup)
   let firstUnloadedId = null
-  for (const cat of WS_ORDER_CONST) {
+  for (const cat of WS_ORDER) {
     const catItems = items
-      .filter(i => (i.isExtra ? 'Extra' : (i.category || 'Altro')) === cat)
+      .filter(i => (i.isExtra ? 'Extra' : (i.category === 'Kit' ? 'Kit' : groupOf(i.category))) === cat)
       .sort((a, b) => ((a[doneField] || a.mancante) ? 1 : 0) - ((b[doneField] || b.mancante) ? 1 : 0))
     const first = catItems.find(i => !i[doneField] && !i.mancante)
     if (first) { firstUnloadedId = first.id; break }
@@ -1879,8 +1858,6 @@ export default function WorkerScanner() {
             {items.length === 0
               ? <p style={{ padding:'20px', color:'var(--text2)', textAlign:'center', fontSize:14 }}>{t('workerScanner.listNotPrepared')}</p>
               : (() => {
-                  const WS_CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
-                  const WS_ORDER = ['Kit','Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
 
                   const buildItemProps = (item, vehicleColor) => ({
                     ...item,
@@ -2217,7 +2194,7 @@ export default function WorkerScanner() {
                                 </button>
                               )
                             })()}
-                            <span style={{ fontSize:11 }}>{WS_CAT_ICONS[cat]||'📦'}</span>
+                            <span style={{ fontSize:11 }}>{iconOf(cat)}</span>
                             <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
                             <div style={{ flex:1, height:1, background:'var(--border)' }} />
                             <span style={{ fontSize:10, color:'var(--text3)' }}>{grouped[cat].length}</span>
@@ -2515,6 +2492,7 @@ function BtnSpinner() {
 
 function ChecklistRow({ item, mode }) {
   const { t } = useTranslation()
+  const { iconOf } = useCategories()
   const [showInfo, setShowInfo]   = useState(false)
   // Pressione prolungata sulla riga: entra in selezione multipla con questa riga
   // già scelta (stessa idea di EventDetail); in selezione il tap alterna la spunta.
@@ -2651,7 +2629,7 @@ function ChecklistRow({ item, mode }) {
             {item._selected ? '✓' : ''}
           </span>
         )}
-        <span style={{ fontSize:20, flexShrink:0 }}>{ICONS[item.category] || '📦'}</span>
+        <span style={{ fontSize:20, flexShrink:0 }}>{iconOf(item.category)}</span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:14, color: item.returned ? 'var(--text2)' : 'var(--text)', textDecoration: item.returned ? 'line-through' : 'none' }}>{item.name}</p>

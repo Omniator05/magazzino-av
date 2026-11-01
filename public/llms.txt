@@ -1,8 +1,8 @@
 # Roadcase
 
-> Gestionale per aziende di noleggio audio/video/luci: magazzino, calendario eventi, liste di carico e scanner QR/barcode in un'unica app. Attualmente in beta, con prezzo di lancio speciale.
+> Gestionale di magazzino per qualsiasi attività: inventario, calendario eventi, liste di carico e scanner QR/barcode in un'unica app. Attualmente in beta, con prezzo di lancio speciale.
 
-Roadcase aiuta le aziende che noleggiano attrezzatura audio/video/luci per eventi a tenere traccia del magazzino, pianificare gli eventi a calendario, costruire una lista di carico per evento e scansionare l'attrezzatura in entrata/uscita via QR/barcode mentre viene preparata, caricata sui furgoni e rientrata in magazzino.
+Roadcase aiuta chi gestisce un magazzino a tenere traccia dell'inventario, pianificare gli eventi a calendario, costruire una lista di carico per evento e scansionare gli articoli in entrata/uscita via QR/barcode mentre vengono preparati, caricati sui furgoni e rientrati in magazzino. Le categorie del magazzino sono personalizzabili per squadra.
 
 Pensato per la realtà fisica del lavoro in magazzino: resistente a connessioni scarse, con conferma visibile di ogni salvataggio invece di perdere dati in silenzio.
 

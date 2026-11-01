@@ -2230,11 +2230,11 @@
     "pickSecondDay": "Tocca un secondo giorno per scegliere un periodo"
   },
   "landing": {
-    "seoTitle": "Roadcase — Gestionale magazzino per noleggio audio, video e luci",
-    "seoDescription": "Gestionale di magazzino per aziende di noleggio audio, video e luci: inventario, calendario eventi, liste di carico e scanner QR/barcode in un'unica app. Prova gratis per 30 giorni.",
+    "seoTitle": "Roadcase — Gestionale di magazzino con calendario, liste di carico e scanner",
+    "seoDescription": "Gestionale di magazzino per qualsiasi attività: inventario con disponibilità in tempo reale, calendario eventi, liste di carico e scanner QR/barcode in un'unica app. Prova gratis per 30 giorni.",
     "login": "Accedi",
     "tryFree": "Prova gratis",
-    "eyebrow": "Gestionale magazzino per noleggio audio, video e luci",
+    "eyebrow": "Gestionale di magazzino e inventario",
     "title": "Dal magazzino al furgone, senza dimenticare niente.",
     "text": "Roadcase tiene insieme inventario, calendario eventi e liste di carico. Il magazziniere scansiona, l'app segna cosa è pronto, caricato e rientrato.",
     "ctaStart": "Inizia gratis per 30 giorni",
@@ -2267,12 +2267,12 @@
     "stepsTitle": "Ogni carico in tre passaggi",
     "stepsText": "Chiunque apra l'evento vede a che punto è il lavoro, anche se a cominciarlo è stato un collega.",
     "step": "PASSO {{n}}",
-    "featuresTitle": "Tutto quello che serve a un magazzino di noleggio",
+    "featuresTitle": "Tutto quello che serve a un magazzino",
     "featuresText": "Dalla gestione dell'attrezzatura all'organizzazione della squadra, in un'unica app.",
     "features": [
       {
         "title": "Magazzino",
-        "desc": "Inventario di audio, video e luci con disponibilità in tempo reale, pezzi rotti e scorta minima dei consumabili."
+        "desc": "Inventario con disponibilità in tempo reale, pezzi rotti e scorta minima dei consumabili. Le categorie le scegli tu."
       },
       {
         "title": "Calendario eventi",
@@ -2431,5 +2431,49 @@
     "patchNote": "Ogni faro occupa canali consecutivi; se non ci sta in quelli rimasti, passa all'indirizzo 1 dell'universo dopo.",
     "chip": "Potenza e patch",
     "scopeSelected": "Oggetti selezionati: {{count}}"
+  },
+  "categoriesEditor": {
+    "title": "Categorie del magazzino",
+    "intro": "Dividono il magazzino e le liste di carico. Parti da quelle predefinite e personalizzale per la tua squadra.",
+    "count_one": "{{count}} articolo",
+    "count_other": "{{count}} articoli",
+    "consumableHint": "con scorta minima",
+    "fallbackHint": "sempre presente, raccoglie gli articoli senza categoria",
+    "moveUp": "Sposta su «{{name}}»",
+    "moveDown": "Sposta giù «{{name}}»",
+    "removeAria": "Togli «{{name}}»",
+    "changeIcon": "Cambia l'icona di «{{name}}»",
+    "pickIcon": "Scegli un'icona",
+    "newPlaceholder": "Nuova categoria",
+    "add": "Aggiungi",
+    "errTaken": "Esiste già una categoria con questo nome.",
+    "errMax": "Puoi avere al massimo {{max}} categorie.",
+    "addedToast": "Categoria «{{name}}» aggiunta",
+    "removedToast": "Categoria «{{name}}» tolta",
+    "removeTitle": "Togliere «{{name}}»?",
+    "removeNone": "Nessun articolo la usa.",
+    "removeItems_one": "{{count}} articolo passerà in «Altro».",
+    "removeItems_other": "{{count}} articoli passeranno in «Altro».",
+    "remove": "Togli",
+    "reset": "Ripristina le predefinite",
+    "resetTitle": "Tornare alle categorie predefinite?",
+    "resetNone": "Le categorie create da te vengono tolte.",
+    "resetItems_one": "Le categorie create da te vengono tolte e {{count}} articolo passerà in «Altro».",
+    "resetItems_other": "Le categorie create da te vengono tolte e {{count}} articoli passeranno in «Altro».",
+    "resetConfirm": "Ripristina",
+    "resetToast": "Categorie predefinite ripristinate",
+    "statusDefault": "Stai usando le categorie predefinite.",
+    "statusCustom": "Categorie personalizzate per la tua squadra.",
+    "saveError": "Non sono riuscito a salvare. Riprova."
+  },
+  "joinRequestNotif": {
+    "title": "Richiesta di accesso",
+    "later": "Più tardi",
+    "review": "Vai agli utenti",
+    "subtitle_one": "Vuole entrare nella tua squadra.",
+    "subtitle_other": "Vogliono entrare nella tua squadra.",
+    "confirmReject": "Rifiutare la richiesta?",
+    "confirmYes": "Sì, rifiuta",
+    "failed": "Non è andata a buon fine. Riprova."
   }
 }

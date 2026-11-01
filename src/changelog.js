@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-11',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Categorie del magazzino personalizzabili: in Impostazioni → Preferenze aggiungi, riordini, cambi icona e togli le categorie della tua squadra. Quelle di prima sono il punto di partenza e si possono ripristinare; "Altro" resta sempre in fondo',
+        'Richieste di accesso alla squadra: chi chiede riceve un\'email di benvenuto e, appena un admin decide, l\'esito. Gli admin ricevono email, notifica push e un avviso in app dove possono approvare o rifiutare subito, oppure aprire la sezione Utenti. Se rifiuti, la persona può riprovare con la stessa email',
+        'Task: il menu "⋮" con "Modifica" non finisce più dietro la task sotto',
+        'Il sito non parla più solo di audio, video e luci: va bene per qualsiasi magazzino',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Customisable warehouse categories: in Settings → Preferences you add, reorder, change the icon of and remove your team\'s categories. The old ones are the starting point and can be restored; "Altro" always stays last',
+        'Requests to join a team: the person gets a welcome email and, as soon as an admin decides, the outcome. Admins get an email, a push notification and an in-app alert where they can approve or reject right away, or open the Users section. If you reject, the person can try again with the same email',
+        'Tasks: the "⋮" menu with "Edit" no longer ends up behind the task below',
+        'The website no longer talks only about audio, video and lighting: it suits any warehouse',
+      ],
+    },
+  },
+  {
     version: '2026-11-10',
     it: {
       title: 'Novità di oggi',

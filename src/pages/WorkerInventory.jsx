@@ -14,33 +14,7 @@ import { parseScannedCode } from '../utils/generateCode'
 import DailyQuip from '../components/DailyQuip'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { addIssue, removeIssueById, sortedIssues } from '../utils/itemIssues'
-
-// Stessa lista di Inventory.jsx (vista admin) — usata qui solo per il
-// filtro categoria del menu filtri avanzati, vedi sotto.
-const CATEGORIES = ['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
-const ICONS = {
-  'Audio':    '🔊',
-  'Video':    '📺',
-  'Luci':     '🔦',
-  'Rigging':  '⛓️',
-  'Corrente': '⚡',
-  'Effetti':  '🎉',
-  'Consumabili': '🪣',
-  'Microfoni':   '🎤',
-  'Traduzione':  '🌐',
-  'Connettività':'📶',
-  'Comunicazione':'📡',
-  'Strumenti':   '🎸',
-  'Kit':      '🧰',
-  'Altro':    '📦',
-  // legacy
-  'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
-  'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
-  'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
-  'Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜',
-  'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
-  'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
-}
+import { useCategories } from '../hooks/useCategories'
 
 // Un solo pezzo in totale: "Rotto" / "Difettoso" invece di "1 rotto" / "1 con difetto".
 const brokenText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.brokenSingle') : t('inventory.brokenCount', { count: item.brokenQty })
@@ -49,6 +23,7 @@ const defectText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.defect
 export default function WorkerInventory() {
   const { t } = useTranslation()
   const { teamId, profile } = useAuth()
+  const { names: CATEGORIES, iconOf } = useCategories()   // categorie scelte dalla squadra (Altro sempre ultima)
   const { isStation, operator, requireOperator } = useOperator()
   // Chi segnala: sulla Postazione magazzino l'operatore col badge (e senza badge non si segna),
   // altrimenti l'utente collegato.
@@ -550,7 +525,7 @@ export default function WorkerInventory() {
             const isOut    = avail < item.totalQty && !isBroken
             return (
               <div key={item.id} className="item-row" onClick={() => setDetail(item)}>
-                <div className="item-icon" style={{ fontSize:22 }}>{ICONS[item.category] || '📦'}</div>
+                <div className="item-icon" style={{ fontSize:22 }}>{iconOf(item.category)}</div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ fontWeight:700, fontSize:15, marginBottom:2 }}>{item.name}</p>
                   <p style={{ color:'var(--text2)', fontSize:13 }}>{item.brand} {item.model}</p>
@@ -649,7 +624,7 @@ export default function WorkerInventory() {
           <div className="modal rc-sheet" style={{ position:'relative' }}>
             <button className="close-btn" onClick={() => setDetail(null)}>✕</button>
             <div style={{ textAlign:'center', marginBottom:16 }}>
-              <div style={{ fontSize:48, marginBottom:8 }}>{ICONS[detail.category] || '📦'}</div>
+              <div style={{ fontSize:48, marginBottom:8 }}>{iconOf(detail.category)}</div>
               <h2 style={{ fontSize:20 }}>{detail.name}</h2>
               {detail.brand && <p style={{ color:'var(--text2)', marginTop:4 }}>{detail.brand} {detail.model}</p>}
             </div>

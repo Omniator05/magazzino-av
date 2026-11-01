@@ -35,6 +35,7 @@ import EventPowerPatch from '../components/EventPowerPatch'
 import { linkedAdditionsFor } from '../utils/linkedItems'
 import { MAIN_LIST_ID, rowListId, getEventLists, hasMultipleLists, newListId, listRowId, moveRowToList } from '../utils/eventLists'
 import { isProPlan, FREE_LIMITS, promptLimitReached } from '../utils/planLimits'
+import { useCategories } from '../hooks/useCategories'
 import JSZip from 'jszip'
 
 // Ultima notifica "lista aggiornata" inviata, per evento (vedi
@@ -58,30 +59,6 @@ function slugifyName(s) {
   return noDiacritics.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file'
 }
 
-const ICONS = {
-  'Audio':    '🔊',
-  'Video':    '📺',
-  'Luci':     '🔦',
-  'Rigging':  '⛓️',
-  'Corrente': '⚡',
-  'Effetti':  '🎉',
-  'Consumabili': '🪣',
-  'Microfoni':   '🎤',
-  'Traduzione':  '🌐',
-  'Connettività':'📶',
-  'Comunicazione':'📡',
-  'Strumenti':   '🎸',
-  'Kit':      '🧰',
-  'Altro':    '📦',
-  // legacy
-  'Console audio':'🎚️','Mixer':'🎛️','Amplificatore':'📡','Casse':'🔊','Subwoofer':'💥',
-  'Microfono':'🎤','Cavo audio':'🔌','Cavo DMX':'🔗','Proiettore':'💡','LED bar':'🌈',
-  'Par LED':'🔵','Moving head':'🎭','Dimmer':'🔆','Controller luci':'🎮',
-  'Cavo elettrico':'⚡','Multipresa':'🔌','Flight case':'🧳','Stativi':'🪜',
-  'Mixer Audio':'🎚️','Console Luci':'🕹️','Faro':'🔦','Ledwall':'📺',
-  'Cavo XLR':'🎙️','Cavo Corrente':'⚡','Valigetta':'💼','Case':'🧳',
-}
-
 export default function EventDetail() {
   const { t, i18n } = useTranslation()
   const { id } = useParams()
@@ -92,6 +69,7 @@ export default function EventDetail() {
   // della riga anche come eventId.
   const eventId = id
   const { user, profile, teamId, team, isOwner } = useAuth()
+  const { names: catNames, iconOf, groupOf } = useCategories()   // categorie scelte dalla squadra
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const navigate = useNavigate()
@@ -1537,8 +1515,8 @@ export default function EventDetail() {
     setTimeout(() => win.print(), 250)
   }
 
-  const CAT_ICONS = { Audio:'🔊', Video:'📺', Luci:'🔦', Rigging:'⛓️', Corrente:'⚡', Effetti:'🎉', Consumabili:'🪣', Microfoni:'🎤', Traduzione:'🌐', Connettività:'📶', Comunicazione:'📡', Strumenti:'🎸', Kit:'🧰', Extra:'✨', Altro:'📦' }
-  const CAT_ORDER = ['Kit','Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Extra','Altro']
+  // Ordine dei gruppi: Kit, le categorie della squadra, righe Extra, e Altro per ultimo.
+  const CAT_ORDER = ['Kit', ...catNames.filter(n => n !== 'Altro'), 'Extra', 'Altro']
   const filteredEventItems = itemListSearch.trim()
     ? eventItems.filter(i => i.name?.toLowerCase().includes(itemListSearch.trim().toLowerCase()))
     : eventItems
@@ -1554,7 +1532,7 @@ export default function EventDetail() {
       // che non esiste più tra quelle attuali se nel frattempo è stata rinominata
       // nel magazzino (es. vecchia migrazione categorie) — il dato non va perso.
       const rawCat = item.isExtra ? 'Extra' : (item.category || 'Altro')
-      const cat = CAT_ORDER.includes(rawCat) ? rawCat : 'Altro'
+      const cat = rawCat === 'Kit' || rawCat === 'Extra' ? rawCat : groupOf(rawCat)
       if (!catGrouped[cat]) catGrouped[cat] = []
       catGrouped[cat].push(item)
     })
@@ -1577,7 +1555,7 @@ export default function EventDetail() {
       <div key={cat}>
         {multiCat && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px 4px' }}>
-            <span style={{ fontSize:12 }}>{CAT_ICONS[cat]||'📦'}</span>
+            <span style={{ fontSize:12 }}>{iconOf(cat)}</span>
             <span style={{ fontSize:10, fontWeight:700, color:'var(--text2)', textTransform:'uppercase', letterSpacing:'0.8px' }}>{cat}</span>
             <div style={{ flex:1, height:1, background:'var(--border)' }} />
             <span style={{ fontSize:10, color:'var(--text3)' }}>{catGrouped[cat].length}</span>
@@ -2524,7 +2502,7 @@ export default function EventDetail() {
                         <AddItemRow
                           item={item}
                           onAdd={addToCart}
-                          icon={ICONS[item.category] || '📦'}
+                          icon={iconOf(item.category)}
                           inCart={cart.some(c => c.id === item.id)}
                           cartQty={cart.find(c => c.id === item.id)?.qty}
                         />
@@ -2549,7 +2527,7 @@ export default function EventDetail() {
                     key={item.id}
                     item={item}
                     onAdd={addToCart}
-                    icon={ICONS[item.category] || '📦'}
+                    icon={iconOf(item.category)}
                     inCart={cart.some(c => c.id === item.id)}
                     cartQty={cart.find(c => c.id === item.id)?.qty}
                   />
@@ -3040,6 +3018,7 @@ function AddItemRow({ item, onAdd, icon, inCart, cartQty }) {
 // Riga lista evento con location live
 function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicles, externalVehicles, onSetVehicle, onRequestExternalVehicle, bulkMode, bulkSelected, flash, onBulkToggle, onLongPressSelect, allItems, event, otherEvents }) {
   const { t } = useTranslation()
+  const { iconOf } = useCategories()
   // Pressione prolungata (soprattutto da cellulare): entra in selezione con
   // questa riga già scelta, senza dover risalire al bottone "Seleziona" in
   // alto. Se si è già in selezione il long press non fa nulla di diverso dal
@@ -3112,7 +3091,7 @@ function EventItemRow({ item, location, warehouseNotes, onRemove, onEdit, vehicl
           </div>
         )}
         <div style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:0, opacity: item.loaded ? 0.45 : 1, transition:'opacity 0.3s' }}>
-        <div style={{ fontSize:24 }}>{ICONS[item.category] || '📦'}</div>
+        <div style={{ fontSize:24 }}>{iconOf(item.category)}</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap' }}>
             <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>

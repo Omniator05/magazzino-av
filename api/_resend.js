@@ -135,6 +135,73 @@ export function welcomeEmailHtml({ adminName, teamName, appUrl }) {
   })
 }
 
+// Email del flusso "richiesta d'accesso a una squadra esistente". Per ora sono in inglese per tutti
+// (l'app non salva ancora la lingua dell'utente sul profilo).
+
+// A chi ha appena chiesto di entrare: ringraziamento e benvenuto.
+export function joinRequestThanksEmailHtml({ name, teamName, appUrl }) {
+  return emailShell({
+    title: `Thanks, ${esc(name)}!`,
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        Thank you for requesting access to the team <strong>${esc(teamName)}</strong>. Welcome to Roadcase, the app for warehouse and event management.
+      </p>
+      <p style="margin:0;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        The team's administrators have been notified and will review your request. As soon as it is approved, you will be able to sign in with your email and the password you chose.
+      </p>
+    `,
+    ctaLabel: 'Open Roadcase',
+    ctaUrl: appUrl,
+  })
+}
+
+// Agli admin della squadra: qualcuno chiede di entrare, con il collegamento alla sezione Utenti.
+export function joinRequestAdminEmailHtml({ requesterName, requesterEmail, teamName, appUrl }) {
+  return emailShell({
+    title: 'New access request',
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        <strong>${esc(requesterName)}</strong> has asked to join the team <strong>${esc(teamName)}</strong>. Review the request and approve or decline it from the Users section.
+      </p>
+      <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
+        <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Request from</p>
+        <p style="margin:0;color:#1a1a1a;font-size:14px;font-weight:700;">${esc(requesterName)}</p>
+        ${requesterEmail ? `<p style="margin:2px 0 0;color:#6b7280;font-size:13px;">${esc(requesterEmail)}</p>` : ''}
+      </div>
+      <p style="margin:10px 0 0;color:#9ca3af;font-size:12.5px;">If you don't recognise this person, don't approve the request: you can remove them from the same section.</p>
+    `,
+    ctaLabel: 'Go to users',
+    ctaUrl: `${appUrl}/admin/settings/users`,
+  })
+}
+
+// A chi aveva chiesto di entrare: la richiesta è stata approvata.
+export function joinApprovedEmailHtml({ name, teamName, loginUrl }) {
+  return emailShell({
+    title: `You're in, ${esc(name)}!`,
+    bodyHtml: `
+      <p style="margin:0;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        Your request to join the team <strong>${esc(teamName)}</strong> has been approved. You can now sign in to Roadcase with your email and the password you chose.
+      </p>
+    `,
+    ctaLabel: 'Sign in',
+    ctaUrl: loginUrl,
+  })
+}
+
+// A chi aveva chiesto di entrare: la richiesta non è stata approvata.
+export function joinRejectedEmailHtml({ name, teamName }) {
+  return emailShell({
+    title: `Hi ${esc(name)},`,
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        The administrators of <strong>${esc(teamName)}</strong> did not approve your request to join the team.
+      </p>
+      <p style="margin:0;color:#9ca3af;font-size:12.5px;">If you think this is a mistake, please contact them directly.</p>
+    `,
+  })
+}
+
 export function loginChangedEmailHtml({ workerName, teamName, email, loginUrl }) {
   return emailShell({
     logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,

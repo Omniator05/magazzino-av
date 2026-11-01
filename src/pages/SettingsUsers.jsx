@@ -26,6 +26,7 @@ import {
   createUserWithEmailAndPassword,
   signOut
 } from 'firebase/auth'
+import { approveJoinRequest, rejectJoinRequest } from '../utils/joinRequests'
 
 const EMPTY_ORG_CONFIG = { eventName:'', frequency:'weekly', weekday:4, monthDay:1, customDates:[], endDate:'' }
 
@@ -378,7 +379,7 @@ export default function SettingsUsers() {
 
   // ── Approva richiesta di adesione (self-signup "unisciti a squadra") ──
   const approveUser = async () => {
-    await updateDoc(doc(db, 'profiles', showDetail.id), { approved: true })
+    await approveJoinRequest(showDetail.id)
     setShowDetail(d => ({ ...d, approved: true }))
     clearDetailMsg()
     showToast(t('adminUsers.approvedToast', { name: showDetail.name }))
@@ -393,7 +394,7 @@ export default function SettingsUsers() {
       danger: true,
     }))) return
     const name = showDetail.name
-    await deleteDoc(doc(db, 'profiles', showDetail.id))
+    await rejectJoinRequest(showDetail.id)
     setShowDetail(null)
     showToast(t('adminUsers.rejectedToast', { name }))
   }

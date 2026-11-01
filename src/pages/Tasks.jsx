@@ -346,7 +346,9 @@ function TaskCard({ task, isAdmin, canEdit, onToggle, onDelete, onEdit, assignee
     <div
       className="tk-row"
       onClick={isMobile && canEdit ? onEdit : undefined}
-      style={{ position:'relative', margin:'0 18px 10px', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding: isMobile ? '12px 14px' : '12px 10px 12px 14px', display:'flex', alignItems:'center', gap:12, cursor: isMobile && canEdit ? 'pointer' : 'default' }}>
+      // La riga ha un'animazione (opacità/transform, vedi .tk-row) quindi è un livello a sé: il menu ⋮ non
+      // può stare sopra la riga seguente se non si alza la riga intera finché il menu è aperto.
+      style={{ position:'relative', zIndex: menuOpen ? 20 : undefined, margin:'0 18px 10px', background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding: isMobile ? '12px 14px' : '12px 10px 12px 14px', display:'flex', alignItems:'center', gap:12, cursor: isMobile && canEdit ? 'pointer' : 'default' }}>
       <button type="button" className="btn-no-anim tk-box" onClick={e => { stop(e); onToggle() }}
         aria-label={task.done ? t('activities.reopen') : t('activities.complete')} aria-pressed={!!task.done}
         style={{ width:26, height:26, borderRadius:8, flexShrink:0, border:`2px solid ${task.done ? '#2f9e5b' : 'var(--c-ink3)'}`, background: task.done ? '#2f9e5b' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>

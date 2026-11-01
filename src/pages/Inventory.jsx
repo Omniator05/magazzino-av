@@ -9,6 +9,8 @@ import { db } from '../firebase'
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where, serverTimestamp } from 'firebase/firestore'
 import { generateItemCode, generateUnitCode } from '../utils/generateCode'
 import { eventRowIncludesItem } from '../utils/kitInventory'
+import { useCategories } from '../hooks/useCategories'
+import { FALLBACK_CATEGORY } from '../utils/categories'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import { formatDate } from '../utils/formatDate'
 import { notifyTeamPush } from '../utils/pushNotifications'
@@ -62,34 +64,11 @@ const itemToForm = item => ({
 })
 // "1,5" o "1.5" → 1.5; vuoto/zero/non numerico → null (distingue "non compilato" da "davvero zero")
 const parseDecimal = v => v !== '' && v != null ? (parseFloat(String(v).replace(',', '.')) || null) : null
-const CATEGORIES =['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
-const KIT_CATEGORIES = CATEGORIES
-// Ordine di visualizzazione nella lista raggruppata — audio e microfoni
-// vicini, poi video, poi luci e strutture (rigging) di seguito.
-const CATEGORY_ORDER = ['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti','Altro']
 // Unità di misura per i Consumabili — non tutti si contano allo stesso modo:
 // moquette/gonna palco a metri, nastro a rotoli, taniche/fascette/pile a pezzi.
 // "pezzi" resta il default per tutto il resto (retrocompatibile: gli oggetti
 // esistenti senza questo campo si comportano come prima, in pezzi).
 const CONSUMABLE_UNITS = ['pezzi', 'metri', 'rotoli']
-const MAIN_CATS = ['Audio','Microfoni','Video','Luci','Rigging','Corrente','Effetti','Consumabili','Traduzione','Connettività','Comunicazione','Strumenti']
-const ICONS = {
-  'Audio':       '🔊',
-  'Video':       '📺',
-  'Luci':        '🔦',
-  'Rigging':     '⛓️',
-  'Corrente':    '⚡',
-  'Effetti':     '🎉',
-  'Consumabili': '🪣',
-  'Microfoni':   '🎤',
-  'Traduzione':  '🌐',
-  'Connettività':'📶',
-  'Comunicazione':'📡',
-  'Strumenti':   '🎸',
-  'Kit':         '🧰',
-  'Altro':       '📦',
-}
-
 // Mappa vecchie categorie → nuove per migrazione automatica
 const CATEGORY_MIGRATION = {
   'Mixer Audio':    'Audio',
@@ -125,6 +104,7 @@ const CATEGORY_MIGRATION = {
 export default function Inventory() {
   const { t, i18n } = useTranslation()
   const { user, teamId, team, profile, isOwner } = useAuth()
+  const { names: CATEGORIES, iconOf, groupOf } = useCategories()   // categorie scelte dalla squadra (Altro sempre ultima)
   const confirm = useConfirm()
   const { operator, isStation } = useOperator()   // alla postazione: chi è collegato in quel momento (le aggiunte portano il suo nome)
   const navigate = useNavigate()
@@ -312,7 +292,7 @@ export default function Inventory() {
   // Migrazione automatica vecchie categorie → nuove (gira una volta sola)
   useEffect(() => {
     if (items.length === 0) return
-    const toMigrate = items.filter(i => CATEGORY_MIGRATION[i.category])
+    const toMigrate = items.filter(i => CATEGORY_MIGRATION[i.category] && !CATEGORIES.includes(i.category))
     if (toMigrate.length === 0) return
     toMigrate.forEach(item => {
       updateDoc(doc(db, 'items', item.id), { category: CATEGORY_MIGRATION[item.category] })
@@ -755,10 +735,10 @@ export default function Inventory() {
     kitHasIncompleteInstance(i)
   const groupedFiltered = [
     ...(forgottenItems.length > 0 ? [{ cat: '__forgotten__', catItems: forgottenItems, isForgottenGroup: true }] : []),
-    ...CATEGORY_ORDER.map(cat => ({
+    ...CATEGORIES.map(cat => ({
       cat,
-      catItems: cat === 'Altro'
-        ? filtered.filter(i => !MAIN_CATS.includes(i.category) && !(showForgottenGroup && isForgottenItem(i)))
+      catItems: cat === FALLBACK_CATEGORY
+        ? filtered.filter(i => groupOf(i.category) === FALLBACK_CATEGORY && !(showForgottenGroup && isForgottenItem(i)))
         : filtered.filter(i => i.category === cat && !(showForgottenGroup && isForgottenItem(i))),
     })).filter(g => g.catItems.length > 0),
   ].map(g => ({ ...g, needsAttention: g.isForgottenGroup || g.catItems.some(itemNeedsAttention) }))
@@ -1112,7 +1092,7 @@ export default function Inventory() {
                   value={form.category}
                   onChange={category => setForm({...form, category})}
                   ariaLabel={t('inventory.categoryLabel')}
-                  options={CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))}
+                  options={CATEGORIES.map(c => ({ value:c, label:c, icon:iconOf(c) }))}
                 />
               </div>
               {/* Unità di misura — solo Consumabili: non tutti si contano allo
@@ -1252,7 +1232,7 @@ export default function Inventory() {
 
               {/* ── Titolo documento ── */}
               <div className="rc-drawer-titleblock" style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                <span className="rc-emoji-phone" style={{ fontSize:26, flexShrink:0 }}>{ICONS[showDetail.category] || '📦'}</span>
+                <span className="rc-emoji-phone" style={{ fontSize:26, flexShrink:0 }}>{iconOf(showDetail.category)}</span>
                 <div style={{ minWidth:0 }}>
                   <h2 style={{ margin:0, fontSize:19 }}>{showDetail.name}</h2>
                   {/* Computer: la categoria sotto il nome (sul telefono c'è l'icona accanto) */}
@@ -1846,6 +1826,7 @@ export default function Inventory() {
 //  · Stato bauli — solo in modifica: pezzi mancanti/rotti baule per baule
 //  · Collegati — oggetti da portare insieme
 function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, setComponents, instances, onToggleBroken, search, setSearch, linkedSearch, setLinkedSearch, footer }) {
+  const { names: KIT_CATEGORIES, iconOf } = useCategories()
   const isEdit = mode === 'edit'
   const [tab, setTab] = useState('content')
   const [addOpen, setAddOpen] = useState(components.length === 0)
@@ -1895,7 +1876,7 @@ function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, set
                 <div className="form-group" style={{ margin:0 }}>
                   <label>{t('inventory.categoryLabel')}</label>
                   <Picker value={form.category || 'Altro'} onChange={category => setForm({ ...form, category })} ariaLabel={t('inventory.categoryLabel')}
-                    options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:ICONS[c] }))} />
+                    options={KIT_CATEGORIES.map(c => ({ value:c, label:c, icon:iconOf(c) }))} />
                 </div>
                 <div className="form-group" style={{ margin:0 }}>
                   <label>{t('inventory.howManyKits')}</label>
@@ -1949,7 +1930,7 @@ function KitSheet({ mode, drag, t, items, selfId, form, setForm, components, set
                       ) : candidates.map(item => (
                         <button type="button" key={item.id} className="item-row" aria-label={t('inventory.addComponentAria', { name: item.name })}
                           onClick={() => { setComponents(prev => [...prev, { itemId:item.id, name:item.name, qty:1, maxQty:item.totalQty || 1 }]); setSearch('') }}>
-                          <div className="item-icon" style={{ fontSize:18 }}>{ICONS[item.category] || '📦'}</div>
+                          <div className="item-icon" style={{ fontSize:18 }}>{iconOf(item.category)}</div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <p style={{ fontWeight:700, fontSize:14 }}>{item.name}</p>
                             <p style={{ color:'var(--c-ink2)', fontSize:12 }}>{t('inventory.availableShort', { count: item.availableQty ?? item.totalQty })}</p>
@@ -2137,9 +2118,10 @@ const brokenText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.broken
 const defectText = (item, t) => (item.totalQty || 0) === 1 ? t('inventory.defectSingle') : t('inventory.defectCount', { count: item.defectQty })
 
 function ItemRow({ item, onOpen, t, outEvents }) {
+  const { iconOf } = useCategories()
   return (
     <button type="button" className="item-row btn-no-anim" onClick={() => onOpen(item)} aria-label={t('inventory.openItemAria', { name: item.name })}>
-      <div className="item-icon">{ICONS[item.category] || '📦'}</div>
+      <div className="item-icon">{iconOf(item.category)}</div>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
           <p style={{ fontWeight:700, fontSize:15 }}>{item.name}</p>

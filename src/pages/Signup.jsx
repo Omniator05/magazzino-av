@@ -316,6 +316,14 @@ function JoinTeamStep({ onBack, onDone }) {
         consentVersion: 'v1',
       })
 
+      // Avvisa gli admin (email, push, popup in app) e ringrazia chi ha chiesto. Best-effort e senza attendere:
+      // la richiesta è già salvata, un errore qui non deve fermare nessuno.
+      cred.user.getIdToken().then(idToken => fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ type: 'joinRequest' }),
+      })).catch(() => {})
+
       onDone()
     } catch (err) {
       if (cred) await deleteUser(cred.user).catch(() => {})

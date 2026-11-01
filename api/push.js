@@ -203,6 +203,16 @@ async function runDailyReminders(res) {
   res.status(200).json({ teams: results.length, results })
 }
 
+// Push agli admin di una squadra, chiamabile da un'altra API: serve quando chi innesca l'avviso non è ancora
+// membro approvato (es. una richiesta d'accesso) e quindi non potrebbe passare dall'azione 'send'.
+export async function pushToAdmins(teamId, { title, body, url }) {
+  const admin = getAdmin()
+  const db = admin.firestore()
+  const userIds = await resolveAudienceUserIds(db, teamId, { type: 'admins' })
+  const tokenDocs = await tokensForTeam(db, teamId, userIds)
+  return sendToTokenDocs(admin, db, tokenDocs, { title, body, url })
+}
+
 export default async function handler(req, res) {
   if (req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`) {
     return runDailyReminders(res)

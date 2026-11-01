@@ -2230,11 +2230,11 @@
     "pickSecondDay": "Toque num segundo dia para escolher um período"
   },
   "landing": {
-    "seoTitle": "Roadcase — Software de gestão de armazém para aluguer de áudio, vídeo e luz",
-    "seoDescription": "Gestão de armazém para empresas de aluguer de áudio, vídeo e iluminação: inventário, calendário de eventos, listas de carga e leitor de QR/código de barras numa só aplicação. Experimente grátis durante 30 dias.",
+    "seoTitle": "Roadcase — Software de gestão de armazém com calendário, listas de carga e leitor",
+    "seoDescription": "Gestão de armazém para qualquer atividade: inventário com disponibilidade em tempo real, calendário de eventos, listas de carga e leitor de QR/código de barras numa só aplicação. Experimente grátis durante 30 dias.",
     "login": "Entrar",
     "tryFree": "Experimentar",
-    "eyebrow": "Software de armazém para aluguer de áudio, vídeo e iluminação",
+    "eyebrow": "Software de armazém e inventário",
     "title": "Do armazém à carrinha, sem esquecer nada.",
     "text": "O Roadcase junta inventário, calendário de eventos e listas de carga. O trabalhador do armazém lê os códigos e a aplicação regista o que está pronto, carregado e devolvido.",
     "ctaStart": "Começar grátis durante 30 dias",
@@ -2267,12 +2267,12 @@
     "stepsTitle": "Cada carga em três passos",
     "stepsText": "Quem abre o evento vê em que ponto está o trabalho, mesmo que tenha sido um colega a começá-lo.",
     "step": "PASSO {{n}}",
-    "featuresTitle": "Tudo o que um armazém de aluguer precisa",
+    "featuresTitle": "Tudo o que um armazém precisa",
     "featuresText": "Da gestão do equipamento à organização da equipa, numa só aplicação.",
     "features": [
       {
         "title": "Armazém",
-        "desc": "Inventário de áudio, vídeo e iluminação com disponibilidade em tempo real, peças avariadas e stock mínimo dos consumíveis."
+        "desc": "Inventário com disponibilidade em tempo real, peças avariadas e stock mínimo dos consumíveis. As categorias é você que escolhe."
       },
       {
         "title": "Calendário de eventos",
@@ -2431,5 +2431,49 @@
     "patchNote": "Cada projetor ocupa canais consecutivos; se não couber no que resta, passa ao endereço 1 do universo seguinte.",
     "chip": "Potência e patch",
     "scopeSelected": "Artigos selecionados: {{count}}"
+  },
+  "categoriesEditor": {
+    "title": "Categorias do armazém",
+    "intro": "Dividem o armazém e as listas de carga. Comece pelas predefinidas e personalize-as para a sua equipa.",
+    "count_one": "{{count}} artigo",
+    "count_other": "{{count}} artigos",
+    "consumableHint": "com stock mínimo",
+    "fallbackHint": "sempre presente, reúne os artigos sem categoria",
+    "moveUp": "Subir «{{name}}»",
+    "moveDown": "Descer «{{name}}»",
+    "removeAria": "Remover «{{name}}»",
+    "changeIcon": "Mudar o ícone de «{{name}}»",
+    "pickIcon": "Escolha um ícone",
+    "newPlaceholder": "Nova categoria",
+    "add": "Adicionar",
+    "errTaken": "Já existe uma categoria com este nome.",
+    "errMax": "Pode ter no máximo {{max}} categorias.",
+    "addedToast": "Categoria «{{name}}» adicionada",
+    "removedToast": "Categoria «{{name}}» removida",
+    "removeTitle": "Remover «{{name}}»?",
+    "removeNone": "Nenhum artigo a utiliza.",
+    "removeItems_one": "{{count}} artigo passará para «Altro».",
+    "removeItems_other": "{{count}} artigos passarão para «Altro».",
+    "remove": "Remover",
+    "reset": "Repor as predefinidas",
+    "resetTitle": "Voltar às categorias predefinidas?",
+    "resetNone": "As categorias que criou serão removidas.",
+    "resetItems_one": "As categorias que criou serão removidas e {{count}} artigo passará para «Altro».",
+    "resetItems_other": "As categorias que criou serão removidas e {{count}} artigos passarão para «Altro».",
+    "resetConfirm": "Repor",
+    "resetToast": "Categorias predefinidas repostas",
+    "statusDefault": "Está a usar as categorias predefinidas.",
+    "statusCustom": "Categorias personalizadas para a sua equipa.",
+    "saveError": "Não foi possível guardar. Tente novamente."
+  },
+  "joinRequestNotif": {
+    "title": "Pedido de acesso",
+    "later": "Mais tarde",
+    "review": "Ir para utilizadores",
+    "subtitle_one": "Quer entrar na sua equipa.",
+    "subtitle_other": "Querem entrar na sua equipa.",
+    "confirmReject": "Rejeitar o pedido?",
+    "confirmYes": "Sim, rejeitar",
+    "failed": "Não correu bem. Tente novamente."
   }
 }

@@ -2230,11 +2230,11 @@
     "pickSecondDay": "Tippe auf einen zweiten Tag, um einen Zeitraum zu wählen"
   },
   "landing": {
-    "seoTitle": "Roadcase — Lagerverwaltung für die Vermietung von Audio-, Video- und Lichttechnik",
-    "seoDescription": "Lagerverwaltung für Verleihfirmen für Audio-, Video- und Lichttechnik: Inventar, Eventkalender, Ladelisten und QR-/Barcode-Scanner in einer einzigen App. 30 Tage kostenlos testen.",
+    "seoTitle": "Roadcase — Lagerverwaltung mit Kalender, Ladelisten und Scanner",
+    "seoDescription": "Lagerverwaltung für jeden Betrieb: Inventar mit Verfügbarkeit in Echtzeit, Eventkalender, Ladelisten und QR-/Barcode-Scanner in einer einzigen App. 30 Tage kostenlos testen.",
     "login": "Anmelden",
     "tryFree": "Gratis testen",
-    "eyebrow": "Lagersoftware für die Vermietung von Audio-, Video- und Lichttechnik",
+    "eyebrow": "Lager- und Inventarsoftware",
     "title": "Vom Lager in den Transporter, ohne etwas zu vergessen.",
     "text": "Roadcase vereint Inventar, Eventkalender und Ladelisten. Der Lagermitarbeiter scannt, und die App hält fest, was bereit, geladen und zurück ist.",
     "ctaStart": "30 Tage kostenlos starten",
@@ -2267,12 +2267,12 @@
     "stepsTitle": "Jede Ladung in drei Schritten",
     "stepsText": "Wer das Event öffnet, sieht, wie weit die Arbeit ist – auch wenn ein Kollege sie begonnen hat.",
     "step": "SCHRITT {{n}}",
-    "featuresTitle": "Alles, was ein Verleihlager braucht",
+    "featuresTitle": "Alles, was ein Lager braucht",
     "featuresText": "Von der Verwaltung des Equipments bis zur Organisation des Teams, in einer einzigen App.",
     "features": [
       {
         "title": "Lager",
-        "desc": "Inventar von Audio-, Video- und Lichttechnik mit Verfügbarkeit in Echtzeit, defekten Teilen und Mindestbestand für Verbrauchsmaterial."
+        "desc": "Inventar mit Verfügbarkeit in Echtzeit, defekten Teilen und Mindestbestand für Verbrauchsmaterial. Die Kategorien bestimmst du."
       },
       {
         "title": "Eventkalender",
@@ -2431,5 +2431,49 @@
     "patchNote": "Jeder Scheinwerfer belegt aufeinanderfolgende Kanäle; passt er nicht in den Rest, geht es bei Adresse 1 des nächsten Universums weiter.",
     "chip": "Leistung und Patch",
     "scopeSelected": "Ausgewählte Artikel: {{count}}"
+  },
+  "categoriesEditor": {
+    "title": "Lagerkategorien",
+    "intro": "Sie gliedern das Lager und die Ladelisten. Starte mit den Standardkategorien und passe sie an dein Team an.",
+    "count_one": "{{count}} Artikel",
+    "count_other": "{{count}} Artikel",
+    "consumableHint": "mit Mindestbestand",
+    "fallbackHint": "immer vorhanden, sammelt Artikel ohne Kategorie",
+    "moveUp": "„{{name}}“ nach oben",
+    "moveDown": "„{{name}}“ nach unten",
+    "removeAria": "„{{name}}“ entfernen",
+    "changeIcon": "Symbol von „{{name}}“ ändern",
+    "pickIcon": "Symbol wählen",
+    "newPlaceholder": "Neue Kategorie",
+    "add": "Hinzufügen",
+    "errTaken": "Eine Kategorie mit diesem Namen gibt es schon.",
+    "errMax": "Du kannst höchstens {{max}} Kategorien haben.",
+    "addedToast": "Kategorie „{{name}}“ hinzugefügt",
+    "removedToast": "Kategorie „{{name}}“ entfernt",
+    "removeTitle": "„{{name}}“ entfernen?",
+    "removeNone": "Kein Artikel nutzt sie.",
+    "removeItems_one": "{{count}} Artikel wechselt zu „Altro“.",
+    "removeItems_other": "{{count}} Artikel wechseln zu „Altro“.",
+    "remove": "Entfernen",
+    "reset": "Standard wiederherstellen",
+    "resetTitle": "Zu den Standardkategorien zurückkehren?",
+    "resetNone": "Die von dir erstellten Kategorien werden entfernt.",
+    "resetItems_one": "Die von dir erstellten Kategorien werden entfernt und {{count}} Artikel wechselt zu „Altro“.",
+    "resetItems_other": "Die von dir erstellten Kategorien werden entfernt und {{count}} Artikel wechseln zu „Altro“.",
+    "resetConfirm": "Wiederherstellen",
+    "resetToast": "Standardkategorien wiederhergestellt",
+    "statusDefault": "Du verwendest die Standardkategorien.",
+    "statusCustom": "Für dein Team angepasste Kategorien.",
+    "saveError": "Speichern nicht möglich. Bitte versuche es erneut."
+  },
+  "joinRequestNotif": {
+    "title": "Zugriffsanfrage",
+    "later": "Später",
+    "review": "Zu den Nutzern",
+    "subtitle_one": "Möchte deinem Team beitreten.",
+    "subtitle_other": "Möchten deinem Team beitreten.",
+    "confirmReject": "Anfrage ablehnen?",
+    "confirmYes": "Ja, ablehnen",
+    "failed": "Das hat nicht geklappt. Versuche es erneut."
   }
 }

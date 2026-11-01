@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { isModuleEnabled } from '../utils/modules'
 import { getCodeDisplay } from '../utils/codeDisplay'
 import PageHeader from '../components/PageHeader'
+import CategoriesEditor from '../components/CategoriesEditor'
 
 function Switch({ enabled, onClick, disabled, label }) {
   return (
@@ -97,6 +98,8 @@ export default function SettingsModules() {
             />
           </div>
         </div>
+
+        <CategoriesEditor onNotify={showToast} />
 
         <h2 className="pref-h">{t('adminUsers.prefsLabelsSection')}</h2>
         <div className="pref-group" style={{ padding:'18px 18px 16px' }}>

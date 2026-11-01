@@ -2230,11 +2230,11 @@
     "pickSecondDay": "Tap a second day to pick a period"
   },
   "landing": {
-    "seoTitle": "Roadcase — Warehouse management software for audio, video and lighting rental",
-    "seoDescription": "Warehouse management for audio, video and lighting rental companies: inventory, event calendar, load lists and QR/barcode scanner in a single app. Free for 30 days.",
+    "seoTitle": "Roadcase — Warehouse management software with calendar, load lists and scanner",
+    "seoDescription": "Warehouse management for any business: inventory with real-time availability, event calendar, load lists and QR/barcode scanner in a single app. Free for 30 days.",
     "login": "Sign in",
     "tryFree": "Try it free",
-    "eyebrow": "Warehouse software for audio, video and lighting rental",
+    "eyebrow": "Warehouse and inventory software",
     "title": "From the warehouse to the van, without forgetting a thing.",
     "text": "Roadcase brings together inventory, the event calendar and load lists. The warehouse worker scans, and the app marks what is ready, loaded and back.",
     "ctaStart": "Start free for 30 days",
@@ -2267,12 +2267,12 @@
     "stepsTitle": "Every load in three steps",
     "stepsText": "Anyone who opens the event sees how far the work has got, even if a colleague started it.",
     "step": "STEP {{n}}",
-    "featuresTitle": "Everything a rental warehouse needs",
+    "featuresTitle": "Everything a warehouse needs",
     "featuresText": "From managing equipment to organising the crew, in a single app.",
     "features": [
       {
         "title": "Warehouse",
-        "desc": "Audio, video and lighting inventory with real-time availability, broken pieces and minimum stock for consumables."
+        "desc": "Inventory with real-time availability, broken pieces and minimum stock for consumables. You choose the categories."
       },
       {
         "title": "Event calendar",
@@ -2431,5 +2431,49 @@
     "patchNote": "Each fixture takes consecutive channels; if it doesn't fit in what's left, it moves to address 1 of the next universe.",
     "chip": "Power and patch",
     "scopeSelected": "Selected items: {{count}}"
+  },
+  "categoriesEditor": {
+    "title": "Warehouse categories",
+    "intro": "They organise the warehouse and the load lists. Start from the defaults and make them your team's own.",
+    "count_one": "{{count}} item",
+    "count_other": "{{count}} items",
+    "consumableHint": "with minimum stock",
+    "fallbackHint": "always there, collects items without a category",
+    "moveUp": "Move \"{{name}}\" up",
+    "moveDown": "Move \"{{name}}\" down",
+    "removeAria": "Remove \"{{name}}\"",
+    "changeIcon": "Change the icon of \"{{name}}\"",
+    "pickIcon": "Pick an icon",
+    "newPlaceholder": "New category",
+    "add": "Add",
+    "errTaken": "A category with this name already exists.",
+    "errMax": "You can have at most {{max}} categories.",
+    "addedToast": "Category \"{{name}}\" added",
+    "removedToast": "Category \"{{name}}\" removed",
+    "removeTitle": "Remove \"{{name}}\"?",
+    "removeNone": "No items use it.",
+    "removeItems_one": "{{count}} item will move to \"Altro\".",
+    "removeItems_other": "{{count}} items will move to \"Altro\".",
+    "remove": "Remove",
+    "reset": "Restore the defaults",
+    "resetTitle": "Go back to the default categories?",
+    "resetNone": "The categories you created will be removed.",
+    "resetItems_one": "The categories you created will be removed and {{count}} item will move to \"Altro\".",
+    "resetItems_other": "The categories you created will be removed and {{count}} items will move to \"Altro\".",
+    "resetConfirm": "Restore",
+    "resetToast": "Default categories restored",
+    "statusDefault": "You are using the default categories.",
+    "statusCustom": "Categories customised for your team.",
+    "saveError": "Couldn't save. Please try again."
+  },
+  "joinRequestNotif": {
+    "title": "Access request",
+    "later": "Later",
+    "review": "Go to users",
+    "subtitle_one": "Wants to join your team.",
+    "subtitle_other": "Want to join your team.",
+    "confirmReject": "Reject this request?",
+    "confirmYes": "Yes, reject",
+    "failed": "That didn't work. Try again."
   }
 }
