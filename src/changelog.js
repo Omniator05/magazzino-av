@@ -7,6 +7,23 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-12',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Tab bar: il numero rosso sulle Task è più grande e più visibile, e sparisce quando sei già nella pagina Task',
+        'Calendario dei magazzinieri e della postazione, su computer e tablet: scorre solo il calendario, così l\'ultima settimana del mese si vede intera',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Tab bar: the red number on Tasks is bigger and easier to see, and it disappears when you are already on the Tasks page',
+        'Warehouse workers\' and station calendar, on computer and tablet: only the calendar scrolls, so the last week of the month is fully visible',
+      ],
+    },
+  },
+  {
     version: '2026-11-11',
     it: {
       title: 'Novità di oggi',

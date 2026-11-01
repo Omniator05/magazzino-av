@@ -267,7 +267,7 @@ export default function TabBar() {
                 style={{ display:'flex', position:'relative', willChange:'transform', color: isRunningShift ? 'var(--accent)' : TAB_GREY }}>
                 <span className="ftab-ico-in">{t.icon}</span>
                 {t.path === '/tasks' && openTasks > 0 && (
-                  <span className="ftab-badge">{openTasks}</span>
+                  <span className="ftab-badge" data-hidden={active ? '1' : '0'} aria-hidden={active ? 'true' : undefined}>{openTasks > 99 ? '99+' : openTasks}</span>
                 )}
               </span>
             </button>
@@ -294,12 +294,17 @@ export default function TabBar() {
         .ftab-btn:active .ftab-ico-in { transform: scale(1.08); }
         .ftab-ico svg { width: var(--ftab-icon, 28px); height: var(--ftab-icon, 28px); display: block; }
         .ftab-badge {
-          position: absolute; top: -5px; right: -9px;
-          background: var(--accent); color: #fff; border-radius: 10px;
-          font-size: 10.5px; font-weight: 800; min-width: 18px; height: 18px;
+          position: absolute; top: -17px; right: -21px;
+          background: var(--accent); color: #fff; border-radius: 15px;
+          font-size: 15px; font-weight: 800; min-width: 30px; height: 30px;
           display: flex; align-items: center; justify-content: center;
-          padding: 0 4px; line-height: 1; border: 1.5px solid var(--c-surface); box-sizing: border-box;
+          padding: 0 8px; line-height: 1; border: 2.5px solid var(--c-surface); box-sizing: border-box;
+          box-shadow: 0 2px 8px rgba(230,57,70,0.45); font-variant-numeric: tabular-nums;
+          transition: opacity 0.18s ease, transform 0.18s ease;
         }
+        /* Sulla tab Task aperta il badge sparisce: sarebbe un pallino rosso dentro il cerchio rosso. */
+        .ftab-badge[data-hidden="1"] { opacity: 0; transform: scale(0.4); pointer-events: none; }
+        @media (prefers-reduced-motion: reduce) { .ftab-badge { transition: none; } }
       `}</style>
     </nav>
   )

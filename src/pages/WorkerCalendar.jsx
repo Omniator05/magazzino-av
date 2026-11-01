@@ -12,6 +12,7 @@ import { useSwipeMonth } from '../hooks/useSwipeMonth'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
+import { useIsMobile } from '../hooks/useIsMobile'
 import DateRangeField from '../components/DateRangeField'
 import TimeField from '../components/TimeField'
 import Toast from '../components/Toast'
@@ -98,7 +99,10 @@ export default function WorkerCalendar() {
   const [editingId, setEditingId] = useState(null)
   const [savingUnavail, setSavingUnavail] = useState(false)
   const [unavailOpen, setUnavailOpen] = useState(false)
-  useModalScrollLock(!!pendingRange)
+  // Su computer/tablet (postazione compresa) la pagina non scorre: scorre solo il calendario sotto l'intestazione,
+  // come in Calendar.jsx lato admin, così l'ultima settimana del mese non finisce sotto la barra delle schede.
+  const isMobile = useIsMobile()
+  useModalScrollLock(!!pendingRange || !isMobile)
 
   useEffect(() => {
     if (!teamId) return
@@ -420,9 +424,9 @@ export default function WorkerCalendar() {
   const selectedDateObj = selectedDate ? new Date(selectedDate + 'T00:00:00') : null
 
   return (
-    <div className="page" style={{ paddingBottom:90 }}>
+    <div className="page" style={isMobile ? { paddingBottom:90 } : { paddingBottom:0, height:'100dvh', display:'flex', flexDirection:'column' }}>
       <Toast message={toast} />
-      <div className="page-header" style={{ background:'var(--c-surface)', borderBottom:'1px solid var(--c-line)', paddingBottom:14 }}>
+      <div className="page-header" style={{ background:'var(--c-surface)', borderBottom:'1px solid var(--c-line)', paddingBottom:14, flexShrink:0 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <h1 style={{ fontSize:26, letterSpacing:'-0.5px', color:'var(--c-ink)' }}>{t('workerCalendar.title')}</h1>
@@ -470,6 +474,8 @@ export default function WorkerCalendar() {
         )}
       </div>
 
+      {/* Su computer questo blocco (mese + pannello del giorno) è l'unica parte che scorre. */}
+      <div style={isMobile ? undefined : { flex:1, minHeight:0, overflowY:'auto', overscrollBehavior:'contain', paddingBottom:124 }}>
       <div style={{ padding:'0 0 8px' }}>
         {/* Griglia unita da sole righe hairline dentro un contenitore bianco —
             stesso linguaggio del calendario admin. */}
@@ -796,6 +802,8 @@ export default function WorkerCalendar() {
           ))}
         </div>
       )}
+
+      </div>
 
       {summaryTask && <TaskSummaryModal block={summaryTask} workers={workers} onClose={() => setSummaryTask(null)} />}
       {summaryEvent && (
