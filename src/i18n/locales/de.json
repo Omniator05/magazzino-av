@@ -880,7 +880,7 @@
     "newTeamTitle": "Neues Team",
     "newTeamDesc": "Du wirst Administrator eines leeren Teams",
     "companyNameLabel": "Firmenname",
-    "companyNamePlaceholder": "z. B. Stagecraft Audio",
+    "companyNamePlaceholder": "z. B. Lager Müller",
     "yourNameLabel": "Dein Name",
     "yourNamePlaceholder": "Max Mustermann",
     "emailLabel": "E-Mail",
@@ -903,7 +903,17 @@
     "pwWeak": "Schwach",
     "pwFair": "Mittel",
     "pwGood": "Gut",
-    "pwStrong": "Stark"
+    "pwStrong": "Stark",
+    "checkEmailTitle": "Prüfe deine E-Mail",
+    "checkEmailText": "Wir haben einen Bestätigungslink gesendet an:",
+    "checkEmailHint": "Klicke auf den Link, um dein Team zu erstellen und dich anzumelden. Findest du ihn nicht, schau im Spam-Ordner nach.",
+    "resend": "E-Mail erneut senden",
+    "resendIn": "E-Mail erneut senden in {{seconds}} s",
+    "resending": "Wird gesendet …",
+    "resent": "E-Mail erneut gesendet.",
+    "wrongEmail": "Falsche Adresse? Zurück",
+    "errorRateLimit": "Zu viele Versuche hintereinander. Warte eine Minute und versuche es erneut.",
+    "errorEmailNotSent": "Wir konnten die Bestätigungs-E-Mail nicht senden. Prüfe die Adresse und versuche es erneut."
   },
   "adminUsers": {
     "ownerHint": "Ersteller des Teams: sieht das Abo und verwaltet die anderen Admins",
@@ -1805,7 +1815,11 @@
     "goToDashboard": "Zum Dashboard",
     "launching": "Gleich geschafft …",
     "revealDone": "Alles bereit!",
-    "usernameIfNoEmail": "wenn keine E-Mail"
+    "usernameIfNoEmail": "wenn keine E-Mail",
+    "introTitle": "Willkommen, {{name}}!",
+    "introTeam": "{{team}} ist startklar.",
+    "introText": "Ich begleite dich in wenigen Schritten: ein Nutzer, dein Logo, der erste Artikel und das erste Event. Überspringen kannst du jederzeit.",
+    "introStart": "Los geht's"
   },
   "pendingApproval": {
     "heroTitle": "Gleich geschafft!",
@@ -2475,5 +2489,45 @@
     "confirmReject": "Anfrage ablehnen?",
     "confirmYes": "Ja, ablehnen",
     "failed": "Das hat nicht geklappt. Versuche es erneut."
+  },
+  "verify": {
+    "workingTitle": "Deine E-Mail wird bestätigt …",
+    "workingText": "Einen Moment, dein Team wird erstellt.",
+    "invalidTitle": "Link ungültig",
+    "invalidText": "Dieser Link funktioniert nicht mehr: Er wurde vielleicht schon benutzt oder durch einen neueren ersetzt. Prüfe die neueste E-Mail oder beginne von vorn.",
+    "expiredTitle": "Link abgelaufen",
+    "expiredText": "Der Link war 24 Stunden gültig. Du kannst einen neuen anfordern.",
+    "companyTitle": "Firmenname bereits vergeben",
+    "companyText": "Inzwischen hat ein anderes Team diesen Namen gewählt. Beginne mit einem anderen Namen von vorn.",
+    "failedTitle": "Etwas ist schiefgelaufen",
+    "failedText": "Die Bestätigung konnte nicht abgeschlossen werden. Versuche es gleich noch einmal.",
+    "sendNewLink": "Neuen Link senden",
+    "newLinkSent": "Neuer Link gesendet: Prüfe deine E-Mail.",
+    "tryAgain": "Erneut versuchen",
+    "backToSignup": "Zurück zur Registrierung"
+  },
+  "tour": {
+    "aria": "Geführte Tour",
+    "progress": "Schritt {{current}} von {{total}}",
+    "next": "Weiter",
+    "finish": "Fertig",
+    "skip": "Tour überspringen",
+    "takeMe": "Dorthin bringen",
+    "users": {
+      "title": "Ersten Nutzer hinzufügen",
+      "text": "Tippe auf +, um das Konto eines Lagermitarbeiters oder eines weiteren Admins zu erstellen. Das geht auch später."
+    },
+    "logo": {
+      "title": "Dein Logo hinzufügen",
+      "text": "Lade das Logo deines Teams hoch: Es erscheint in der App und auf Dokumenten."
+    },
+    "item": {
+      "title": "Ersten Artikel anlegen",
+      "text": "Tippe auf +, um das erste Teil deines Lagers hinzuzufügen: Name, Kategorie und Menge reichen."
+    },
+    "event": {
+      "title": "Erstes Event erstellen",
+      "text": "Tippe auf +, um ein Event in den Kalender zu setzen. Danach kannst du die Ladeliste vorbereiten."
+    }
   }
 }

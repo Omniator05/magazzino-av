@@ -798,7 +798,7 @@ export default function Inventory() {
         </div>
       </div>
 
-      <FabButton onClick={() => setShowAddMenu(true)} ariaLabel={t('inventory.addButton')} />
+      <FabButton onClick={() => setShowAddMenu(true)} ariaLabel={t('inventory.addButton')} tourId="add-item" />
 
       <div className="search-bar rc-inv-search" style={{ position:'relative', display:'flex', alignItems:'center', gap:8 }}>
         <div style={{ flex:1, minWidth:0 }}>

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
 import { deleteUser } from 'firebase/auth'
 import { useFieldErrors, FieldError, PasswordInput } from '../components/AuthFields'
-import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, setDoc, doc } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
 import { createSignupUser } from '../utils/authCleanup'
 
@@ -19,7 +19,7 @@ export default function SignupFlow({ onSwitch }) {
   return (
     <>
       {step === 'choice' && <ChoiceStep onChoose={setStep} />}
-      {step === 'create'  && <CreateTeamStep onBack={() => setStep('choice')} onDone={() => navigate('/welcome')} />}
+      {step === 'create'  && <CreateTeamStep onBack={() => setStep('choice')} />}
       {step === 'join'    && <JoinTeamStep onBack={() => setStep('choice')} onDone={() => navigate('/')} />}
 
       <p style={{ textAlign:'center', color:'rgba(var(--au-fg), calc(var(--au-k) * 0.2))', fontSize:12, marginTop:20, letterSpacing:'0.2px' }}>
@@ -120,21 +120,65 @@ function ConsentCheckbox({ checked, onChange, error, flashClass }) {
   )
 }
 
-function CreateTeamStep({ onBack, onDone }) {
+// Chiamata pubblica alle azioni di registrazione (vedi api/_signup.js): chi si registra non ha ancora un account.
+async function signupApi(type, body) {
+  const res = await fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, ...body }),
+  })
+  const data = await res.json().catch(() => ({}))
+  return { ok: res.ok, status: res.status, ...data }
+}
+
+// "Controlla la tua email": dopo "Crea squadra" la squadra NON esiste ancora, nasce quando si clicca il link
+// nell'email (che fa anche entrare). Qui si può rimandare il link o tornare indietro a correggere l'indirizzo.
+function CheckEmailPanel({ email, onBack }) {
   const { t } = useTranslation()
-  const { setSignupInProgress } = useAuth()
-  const ERROR_MSGS = {
-    'auth/email-already-in-use': t('signup.errorEmailInUse'),
-    'auth/weak-password':        t('signup.errorWeakPassword'),
-    'auth/invalid-email':        t('signup.errorInvalidEmail'),
+  const [cooldown, setCooldown] = useState(60)
+  const [state, setState] = useState('')   // '' | 'sending' | 'sent' | 'error'
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setTimeout(() => setCooldown(c => c - 1), 1000)
+    return () => clearTimeout(id)
+  }, [cooldown])
+  const resend = async () => {
+    setState('sending')
+    try {
+      const r = await signupApi('signupResend', { email })
+      setState(r.ok ? 'sent' : 'error')
+      if (r.ok) setCooldown(60)
+    } catch { setState('error') }
   }
+  const muted = 'rgba(var(--au-fg), calc(var(--au-k) * 0.45))'
+  return (
+    <div className="auth-card" role="status" aria-live="polite">
+      <div aria-hidden="true" style={{ width:54, height:54, borderRadius:'50%', margin:'0 0 18px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(230,57,70,0.14)', color:'#e63946' }}>
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg>
+      </div>
+      <h2 style={{ fontSize:22, fontWeight:700, color:'rgb(var(--au-fg))', marginBottom:8, letterSpacing:'-0.3px' }}>{t('signup.checkEmailTitle')}</h2>
+      <p style={{ fontSize:14, lineHeight:1.55, color:muted, marginBottom:6 }}>{t('signup.checkEmailText')}</p>
+      <p style={{ fontSize:15, fontWeight:700, color:'rgb(var(--au-fg))', marginBottom:14, overflowWrap:'anywhere' }}>{email}</p>
+      <p style={{ fontSize:12.5, lineHeight:1.5, color:muted, marginBottom:22 }}>{t('signup.checkEmailHint')}</p>
+      <button type="button" className="auth-btn" disabled={cooldown > 0 || state === 'sending'} onClick={resend} style={{ marginBottom:10 }}>
+        {state === 'sending' ? t('signup.resending') : cooldown > 0 ? t('signup.resendIn', { seconds: cooldown }) : t('signup.resend')}
+      </button>
+      {state === 'sent' && <p role="status" style={{ fontSize:12.5, fontWeight:600, color:'#22c55e', margin:'0 0 10px' }}>{t('signup.resent')}</p>}
+      {state === 'error' && <p role="alert" style={{ fontSize:12.5, fontWeight:600, color:'#e63946', margin:'0 0 10px' }}>{t('signup.errorSignupFailed')}</p>}
+      <button type="button" className="auth-btn-secondary" onClick={onBack}>{t('signup.wrongEmail')}</button>
+    </div>
+  )
+}
+
+function CreateTeamStep({ onBack }) {
+  const { t } = useTranslation()
   const f = useSignupForm()
   const [companyName, setCompanyName] = useState('')
-  // Errori di Firebase legati a un campo (email già usata, password debole…) vanno sotto quel campo.
-  const FIELD_OF = { 'auth/email-already-in-use': 'email', 'auth/invalid-email': 'email', 'auth/weak-password': 'password' }
-  const showAuthError = err => {
-    const field = FIELD_OF[err.code]
-    if (field) { f.setError(''); f.fe.fail({ [field]: ERROR_MSGS[err.code] }) } else f.setError(t('signup.errorSignupFailed'))
+  const [sentTo, setSentTo] = useState('')   // email a cui è partito il link: mostra "controlla la tua email"
+  // Messaggi per i campi segnalati dal server (api/_signup.js).
+  const FIELD_MSG = {
+    company: t('signup.errorCompanyNameRequired'), name: t('signup.errorNameRequired'), email: t('signup.errorInvalidEmail'),
+    password: t('signup.errorPasswordLength'), consent: t('signup.errorConsentRequired'),
   }
 
   const handleSubmit = async e => {
@@ -144,73 +188,26 @@ function CreateTeamStep({ onBack, onDone }) {
     if (Object.keys(errs).length) { f.setError(''); f.fe.fail(errs); return }
 
     f.setError(''); f.setLoading(true)
-    const nameLower = companyName.trim().toLowerCase()
-    let cred = null
-
     try {
-      // Blocca nomi azienda duplicati (case-insensitive) per evitare confusione
-      // nel flusso "unisciti a squadra esistente".
-      const dupQ = query(collection(db, 'teams'), where('nameLower', '==', nameLower))
-      const dupSnap = await getDocs(dupQ)
-      if (!dupSnap.empty) {
-        f.setError(''); f.fe.fail({ company: t('signup.errorCompanyExists') })
-        f.setLoading(false)
-        return
-      }
-
-      // Da qui l'utente Auth esiste ma il profilo non ancora: il flag evita
-      // che App mostri "errore con questo account" durante la finestra.
-      setSignupInProgress(true)
-      cred = await createSignupUser(f.email.trim(), f.password)
-
-      const teamRef = await addDoc(collection(db, 'teams'), {
-        name: companyName.trim(),
-        nameLower,
-        createdAt: serverTimestamp(),
-        createdByUid: cred.user.uid,
-        // Prova gratuita di 30 giorni: dopo questa data l'app si blocca finché
-        // non si sottoscrive un abbonamento (vedi firestore.rules → hasValidBilling).
-        billingStatus: 'trialing',
-        trialEndsAt: Timestamp.fromDate(new Date(Date.now() + 30 * 86400000)),
+      // Il server crea l'account e manda l'email di conferma; la squadra nasce solo quando si clicca il link.
+      const r = await signupApi('signupStart', {
+        companyName: companyName.trim(), name: f.name.trim(), email: f.email.trim().toLowerCase(), password: f.password, consent: f.consent,
       })
-
-      await setDoc(doc(db, 'profiles', cred.user.uid), {
-        name: f.name.trim(),
-        email: f.email.trim().toLowerCase(),
-        role: 'admin',
-        teamId: teamRef.id,
-        approved: true,
-        active: true,
-        createdAt: new Date().toISOString(),
-        // Prova di consenso a Termini/Privacy (spunta obbligatoria sopra) —
-        // versione registrata così, se cambiano in futuro, si sa a quale
-        // testo l'utente ha effettivamente acconsentito.
-        consentAcceptedAt: new Date().toISOString(),
-        consentVersion: 'v1',
-      })
-
-      // Email di benvenuto best-effort: non deve mai far sembrare fallito un
-      // signup già riuscito.
-      try {
-        const idToken = await cred.user.getIdToken()
-        await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'welcome', toEmail: f.email.trim().toLowerCase(), adminName: f.name.trim() }),
-        })
-      } catch {}
-
-      onDone()
-    } catch (err) {
-      // L'utente Auth esiste ma il profilo/la squadra no: senza questo si
-      // creerebbe un nuovo account orfano identico a quelli ripuliti prima.
-      if (cred) await deleteUser(cred.user).catch(() => {})
-      showAuthError(err)
-      f.setLoading(false)
+      if (r.ok) { setSentTo(f.email.trim().toLowerCase()); return }
+      if (r.error === 'company-exists') f.fe.fail({ company: t('signup.errorCompanyExists') })
+      else if (r.error === 'email-in-use') f.fe.fail({ email: t('signup.errorEmailInUse') })
+      else if (r.error === 'invalid' && FIELD_MSG[r.field]) f.fe.fail({ [r.field]: FIELD_MSG[r.field] })
+      else if (r.error === 'rate-limit') f.setError(t('signup.errorRateLimit'))
+      else if (r.error === 'email-failed') f.setError(t('signup.errorEmailNotSent'))
+      else f.setError(t('signup.errorSignupFailed'))
+    } catch {
+      f.setError(t('signup.errorSignupFailed'))
     } finally {
-      setSignupInProgress(false)
+      f.setLoading(false)
     }
   }
+
+  if (sentTo) return <CheckEmailPanel email={sentTo} onBack={() => setSentTo('')} />
 
   return (
     <form onSubmit={handleSubmit} noValidate>

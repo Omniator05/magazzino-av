@@ -110,7 +110,7 @@ export default function SettingsProfile() {
               onKeyDown={e => { if (e.key === 'Enter' && teamName.trim() !== (team?.name || '')) saveTeamName() }} aria-label={t('adminUsers.teamNameTitle')} />
             {teamNameError && <p style={{ color:'var(--red)', fontSize:12, marginTop:6, fontWeight:600 }}>{teamNameError}</p>}
             <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:12, flexWrap:'wrap' }}>
-              <label className="sp-btn sp-btn-primary" style={{ opacity: logoUploading ? 0.6 : 1, cursor: logoUploading ? 'default' : 'pointer' }}>
+              <label className="sp-btn sp-btn-primary" data-tour="logo" style={{ opacity: logoUploading ? 0.6 : 1, cursor: logoUploading ? 'default' : 'pointer' }}>
                 {logoUploading ? t('adminUsers.uploadingLogo') : team?.logoUrl ? t('adminUsers.changeLogo') : t('adminUsers.uploadLogo')}
                 <input type="file" accept={ACCEPT_LOGO_ATTR} onChange={handleLogoChange} disabled={logoUploading} style={{ display:'none' }} />
               </label>

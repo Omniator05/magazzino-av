@@ -3,13 +3,15 @@
 // al posto del vecchio bottone "+" nell'header pagina.
 import { usePulseAdd } from '../hooks/usePulseAdd'
 
-export default function FabButton({ onClick, ariaLabel }) {
+// `tourId`: aggancio per il tour guidato (GuidedTour.jsx), che evidenzia questo bottone.
+export default function FabButton({ onClick, ariaLabel, tourId }) {
   const pulse = usePulseAdd()
   return (
     <button
       className={pulse ? 'fab-pulse' : undefined}
       onClick={onClick}
       aria-label={ariaLabel}
+      data-tour={tourId}
       style={{
         position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
         width:56, height:56, borderRadius:'50%',

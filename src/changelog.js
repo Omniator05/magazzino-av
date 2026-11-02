@@ -7,6 +7,23 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-13',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Creare una squadra ora richiede di confermare l\'email: dopo "Crea squadra" ricevi un link che crea la squadra e ti fa entrare già collegato, anche da un altro dispositivo',
+        'Dopo la conferma c\'è una schermata di benvenuto animata e poi un tour guidato sull\'app vera: aggiungi il primo utente, il logo, il primo oggetto e il primo evento. Si può saltare in ogni momento',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Creating a team now requires confirming your email: after "Create team" you get a link that creates the team and signs you in, even from another device',
+        'After confirming there is an animated welcome screen and then a guided tour on the real app: add your first user, your logo, your first item and your first event. You can skip it at any time',
+      ],
+    },
+  },
+  {
     version: '2026-11-12',
     it: {
       title: 'Novità di oggi',

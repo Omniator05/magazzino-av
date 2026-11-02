@@ -202,6 +202,21 @@ export function joinRejectedEmailHtml({ name, teamName }) {
   })
 }
 
+// Conferma dell'email per chi sta creando una nuova squadra (il link crea la squadra e fa entrare).
+export function verifyEmailHtml({ name, teamName, verifyUrl }) {
+  return emailShell({
+    title: `Confirm your email, ${esc(name)}`,
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        You're one step away from creating <strong>${esc(teamName)}</strong> on Roadcase. Confirm your email address and we'll set everything up and sign you in.
+      </p>
+      <p style="margin:0;color:#9ca3af;font-size:12.5px;line-height:1.6;">The link works on any device and is valid for 24 hours. If you didn't ask for this, you can safely ignore this email: nothing will be created.</p>
+    `,
+    ctaLabel: 'Confirm and continue',
+    ctaUrl: verifyUrl,
+  })
+}
+
 export function loginChangedEmailHtml({ workerName, teamName, email, loginUrl }) {
   return emailShell({
     logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,

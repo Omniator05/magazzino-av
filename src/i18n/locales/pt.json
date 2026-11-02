@@ -880,7 +880,7 @@
     "newTeamTitle": "Nova equipa",
     "newTeamDesc": "Será o administrador de uma equipa vazia",
     "companyNameLabel": "Nome da empresa",
-    "companyNamePlaceholder": "ex.: Stagecraft Audio",
+    "companyNamePlaceholder": "ex.: Armazém Silva",
     "yourNameLabel": "O seu nome",
     "yourNamePlaceholder": "João Silva",
     "emailLabel": "E-mail",
@@ -903,7 +903,17 @@
     "pwWeak": "Fraca",
     "pwFair": "Razoável",
     "pwGood": "Boa",
-    "pwStrong": "Forte"
+    "pwStrong": "Forte",
+    "checkEmailTitle": "Verifique o seu email",
+    "checkEmailText": "Enviámos uma ligação de confirmação para:",
+    "checkEmailHint": "Clique na ligação para criar a equipa e entrar. Se não a encontrar, veja o spam.",
+    "resend": "Reenviar o email",
+    "resendIn": "Reenviar o email em {{seconds}} s",
+    "resending": "A enviar…",
+    "resent": "Email reenviado.",
+    "wrongEmail": "Endereço errado? Voltar",
+    "errorRateLimit": "Demasiadas tentativas seguidas. Aguarde um minuto e tente de novo.",
+    "errorEmailNotSent": "Não foi possível enviar o email de confirmação. Verifique o endereço e tente de novo."
   },
   "adminUsers": {
     "ownerHint": "Criador da equipa: vê a subscrição e gere os outros administradores",
@@ -1805,7 +1815,11 @@
     "goToDashboard": "Ir para o Painel",
     "launching": "Quase lá…",
     "revealDone": "Tudo pronto!",
-    "usernameIfNoEmail": "se não tiver e-mail"
+    "usernameIfNoEmail": "se não tiver e-mail",
+    "introTitle": "Bem-vindo, {{name}}!",
+    "introTeam": "{{team}} está pronta.",
+    "introText": "Acompanho-o em poucos passos: um utilizador, o logótipo, o primeiro artigo e o primeiro evento. Pode saltar quando quiser.",
+    "introStart": "Vamos começar"
   },
   "pendingApproval": {
     "heroTitle": "Quase lá!",
@@ -2475,5 +2489,45 @@
     "confirmReject": "Rejeitar o pedido?",
     "confirmYes": "Sim, rejeitar",
     "failed": "Não correu bem. Tente novamente."
+  },
+  "verify": {
+    "workingTitle": "A confirmar o seu email…",
+    "workingText": "Um momento, estamos a criar a sua equipa.",
+    "invalidTitle": "Ligação inválida",
+    "invalidText": "Esta ligação já não funciona: pode já ter sido usada ou substituída por uma mais recente. Veja o email mais recente ou recomece.",
+    "expiredTitle": "Ligação expirada",
+    "expiredText": "A ligação era válida por 24 horas. Pode pedir uma nova.",
+    "companyTitle": "Nome da empresa já usado",
+    "companyText": "Entretanto outra equipa escolheu este nome. Recomece com um nome diferente.",
+    "failedTitle": "Algo correu mal",
+    "failedText": "Não foi possível concluir a confirmação. Tente de novo dentro de instantes.",
+    "sendNewLink": "Enviar-me uma nova ligação",
+    "newLinkSent": "Nova ligação enviada: verifique o seu email.",
+    "tryAgain": "Tentar de novo",
+    "backToSignup": "Voltar ao registo"
+  },
+  "tour": {
+    "aria": "Visita guiada",
+    "progress": "Passo {{current}} de {{total}}",
+    "next": "Seguinte",
+    "finish": "Concluir",
+    "skip": "Saltar a visita",
+    "takeMe": "Levar-me até lá",
+    "users": {
+      "title": "Adicione o primeiro utilizador",
+      "text": "Toque em + para criar a conta de um trabalhador do armazém ou de outro administrador. Pode fazê-lo mais tarde."
+    },
+    "logo": {
+      "title": "Coloque o seu logótipo",
+      "text": "Carregue o logótipo da equipa: aparece na aplicação e nos documentos."
+    },
+    "item": {
+      "title": "Insira o primeiro artigo",
+      "text": "Toque em + para adicionar a primeira peça ao armazém: basta um nome, uma categoria e uma quantidade."
+    },
+    "event": {
+      "title": "Crie o primeiro evento",
+      "text": "Toque em + para pôr um evento no calendário. Depois pode preparar a sua lista de carga."
+    }
   }
 }

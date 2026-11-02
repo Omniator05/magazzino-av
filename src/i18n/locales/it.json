@@ -880,7 +880,7 @@
     "newTeamTitle": "Nuova squadra",
     "newTeamDesc": "Sarai l'amministratore di una squadra vuota",
     "companyNameLabel": "Nome azienda",
-    "companyNamePlaceholder": "es. Service Audio Luci",
+    "companyNamePlaceholder": "es. Magazzino Rossi",
     "yourNameLabel": "Il tuo nome",
     "yourNamePlaceholder": "Mario Rossi",
     "emailLabel": "Email",
@@ -903,7 +903,17 @@
     "pwWeak": "Debole",
     "pwFair": "Discreta",
     "pwGood": "Buona",
-    "pwStrong": "Forte"
+    "pwStrong": "Forte",
+    "checkEmailTitle": "Controlla la tua email",
+    "checkEmailText": "Ti abbiamo mandato un link di conferma a:",
+    "checkEmailHint": "Clicca il link per creare la squadra ed entrare. Se non lo trovi, guarda nella posta indesiderata.",
+    "resend": "Rimanda l'email",
+    "resendIn": "Rimanda l'email tra {{seconds}} s",
+    "resending": "Invio in corso…",
+    "resent": "Email rimandata.",
+    "wrongEmail": "Indirizzo sbagliato? Torna indietro",
+    "errorRateLimit": "Troppi tentativi ravvicinati. Aspetta un minuto e riprova.",
+    "errorEmailNotSent": "Non siamo riusciti a mandare l'email di conferma. Controlla l'indirizzo e riprova."
   },
   "adminUsers": {
     "ownerHint": "Creatore della squadra: vede l'abbonamento e gestisce gli altri admin",
@@ -1805,7 +1815,11 @@
     "goToDashboard": "Vai alla Dashboard",
     "launching": "Ci siamo quasi…",
     "revealDone": "Tutto pronto!",
-    "usernameIfNoEmail": "se non ha l'email"
+    "usernameIfNoEmail": "se non ha l'email",
+    "introTitle": "Benvenuto, {{name}}!",
+    "introTeam": "{{team}} è pronta.",
+    "introText": "Ti accompagno in pochi passi: un utente, il logo, il primo oggetto e il primo evento. Puoi saltare quando vuoi.",
+    "introStart": "Iniziamo"
   },
   "pendingApproval": {
     "heroTitle": "Ci siamo quasi!",
@@ -2475,5 +2489,45 @@
     "confirmReject": "Rifiutare la richiesta?",
     "confirmYes": "Sì, rifiuta",
     "failed": "Non è andata a buon fine. Riprova."
+  },
+  "verify": {
+    "workingTitle": "Confermo la tua email…",
+    "workingText": "Un attimo, sto creando la tua squadra.",
+    "invalidTitle": "Link non valido",
+    "invalidText": "Questo link non funziona più: può essere già stato usato o sostituito da uno più recente. Controlla l'email più recente oppure ricomincia.",
+    "expiredTitle": "Link scaduto",
+    "expiredText": "Il link valeva 24 ore. Puoi chiederne uno nuovo.",
+    "companyTitle": "Nome azienda già preso",
+    "companyText": "Nel frattempo un'altra squadra ha scelto questo nome. Ricomincia con un nome diverso.",
+    "failedTitle": "Qualcosa è andato storto",
+    "failedText": "Non siamo riusciti a completare la conferma. Riprova tra un momento.",
+    "sendNewLink": "Mandami un nuovo link",
+    "newLinkSent": "Nuovo link inviato: controlla la tua email.",
+    "tryAgain": "Riprova",
+    "backToSignup": "Torna alla registrazione"
+  },
+  "tour": {
+    "aria": "Tour guidato",
+    "progress": "Passo {{current}} di {{total}}",
+    "next": "Avanti",
+    "finish": "Fine",
+    "skip": "Salta il tour",
+    "takeMe": "Portami lì",
+    "users": {
+      "title": "Aggiungi il primo utente",
+      "text": "Tocca il + per creare l'account di un magazziniere o di un altro admin. Potrai farlo anche più avanti."
+    },
+    "logo": {
+      "title": "Metti il tuo logo",
+      "text": "Carica il logo della squadra: compare nell'app e nei documenti."
+    },
+    "item": {
+      "title": "Inserisci il primo oggetto",
+      "text": "Tocca il + per aggiungere il primo pezzo del magazzino: bastano nome, categoria e quantità."
+    },
+    "event": {
+      "title": "Crea il primo evento",
+      "text": "Tocca il + per mettere un evento in calendario. Poi potrai preparargli la lista di carico."
+    }
   }
 }

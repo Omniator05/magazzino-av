@@ -1,247 +1,63 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { db, secondaryAuth } from '../firebase'
-import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
-import { doc, setDoc } from 'firebase/firestore'
-import { useAuth, usernameToEmail } from '../context/AuthContext'
-import { isRealEmail } from '../utils/loginEmail'
-import { uploadTeamLogo, deleteTeamLogo, ACCEPT_LOGO_ATTR, ALLOWED_LOGO_TYPES } from '../utils/teamStorage'
-import { Check, User } from '../components/Icon'
+import { useAuth } from '../context/AuthContext'
 import AuthBackground from '../components/AuthBackground'
 
-const STEPS = ['logo', 'worker', 'done']
-
-// Prima schermata vista da chi ha appena creato una nuova squadra (non da chi
-// si unisce a una esistente, quella finisce su PendingApproval). Sostituisce
-// l'atterraggio a freddo sulla Dashboard vuota con due passaggi opzionali —
-// logo squadra e primo magazziniere — sempre saltabili (mai un tour bloccato).
-// Stesso sfondo animato scuro di login/signup (AuthBackground): il percorso
-// guidato è ancora "fuori" dall'app vera e propria.
+// Benvenuto a chi ha appena confermato l'email e creato la squadra (non a chi si unisce a una esistente: quella
+// finisce su PendingApproval). Una schermata di accoglienza animata; "Iniziamo" apre la Dashboard (con
+// OnboardingReveal, sempre montato in App.jsx) e avvia il tour guidato sull'app vera (GuidedTour.jsx):
+// utente, logo, primo oggetto, primo evento — i passi non stanno più qui, si fanno sulle pagine vere.
+// Stesso sfondo animato di login/signup (AuthBackground): siamo ancora "fuori" dall'app.
 export default function Welcome() {
   const { t } = useTranslation()
-  const { user, team, teamId, updateTeamData, setOnboardingReveal } = useAuth()
-  const [step, setStep] = useState('logo')
-  const stepIndex = STEPS.indexOf(step)
-  const [mounted, setMounted] = useState(false)
-  const [finishing, setFinishing] = useState(false)
+  const { profile, team, updateTeamData, setOnboardingReveal } = useAuth()
+  const [starting, setStarting] = useState(false)
+  const firstName = (profile?.name || '').split(' ')[0]
 
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 60)
-    return () => clearTimeout(t)
-  }, [])
-
-  // ── Step logo ──
-  const [logoUploading, setLogoUploading] = useState(false)
-  const [logoError, setLogoError] = useState('')
-
-  const handleLogoChange = async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !teamId) return
-    if (!ALLOWED_LOGO_TYPES.includes(file.type)) { setLogoError(t('adminUsers.errorLogoType')); return }
-    if (file.size > 3 * 1024 * 1024) { setLogoError(t('adminUsers.errorLogoSize')); return }
-    setLogoError(''); setLogoUploading(true)
-    try {
-      const oldPath = team?.logoPath
-      const { url, path } = await uploadTeamLogo(file, teamId)
-      await updateTeamData({ logoUrl: url, logoPath: path })
-      if (oldPath) await deleteTeamLogo(oldPath)
-    } catch {
-      setLogoError(t('adminUsers.errorLogoUpload'))
-    } finally { setLogoUploading(false) }
-  }
-
-  // ── Step primo worker ──
-  const [form, setForm] = useState({ name: '', username: '', email: '', password: '' })
-  const [workerError, setWorkerError] = useState('')
-  const [creatingWorker, setCreatingWorker] = useState(false)
-  const [workerCreated, setWorkerCreated] = useState(false)
-
-  const createFirstWorker = async () => {
-    // Con l'email vera il magazziniere entra con quella (e può reimpostare da solo la password);
-    // senza email si ripiega sul nome utente, come prima.
-    const email = form.email.trim().toLowerCase()
-    if (!form.name.trim() || (!email && !form.username.trim()) || form.password.length < 6) {
-      setWorkerError(t('welcome.errorFillFields')); return
-    }
-    if (email && !isRealEmail(email)) { setWorkerError(t('adminUsers.errorEmailInvalid')); return }
-    setCreatingWorker(true); setWorkerError('')
-    const username = email || form.username.toLowerCase().trim().replace(/\s+/g, '.')
-    const internalEmail = email || usernameToEmail(username)
-
-    let cred = null
-    try {
-      // Crea il nuovo utente su un'app Firebase secondaria: non tocca la
-      // sessione admin corrente (stesso pattern di AdminUsers.jsx).
-      cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
-      await setDoc(doc(db, 'profiles', cred.user.uid), {
-        name: form.name.trim(),
-        username,
-        internalEmail,
-        email: email || null,
-        role: 'worker',
-        teamId,
-        approved: true,
-        active: true,
-        createdAt: new Date().toISOString(),
-        createdBy: user.uid,
-      })
-      await signOut(secondaryAuth)
-      setWorkerCreated(true)
-      setTimeout(() => setStep('done'), 900)
-    } catch (err) {
-      // Il profilo non si è salvato: se l'account Auth era stato creato,
-      // ripulisci — altrimenti resta orfano e blocca per sempre quello username.
-      if (cred) await cred.user.delete().catch(() => {})
-      setWorkerError(err.code === 'auth/email-already-in-use' ? t('welcome.errorUsernameTaken') : t('welcome.errorGeneric'))
-    } finally { setCreatingWorker(false) }
-  }
-
-  // Chiusura in due tempi: prima un piccolo anello che pulsa localmente
-  // attorno al segno di spunta (l'anticipo), poi il testimone passa a
-  // OnboardingReveal — un cerchio che si allarga fino a coprire tutto lo
-  // schermo, cambia rotta verso la Dashboard SOLO a copertura totale (quindi
-  // invisibile), e infine sfuma svelandola. Vive fuori da questo componente
-  // (in App.jsx, sempre montato) apposta: se il cerchio fosse qui dentro,
-  // smontare Welcome al cambio rotta lo farebbe sparire di scatto a metà
-  // animazione, con la Dashboard che lampeggia per un istante prima del
-  // ritorno dell'overlay — esattamente il difetto segnalato.
-  const finish = () => {
-    if (finishing) return
-    setFinishing(true)
-    updateTeamData({ onboarded: true })
-    setTimeout(() => setOnboardingReveal(true), 550)
+  const start = () => {
+    if (starting) return
+    setStarting(true)
+    // Il tour parte da solo quando la Dashboard è visibile (stato salvato sulla squadra: vale su ogni dispositivo).
+    updateTeamData({ onboarded: true, tour: { status: 'active', step: 0 } })
+    setOnboardingReveal(true)
   }
 
   return (
     <AuthBackground>
       <style>{`
-        @keyframes welcomeCardIn {
-          from { opacity:0; transform:translateY(24px) scale(0.97); }
-          to   { opacity:1; transform:translateY(0) scale(1); }
-        }
-        @keyframes welcomeRingPulse {
-          from { transform:scale(1); opacity:0.9; }
-          to   { transform:scale(2.2); opacity:0; }
-        }
-        @keyframes welcomeRingPulse2 {
-          from { transform:scale(1); opacity:0.6; }
-          to   { transform:scale(1.7); opacity:0; }
+        .wl-mark { animation: wlMarkIn 0.9s cubic-bezier(0.34,1.56,0.64,1) 0.15s both; }
+        .wl-ring { position:absolute; inset:0; border-radius:28px; border:2px solid #e63946; animation: wlRing 2.4s ease-out infinite; opacity:0; }
+        .wl-ring.b { animation-delay: 1.2s; }
+        .wl-rise { animation: wlRise 0.7s cubic-bezier(0.22,1,0.36,1) both; }
+        @keyframes wlMarkIn { from { opacity:0; transform: scale(0.4) rotate(-8deg); } to { opacity:1; transform:none; } }
+        @keyframes wlRing { 0% { transform:scale(1); opacity:0.55; } 100% { transform:scale(1.9); opacity:0; } }
+        @keyframes wlRise { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
+        @media (prefers-reduced-motion: reduce) {
+          .wl-mark, .wl-rise { animation: none; }
+          .wl-ring { display:none; }
         }
       `}</style>
 
-      <div style={{
-        position:'relative', zIndex:1, width:'100%', maxWidth:440,
-        background:'var(--card)', borderRadius:26, padding:'40px 32px 36px',
-        boxShadow:'0 24px 70px rgba(0,0,0,0.45)', boxSizing:'border-box',
-        opacity: mounted ? 1 : 0,
-        animation: mounted ? 'welcomeCardIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both' : 'none',
-      }}>
-
-        {/* Progresso */}
-        <div style={{ display:'flex', gap:6, justifyContent:'center', marginBottom:28 }}>
-          {STEPS.map((s, i) => (
-            <div key={s} style={{ width: i === stepIndex ? 22 : 8, height:8, borderRadius:4, background: i <= stepIndex ? 'var(--accent)' : 'var(--border)', transition:'all 0.3s ease' }} />
-          ))}
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 440, textAlign: 'center', padding: '0 8px', boxSizing: 'border-box' }}>
+        <div style={{ position: 'relative', width: 104, height: 104, margin: '0 auto 34px' }}>
+          <span className="wl-ring" aria-hidden="true" />
+          <span className="wl-ring b" aria-hidden="true" />
+          <img className="wl-mark" src="/pwa-192x192.png" alt="" width="104" height="104" style={{ position: 'relative', borderRadius: 28, boxShadow: '0 18px 48px rgba(230,57,70,0.35)' }} />
         </div>
 
-        {step === 'logo' && (
-          <div style={{ textAlign:'center' }}>
-            <h1 style={{ fontSize:24, fontWeight:800, marginBottom:8 }}>{t('welcome.logoTitle', { team: team?.name || '' })}</h1>
-            <p style={{ color:'var(--text2)', fontSize:14, lineHeight:1.5, marginBottom:28 }}>{t('welcome.logoDesc')}</p>
+        <h1 className="wl-rise" style={{ animationDelay: '0.7s', fontSize: 30, fontWeight: 800, letterSpacing: '-0.6px', margin: '0 0 10px', color: 'rgb(var(--au-fg))' }}>
+          {t('welcome.introTitle', { name: firstName })}
+        </h1>
+        <p className="wl-rise" style={{ animationDelay: '0.95s', fontSize: 16, fontWeight: 700, margin: '0 0 8px', color: '#e63946' }}>
+          {t('welcome.introTeam', { team: team?.name || '' })}
+        </p>
+        <p className="wl-rise" style={{ animationDelay: '1.15s', fontSize: 14.5, lineHeight: 1.6, margin: '0 auto 34px', maxWidth: 340, color: 'rgba(var(--au-fg), calc(var(--au-k) * 0.5))' }}>
+          {t('welcome.introText')}
+        </p>
 
-            <div style={{ width:120, height:120, borderRadius:24, margin:'0 auto 20px', background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
-              <img src={team?.logoUrl || '/logo-default.svg'} alt="" style={{ width: team?.logoUrl ? '100%' : '55%', height: team?.logoUrl ? '100%' : '55%', objectFit:'contain', opacity: team?.logoUrl ? 1 : 0.4 }} />
-            </div>
-
-            {logoError && <p style={{ color:'var(--accent)', fontSize:13, marginBottom:12 }}>{logoError}</p>}
-
-            <label className="btn btn-primary" style={{ display:'inline-flex', alignItems:'center', gap:7, cursor: logoUploading ? 'default' : 'pointer', opacity: logoUploading ? 0.6 : 1 }}>
-              {logoUploading ? t('adminUsers.uploadingLogo') : (team?.logoUrl ? t('adminUsers.changeLogo') : t('welcome.uploadLogoButton'))}
-              <input type="file" accept={ACCEPT_LOGO_ATTR} onChange={handleLogoChange} disabled={logoUploading} style={{ display:'none' }} />
-            </label>
-
-            <div style={{ display:'flex', gap:10, marginTop:32 }}>
-              <button onClick={() => setStep('worker')} className="btn-no-anim" style={{ flex:1, padding:13, borderRadius:12, background:'transparent', color:'var(--text2)', fontWeight:700, fontSize:14 }}>
-                {t('welcome.skip')}
-              </button>
-              <button onClick={() => setStep('worker')} className="btn btn-primary" style={{ flex:1 }}>
-                {t('welcome.continue')}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'worker' && (
-          <div>
-            <div style={{ textAlign:'center', marginBottom:24 }}>
-              <h1 style={{ fontSize:24, fontWeight:800, marginBottom:8 }}>{t('welcome.workerTitle')}</h1>
-              <p style={{ color:'var(--text2)', fontSize:14, lineHeight:1.5 }}>{t('welcome.workerDesc')}</p>
-            </div>
-
-            {workerCreated ? (
-              <div style={{ textAlign:'center', padding:'20px 0' }}>
-                <div style={{ width:56, height:56, borderRadius:'50%', background:'rgba(52,211,153,0.12)', color:'var(--green)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
-                  <Check size={26} />
-                </div>
-                <p style={{ fontWeight:700, fontSize:15 }}>{t('welcome.workerCreatedToast', { name: form.name })}</p>
-              </div>
-            ) : (
-              <>
-                <div className="form-group">
-                  <label>{t('welcome.workerNameLabel')}</label>
-                  <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={t('welcome.workerNamePlaceholder')} autoFocus />
-                </div>
-                <div className="form-group">
-                  <label>{t('adminUsers.loginEmailLabel')}</label>
-                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder={t('adminUsers.emailPlaceholder')} autoCapitalize="none" autoCorrect="off" />
-                </div>
-                <div className="form-group">
-                  <label>{t('welcome.workerUsernameLabel')} <span style={{ color:'var(--text2)', fontWeight:500 }}>({t('welcome.usernameIfNoEmail')})</span></label>
-                  <input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="es. marco.rossi" autoCapitalize="none" autoCorrect="off" />
-                </div>
-                <div className="form-group">
-                  <label>{t('welcome.workerPasswordLabel')}</label>
-                  <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" />
-                </div>
-
-                {workerError && <p style={{ color:'var(--accent)', fontSize:13, fontWeight:600, marginBottom:12 }}>{workerError}</p>}
-
-                <div style={{ display:'flex', gap:10, marginTop:20 }}>
-                  <button onClick={() => setStep('done')} className="btn-no-anim" style={{ flex:1, padding:13, borderRadius:12, background:'transparent', color:'var(--text2)', fontWeight:700, fontSize:14 }}>
-                    {t('welcome.skip')}
-                  </button>
-                  <button onClick={createFirstWorker} disabled={creatingWorker} className="btn btn-primary" style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:7 }}>
-                    <User size={15} /> {creatingWorker ? t('welcome.creatingWorker') : t('welcome.createWorker')}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {step === 'done' && (
-          <div style={{ textAlign:'center' }}>
-            <div style={{ position:'relative', width:64, height:64, margin:'0 auto 20px' }}>
-              {finishing && (
-                <>
-                  <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:'2px solid var(--accent)', animation:'welcomeRingPulse 0.7s ease-out both' }} />
-                  <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:'2px solid var(--accent)', animation:'welcomeRingPulse2 0.7s ease-out 0.12s both' }} />
-                </>
-              )}
-              <div style={{ position:'absolute', inset:0, borderRadius:'50%', background:'rgba(230,57,70,0.10)', color:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Check size={28} />
-              </div>
-            </div>
-            <div style={{ opacity: finishing ? 0 : 1, transition:'opacity 0.3s ease' }}>
-              <h1 style={{ fontSize:24, fontWeight:800, marginBottom:8 }}>{t('welcome.doneTitle')}</h1>
-              <p style={{ color:'var(--text2)', fontSize:14, lineHeight:1.5, marginBottom:28 }}>{t('welcome.doneDesc')}</p>
-            </div>
-            <button onClick={finish} disabled={finishing} className="btn btn-primary btn-full" style={{ opacity: finishing ? 0.7 : 1 }}>
-              {finishing ? t('welcome.launching') : t('welcome.goToDashboard')}
-            </button>
-          </div>
-        )}
+        <button className="auth-btn wl-rise" style={{ animationDelay: '1.5s', maxWidth: 300, margin: '0 auto', opacity: starting ? 0.7 : undefined }} onClick={start} disabled={starting} autoFocus>
+          {starting ? t('welcome.launching') : t('welcome.introStart')}
+        </button>
       </div>
     </AuthBackground>
   )

@@ -559,7 +559,7 @@ export default function Events() {
         </div>
       </div>
 
-      <FabButton onClick={startNewEvent} ariaLabel={t('events.newEventButton')} />
+      <FabButton onClick={startNewEvent} ariaLabel={t('events.newEventButton')} tourId="add-event" />
 
       {/* Barra di ricerca SEMPRE visibile — stessa del Magazzino (fondo grigio,
           appiccicata in alto), con un po' d'aria sotto l'intestazione. */}

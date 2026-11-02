@@ -11,6 +11,7 @@ import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 're
 const Auth = lazy(() => import('./pages/Auth'))
 const Landing = lazy(() => import('./pages/Landing'))
 const Welcome = lazy(() => import('./pages/Welcome'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 const PendingApproval = lazy(() => import('./pages/PendingApproval'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Inventory = lazy(() => import('./pages/Inventory'))
@@ -64,6 +65,7 @@ import QrRedirect from './components/QrRedirect'
 import WhatsNewModal from './components/WhatsNewModal'
 import AbsenceNotifications from './components/AbsenceNotifications'
 import JoinRequestNotifications from './components/JoinRequestNotifications'
+import GuidedTour from './components/GuidedTour'
 import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
@@ -346,6 +348,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
       <WhatsNewModal />
       <AbsenceNotifications />
       <JoinRequestNotifications />
+      <GuidedTour />
       <AbsenceEditedNotification />
       <ActiveShiftBadge />
       <GhostBanner />
@@ -409,6 +412,8 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Auth initialMode="login" />} />
               <Route path="/signup" element={<Auth initialMode="signup" />} />
+              {/* Link nell'email di conferma: crea la squadra e fa entrare (pubblica: chi arriva non è ancora loggato) */}
+              <Route path="/verify" element={<VerifyEmail />} />
               {/* Pagina pubblica nelle altre lingue (la home "/" è l'italiano): indirizzi propri, indicizzabili */}
               <Route path="/en" element={<LandingLang lang="en" />} />
               <Route path="/pt" element={<LandingLang lang="pt" />} />

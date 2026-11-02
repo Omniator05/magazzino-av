@@ -729,7 +729,7 @@ export default function SettingsUsers() {
 
       <PageHeader title={t('adminUsers.title')} subtitle={t('adminUsers.totalAccounts', { count: users.length })} backTo="/admin/settings" />
 
-      <FabButton onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} ariaLabel={t('adminUsers.newButton')} />
+      <FabButton onClick={() => { setShowCreate(true); setError(''); setOrgConfig(EMPTY_ORG_CONFIG); setNewCustomDate(''); setAssignedEventId('') }} ariaLabel={t('adminUsers.newButton')} tourId="add-user" />
 
       <div style={{ padding:'8px 0 0' }}>
         {legacyUsers.length > 0 && (
