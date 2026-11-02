@@ -25,3 +25,21 @@ if (typeof window !== 'undefined') {
   // Vite lancia questo evento quando non riesce a scaricare un pezzo dell'app.
   window.addEventListener('vite:preloadError', e => { e.preventDefault(); reloadForNewVersion() })
 }
+
+// Nuova versione dell'app (nuovo service worker che prende il controllo): se succede nei primi secondi dall'apertura —
+// quando chi usa l'app non ha ancora iniziato nulla — si ricarica una volta, così si vede subito la versione nuova.
+// Più tardi non si interrompe nessuno: la nuova versione arriva alla prossima apertura. Mai due volte in un minuto.
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  const openedAt = Date.now()
+  let hadController = !!navigator.serviceWorker.controller   // senza, è la prima installazione: niente da ricaricare
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return }
+    if (Date.now() - openedAt > 15000) return
+    try {
+      const last = Number(sessionStorage.getItem('rcSwReload') || 0)
+      if (Date.now() - last < 60000) return
+      sessionStorage.setItem('rcSwReload', String(Date.now()))
+    } catch { /* senza memoria della sessione si ricarica comunque una volta */ }
+    window.location.reload()
+  })
+}

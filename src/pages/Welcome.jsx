@@ -36,9 +36,10 @@ export default function Welcome() {
   return (
     <AuthBackground>
       <style>{`
-        .wl-mark { animation: wlMarkIn 0.9s cubic-bezier(0.34,1.56,0.64,1) 0.15s both; }
-        .wl-ring { position:absolute; inset:0; border-radius:28px; border:2px solid #e63946; animation: wlRing 2.4s ease-out infinite; opacity:0; }
-        .wl-ring.b { animation-delay: 1.2s; }
+        .wl-mark { animation: wlMarkIn 0.9s cubic-bezier(0.25,1,0.5,1) 0.15s both; }
+        /* I cerchi partono dal logo per circa 5 secondi (tre onde: 0, 1,25 e 2,5 s, ciascuna dura 2,5 s) e poi si fermano. */
+        .wl-ring { position:absolute; inset:0; border-radius:28px; border:2px solid #e63946; opacity:0; animation: wlRing 2.5s ease-out 2 forwards; }
+        .wl-ring.b { animation-delay: 1.25s; animation-iteration-count: 1; }
         .wl-rise { animation: wlRise 0.7s cubic-bezier(0.22,1,0.36,1) both; }
         .wl-float { animation: wlFloat 3.2s ease-in-out 1.2s infinite; }
         .wl-conf { position:absolute; left:50%; top:50%; width:var(--w); height:var(--h); margin:-4px 0 0 -4px; border-radius:var(--r); background:var(--c); opacity:0; animation: wlConf 1.9s cubic-bezier(0.15,0.7,0.3,1) var(--d) both; }

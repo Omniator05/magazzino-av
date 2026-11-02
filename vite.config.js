@@ -31,12 +31,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // 'prompt' invece di 'autoUpdate': con autoUpdate il nuovo service
-      // worker si attivava da solo e ricaricava la pagina senza preavviso —
-      // rischioso a metà di una lista di carico in magazzino. Con 'prompt'
-      // il nuovo SW resta in attesa finché UpdateAvailableBanner.jsx (montato
-      // in App.jsx) non lo dice esplicitamente, tramite updateSW(true) da
-      // virtual:pwa-register — l'utente decide quando ricaricare, non l'app.
+      // 'prompt' invece di 'autoUpdate': la pagina non si ricarica da sola a ogni nuovo deploy (rischioso a metà
+      // di una lista di carico in magazzino). MA il nuovo service worker non deve restare in attesa: UpdateAvailable-
+      // Banner non esiste più, e con il solo 'prompt' il nuovo SW aspettava che si chiudessero TUTTE le schede/finestre
+      // dell'app — chi la teneva installata restava per giorni su una versione vecchia (vecchi popup, vecchie
+      // schermate). Con skipWaiting + clientsClaim (sotto, in `workbox`) il nuovo SW prende il controllo subito; il
+      // ricaricamento lo fa utils/staleChunk.js solo se avviene appena si apre l'app, senza interrompere nessuno.
       registerType: 'prompt',
       // Senza questo, in `npm run dev` il plugin non genera/serve
       // manifest.webmanifest né il service worker: la richiesta del browser
@@ -66,6 +66,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {

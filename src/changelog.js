@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-16',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Tour guidato più leggero: niente ombra sullo schermo, solo il pulsante da toccare che diventa rosso e respira piano, con una piccola card che compare con un fade',
+        'Benvenuto: i cerchi rossi attorno al logo durano circa 5 secondi e poi si fermano',
+        'Aggiornamenti dell\'app più affidabili: la nuova versione si attiva subito e, se arriva appena apri l\'app, si ricarica da sola una volta. Prima poteva restare in attesa per giorni con le schermate vecchie',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Lighter guided tour: no shadow over the screen, just the button to tap turning red and gently breathing, with a small card that fades in',
+        'Welcome: the red circles around the logo last about 5 seconds and then stop',
+        'More reliable app updates: the new version activates right away and, if it arrives just as you open the app, reloads once by itself. Before, it could wait for days and keep showing old screens',
+      ],
+    },
+  },
+  {
     version: '2026-11-15',
     it: {
       title: 'Novità di oggi',
