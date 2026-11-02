@@ -28,6 +28,7 @@ function SettingsRowsCard({ rows, navigate }) {
         return (
           <button
             key={row.key}
+            data-tour={`settings-${row.key}`}
             onClick={() => navigate(row.to)}
             className="btn-no-anim"
             style={{

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { signInWithCustomToken } from 'firebase/auth'
 import { auth } from '../firebase'
-import { useAuth } from '../context/AuthContext'
 import AuthBackground from '../components/AuthBackground'
 
 // Pagina del link nell'email di conferma (/verify?token=...). Il server crea la squadra e il profilo e restituisce
@@ -21,8 +20,6 @@ async function post(type, body) {
 export default function VerifyEmail() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { user, profile } = useAuth()
-  const [signedIn, setSignedIn] = useState(null)   // { uid, email } dopo l'accesso dal link
   const [fail, setFail] = useState(null)      // null = in corso, altrimenti { error, email }
   const [resend, setResend] = useState('')    // '' | 'sending' | 'sent' | 'error'
   const started = useRef(false)
@@ -36,9 +33,9 @@ export default function VerifyEmail() {
         const r = await post('signupVerify', { token })
         if (!r.ok || !r.token) { console.error('[verify] conferma rifiutata:', r.error); setFail({ error: r.error || 'failed', email: r.email }); return }
         await signInWithCustomToken(auth, r.token)
-        // Non si naviga subito: prima deve arrivare il profilo di QUESTO utente (altrimenti per un attimo l'app
-        // vede un account senza profilo e mostra "problema con l'account", o rimanda al login).
-        setSignedIn({ uid: r.uid, email: r.email })
+        // Si riparte con un caricamento pulito: l'app si avvia già collegata e legge il profilo appena creato. Cambiare
+        // pagina "dall'interno" lasciava a volte i collegamenti dell'app in uno stato vecchio (il profilo non arrivava).
+        window.location.replace('/welcome')
       } catch (e) {
         console.error('[verify] accesso non riuscito:', e)
         setFail({ error: 'failed' })
@@ -46,14 +43,6 @@ export default function VerifyEmail() {
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    if (!signedIn) return
-    if (user?.uid === signedIn.uid && profile?.email === signedIn.email) { navigate('/welcome', { replace: true }); return }
-    // Il profilo non arriva (dovrebbe già esistere): meglio dirlo che lasciare un caricamento infinito.
-    const id = setTimeout(() => { console.error('[verify] profilo non trovato dopo l\'accesso'); setFail({ error: 'failed' }) }, 12000)
-    return () => clearTimeout(id)
-  }, [signedIn, user, profile, navigate])
 
   const sendNewLink = async () => {
     setResend('sending')
@@ -68,9 +57,10 @@ export default function VerifyEmail() {
       <div role="status" aria-live="polite" className="auth-card" style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 420, boxSizing: 'border-box', textAlign: 'center' }}>
         {!fail ? (
           <>
-            <div aria-hidden="true" className="verify-spin" style={{ width: 52, height: 52, margin: '4px auto 20px', borderRadius: '50%', border: '3px solid rgba(var(--au-fg), 0.14)', borderTopColor: '#e63946' }} />
+            <img src="/pwa-192x192.png" alt="" width="64" height="64" className="verify-mark" style={{ display: 'block', margin: '2px auto 22px', borderRadius: 18, boxShadow: '0 12px 32px rgba(230,57,70,0.3)' }} />
             <h1 style={{ fontSize: 21, fontWeight: 700, color: 'rgb(var(--au-fg))', marginBottom: 6, letterSpacing: '-0.3px' }}>{t('verify.workingTitle')}</h1>
-            <p style={{ fontSize: 13.5, color: muted }}>{t('verify.workingText')}</p>
+            <p style={{ fontSize: 13.5, color: muted, marginBottom: 22 }}>{t('verify.workingText')}</p>
+            <div role="progressbar" aria-label={t('verify.workingTitle')} className="verify-bar"><span /></div>
           </>
         ) : (
           <>
@@ -93,9 +83,12 @@ export default function VerifyEmail() {
         )}
       </div>
       <style>{`
-        .verify-spin { animation: verifySpin 0.8s linear infinite; }
-        @keyframes verifySpin { to { transform: rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce) { .verify-spin { animation-duration: 2.4s; } }
+        .verify-mark { animation: verifyPulse 1.8s ease-in-out infinite; }
+        @keyframes verifyPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        .verify-bar { height: 6px; border-radius: 3px; overflow: hidden; background: rgba(var(--au-fg), 0.12); }
+        .verify-bar span { display: block; height: 100%; width: 40%; border-radius: 3px; background: linear-gradient(90deg, #ee4a58, #d62f3d); animation: verifySlide 1.3s ease-in-out infinite; }
+        @keyframes verifySlide { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+        @media (prefers-reduced-motion: reduce) { .verify-mark, .verify-bar span { animation: none; } .verify-bar span { width: 100%; opacity: 0.6; } }
       `}</style>
     </AuthBackground>
   )

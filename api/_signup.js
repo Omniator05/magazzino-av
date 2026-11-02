@@ -57,7 +57,9 @@ export function createSignupHandlers(deps = {}) {
     try {
       await send({
         to: email,
-        subject: `Confirm your email to create ${companyName} on Roadcase`,
+        // Il codice breve rende ogni invio un messaggio a sé: con lo stesso oggetto Gmail li raggruppa e nasconde
+        // come "testo ripetuto" (…) la parte con il pulsante.
+        subject: `Confirm your email to create ${companyName} on Roadcase (${sha(token).slice(0, 4).toUpperCase()})`,
         html: verifyEmailHtml({ name, teamName: companyName, verifyUrl: `${originOf(req)}/verify?token=${token}` }),
       })
     } catch (e) {

@@ -1816,9 +1816,8 @@
     "launching": "Almost there…",
     "revealDone": "All set!",
     "usernameIfNoEmail": "if no email",
-    "introTitle": "Welcome, {{name}}!",
-    "introTeam": "{{team}} is ready.",
-    "introText": "I'll walk you through a few steps: a user, your logo, the first item and the first event. Skip whenever you like.",
+    "introTitle": "Roadcase welcomes you, {{name}}!",
+    "introTeam": "Your team is ready.",
     "introStart": "Let's get started"
   },
   "pendingApproval": {
@@ -2493,8 +2492,8 @@
     "failed": "That didn't work. Try again."
   },
   "verify": {
-    "workingTitle": "Confirming your email…",
-    "workingText": "One moment, we're creating your team.",
+    "workingTitle": "We're creating your team…",
+    "workingText": "It only takes a moment.",
     "invalidTitle": "Link not valid",
     "invalidText": "This link no longer works: it may have been used already or replaced by a newer one. Check your most recent email or start again.",
     "expiredTitle": "Link expired",
@@ -2511,26 +2510,62 @@
   },
   "tour": {
     "aria": "Guided tour",
-    "progress": "Step {{current}} of {{total}}",
-    "next": "Next",
-    "finish": "Done",
-    "skip": "Skip the tour",
+    "progress": "{{current}} of {{total}}",
+    "skip": "Close the tour",
+    "skipStep": "Skip",
     "takeMe": "Take me there",
-    "users": {
-      "title": "Add your first user",
-      "text": "Tap + to create the account of a warehouse worker or another admin. You can also do it later."
+    "finish": "Done",
+    "ask": {
+      "title": "Shall we take a tour?",
+      "text": "I'll show you where to add your first user, your logo, your first item and your first event. It only takes a few minutes.",
+      "yes": "Yes, let's go",
+      "no": "No, thanks"
     },
-    "logo": {
-      "title": "Add your logo",
-      "text": "Upload your team's logo: it appears in the app and on documents."
-    },
-    "item": {
-      "title": "Add your first item",
-      "text": "Tap + to add the first piece to your warehouse: a name, a category and a quantity are enough."
-    },
-    "event": {
-      "title": "Create your first event",
-      "text": "Tap + to put an event on the calendar. You can then prepare its load list."
+    "steps": {
+      "settings": {
+        "title": "Open Settings",
+        "text": "Tap the gear in the bar at the bottom."
+      },
+      "usersRow": {
+        "title": "Go to Users",
+        "text": "This is where you manage the people who work with you."
+      },
+      "addUser": {
+        "title": "Create your first user",
+        "text": "Tap + and fill in the details. As soon as it's created, we move on."
+      },
+      "settingsAgain": {
+        "title": "Now your team",
+        "text": "Go back to Settings."
+      },
+      "profileRow": {
+        "title": "Open the team profile",
+        "text": "This is where you change the logo and the name."
+      },
+      "logo": {
+        "title": "Add your logo",
+        "text": "Upload your team's logo (and change the name if you like). As soon as it's uploaded, we move on."
+      },
+      "inventoryTab": {
+        "title": "Now the warehouse",
+        "text": "Tap Warehouse in the bar at the bottom."
+      },
+      "addItem": {
+        "title": "Add your first item",
+        "text": "Tap + and choose what to add. As soon as it's saved, we move on."
+      },
+      "eventsTab": {
+        "title": "On to events",
+        "text": "Tap Events in the bar at the bottom."
+      },
+      "addEvent": {
+        "title": "Create your first event",
+        "text": "Tap + to put it on the calendar. As soon as it's created, we're done."
+      },
+      "finish": {
+        "title": "All set!",
+        "text": "You have a user, a logo, an item and an event. From here on it's all yours: enjoy Roadcase."
+      }
     }
   }
 }

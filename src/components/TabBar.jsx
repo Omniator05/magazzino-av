@@ -43,6 +43,8 @@ const WORK_HOURS_TAB = { path:'/work-hours', label:'Ore', icon:ICON_WORK_HOURS }
 // Telefono / schermi larghi (≥700px): stessa forma, scala ~1.3 su computer.
 // padX e rc sono scelti perché la tacca della prima/ultima tab non tocchi gli
 // angoli arrotondati (cx0 ≥ rc + larghezza mezza tacca).
+// Aggancio per il tour guidato (GuidedTour.jsx): le tab che il tour fa toccare.
+const TOUR_TABS = { '/admin/settings': 'tab-settings', '/inventory': 'tab-inventory', '/events': 'tab-events' }
 const PHONE = { H: 60, D: 58, ring: 5, fillet: 6, cy: 5, dip: 9, icon: 32, padX: 28, rc: 14, bottom: 28, slot: 52 }
 const DESKTOP = { H: 70, D: 68, ring: 6, fillet: 10, cy: 5, dip: 10, icon: 34, padX: 40, rc: 24, bottom: 22, width: 600 }
 const DURATION = 480      // ms
@@ -260,6 +262,7 @@ export default function TabBar() {
               aria-label={t.label}
               aria-current={active ? 'page' : undefined}
               className="ftab-btn btn-no-anim"
+              data-tour={TOUR_TABS[t.path]}
               onClick={() => navigate(t.path)}
               style={{ position:'absolute', top:0, left: padX + slotW * i, width: slotW, height: m.H, zIndex:3 }}
             >

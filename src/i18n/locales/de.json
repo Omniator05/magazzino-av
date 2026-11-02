@@ -1816,9 +1816,8 @@
     "launching": "Gleich geschafft …",
     "revealDone": "Alles bereit!",
     "usernameIfNoEmail": "wenn keine E-Mail",
-    "introTitle": "Willkommen, {{name}}!",
-    "introTeam": "{{team}} ist startklar.",
-    "introText": "Ich begleite dich in wenigen Schritten: ein Nutzer, dein Logo, der erste Artikel und das erste Event. Überspringen kannst du jederzeit.",
+    "introTitle": "Roadcase heißt dich willkommen, {{name}}!",
+    "introTeam": "Dein Team ist startklar.",
     "introStart": "Los geht's"
   },
   "pendingApproval": {
@@ -2493,8 +2492,8 @@
     "failed": "Das hat nicht geklappt. Versuche es erneut."
   },
   "verify": {
-    "workingTitle": "Deine E-Mail wird bestätigt …",
-    "workingText": "Einen Moment, dein Team wird erstellt.",
+    "workingTitle": "Wir erstellen dein Team …",
+    "workingText": "Das dauert nur einen Moment.",
     "invalidTitle": "Link ungültig",
     "invalidText": "Dieser Link funktioniert nicht mehr: Er wurde vielleicht schon benutzt oder durch einen neueren ersetzt. Prüfe die neueste E-Mail oder beginne von vorn.",
     "expiredTitle": "Link abgelaufen",
@@ -2511,26 +2510,62 @@
   },
   "tour": {
     "aria": "Geführte Tour",
-    "progress": "Schritt {{current}} von {{total}}",
-    "next": "Weiter",
-    "finish": "Fertig",
-    "skip": "Tour überspringen",
+    "progress": "{{current}} von {{total}}",
+    "skip": "Tour schließen",
+    "skipStep": "Überspringen",
     "takeMe": "Dorthin bringen",
-    "users": {
-      "title": "Ersten Nutzer hinzufügen",
-      "text": "Tippe auf +, um das Konto eines Lagermitarbeiters oder eines weiteren Admins zu erstellen. Das geht auch später."
+    "finish": "Fertig",
+    "ask": {
+      "title": "Sollen wir eine Tour machen?",
+      "text": "Ich zeige dir, wo du den ersten Nutzer, dein Logo, den ersten Artikel und das erste Event hinzufügst. Das dauert nur wenige Minuten.",
+      "yes": "Ja, los geht's",
+      "no": "Nein, danke"
     },
-    "logo": {
-      "title": "Dein Logo hinzufügen",
-      "text": "Lade das Logo deines Teams hoch: Es erscheint in der App und auf Dokumenten."
-    },
-    "item": {
-      "title": "Ersten Artikel anlegen",
-      "text": "Tippe auf +, um das erste Teil deines Lagers hinzuzufügen: Name, Kategorie und Menge reichen."
-    },
-    "event": {
-      "title": "Erstes Event erstellen",
-      "text": "Tippe auf +, um ein Event in den Kalender zu setzen. Danach kannst du die Ladeliste vorbereiten."
+    "steps": {
+      "settings": {
+        "title": "Einstellungen öffnen",
+        "text": "Tippe in der Leiste unten auf das Zahnrad."
+      },
+      "usersRow": {
+        "title": "Zu Nutzer",
+        "text": "Hier verwaltest du die Menschen, die mit dir arbeiten."
+      },
+      "addUser": {
+        "title": "Ersten Nutzer anlegen",
+        "text": "Tippe auf + und gib die Daten ein. Sobald er angelegt ist, geht es weiter."
+      },
+      "settingsAgain": {
+        "title": "Jetzt dein Team",
+        "text": "Geh zurück zu den Einstellungen."
+      },
+      "profileRow": {
+        "title": "Teamprofil öffnen",
+        "text": "Hier änderst du Logo und Namen."
+      },
+      "logo": {
+        "title": "Logo hinzufügen",
+        "text": "Lade das Logo deines Teams hoch (und ändere bei Bedarf den Namen). Sobald es hochgeladen ist, geht es weiter."
+      },
+      "inventoryTab": {
+        "title": "Jetzt das Lager",
+        "text": "Tippe in der Leiste unten auf Lager."
+      },
+      "addItem": {
+        "title": "Ersten Artikel anlegen",
+        "text": "Tippe auf + und wähle, was du hinzufügen willst. Sobald er gespeichert ist, geht es weiter."
+      },
+      "eventsTab": {
+        "title": "Weiter zu den Events",
+        "text": "Tippe in der Leiste unten auf Events."
+      },
+      "addEvent": {
+        "title": "Erstes Event erstellen",
+        "text": "Tippe auf +, um es in den Kalender zu setzen. Sobald es erstellt ist, sind wir fertig."
+      },
+      "finish": {
+        "title": "Alles bereit!",
+        "text": "Du hast einen Nutzer, ein Logo, einen Artikel und ein Event. Ab hier gehört alles dir: viel Freude mit Roadcase."
+      }
     }
   }
 }

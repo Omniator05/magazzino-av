@@ -1816,9 +1816,8 @@
     "launching": "Quase lá…",
     "revealDone": "Tudo pronto!",
     "usernameIfNoEmail": "se não tiver e-mail",
-    "introTitle": "Bem-vindo, {{name}}!",
-    "introTeam": "{{team}} está pronta.",
-    "introText": "Acompanho-o em poucos passos: um utilizador, o logótipo, o primeiro artigo e o primeiro evento. Pode saltar quando quiser.",
+    "introTitle": "A Roadcase dá-lhe as boas-vindas, {{name}}!",
+    "introTeam": "A sua equipa está pronta.",
     "introStart": "Vamos começar"
   },
   "pendingApproval": {
@@ -2493,8 +2492,8 @@
     "failed": "Não correu bem. Tente novamente."
   },
   "verify": {
-    "workingTitle": "A confirmar o seu email…",
-    "workingText": "Um momento, estamos a criar a sua equipa.",
+    "workingTitle": "Estamos a criar a sua equipa…",
+    "workingText": "Demora apenas um momento.",
     "invalidTitle": "Ligação inválida",
     "invalidText": "Esta ligação já não funciona: pode já ter sido usada ou substituída por uma mais recente. Veja o email mais recente ou recomece.",
     "expiredTitle": "Ligação expirada",
@@ -2511,26 +2510,62 @@
   },
   "tour": {
     "aria": "Visita guiada",
-    "progress": "Passo {{current}} de {{total}}",
-    "next": "Seguinte",
-    "finish": "Concluir",
-    "skip": "Saltar a visita",
+    "progress": "{{current}} de {{total}}",
+    "skip": "Fechar a visita",
+    "skipStep": "Saltar",
     "takeMe": "Levar-me até lá",
-    "users": {
-      "title": "Adicione o primeiro utilizador",
-      "text": "Toque em + para criar a conta de um trabalhador do armazém ou de outro administrador. Pode fazê-lo mais tarde."
+    "finish": "Concluir",
+    "ask": {
+      "title": "Fazemos uma visita?",
+      "text": "Mostro-lhe onde adicionar o primeiro utilizador, o logótipo, o primeiro artigo e o primeiro evento. Demora poucos minutos.",
+      "yes": "Sim, vamos",
+      "no": "Não, obrigado"
     },
-    "logo": {
-      "title": "Coloque o seu logótipo",
-      "text": "Carregue o logótipo da equipa: aparece na aplicação e nos documentos."
-    },
-    "item": {
-      "title": "Insira o primeiro artigo",
-      "text": "Toque em + para adicionar a primeira peça ao armazém: basta um nome, uma categoria e uma quantidade."
-    },
-    "event": {
-      "title": "Crie o primeiro evento",
-      "text": "Toque em + para pôr um evento no calendário. Depois pode preparar a sua lista de carga."
+    "steps": {
+      "settings": {
+        "title": "Abra as Definições",
+        "text": "Toque na roda dentada na barra em baixo."
+      },
+      "usersRow": {
+        "title": "Vá a Utilizadores",
+        "text": "É aqui que gere quem trabalha consigo."
+      },
+      "addUser": {
+        "title": "Crie o primeiro utilizador",
+        "text": "Toque em + e preencha os dados. Assim que for criado, avançamos."
+      },
+      "settingsAgain": {
+        "title": "Agora a sua equipa",
+        "text": "Volte às Definições."
+      },
+      "profileRow": {
+        "title": "Abra o perfil da equipa",
+        "text": "Aqui muda o logótipo e o nome."
+      },
+      "logo": {
+        "title": "Adicione o logótipo",
+        "text": "Carregue o logótipo da equipa (e, se quiser, mude o nome). Assim que for carregado, avançamos."
+      },
+      "inventoryTab": {
+        "title": "Agora o armazém",
+        "text": "Toque em Armazém na barra em baixo."
+      },
+      "addItem": {
+        "title": "Adicione o primeiro artigo",
+        "text": "Toque em + e escolha o que adicionar. Assim que for guardado, avançamos."
+      },
+      "eventsTab": {
+        "title": "Vamos aos eventos",
+        "text": "Toque em Eventos na barra em baixo."
+      },
+      "addEvent": {
+        "title": "Crie o primeiro evento",
+        "text": "Toque em + para o pôr no calendário. Assim que for criado, terminámos."
+      },
+      "finish": {
+        "title": "Tudo pronto!",
+        "text": "Tem um utilizador, o logótipo, um artigo e um evento. A partir daqui é tudo seu: bom trabalho com a Roadcase."
+      }
     }
   }
 }

@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-15',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Scansione dei bauli: se in lista c\'è un oggetto con più pezzi (es. Spider × 3) senza bauli assegnati, il QR di un baule specifico carica solo quel pezzo e la riga si completa quando li hai scansionati tutti. Il QR generale continua a completare tutta la riga. Vale per postazione, magazzinieri e admin',
+        'Creazione della squadra: pagina di conferma con barra di caricamento, benvenuto più allegro con coriandoli e un tour guidato che chiede prima se vuoi farlo e poi ti fa toccare i punti giusti (Impostazioni, Utenti, logo, Magazzino, Eventi), passando al passo dopo da solo quando hai finito',
+        'Rimosso il vecchio popup "La tua Dashboard" per gli admin',
+        'Email di conferma: l\'oggetto ha un codice breve, così Gmail non nasconde il pulsante dietro i tre puntini',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Case scanning: if the list has an item with several pieces (e.g. Spider × 3) with no cases assigned, scanning the QR of a specific case loads only that piece, and the row completes once you have scanned them all. The general QR still completes the whole row. Applies to the station, warehouse workers and admins',
+        'Creating a team: confirmation page with a loading bar, a cheerier welcome with confetti, and a guided tour that first asks if you want it and then has you tap the right places (Settings, Users, logo, Warehouse, Events), moving to the next step by itself when you are done',
+        'Removed the old "Your Dashboard" popup for admins',
+        'Confirmation email: the subject has a short code, so Gmail no longer hides the button behind the three dots',
+      ],
+    },
+  },
+  {
     version: '2026-11-14',
     it: {
       title: 'Novità di oggi',

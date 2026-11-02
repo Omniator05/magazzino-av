@@ -9,7 +9,6 @@ import { Pin } from '../components/Icon'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
-import TutorialModal from '../components/TutorialModal'
 import GettingStartedWidget from '../components/GettingStartedWidget'
 import TodayReminderModal from '../components/TodayReminderModal'
 import DeadlineReminderModal from '../components/DeadlineReminderModal'
@@ -581,8 +580,6 @@ export default function Dashboard({ toggleTheme, theme }) {
       `}</style>
 
       {showProfile && <Profile onClose={() => setShowProfile(false)} showLogout />}
-
-      {!showOverlay && !showRecapBanner && !showRecapModal && <TutorialModal role="admin" />}
 
       {/* Non insieme al resoconto settimanale (si sovrapporrebbero il lunedì
           mattina) — quello prevale, questo arriva al prossimo giro. */}

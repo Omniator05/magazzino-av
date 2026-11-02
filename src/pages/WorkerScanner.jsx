@@ -392,8 +392,11 @@ export default function WorkerScanner() {
 
     // Ignora lo stesso codice scansionato entro 3 secondi (evita doppi)
     const now = Date.now()
-    if (normalized === lastCodeRef.current && now - lastCodeTimeRef.current < 3000) return
-    lastCodeRef.current = normalized
+    // Etichette di bauli diversi dello stesso oggetto (…-01, …-02) hanno lo stesso codice base: il controllo
+    // deve distinguerle, altrimenti due bauli scansionati di seguito risulterebbero "doppi".
+    const dupKey = unitNumber ? `${normalized}-${unitNumber}` : normalized
+    if (dupKey === lastCodeRef.current && now - lastCodeTimeRef.current < 3000) return
+    lastCodeRef.current = dupKey
     lastCodeTimeRef.current = now
 
     if (processing) return
@@ -540,6 +543,11 @@ export default function WorkerScanner() {
       // tutta la riga come prima.
       const requiresEachInstance = assignedInstances.length > 1
       const requiresCount = isCountableKit(eventItem)
+      // QR di un baule preciso (…-NN) su una riga con più pezzi ma SENZA numeri assegnati (es. "Spider × 3" senza
+      // scegliere i bauli): si sa quale baule è, quindi quella scansione vale UN pezzo, non l'intera riga. La riga
+      // si completa quando sono stati scansionati tanti bauli diversi quanti sono i pezzi. Il codice generico
+      // (senza numero) resta com'era: non distingue i pezzi e completa la riga.
+      const unitScanOnUnassigned = !!unitNumber && assignedInstances.length === 0 && (eventItem.qty || 1) > 1
 
       // Unità sbagliata: la riga ha unità specifiche assegnate (vedi
       // src/utils/kitInstances.js) e l'etichetta scansionata è quella di
@@ -573,12 +581,12 @@ export default function WorkerScanner() {
 
       const applyOutcome = (doneFieldName, alreadyAction, doneAction, extra = {}) => {
         if (eventItem[doneFieldName]) { outcome = { action: alreadyAction, item: eventItem, ...extra }; return }
-        if (requiresEachInstance && unitNumber) {
+        if ((requiresEachInstance || unitScanOnUnassigned) && unitNumber) {
           const scannedInstance = parseInt(unitNumber, 10)
           const already = eventItem.scannedInstances?.[mode] || []
           if (already.includes(scannedInstance)) { outcome = { action: alreadyAction, item: eventItem, ...extra }; return }
           const nowScanned = [...already, scannedInstance]
-          const isComplete = assignedInstances.every(n => nowScanned.includes(n))
+          const isComplete = requiresEachInstance ? assignedInstances.every(n => nowScanned.includes(n)) : nowScanned.length >= (eventItem.qty || 1)
           const updatedScanned = { ...(eventItem.scannedInstances || {}), [mode]: nowScanned }
           tx.update(eventRef, { items: eventItems.map(i => i.id === eventItem.id ? {
             ...i, scannedInstances: updatedScanned, [doneFieldName]: isComplete,
@@ -588,7 +596,7 @@ export default function WorkerScanner() {
           } : i) })
           outcome = isComplete
             ? { action: doneAction, item: eventItem, ...extra }
-            : { action: 'instance_progress', item: eventItem, scannedInstance, doneCount: nowScanned.length, totalCount: assignedInstances.length, ...extra }
+            : { action: 'instance_progress', item: eventItem, scannedInstance, doneCount: nowScanned.length, totalCount: requiresEachInstance ? assignedInstances.length : (eventItem.qty || 1), ...extra }
           return
         }
         if (requiresCount && !unitNumber) {
@@ -2599,10 +2607,13 @@ function ChecklistRow({ item, mode }) {
   // vedi isCountableKit in handleScan più sopra.
   const hasNumberedInstances = (item.instanceNumbers || []).length > 1
   const isGenericKitCount = !hasNumberedInstances && item.isBundle && (item.qty || 1) > 1
-  const instanceTotal = hasNumberedInstances ? item.instanceNumbers.length : (isGenericKitCount ? (item.qty || 1) : 0)
-  const hasMultiInstance = hasNumberedInstances || isGenericKitCount
-  const prontoScanned = hasNumberedInstances ? (item.scannedInstances?.pronto || []).length : (item.scannedCount?.pronto || 0)
-  const loadScanned = hasNumberedInstances ? (item.scannedInstances?.load || []).length : (item.scannedCount?.load || 0)
+  // Bauli scansionati uno a uno con la loro etichetta su una riga senza numeri assegnati (vedi unitScanOnUnassigned).
+  const unitScansOf = m => (item.scannedInstances?.[m] || []).length
+  const isUnitScanned = !hasNumberedInstances && (item.qty || 1) > 1 && (unitScansOf('pronto') > 0 || unitScansOf('load') > 0)
+  const instanceTotal = hasNumberedInstances ? item.instanceNumbers.length : (isGenericKitCount || isUnitScanned ? (item.qty || 1) : 0)
+  const hasMultiInstance = hasNumberedInstances || isGenericKitCount || isUnitScanned
+  const prontoScanned = hasNumberedInstances ? unitScansOf('pronto') : (unitScansOf('pronto') || (item.scannedCount?.pronto || 0))
+  const loadScanned = hasNumberedInstances ? unitScansOf('load') : (unitScansOf('load') || (item.scannedCount?.load || 0))
   // La nota specifica dell'evento (aggiunta dall'admin sulla lista di carico) ha priorità su quella generale di magazzino
   const eventNote = item.eventNote || null
   const displayNote = eventNote || warehouseNotes

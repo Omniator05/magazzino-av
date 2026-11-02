@@ -1816,9 +1816,8 @@
     "launching": "Ci siamo quasi…",
     "revealDone": "Tutto pronto!",
     "usernameIfNoEmail": "se non ha l'email",
-    "introTitle": "Benvenuto, {{name}}!",
-    "introTeam": "{{team}} è pronta.",
-    "introText": "Ti accompagno in pochi passi: un utente, il logo, il primo oggetto e il primo evento. Puoi saltare quando vuoi.",
+    "introTitle": "Roadcase ti dà il benvenuto, {{name}}!",
+    "introTeam": "La tua squadra è pronta.",
     "introStart": "Iniziamo"
   },
   "pendingApproval": {
@@ -2493,8 +2492,8 @@
     "failed": "Non è andata a buon fine. Riprova."
   },
   "verify": {
-    "workingTitle": "Confermo la tua email…",
-    "workingText": "Un attimo, sto creando la tua squadra.",
+    "workingTitle": "Stiamo creando la tua squadra…",
+    "workingText": "Ci vuole solo un momento.",
     "invalidTitle": "Link non valido",
     "invalidText": "Questo link non funziona più: può essere già stato usato o sostituito da uno più recente. Controlla l'email più recente oppure ricomincia.",
     "expiredTitle": "Link scaduto",
@@ -2511,26 +2510,62 @@
   },
   "tour": {
     "aria": "Tour guidato",
-    "progress": "Passo {{current}} di {{total}}",
-    "next": "Avanti",
-    "finish": "Fine",
-    "skip": "Salta il tour",
+    "progress": "{{current}} di {{total}}",
+    "skip": "Chiudi il tour",
+    "skipStep": "Salta",
     "takeMe": "Portami lì",
-    "users": {
-      "title": "Aggiungi il primo utente",
-      "text": "Tocca il + per creare l'account di un magazziniere o di un altro admin. Potrai farlo anche più avanti."
+    "finish": "Fine",
+    "ask": {
+      "title": "Facciamo un tour?",
+      "text": "Ti mostro dove aggiungere il primo utente, il logo, il primo oggetto e il primo evento. Ci vogliono pochi minuti.",
+      "yes": "Sì, iniziamo",
+      "no": "No, grazie"
     },
-    "logo": {
-      "title": "Metti il tuo logo",
-      "text": "Carica il logo della squadra: compare nell'app e nei documenti."
-    },
-    "item": {
-      "title": "Inserisci il primo oggetto",
-      "text": "Tocca il + per aggiungere il primo pezzo del magazzino: bastano nome, categoria e quantità."
-    },
-    "event": {
-      "title": "Crea il primo evento",
-      "text": "Tocca il + per mettere un evento in calendario. Poi potrai preparargli la lista di carico."
+    "steps": {
+      "settings": {
+        "title": "Apri le Impostazioni",
+        "text": "Tocca l'ingranaggio nella barra in basso."
+      },
+      "usersRow": {
+        "title": "Vai su Utenti",
+        "text": "Da qui gestisci chi lavora con te."
+      },
+      "addUser": {
+        "title": "Crea il primo utente",
+        "text": "Tocca il + e inserisci i dati. Appena è creato passiamo avanti."
+      },
+      "settingsAgain": {
+        "title": "Ora la tua squadra",
+        "text": "Torna alle Impostazioni."
+      },
+      "profileRow": {
+        "title": "Apri il profilo della squadra",
+        "text": "Qui cambi il logo e il nome."
+      },
+      "logo": {
+        "title": "Aggiungi il logo",
+        "text": "Carica il logo della squadra (e, se vuoi, cambia il nome). Appena è caricato passiamo avanti."
+      },
+      "inventoryTab": {
+        "title": "Ora il magazzino",
+        "text": "Tocca Magazzino nella barra in basso."
+      },
+      "addItem": {
+        "title": "Aggiungi il primo oggetto",
+        "text": "Tocca il + e scegli cosa aggiungere. Appena è salvato passiamo avanti."
+      },
+      "eventsTab": {
+        "title": "Passiamo agli eventi",
+        "text": "Tocca Eventi nella barra in basso."
+      },
+      "addEvent": {
+        "title": "Crea il primo evento",
+        "text": "Tocca il + per metterlo in calendario. Appena è creato abbiamo finito."
+      },
+      "finish": {
+        "title": "Tutto pronto!",
+        "text": "Hai un utente, il logo, un oggetto e un evento. Da qui in poi è tutto tuo: buon lavoro con Roadcase."
+      }
     }
   }
 }
