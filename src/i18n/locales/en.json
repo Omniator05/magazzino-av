@@ -1831,7 +1831,9 @@
     "inactiveBody": "Your account has been disabled by an administrator. Contact them to reactivate it.",
     "unknownTitle": "Account issue",
     "unknownBody": "Your account isn't set up correctly. Contact an administrator to resolve it.",
-    "exit": "Log out"
+    "exit": "Log out",
+    "verifyTitle": "Confirm your email",
+    "verifyBody": "Your account isn't active yet. If you've just created a team, click the link in the email we sent to {{email}} (check your spam folder too). You can have the link sent again below."
   },
   "profile": {
     "sectionWhatsNew": "What's new",
@@ -2504,7 +2506,8 @@
     "sendNewLink": "Send me a new link",
     "newLinkSent": "New link sent: check your email.",
     "tryAgain": "Try again",
-    "backToSignup": "Back to sign up"
+    "backToSignup": "Back to sign up",
+    "goToLogin": "If you've already confirmed, sign in"
   },
   "tour": {
     "aria": "Guided tour",

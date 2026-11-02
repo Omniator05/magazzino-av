@@ -131,7 +131,7 @@ export function createSignupHandlers(deps = {}) {
     // deve costare la registrazione), oltre il link è consumato.
     if (d.usedAt) {
       if (now() - d.usedAt > REUSE_GRACE_MS || !d.teamId) return res.status(410).json({ error: 'used' })
-      return res.status(200).json({ token: await admin.auth().createCustomToken(d.uid), teamName: d.companyName, name: d.name })
+      return res.status(200).json({ token: await admin.auth().createCustomToken(d.uid), uid: d.uid, email: d.email, teamName: d.companyName, name: d.name })
     }
 
     // Nel frattempo qualcun altro può aver preso lo stesso nome azienda.
@@ -161,7 +161,7 @@ export function createSignupHandlers(deps = {}) {
       console.error('[signupVerify]', e.message)
       return res.status(500).json({ error: 'failed' })
     }
-    return res.status(200).json({ token: await admin.auth().createCustomToken(d.uid), teamName: d.companyName, name: d.name })
+    return res.status(200).json({ token: await admin.auth().createCustomToken(d.uid), uid: d.uid, email: d.email, teamName: d.companyName, name: d.name })
   }
 
   async function signupResend(req, res) {

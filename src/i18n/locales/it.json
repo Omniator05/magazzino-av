@@ -1831,7 +1831,9 @@
     "inactiveBody": "Il tuo account è stato disattivato da un amministratore. Contattalo per riattivarlo.",
     "unknownTitle": "Problema con l'account",
     "unknownBody": "Il tuo account non è configurato correttamente. Contatta un amministratore per risolvere.",
-    "exit": "Esci"
+    "exit": "Esci",
+    "verifyTitle": "Conferma la tua email",
+    "verifyBody": "Il tuo account non è ancora attivo. Se hai appena creato una squadra, clicca il link nell'email che ti abbiamo mandato a {{email}} (guarda anche nella posta indesiderata). Puoi farti rimandare il link qui sotto."
   },
   "profile": {
     "sectionWhatsNew": "Novità",
@@ -2504,7 +2506,8 @@
     "sendNewLink": "Mandami un nuovo link",
     "newLinkSent": "Nuovo link inviato: controlla la tua email.",
     "tryAgain": "Riprova",
-    "backToSignup": "Torna alla registrazione"
+    "backToSignup": "Torna alla registrazione",
+    "goToLogin": "Se hai già confermato, accedi"
   },
   "tour": {
     "aria": "Tour guidato",

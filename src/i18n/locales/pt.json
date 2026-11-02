@@ -1831,7 +1831,9 @@
     "inactiveBody": "A sua conta foi desativada por um administrador. Contacte-o para a reativar.",
     "unknownTitle": "Problema na conta",
     "unknownBody": "A sua conta não está configurada corretamente. Contacte um administrador para o resolver.",
-    "exit": "Terminar sessão"
+    "exit": "Terminar sessão",
+    "verifyTitle": "Confirme o seu email",
+    "verifyBody": "A sua conta ainda não está ativa. Se acabou de criar uma equipa, clique na ligação do email que enviámos para {{email}} (veja também o spam). Pode pedir que a ligação seja reenviada abaixo."
   },
   "profile": {
     "sectionWhatsNew": "Novidades",
@@ -2504,7 +2506,8 @@
     "sendNewLink": "Enviar-me uma nova ligação",
     "newLinkSent": "Nova ligação enviada: verifique o seu email.",
     "tryAgain": "Tentar de novo",
-    "backToSignup": "Voltar ao registo"
+    "backToSignup": "Voltar ao registo",
+    "goToLogin": "Se já confirmou, inicie sessão"
   },
   "tour": {
     "aria": "Visita guiada",

@@ -7,6 +7,23 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-14',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Conferma email più affidabile: dopo il clic sul link la pagina aspetta che l\'account sia pronto prima di aprire il benvenuto. Se accedi prima di confermare, vedi "Conferma la tua email" con il pulsante per rimandare il link',
+        'Pagina di accesso: corretto un errore in console quando il browser compila da solo email e password',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'More reliable email confirmation: after clicking the link, the page waits for your account to be ready before opening the welcome screen. If you sign in before confirming, you see "Confirm your email" with a button to resend the link',
+        'Sign-in page: fixed a console error when the browser autofills email and password',
+      ],
+    },
+  },
+  {
     version: '2026-11-13',
     it: {
       title: 'Novità di oggi',

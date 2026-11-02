@@ -49,7 +49,7 @@ export function useKeyboardWedgeScanner(onScan, { enabled = true, badges = false
         }
         return
       }
-      if (e.key.length === 1) bufferRef.current += e.key
+      if (e.key?.length === 1) bufferRef.current += e.key   // l'autofill del browser manda keydown senza `key`
     }
 
     window.addEventListener('keydown', handleKeyDown)

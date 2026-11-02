@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { signInWithCustomToken } from 'firebase/auth'
 import { auth } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 import AuthBackground from '../components/AuthBackground'
 
 // Pagina del link nell'email di conferma (/verify?token=...). Il server crea la squadra e il profilo e restituisce
@@ -20,6 +21,8 @@ async function post(type, body) {
 export default function VerifyEmail() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { user, profile } = useAuth()
+  const [signedIn, setSignedIn] = useState(null)   // { uid, email } dopo l'accesso dal link
   const [fail, setFail] = useState(null)      // null = in corso, altrimenti { error, email }
   const [resend, setResend] = useState('')    // '' | 'sending' | 'sent' | 'error'
   const started = useRef(false)
@@ -31,15 +34,26 @@ export default function VerifyEmail() {
     ;(async () => {
       try {
         const r = await post('signupVerify', { token })
-        if (!r.ok || !r.token) { setFail({ error: r.error || 'failed', email: r.email }); return }
+        if (!r.ok || !r.token) { console.error('[verify] conferma rifiutata:', r.error); setFail({ error: r.error || 'failed', email: r.email }); return }
         await signInWithCustomToken(auth, r.token)
-        navigate('/welcome', { replace: true })
-      } catch {
+        // Non si naviga subito: prima deve arrivare il profilo di QUESTO utente (altrimenti per un attimo l'app
+        // vede un account senza profilo e mostra "problema con l'account", o rimanda al login).
+        setSignedIn({ uid: r.uid, email: r.email })
+      } catch (e) {
+        console.error('[verify] accesso non riuscito:', e)
         setFail({ error: 'failed' })
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!signedIn) return
+    if (user?.uid === signedIn.uid && profile?.email === signedIn.email) { navigate('/welcome', { replace: true }); return }
+    // Il profilo non arriva (dovrebbe già esistere): meglio dirlo che lasciare un caricamento infinito.
+    const id = setTimeout(() => { console.error('[verify] profilo non trovato dopo l\'accesso'); setFail({ error: 'failed' }) }, 12000)
+    return () => clearTimeout(id)
+  }, [signedIn, user, profile, navigate])
 
   const sendNewLink = async () => {
     setResend('sending')
@@ -71,7 +85,10 @@ export default function VerifyEmail() {
             {resend === 'error' && <p role="alert" style={{ fontSize: 13, fontWeight: 600, color: '#e63946', marginBottom: 14 }}>{t('signup.errorSignupFailed')}</p>}
             {kind === 'failed'
               ? <button type="button" className="auth-btn" onClick={() => window.location.reload()}>{t('verify.tryAgain')}</button>
-              : <button type="button" className="auth-btn-secondary" onClick={() => navigate('/signup', { replace: true })}>{t('verify.backToSignup')}</button>}
+              : <>
+                  {kind === 'invalid' && <button type="button" className="auth-btn" onClick={() => navigate('/login', { replace: true })} style={{ marginBottom: 10 }}>{t('verify.goToLogin')}</button>}
+                  <button type="button" className="auth-btn-secondary" onClick={() => navigate('/signup', { replace: true })}>{t('verify.backToSignup')}</button>
+                </>}
           </>
         )}
       </div>

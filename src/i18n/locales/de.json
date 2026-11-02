@@ -1831,7 +1831,9 @@
     "inactiveBody": "Dein Konto wurde von einem Administrator deaktiviert. Wende dich an ihn, um es zu reaktivieren.",
     "unknownTitle": "Problem mit dem Konto",
     "unknownBody": "Dein Konto ist nicht richtig eingerichtet. Wende dich an einen Administrator, um das zu klären.",
-    "exit": "Abmelden"
+    "exit": "Abmelden",
+    "verifyTitle": "Bestätige deine E-Mail",
+    "verifyBody": "Dein Konto ist noch nicht aktiv. Wenn du gerade ein Team erstellt hast, klicke auf den Link in der E-Mail an {{email}} (schau auch im Spam-Ordner nach). Unten kannst du den Link erneut senden lassen."
   },
   "profile": {
     "sectionWhatsNew": "Neuigkeiten",
@@ -2504,7 +2506,8 @@
     "sendNewLink": "Neuen Link senden",
     "newLinkSent": "Neuer Link gesendet: Prüfe deine E-Mail.",
     "tryAgain": "Erneut versuchen",
-    "backToSignup": "Zurück zur Registrierung"
+    "backToSignup": "Zurück zur Registrierung",
+    "goToLogin": "Schon bestätigt? Anmelden"
   },
   "tour": {
     "aria": "Geführte Tour",

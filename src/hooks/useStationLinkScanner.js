@@ -24,7 +24,7 @@ export function useStationLinkScanner() {
         }
         return
       }
-      if (e.key.length === 1) buffer += e.key
+      if (e.key?.length === 1) buffer += e.key   // l'autofill del browser manda keydown senza `key`
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)

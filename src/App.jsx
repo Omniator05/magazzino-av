@@ -246,7 +246,9 @@ function PrivateRoutes({ toggleTheme, theme }) {
 
   // Profilo mancante (utente Auth orfano, senza doc in profiles) — mai deve
   // ricadere sul ramo admin di default: mostra errore invece di dare accesso.
-  if (!profile) return <PendingApproval reason="unknown" />
+  // Un account senza profilo e con l'email non ancora confermata è quasi sempre una registrazione appena fatta il cui
+  // link non è stato ancora cliccato (si può accedere con la password prima di confermare): meglio dirlo chiaro.
+  if (!profile) return <PendingApproval reason={user.emailVerified ? 'unknown' : 'verify'} />
 
   // In attesa di approvazione (self-signup "unisciti a squadra") o account
   // disattivato da un admin — bloccato prima di qualunque route applicativa.
