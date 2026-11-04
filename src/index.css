@@ -271,7 +271,7 @@ select {
 
 .page {
   min-height: 100dvh;
-  padding-bottom: 140px;
+  padding-bottom: 152px;   /* la barra delle schede sta ora 12px più su */
   animation: slowToSmoothFade 0.7s cubic-bezier(0.83, 0, 0.17, 1);
 }
 
@@ -797,12 +797,18 @@ button.rc-action-btn:not(:disabled):active {
   --c-violet-bg: #ede9fe; --c-blue-bg: #dbeafe; --c-orange-bg: #ffedd5;
   --c-t-red: #fdecee;    --c-t-blue: #eaf1fb; --c-t-amber: #fbf1dc;  --c-t-green: #e9f5ec;
   --tab-shadow: rgba(34,44,66,0.18);
-  --rc-wash: rgba(230,57,70,0.16);
+  --rc-wash: rgba(230,57,70,0.11);
   --ov-1: #ffd9d6; --ov-2: #f28b86; --ov-3: #b9d2f5; --ov-4: #6f9fe6;
 }
 
 
 /* ── TEMA SCURO ──────────────────────────────── */
+/* Dashboard: i grigi del testo diventano grigi caldi con una punta di rosso (stessa famiglia dell'accento) e più scuri.
+   Prima --c-ink3 (#9a9a9a) aveva 2,1–2,8:1 su card e sfondo, e --c-ink2 scendeva a 3,9:1 sull'alone rosso. Ora, su card
+   bianca, fondo e alone al suo punto più forte: secondario >= 6,2:1, terziario >= 4,5:1. Solo dentro .dash-ink. */
+[data-theme="light"] .dash-ink { --c-ink: #211b1b; --c-ink2: #5a504e; --c-ink3: #6a605e; --text2: #5a504e; --text3: #6a605e; }
+[data-theme="dark"] .dash-ink { --c-ink3: #938f87; --text3: #938f87; }
+
 [data-theme="dark"] {
   color-scheme: dark;
   --bg:      #121211;

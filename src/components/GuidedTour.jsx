@@ -151,7 +151,7 @@ export default function GuidedTour() {
           ? { top: rect.top + rect.height + GAP }
           : { bottom: vp.h - rect.top + GAP }),
       }
-    : { left: clamp((vp.w - W) / 2, 12, vp.w), bottom: 124 }
+    : { left: clamp((vp.w - W) / 2, 12, vp.w), bottom: 136 }
 
   return (
     <>

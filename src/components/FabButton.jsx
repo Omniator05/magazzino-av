@@ -13,7 +13,7 @@ export default function FabButton({ onClick, ariaLabel, tourId }) {
       aria-label={ariaLabel}
       data-tour={tourId}
       style={{
-        position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
+        position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 144px)', right:20, zIndex:50,
         width:56, height:56, borderRadius:'50%',
         background:'var(--accent)', color:'white',
         display:'flex', alignItems:'center', justifyContent:'center',

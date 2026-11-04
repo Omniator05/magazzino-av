@@ -251,7 +251,7 @@ export default function GettingStartedWidget({ teamId, items, events, dataReady 
         .gsw-widget {
           left: 50%;
           transform: translateX(-50%);
-          bottom: calc(env(safe-area-inset-bottom) + 130px);
+          bottom: calc(env(safe-area-inset-bottom) + 142px);
           width: 270px;
         }
         .gsw-steps-list { display: none; }

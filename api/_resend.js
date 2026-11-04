@@ -4,7 +4,8 @@
 // non si verifica un dominio proprio su Resend, il mittente di default
 // "onboarding@resend.dev" funziona ma può mandare solo alla propria email
 // di test — per email vere ai clienti serve verificare un dominio vero.
-export async function sendEmail({ to, subject, html }) {
+// `replyTo` (facoltativo): a chi arrivano le risposte; senza, vale il mittente.
+export async function sendEmail({ to, subject, html, replyTo }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -16,6 +17,7 @@ export async function sendEmail({ to, subject, html }) {
       to: [to],
       subject,
       html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
     }),
   })
   if (!res.ok) {
@@ -199,6 +201,26 @@ export function joinRejectedEmailHtml({ name, teamName }) {
       </p>
       <p style="margin:0;color:#9ca3af;font-size:12.5px;">If you think this is a mistake, please contact them directly.</p>
     `,
+  })
+}
+
+// Chi firma l'email di benvenuto (la scrive il fondatore, da solo: lo dice apertamente, è parte del tono).
+export const FOUNDER_NAME = 'Mattia'
+
+// Benvenuto personale a chi ha appena confermato l'email e creato la squadra: un grazie e l'invito a scrivere ogni idea o
+// problema (le risposte arrivano direttamente al fondatore, vedi replyTo in _signup.js). In inglese, come le altre email.
+export function welcomeFounderEmailHtml({ name, teamName, appUrl }) {
+  const p = 'margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.65;'
+  return emailShell({
+    title: `Welcome to Roadcase, ${esc(name)}!`,
+    bodyHtml: `
+      <p style="${p}">Thank you for creating <strong>${esc(teamName)}</strong> on Roadcase. It genuinely means a lot to me that you decided to give it a try.</p>
+      <p style="${p}">I'm ${esc(FOUNDER_NAME)}, and I'm the only person behind Roadcase: I design it, build it and read every message myself. That's also why I can move quickly. If something is missing, confusing or just annoying, tell me and there's a good chance it will be in the app soon.</p>
+      <p style="${p}">Every idea, bug report or request is welcome, big or small: it's how Roadcase gets better. Just reply to this email and it lands straight in my inbox.</p>
+      <p style="margin:0;color:#1a1a1a;font-size:14.5px;line-height:1.65;">Welcome aboard,<br><strong>${esc(FOUNDER_NAME)}</strong> &middot; Roadcase</p>
+    `,
+    ctaLabel: 'Open Roadcase',
+    ctaUrl: appUrl,
   })
 }
 

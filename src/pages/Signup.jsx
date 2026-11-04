@@ -133,15 +133,30 @@ async function signupApi(type, body) {
 
 // "Controlla la tua email": dopo "Crea squadra" la squadra NON esiste ancora, nasce quando si clicca il link
 // nell'email (che fa anche entrare). Qui si può rimandare il link o tornare indietro a correggere l'indirizzo.
-function CheckEmailPanel({ email, onBack }) {
+function CheckEmailPanel({ email, pollKey, onBack }) {
   const { t } = useTranslation()
   const [cooldown, setCooldown] = useState(60)
+  const [done, setDone] = useState(false)   // il link è stato cliccato (in un'altra scheda o su un altro dispositivo)
   const [state, setState] = useState('')   // '' | 'sending' | 'sent' | 'error'
   useEffect(() => {
     if (cooldown <= 0) return
     const id = setTimeout(() => setCooldown(c => c - 1), 1000)
     return () => clearTimeout(id)
   }, [cooldown])
+  // Appena il link viene cliccato, questa scheda smette di chiedere di controllare la posta: così non si rimanda l'email
+  // per sbaglio. Funziona anche se il link si apre su un altro dispositivo (chiave segreta di questa scheda, vedi
+  // signupStatus in api/_signup.js).
+  useEffect(() => {
+    if (!pollKey || done) return
+    let stopped = false
+    const check = async () => {
+      try { const r = await signupApi('signupStatus', { pollKey }); if (!stopped && r.verified) setDone(true) } catch { /* si riprova al prossimo giro */ }
+    }
+    const id = setInterval(check, 3000)
+    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { stopped = true; clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
+  }, [pollKey, done])
   const resend = async () => {
     setState('sending')
     try {
@@ -151,6 +166,17 @@ function CheckEmailPanel({ email, onBack }) {
     } catch { setState('error') }
   }
   const muted = 'rgba(var(--au-fg), calc(var(--au-k) * 0.45))'
+  if (done) {
+    return (
+      <div className="auth-card" role="status" aria-live="polite">
+        <div aria-hidden="true" style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 0 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(34,197,94,0.14)', color: '#22c55e' }}>
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7" /></svg>
+        </div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: 'rgb(var(--au-fg))', marginBottom: 8, letterSpacing: '-0.3px' }}>{t('signup.doneTitle')}</h2>
+        <p style={{ fontSize: 14, lineHeight: 1.55, color: muted }}>{t('signup.doneText')}</p>
+      </div>
+    )
+  }
   return (
     <div className="auth-card" role="status" aria-live="polite">
       <div aria-hidden="true" style={{ width:54, height:54, borderRadius:'50%', margin:'0 0 18px', display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(230,57,70,0.14)', color:'#e63946' }}>
@@ -175,6 +201,7 @@ function CreateTeamStep({ onBack }) {
   const f = useSignupForm()
   const [companyName, setCompanyName] = useState('')
   const [sentTo, setSentTo] = useState('')   // email a cui è partito il link: mostra "controlla la tua email"
+  const [pollKey, setPollKey] = useState('')  // chiave segreta di questa scheda per sapere quando il link è stato cliccato
   // Messaggi per i campi segnalati dal server (api/_signup.js).
   const FIELD_MSG = {
     company: t('signup.errorCompanyNameRequired'), name: t('signup.errorNameRequired'), email: t('signup.errorInvalidEmail'),
@@ -193,7 +220,7 @@ function CreateTeamStep({ onBack }) {
       const r = await signupApi('signupStart', {
         companyName: companyName.trim(), name: f.name.trim(), email: f.email.trim().toLowerCase(), password: f.password, consent: f.consent,
       })
-      if (r.ok) { setSentTo(f.email.trim().toLowerCase()); return }
+      if (r.ok) { setPollKey(r.pollKey || ''); setSentTo(f.email.trim().toLowerCase()); return }
       if (r.error === 'company-exists') f.fe.fail({ company: t('signup.errorCompanyExists') })
       else if (r.error === 'email-in-use') f.fe.fail({ email: t('signup.errorEmailInUse') })
       else if (r.error === 'invalid' && FIELD_MSG[r.field]) f.fe.fail({ [r.field]: FIELD_MSG[r.field] })
@@ -207,7 +234,7 @@ function CreateTeamStep({ onBack }) {
     }
   }
 
-  if (sentTo) return <CheckEmailPanel email={sentTo} onBack={() => setSentTo('')} />
+  if (sentTo) return <CheckEmailPanel email={sentTo} pollKey={pollKey} onBack={() => setSentTo('')} />
 
   return (
     <form onSubmit={handleSubmit} noValidate>

@@ -13,7 +13,7 @@ import { requireTeamAdmin, requireTeamMember, getAdmin } from './_authAdmin.js'
 import crypto from 'node:crypto'
 import { sendEmail, inviteEmailHtml, absenceNotificationEmailHtml, passwordResetEmailHtml, welcomeEmailHtml, joinRequestThanksEmailHtml, joinRequestAdminEmailHtml, joinApprovedEmailHtml, joinRejectedEmailHtml } from './_resend.js'
 import { pushToAdmins } from './push.js'
-import { signupStart, signupVerify, signupResend } from './_signup.js'
+import { signupStart, signupVerify, signupResend, signupStatus } from './_signup.js'
 
 async function sendWelcome(req, res) {
   let ctx
@@ -333,7 +333,7 @@ async function joinDecision(req, res) {
   return res.status(200).json({ sent, removed })
 }
 
-const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword, loginByUsername, joinRequest, joinDecision, signupStart, signupVerify, signupResend }
+const HANDLERS = { welcome: sendWelcome, invite: sendInvite, absence: sendAbsence, passwordReset: sendPasswordReset, forgotPassword: sendForgotPassword, loginByUsername, joinRequest, joinDecision, signupStart, signupVerify, signupResend, signupStatus }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

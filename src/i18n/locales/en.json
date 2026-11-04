@@ -913,7 +913,9 @@
     "resent": "Email sent again.",
     "wrongEmail": "Wrong address? Go back",
     "errorRateLimit": "Too many attempts in a row. Wait a minute and try again.",
-    "errorEmailNotSent": "We couldn't send the confirmation email. Check the address and try again."
+    "errorEmailNotSent": "We couldn't send the confirmation email. Check the address and try again.",
+    "doneTitle": "All done!",
+    "doneText": "Your email is confirmed and your team is ready. You can close this tab: carry on in the one opened from the link."
   },
   "adminUsers": {
     "ownerHint": "Team creator: sees the subscription and manages the other admins",

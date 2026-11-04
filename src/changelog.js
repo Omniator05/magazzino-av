@@ -7,6 +7,29 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-17',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Dashboard più leggibile su telefono: grigi più scuri e caldi sul fondo con il rosso, header di un rosso più profondo e i quattro strumenti (Scanner, Task, Template, Furgoni) come card bianche ben definite',
+        'Barra delle schede su telefono più in alto e con il vuoto attorno all\'icona selezionata trasparente, così l\'icona sembra fluttuare',
+        'Etichette: nelle Preferenze e nella scelta dell\'etichetta la versione piccola 41×13 è disegnata con un QR più piccolo, non più con le barre',
+        'Registrazione: la scheda "Controlla la tua email" diventa "Tutto fatto!" appena clicchi il link, anche da un altro dispositivo, così non rimandi l\'email per sbaglio. Dopo la conferma ricevi un\'email di benvenuto personale',
+        'Sito: su telefono la prima schermata è più corta e il piano consigliato compare per primo; su computer i link in alto scorrono lentamente fino alla sezione',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'More readable dashboard on phone: darker, warmer greys on the red-tinted background, a deeper red header and the four tools (Scanner, Tasks, Templates, Vans) as clear white cards',
+        'Tab bar on phone sits higher and the gap around the selected icon is transparent, so the icon looks like it floats',
+        'Labels: in Preferences and in the label picker the small 41×13 version is drawn with a smaller QR, no longer with bars',
+        'Sign-up: the "Check your email" tab turns into "All done!" as soon as you click the link, even from another device, so you don\'t resend the email by mistake. After confirming you get a personal welcome email',
+        'Website: on phone the first screen is shorter and the recommended plan comes first; on computer the top links scroll slowly to the section',
+      ],
+    },
+  },
+  {
     version: '2026-11-16',
     it: {
       title: 'Novità di oggi',

@@ -2216,7 +2216,7 @@ export default function EventDetail() {
                   <div onClick={() => { setMobileMoreOpen(false); setBulkAction(null) }}
                     style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
                 )}
-                <div className="rc-bulk-bar" style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 100px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
+                <div className="rc-bulk-bar" style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 112px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
                   {mobileMoreOpen && (
                     <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>{mobileMoreMenu}</div>
                   )}
@@ -2279,7 +2279,7 @@ export default function EventDetail() {
         onClick={openAddModal}
         aria-label={t('eventDetail.addItemsAriaLabel')}
         style={{
-          position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 132px)', right:20, zIndex:50,
+          position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 144px)', right:20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
           background:'var(--accent)', color:'white',
           display:'flex', alignItems:'center', justifyContent:'center',

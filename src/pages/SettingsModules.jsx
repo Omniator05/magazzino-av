@@ -23,18 +23,13 @@ function Switch({ enabled, onClick, disabled, label }) {
 }
 
 // Esempi disegnati dei tre formati: si sceglie guardando com'è l'etichetta, non leggendo una descrizione.
+// Il QR grande è l'etichetta normale; quella piccola 41×13 porta anch'essa un QR, più piccolo (le barre non ci sono più).
 const QR_ON = [0,1,2,4,5,6,7,13,14,16,18,20,21,24,26,28,30,35,42,43,44,46,47,48,9,11,33,39]
-function SampleQr() {
+function SampleQr({ small = false }) {
+  const cell = small ? 3 : 6, gap = small ? 1 : 2
   return (
-    <div aria-hidden="true" style={{ display:'grid', gridTemplateColumns:'repeat(7, 6px)', gap:2 }}>
-      {Array.from({ length: 49 }, (_, i) => <span key={i} style={{ width:6, height:6, borderRadius:1.5, background:'#1a1a1a', opacity: QR_ON.includes(i) ? 1 : 0.1 }} />)}
-    </div>
-  )
-}
-function SampleBarcode() {
-  return (
-    <div aria-hidden="true" style={{ display:'flex', alignItems:'stretch', gap:2, height:42 }}>
-      {[3,1,2,1,3,2,1,1,3,1,2,3,1,2,1,3,2,1].map((w, i) => <span key={i} style={{ width:w, background:'#1a1a1a', opacity: i % 2 === 0 ? 1 : 0 }} />)}
+    <div aria-hidden="true" style={{ display:'grid', gridTemplateColumns:`repeat(7, ${cell}px)`, gap }}>
+      {Array.from({ length: 49 }, (_, i) => <span key={i} style={{ width:cell, height:cell, borderRadius: small ? 0.75 : 1.5, background:'#1a1a1a', opacity: QR_ON.includes(i) ? 1 : 0.1 }} />)}
     </div>
   )
 }
@@ -113,7 +108,7 @@ export default function SettingsModules() {
                   className={`pref-choice btn-no-anim${on ? ' on' : ''}`}>
                   <span className="pref-choice-sample">
                     {(f === 'qr' || f === 'both') && <SampleQr />}
-                    {(f === 'barcode' || f === 'both') && <SampleBarcode />}
+                    {(f === 'barcode' || f === 'both') && <SampleQr small />}
                   </span>
                   <span className="pref-choice-text">
                     <span className="pref-choice-name">{FORMAT_LABEL[f]}</span>

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { generateItemCode, generateUnitCode } from '../utils/generateCode'
 import { renderLabelPNG, downloadDataUrl, labelFilename } from '../utils/labelImage'
 import { getCodeDisplay } from '../utils/codeDisplay'
-import { QrCode, Barcode } from './Icon'
+import { QrCode } from './Icon'
 import { probeService, pickPrinter, printLabelImages, printErrorText, loadPrintSettings, savePrintSettings } from '../utils/makeidPrint'
 
 // Scarica l'etichetta di un oggetto (PNG pronta per la stampante termica), una sola o una per ogni pezzo in uno
@@ -113,7 +113,7 @@ export default function LabelDialog({ item, onClose }) {
             <h2 style={{ margin: '0 36px 16px 0', fontSize: 17 }}>{t('inventory.chooseCodeFormat')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <button onClick={() => setFormat('qr')} style={choice}><QrCode size={26} /><span style={{ fontWeight: 700, fontSize: 13 }}>{t('adminUsers.codeDisplayQr')}</span></button>
-              <button onClick={() => setFormat('barcode')} style={choice}><Barcode size={26} /><span style={{ fontWeight: 700, fontSize: 13 }}>{t('adminUsers.codeDisplayBarcode')}</span></button>
+              <button onClick={() => setFormat('barcode')} style={choice}><span style={{ display: 'flex', alignItems: 'center', height: 26 }}><QrCode size={16} /></span><span style={{ fontWeight: 700, fontSize: 13 }}>{t('adminUsers.codeDisplayBarcode')}</span></button>
             </div>
           </>
         ) : (

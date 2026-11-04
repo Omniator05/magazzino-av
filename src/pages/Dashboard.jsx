@@ -311,7 +311,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   // fino all'altezza del riquadro "Ancora nessun evento", con i quattro tasti più grandi.
   const emptyHome = !isMobile && upcoming.length === 0
   const nextEvents = upcoming.filter(e => !(isRelevantToday(e) || isOverdueRent(e)))
-  const sectionLabel = { fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink3)', margin:'0 0 12px 2px' }
+  const sectionLabel = { fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink2)', margin:'0 0 12px 2px' }
   const attentionRow = { width:'100%', display:'flex', alignItems:'center', gap:12, padding:'14px 16px', borderRadius:12, background:'var(--c-surface)', border:'1px solid var(--c-line)', fontSize:13, fontWeight:600, color:'var(--c-ink)' }
   const attentionDot = { width:8, height:8, borderRadius:'50%', flexShrink:0 }
 
@@ -336,7 +336,7 @@ export default function Dashboard({ toggleTheme, theme }) {
     // "rent", il rosso "oggi".
     const tileBg = overdue ? '#ea580c' : isToday ? (ev.type === 'installation' ? 'linear-gradient(135deg, #e63946 0%, #7c6fea 100%)' : '#e63946') : 'var(--c-fill)'
     const tileFg = overdue || isToday ? '#fff' : 'var(--c-ink)'
-    const tileSub = overdue || isToday ? 'rgba(255,255,255,0.85)' : 'var(--c-ink2)'
+    const tileSub = overdue || isToday ? '#fff' : 'var(--c-ink2)'
     return (
       <button type="button" key={ev.id} onClick={() => navigate(`/events/${ev.id}`)} aria-label={t('events.openEventAria', { name: ev.name })} className="btn-no-anim"
         style={{ width:'100%', marginBottom:12, background:'var(--c-surface)', border:`1px solid ${overdue ? 'rgba(234,88,12,0.45)' : isToday && ev.type === 'installation' ? 'rgba(124,111,234,0.45)' : 'var(--c-line)'}`, borderRadius:18, display:'flex', alignItems:'center', gap:14, padding:'15px 16px', textAlign:'left' }}>
@@ -357,7 +357,7 @@ export default function Dashboard({ toggleTheme, theme }) {
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4, minWidth:0 }}>
             <p style={{ fontWeight:800, fontSize:15, color:'var(--c-ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0, margin:0 }}>{ev.name}</p>
             {overdue && (
-              <span style={{ flexShrink:0, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'#ea580c', background:'rgba(234,88,12,0.12)', borderRadius:6, padding:'2px 7px' }}>{t('dashboard.overdueRentBadge')}</span>
+              <span style={{ flexShrink:0, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.4px', color:'var(--c-orange-ink)', background:'rgba(234,88,12,0.12)', borderRadius:6, padding:'2px 7px' }}>{t('dashboard.overdueRentBadge')}</span>
             )}
           </div>
           <p style={{ fontSize:12, fontWeight:500, color:'var(--c-ink2)', margin:0, textTransform:'capitalize' }}>{dateLabel}{dateEndLabel}</p>
@@ -385,7 +385,9 @@ export default function Dashboard({ toggleTheme, theme }) {
     <div className="dash-tools-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:10, marginBottom:32 }}>
       {tools.map((tool) => (
         <button key={tool.path} className="dash-tool-tile btn-no-anim" onClick={() => navigate(tool.path)}
-          style={{ position:'relative', background:'var(--c-fill)', border:'none', borderRadius:16, padding:'18px 4px 14px', display:'flex', flexDirection:'column', alignItems:'center', gap:9, color:'var(--c-ink)' }}>
+          // Card bianca con filo e un'ombra appena accennata (come le card degli eventi): prima il fondo beige quasi uguale allo
+          // sfondo rosato e l'assenza di bordo facevano sembrare solo "icone sospese", non quadrati da toccare.
+          style={{ position:'relative', background:'var(--c-surface)', border:'1px solid var(--c-line)', boxShadow:'0 1px 3px rgba(60,30,30,0.07)', borderRadius:16, padding:'18px 4px 14px', display:'flex', flexDirection:'column', alignItems:'center', gap:9, color:'var(--c-ink)' }}>
           {tool.badge !== null && (
             <span style={{ position:'absolute', top:-6, right:-4, minWidth:20, height:20, padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--accent)', color:'#fff', borderRadius:10, fontSize:11, fontWeight:800 }}>{tool.badge}</span>
           )}
@@ -487,17 +489,17 @@ export default function Dashboard({ toggleTheme, theme }) {
           Sta FUORI dal contenuto e i popup (profilo, riepilogo…) stanno fuori dal contenitore sotto: un contenitore
           con z-index/isolation chiuderebbe i popup nel suo livello, e la tab bar (z-index 100) li coprirebbe. */}
       <div className="dash-bg" aria-hidden="true"><span className="dash-blob dash-blob-a" /><span className="dash-blob dash-blob-b" /><span className="dash-blob dash-blob-c" /></div>
-      <div style={{ position:'relative', zIndex:1, minHeight:'100dvh', paddingBottom: isMobile ? 150 : 110 }}>
+      <div className="dash-ink" style={{ position:'relative', zIndex:1, minHeight:'100dvh', paddingBottom: isMobile ? 162 : 110 }}>
 
       {/* ── Header rosso (colore del marchio), testi bianchi. Saluto, nome, data e meteo a
           sinistra; l'avatar a destra apre il profilo (da lì anche l'uscita). ── */}
-      <div className="page-header rc-page-header" style={{ position:'relative', overflow:'hidden', background:'linear-gradient(135deg, #ee4a58 0%, #d62f3d 100%)', borderBottom:'none', ...(isMobile ? { padding:'calc(env(safe-area-inset-top) + 36px) 22px 26px' } : { paddingBottom:22 }) }}>
+      <div className="page-header rc-page-header" style={{ position:'relative', overflow:'hidden', background:'linear-gradient(135deg, #d43341 0%, #bd2735 100%)', borderBottom:'none', ...(isMobile ? { padding:'calc(env(safe-area-inset-top) + 36px) 22px 26px' } : { paddingBottom:22 }) }}>
         <SkyArc weather={weather} isMobile={isMobile} />
         <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <div style={{ minWidth:0 }}>
-            <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.82)', fontWeight:600, margin:0 }}>{t(greetingKey())}</p>
+            <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.96)', fontWeight:600, margin:0 }}>{t(greetingKey())}</p>
             <h1 style={{ fontSize:isMobile ? 28 : 26, margin:'4px 0 0', color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</h1>
-            <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.82)', fontWeight:500, margin:'6px 0 0', textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
+            <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.96)', fontWeight:500, margin:'6px 0 0', textTransform:'capitalize', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{todayLabel}{weather ? ` · ${weather.temp}°C` : ''}</p>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
             {profile?.superAdmin && (
@@ -509,9 +511,9 @@ export default function Dashboard({ toggleTheme, theme }) {
               </button>
             )}
             <button onClick={() => setShowProfile(true)} aria-label={t('dashboard.openSettings')} className="btn-no-anim"
-              style={{ position:'relative', width:46, height:46, borderRadius:'50%', background:'#fff', color:'#d62f3d', border:'none', fontSize:16, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              style={{ position:'relative', width:46, height:46, borderRadius:'50%', background:'#fff', color:'#bd2735', border:'none', fontSize:16, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>
               {name.charAt(0).toUpperCase()}
-              {hasUnseenWhatsNew() && <span aria-hidden="true" style={{ position:'absolute', top:-2, right:-2, width:13, height:13, borderRadius:'50%', background:'#ffd27a', border:'2px solid #d62f3d' }} />}
+              {hasUnseenWhatsNew() && <span aria-hidden="true" style={{ position:'absolute', top:-2, right:-2, width:13, height:13, borderRadius:'50%', background:'#ffd27a', border:'2px solid #bd2735' }} />}
             </button>
           </div>
         </div>

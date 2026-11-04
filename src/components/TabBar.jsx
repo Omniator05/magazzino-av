@@ -45,7 +45,7 @@ const WORK_HOURS_TAB = { path:'/work-hours', label:'Ore', icon:ICON_WORK_HOURS }
 // angoli arrotondati (cx0 ≥ rc + larghezza mezza tacca).
 // Aggancio per il tour guidato (GuidedTour.jsx): le tab che il tour fa toccare.
 const TOUR_TABS = { '/admin/settings': 'tab-settings', '/inventory': 'tab-inventory', '/events': 'tab-events' }
-const PHONE = { H: 60, D: 58, ring: 5, fillet: 6, cy: 5, dip: 9, icon: 32, padX: 28, rc: 14, bottom: 28, slot: 52 }
+const PHONE = { H: 60, D: 58, ring: 5, fillet: 6, cy: 5, dip: 9, icon: 32, padX: 28, rc: 14, bottom: 40, slot: 52 }   // bottom: più su dal bordo, più comoda da raggiungere col pollice (FAB, barra di selezione e tour stanno 12px più su di conseguenza)
 const DESKTOP = { H: 70, D: 68, ring: 6, fillet: 10, cy: 5, dip: 10, icon: 34, padX: 40, rc: 24, bottom: 22, width: 600 }
 const DURATION = 480      // ms
 const TAB_GREY = 'var(--c-ink2)'
@@ -168,7 +168,6 @@ export default function TabBar() {
   // ognuna sale/scende a seconda di quanto ci è sotto.
   const pathRef = useRef(null)
   const circleRef = useRef(null)
-  const holeRef = useRef(null)
   const iconRefs = useRef([])
   const anim = useRef({ pos: Math.max(activeIndex, 0), vis: activeIndex >= 0 ? 1 : 0, raf: 0, ready: false })
 
@@ -177,7 +176,6 @@ export default function TabBar() {
     const cy = m.cy + dip
     const Rn = (m.D / 2 + m.ring) * vis
     pathRef.current?.setAttribute('d', barPath(barW, m.H, rc, rc, cx, cy, Rn, m.fillet))
-    if (holeRef.current) { holeRef.current.setAttribute('cx', cx); holeRef.current.setAttribute('cy', cy); holeRef.current.setAttribute('r', Math.max(Rn, 0)) }
     if (circleRef.current) {
       circleRef.current.style.transform = `translate(${cx - m.D / 2}px, ${cy - m.D / 2}px) scale(${vis})`
     }
@@ -240,13 +238,10 @@ export default function TabBar() {
       <div style={{ position:'relative', height: m.H }}>
         <svg width={barW} height={m.H} aria-hidden="true"
           style={{ position:'absolute', left:0, top:0, overflow:'visible', filter:'drop-shadow(0 8px 22px var(--tab-shadow))' }}>
+          {/* La tacca è un vuoto vero nel contorno della barra: la pagina si vede attraverso, e l'icona selezionata
+              "galleggia". Prima un disco del colore di sfondo la riempiva: con lo sfondo rosato della Dashboard
+              si vedeva come un cerchio beige piatto attorno al rosso. */}
           <path ref={pathRef} fill="var(--c-surface)" />
-          {/* Dentro la tacca la pagina sotto (testo che scorre) darebbe
-              fastidio: un disco del colore dello sfondo, limitato alla
-              fascia della barra, la nasconde — sopra il bordo il cerchio
-              resta libero, solo con la sua ombra. */}
-          <clipPath id="ftab-clip"><rect x="0" y="0" width={barW} height={m.H} /></clipPath>
-          <circle ref={holeRef} fill="var(--surface)" clipPath="url(#ftab-clip)" />
         </svg>
         <span ref={circleRef} aria-hidden="true" style={{
           position:'absolute', left:0, top:0, width: m.D, height: m.D, borderRadius:'50%', zIndex:2, pointerEvents:'none',

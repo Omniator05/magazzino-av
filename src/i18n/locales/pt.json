@@ -913,7 +913,9 @@
     "resent": "Email reenviado.",
     "wrongEmail": "Endereço errado? Voltar",
     "errorRateLimit": "Demasiadas tentativas seguidas. Aguarde um minuto e tente de novo.",
-    "errorEmailNotSent": "Não foi possível enviar o email de confirmação. Verifique o endereço e tente de novo."
+    "errorEmailNotSent": "Não foi possível enviar o email de confirmação. Verifique o endereço e tente de novo.",
+    "doneTitle": "Tudo feito!",
+    "doneText": "O seu email foi confirmado e a equipa está pronta. Pode fechar este separador: continue no que abriu com a ligação."
   },
   "adminUsers": {
     "ownerHint": "Criador da equipa: vê a subscrição e gere os outros administradores",

@@ -577,6 +577,14 @@ const LANDING_CSS = `
     .lp-rail li { padding: 8px 0; }
     .lp-rail li h3 { font-size: 26px; }
   }
+  /* Telefono: la lista di carico d'esempio nella prima schermata si toglie. Allungava la pagina senza dire altro: poco sotto
+     c'è già la stessa lista che si compila scorrendo (ScrollStory). Su schermi più larghi resta accanto al testo. */
+  @media (max-width: 639px) {
+    .lp-stage { display: none; }
+    .lp-hero-grid { padding-bottom: 56px; }
+    /* Prezzi: il piano consigliato va per primo (le card restano della grandezza di sempre). */
+    .lp-plan.hl { order: -1; }
+  }
   /* Telefono stretto: la barra in alto (accesso e prova) deve stare su una riga in ogni lingua */
   @media (max-width: 520px) {
     .lp-brand img { display: none; }
@@ -592,6 +600,36 @@ const LANDING_CSS = `
     .lp-btn, .lp-box, .lp-box path, .lp-plus, .lp-rail li, .lp-dot { transition: none; }
   }
 `
+
+// Scorrimento lento verso una sezione dai link in alto (prima la pagina saltava di colpo). Dura più o meno a seconda della
+// distanza (da 0,8 a 1,6 secondi), con partenza e arrivo morbidi; si ferma se chi legge prende il controllo (rotella, tocco,
+// tastiera). Con "riduci animazioni" attivo si arriva subito, come prima.
+let scrollAnim = 0
+function smoothScrollTo(targetY) {
+  cancelAnimationFrame(scrollAnim)
+  const startY = window.scrollY
+  const dist = targetY - startY
+  if (Math.abs(dist) < 4) return
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { window.scrollTo(0, targetY); return }
+  const duration = Math.min(1600, Math.max(800, Math.abs(dist) * 0.35))
+  const t0 = performance.now()
+  const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2)
+  const stop = () => { cancelAnimationFrame(scrollAnim); ['wheel', 'touchstart', 'keydown'].forEach(ev => window.removeEventListener(ev, stop)) }
+  ;['wheel', 'touchstart', 'keydown'].forEach(ev => window.addEventListener(ev, stop, { passive: true }))
+  const step = now => {
+    const k = Math.min((now - t0) / duration, 1)
+    window.scrollTo(0, startY + dist * ease(k))
+    if (k < 1) scrollAnim = requestAnimationFrame(step); else stop()
+  }
+  scrollAnim = requestAnimationFrame(step)
+}
+const goToSection = (e, id) => {
+  const el = document.getElementById(id)
+  if (!el) return                                   // senza la sezione, resta il comportamento normale del link
+  e.preventDefault()
+  smoothScrollTo(el.getBoundingClientRect().top + window.scrollY - 80)   // 80 = scroll-margin-top delle sezioni (header fisso)
+  try { window.history.replaceState(null, '', `#${id}`) } catch { /* l'indirizzo resta com'è */ }
+}
 
 // I crawler non vedono mai la finestra di scelta lingua: il contenuto della pagina resta lo stesso, cambia solo l'avviso.
 const looksLikeBot = () => typeof navigator !== 'undefined' && /bot|crawl|spider|lighthouse|headless/i.test(navigator.userAgent || '')
@@ -636,9 +674,9 @@ export default function Landing({ lang = 'it' }) {
             <Wordmark size={24} />
           </Link>
           <nav className="lp-links" aria-label="Roadcase">
-            <a href="#funzioni" className="lp-navlink">{t('landing.navFeatures')}</a>
-            <a href="#prezzi" className="lp-navlink">{t('landing.navPricing')}</a>
-            <a href="#faq" className="lp-navlink">{t('landing.navFaq')}</a>
+            <a href="#funzioni" onClick={e => goToSection(e, 'funzioni')} className="lp-navlink">{t('landing.navFeatures')}</a>
+            <a href="#prezzi" onClick={e => goToSection(e, 'prezzi')} className="lp-navlink">{t('landing.navPricing')}</a>
+            <a href="#faq" onClick={e => goToSection(e, 'faq')} className="lp-navlink">{t('landing.navFaq')}</a>
           </nav>
           <div className="lp-nav">
             <Link to="/login" className="lp-link">{t('landing.login')}</Link>

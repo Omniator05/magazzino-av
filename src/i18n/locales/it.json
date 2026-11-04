@@ -913,7 +913,9 @@
     "resent": "Email rimandata.",
     "wrongEmail": "Indirizzo sbagliato? Torna indietro",
     "errorRateLimit": "Troppi tentativi ravvicinati. Aspetta un minuto e riprova.",
-    "errorEmailNotSent": "Non siamo riusciti a mandare l'email di conferma. Controlla l'indirizzo e riprova."
+    "errorEmailNotSent": "Non siamo riusciti a mandare l'email di conferma. Controlla l'indirizzo e riprova.",
+    "doneTitle": "Tutto fatto!",
+    "doneText": "La tua email è stata confermata e la squadra è pronta. Puoi chiudere questa scheda: si continua da quella aperta dal link."
   },
   "adminUsers": {
     "ownerHint": "Creatore della squadra: vede l'abbonamento e gestisce gli altri admin",

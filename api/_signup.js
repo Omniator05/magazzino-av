@@ -8,13 +8,16 @@
 //                   accesso, così chi ha cliccato entra già collegato (da qualunque dispositivo).
 //   signupResend  — rimanda il link a chi ha una richiesta in attesa (sempre la stessa risposta: non rivela
 //                   quali indirizzi hanno una richiesta).
+//   signupStatus  — la scheda "controlla la tua email" chiede se il link è stato cliccato (anche da un altro
+//                   dispositivo), con una chiave segreta (pollKey) che solo quella scheda conosce: niente indirizzi, niente
+//                   enumerazione.
 //
 // La richiesta in attesa sta in `teamSecrets` (chiusa a tutti i client: la leggono solo le API) con id derivato
 // dall'impronta del token — il token vero esiste solo nell'email. Il link vale 24 ore ed è monouso, con una
 // tolleranza di 10 minuti perché i programmi di scansione dei link nelle email non brucino il collegamento.
 import crypto from 'node:crypto'
 import { getAdmin } from './_authAdmin.js'
-import { sendEmail, verifyEmailHtml } from './_resend.js'
+import { sendEmail, verifyEmailHtml, welcomeFounderEmailHtml } from './_resend.js'
 
 const DAY = 24 * 60 * 60 * 1000
 const TTL_MS = DAY
@@ -45,13 +48,13 @@ export function createSignupHandlers(deps = {}) {
     return true
   }
 
-  async function issueLink({ db, req, uid, email, name, companyName, nameLower, consentAcceptedAt }) {
+  async function issueLink({ db, req, uid, email, name, companyName, nameLower, consentAcceptedAt, pollKey }) {
     // Una sola richiesta in attesa per account: le precedenti (link vecchi) non valgono più.
     const old = await db.collection('teamSecrets').where('kind', '==', 'signup').where('uid', '==', uid).get()
     await Promise.all(old.docs.filter(d => !d.data().usedAt).map(d => d.ref.delete()))
     const token = newToken()
     await db.collection('teamSecrets').doc(pendingId(token)).set({
-      kind: 'signup', uid, email, name, companyName, nameLower, consentAcceptedAt,
+      kind: 'signup', uid, email, name, companyName, nameLower, consentAcceptedAt, pollKey: pollKey || null,
       createdAt: now(), expiresAt: now() + TTL_MS,
     })
     try {
@@ -84,6 +87,7 @@ export function createSignupHandlers(deps = {}) {
     const db = admin.firestore()
     if (!(await allowOnce(db, email))) return res.status(429).json({ error: 'rate-limit' })
 
+    const pollKey = newToken()   // segreto della scheda che sta aspettando la conferma (vedi signupStatus)
     const nameLower = companyName.toLowerCase()
     const dup = await db.collection('teams').where('nameLower', '==', nameLower).limit(1).get()
     if (!dup.empty) return res.status(409).json({ error: 'company-exists' })
@@ -110,12 +114,12 @@ export function createSignupHandlers(deps = {}) {
     }
 
     try {
-      await issueLink({ db, req, uid, email, name, companyName, nameLower, consentAcceptedAt: new Date(now()).toISOString() })
+      await issueLink({ db, req, uid, email, name, companyName, nameLower, consentAcceptedAt: new Date(now()).toISOString(), pollKey })
     } catch (e) {
       console.error('[signupStart] email', e.message)
       return res.status(502).json({ error: 'email-failed' })
     }
-    return res.status(200).json({ ok: true })
+    return res.status(200).json({ ok: true, pollKey })
   }
 
   async function signupVerify(req, res) {
@@ -141,6 +145,7 @@ export function createSignupHandlers(deps = {}) {
     if (!dup.empty) { await ref.delete().catch(() => {}); return res.status(409).json({ error: 'company-exists' }) }
 
     let teamRef
+    let welcome = null
     try {
       teamRef = await db.collection('teams').add({
         name: d.companyName, nameLower: d.nameLower,
@@ -157,13 +162,23 @@ export function createSignupHandlers(deps = {}) {
       })
       await admin.auth().updateUser(d.uid, { emailVerified: true })
       await ref.update({ usedAt: now(), teamId: teamRef.id })
+      // Benvenuto personale (una sola volta: questo è il percorso della creazione, non quello della tolleranza sotto).
+      // Parte in parallelo alla creazione del token e non può mai far fallire l'accesso.
+      welcome = send({
+        to: d.email,
+        subject: `Welcome to Roadcase, ${d.name}`,
+        html: welcomeFounderEmailHtml({ name: d.name, teamName: d.companyName, appUrl: originOf(req) }),
+        replyTo: process.env.RESEND_REPLY_TO || 'info@roadcase.it',
+      }).catch(e => console.error('[signupVerify] welcome email', e.message))
     } catch (e) {
       // Niente squadra a metà: meglio riprovare il link da capo.
       if (teamRef) await teamRef.delete().catch(() => {})
       console.error('[signupVerify]', e.message)
       return res.status(500).json({ error: 'failed' })
     }
-    return res.status(200).json({ token: await admin.auth().createCustomToken(d.uid), uid: d.uid, email: d.email, teamName: d.companyName, name: d.name })
+    const loginToken = await admin.auth().createCustomToken(d.uid)
+    await welcome   // in una funzione serverless un invio non atteso può essere interrotto alla risposta
+    return res.status(200).json({ token: loginToken, uid: d.uid, email: d.email, teamName: d.companyName, name: d.name })
   }
 
   async function signupResend(req, res) {
@@ -176,14 +191,28 @@ export function createSignupHandlers(deps = {}) {
       const snap = await db.collection('teamSecrets').where('kind', '==', 'signup').where('email', '==', email).get()
       const open = snap.docs.map(x => x.data()).filter(x => !x.usedAt).sort((a, b) => b.createdAt - a.createdAt)[0]
       if (!open) return done()
-      await issueLink({ db, req, uid: open.uid, email, name: open.name, companyName: open.companyName, nameLower: open.nameLower, consentAcceptedAt: open.consentAcceptedAt })
+      await issueLink({ db, req, uid: open.uid, email, name: open.name, companyName: open.companyName, nameLower: open.nameLower, consentAcceptedAt: open.consentAcceptedAt, pollKey: open.pollKey })
     } catch (e) {
       console.error('[signupResend]', e.message)
     }
     return done()
   }
 
-  return { signupStart, signupVerify, signupResend }
+  // La scheda "controlla la tua email" chiede ogni pochi secondi se il link è stato cliccato. Si risponde solo a chi
+  // conosce la chiave segreta data alla registrazione, e solo con sì/no.
+  async function signupStatus(req, res) {
+    const key = String(req.body?.pollKey ?? '')
+    if (key.length < 20 || key.length > 120) return res.status(400).json({ error: 'invalid' })
+    try {
+      const snap = await getAdminSdk().firestore().collection('teamSecrets').where('pollKey', '==', key).get()
+      return res.status(200).json({ verified: snap.docs.some(d => d.data().usedAt && d.data().teamId) })
+    } catch (e) {
+      console.error('[signupStatus]', e.message)
+      return res.status(200).json({ verified: false })
+    }
+  }
+
+  return { signupStart, signupVerify, signupResend, signupStatus }
 }
 
-export const { signupStart, signupVerify, signupResend } = createSignupHandlers()
+export const { signupStart, signupVerify, signupResend, signupStatus } = createSignupHandlers()
