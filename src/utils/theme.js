@@ -4,7 +4,7 @@
 // (vedi src/index.css). La stessa logica è replicata in poche righe nello
 // script di index.html, così il tema giusto c'è già al primo paint.
 const KEY = 'rcTheme'
-const THEME_COLOR = { light: '#f5f5f3', dark: '#121211' }
+const THEME_COLOR = { light: '#f5f5f3', dark: '#1b1a18' }
 
 export function getThemePref() {
   try {

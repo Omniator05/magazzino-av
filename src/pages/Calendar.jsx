@@ -175,6 +175,16 @@ export default function Calendar() {
   const [summaryTask, setSummaryTask] = useState(null)
   // Magazziniere (sola lettura): evento aperto nella colonna con tutti i dettagli.
   const [detailEvent, setDetailEvent] = useState(null)
+  // Evento "a fuoco" nella colonna laterale (solo desktop): quello in modifica (admin) o aperto in sola lettura
+  // (magazziniere). Nella griglia resta a colori e tutti gli altri diventano grigi, così tra i tanti eventi dello
+  // stesso giorno si vede subito quale è. Nessun alone né movimento.
+  const focusEventId = !isMobile ? (editingEvent?.id || (readOnly ? detailEvent?.id : null) || null) : null
+  // Spunta davanti al nome degli eventi già montati (solo admin).
+  const mark = (ev) => (!readOnly && ev.assembled ? '✓ ' : '')
+  const focusStyle = (evId) => {
+    if (!focusEventId || evId === focusEventId) return null
+    return { filter: 'grayscale(1)', opacity: 0.5 }
+  }
 
   // Gestione assenze admin
   const [showAbsenceModal, setShowAbsenceModal] = useState(false)
@@ -933,10 +943,10 @@ export default function Calendar() {
                     const rank = ev.isDeadlineReminder ? 4 : ev.type === 'installation' ? 3 : 0
                     const baseColor = ev.isDeadlineReminder ? 'var(--text3)' : ev.type === 'installation' ? '#7c6fcd' : isWorker ? (isAssigned ? 'var(--accent)' : 'var(--blue)') : 'var(--accent)'
                     const phasesToday = !ev.isDeadlineReminder && phaseGroups[ev.id]
-                    if (!phasesToday) return { key: ev.id, name: ev.name, isReminder: ev.isDeadlineReminder, rank, color: baseColor }
+                    if (!phasesToday) return { key: ev.id, evId: ev.id, name: mark(ev) + ev.name, isReminder: ev.isDeadlineReminder, rank, color: baseColor }
                     mergedEventIds.add(ev.id)
                     const split = phasesToday.length > 1 ? phasesToday.map(p => p.color) : [baseColor, phasesToday[0].color]
-                    return { key: ev.id, name: ev.name, rank, split }
+                    return { key: ev.id, evId: ev.id, name: mark(ev) + ev.name, rank, split }
                   })
                   // Fasi rimaste "orfane" (l'evento vero non compare oggi in
                   // griglia — es. giorno di smontaggio fuori dal range
@@ -947,10 +957,10 @@ export default function Calendar() {
                     .filter(group => !mergedEventIds.has(group[0].event.id))
                     .map(group => {
                       if (group.length > 1) {
-                        return { key: `${group[0].event.id}-phases`, name: `${group.map(p => p.label).join('/')} · ${group[0].event.name}`, rank: 1, split: group.map(p => p.color) }
+                        return { key: `${group[0].event.id}-phases`, evId: group[0].event.id, name: `${group.map(p => p.label).join('/')} · ${group[0].event.name}`, rank: 1, split: group.map(p => p.color) }
                       }
                       const p = group[0]
-                      return { key: `${p.event.id}-${p.key}`, name: `${p.label} · ${p.event.name}`, rank: 1, color: p.color }
+                      return { key: `${p.event.id}-${p.key}`, evId: p.event.id, name: `${p.label} · ${p.event.name}`, rank: 1, color: p.color }
                     })
                   // Ordine di priorità fisso: evento vero > fase (montaggio/
                   // smontaggio) > task libero > rent/install > promemoria
@@ -986,16 +996,18 @@ export default function Calendar() {
                         return (
                           <span key={`bar${sg.ev.id}`} style={{
                             ...rowStyle, position:'relative', zIndex:2, pointerEvents:'none',
+                            ...focusStyle(sg.ev.id),
                             maxWidth:'none', width:`calc(${n * 100}% + ${(n - 1) * (padX * 2 + 1) + extraL + extraR}px)`, marginLeft:`calc(${-back * 100}% - ${back * (padX * 2 + 1) + extraL}px)`,
                             borderTopLeftRadius: sg.contL ? 0 : 4, borderBottomLeftRadius: sg.contL ? 0 : 4,
                             borderTopRightRadius: sg.contR ? 0 : 4, borderBottomRightRadius: sg.contR ? 0 : 4,
                             background: evPast ? 'var(--text2)' : color, color:'#fff',
-                          }}>{sg.contL ? '‹ ' : ''}{sg.ev.name}{sg.contR ? ' ›' : ''}</span>
+                          }}>{sg.contL ? '‹ ' : ''}{mark(sg.ev)}{sg.ev.name}{sg.contR ? ' ›' : ''}</span>
                         )
                       })}
                       {titleRows.slice(0, room).map(row => (
                         <span key={row.key} style={{
                           ...rowStyle,
+                          ...focusStyle(row.evId),
                           background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.split ? `linear-gradient(90deg, ${row.split[0]} 50%, ${row.split[1]} 50%)` : row.color,
                           color: row.isReminder ? 'var(--text3)' : '#fff',
                         }}>{row.name}</span>

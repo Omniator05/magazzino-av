@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { listProgress } from '../utils/listProgress'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { db } from '../firebase'
@@ -350,9 +351,7 @@ export default function CalendarSidePanel({
             {selectedDayEvents.map(ev => {
               const items = ev.items || []
               const total = items.length
-              const prontoN = items.filter(it => it.pronto).length
-              const loadedN = items.filter(it => it.loaded).length
-              const returnedN = items.filter(it => it.returned).length
+              const { ready: prontoN, loaded: loadedN, returned: returnedN, stage } = listProgress(items)
               const assignedIds = ev.assignedWorkers || []
               // Solo chi lavora su QUESTO giorno (vedi assigneesOnDay): in un evento
               // lungo, montaggio e giorni dopo hanno persone diverse.
@@ -372,10 +371,11 @@ export default function CalendarSidePanel({
               // "Rientrato n/n" (verde, l'unico stadio che resta finale).
               let status
               if (total === 0) status = { label: t('calendar.listEmpty'), bg: 'rgba(204,34,34,0.12)', color: 'var(--red)' }
-              else if (prontoN < total) status = { label: `${t('calendar.statusReady')} ${prontoN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
-              else if (loadedN < total) status = { label: `${t('calendar.statusLoaded')} ${loadedN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
-              else if (returnedN < total) status = { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
-              else status = { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'rgba(5,150,105,0.12)', color: '#059669' }
+              else if (stage === 'returned') status = returnedN < total
+                ? { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
+                : { label: `${t('calendar.statusReturned')} ${returnedN}/${total}`, bg: 'rgba(5,150,105,0.12)', color: '#059669' }
+              else if (stage === 'loaded') status = { label: `${t('calendar.statusLoaded')} ${loadedN}/${total}`, bg: 'var(--c-t-amber)', color: 'var(--c-amber)' }
+              else status = { label: `${t('calendar.statusReady')} ${prontoN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
 
               return (
                 <div key={ev.id} className="rc-cal-card" style={{ position: 'relative', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
@@ -389,7 +389,10 @@ export default function CalendarSidePanel({
 
                   <div style={{ position: 'relative', zIndex: 2, pointerEvents: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-ink)' }}>{ev.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-ink)' }}>
+                        {ev.name}
+                        {isAdmin && ev.assembled && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 800, color: 'var(--c-green)', whiteSpace: 'nowrap' }}>✓ {t('eventDetail.assembled')}</span>}
+                      </span>
                       <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); readOnly ? onOpenEvent(ev) : onEditEvent(e, ev) }}
                         aria-label={`${readOnly ? t('calendar.detailsTag') : t('common.edit')} · ${ev.name}`}
                         style={{ pointerEvents: 'auto', flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>

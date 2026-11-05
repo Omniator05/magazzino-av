@@ -5,7 +5,9 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase/firestore'
-import { Pin } from '../components/Icon'
+import { Pin, Check } from '../components/Icon'
+import { DashEventsSkeleton, Bar } from '../components/Skeleton'
+import { listProgress } from '../utils/listProgress'
 import { formatDate } from '../utils/formatDate'
 import { isModuleEnabled } from '../utils/modules'
 import Profile from './Profile'
@@ -111,6 +113,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   const [showProfile, setShowProfile] = useState(false)
   const [dash, setDash] = useState(() => (dashCache.teamId && dashCache.teamId === teamId ? { ...dashCache } : { ...EMPTY_DASH }))
   const { items, vehicles, tasks, events, itemsLoaded, eventsLoaded } = dash
+  const dashLoading = !itemsLoaded || !eventsLoaded   // primo caricamento senza dati in memoria: scheletri al posto di liste vuote
   const [weather, setWeather] = useState(() => {
     try { return JSON.parse(localStorage.getItem('weatherCache')) } catch { return null }
   })
@@ -309,7 +312,7 @@ export default function Dashboard({ toggleTheme, theme }) {
   const todayEvents = upcoming.filter(e => isRelevantToday(e) || isOverdueRent(e))
   // Squadra nuova (nessun evento in evidenza), su computer: la colonna degli strumenti si allunga
   // fino all'altezza del riquadro "Ancora nessun evento", con i quattro tasti più grandi.
-  const emptyHome = !isMobile && upcoming.length === 0
+  const emptyHome = !isMobile && !dashLoading && upcoming.length === 0
   const nextEvents = upcoming.filter(e => !(isRelevantToday(e) || isOverdueRent(e)))
   const sectionLabel = { fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', color:'var(--c-ink2)', margin:'0 0 12px 2px' }
   const attentionRow = { width:'100%', display:'flex', alignItems:'center', gap:12, padding:'14px 16px', borderRadius:12, background:'var(--c-surface)', border:'1px solid var(--c-line)', fontSize:13, fontWeight:600, color:'var(--c-ink)' }
@@ -322,10 +325,7 @@ export default function Dashboard({ toggleTheme, theme }) {
     const dateEndLabel = ev.dateEnd && ev.dateEnd !== ev.date ? ' — ' + formatDate(ev.dateEnd+'T12:00:00', {day:'numeric',month:'short'}, i18n.language) : ''
     // Avanzamento della lista di carico, come nella card di Eventi.
     const evItems = loadListsOn ? (ev.items || []) : []
-    const nTot = evItems.length
-    const nReturned = evItems.filter(i => i.returned).length
-    const nLoaded = evItems.filter(i => i.loaded).length
-    const nReady = evItems.filter(i => i.pronto).length
+    const { total: nTot, returned: nReturned, loaded: nLoaded, ready: nReady } = listProgress(evItems)
     const status = nTot === 0 ? null
       : rentReadyToClose(ev) ? { tag: true, color:'#5b4fcf', text:t('events.statusToClose') }
       : nReturned > 0 ? { color:'var(--c-green)', text:t('events.statusReturnedCount', { returned:nReturned, total:nTot }) }
@@ -364,6 +364,7 @@ export default function Dashboard({ toggleTheme, theme }) {
           {status && (status.tag
             ? <span style={{ display:'inline-block', margin:'4px 0 0', background:'var(--c-violet-bg)', color:status.color, borderRadius:6, padding:'2px 8px', fontSize:10.5, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.3px' }}>{status.text}</span>
             : <p style={{ fontSize:11.5, fontWeight:700, color:status.color, margin:'4px 0 0' }}>{status.text}</p>)}
+          {ev.assembled && <p style={{ fontSize:11.5, fontWeight:700, color:'var(--c-green)', margin:'4px 0 0', display:'flex', alignItems:'center', gap:4 }}><Check size={12} /> {t('eventDetail.assembled')}</p>}
           {ev.location && <p style={{ fontSize:11.5, color:'var(--c-ink3)', margin:'4px 0 0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}><Pin size={11} /> {ev.location}</p>}
         </div>
         <span style={{ color:'var(--c-ink3)', display:'flex', flexShrink:0 }}><IconChevron /></span>
@@ -532,7 +533,7 @@ export default function Dashboard({ toggleTheme, theme }) {
                 style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:18, padding:'18px 20px', display:'flex', alignItems:'center', gap:14, textAlign:'left' }}>
                 <span style={{ width:46, height:46, borderRadius:14, background:st.tint, color:st.fg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{st.icon}</span>
                 <span style={{ minWidth:0 }}>
-                  <span style={{ display:'block', fontSize:28, fontWeight:800, letterSpacing:'-0.6px', lineHeight:1, color:'var(--c-ink)', fontVariantNumeric:'tabular-nums' }}>{st.value}</span>
+                  <span style={{ display:'block', fontSize:28, fontWeight:800, letterSpacing:'-0.6px', lineHeight:1, color:'var(--c-ink)', fontVariantNumeric:'tabular-nums' }}>{dashLoading ? <Bar w={36} h={26} r={6} /> : st.value}</span>
                   <span style={{ display:'block', fontSize:12.5, fontWeight:600, color:'var(--c-ink2)', marginTop:5 }}>{st.label}</span>
                 </span>
               </button>
@@ -544,14 +545,18 @@ export default function Dashboard({ toggleTheme, theme }) {
 
           {/* Colonna principale (computer) — su telefono tutto in fila */}
           <div style={{ order: isMobile ? 2 : 1, minWidth:0, ...(emptyHome ? { display:'flex', flexDirection:'column' } : {}) }}>
-            {todayEvents.length > 0 && (
+            {dashLoading ? <DashEventsSkeleton /> : (
               <>
-                <p style={sectionLabel}>{t('dashboard.todaySection')}</p>
-                <div style={{ marginBottom:32 }}>{todayEvents.map(renderEventCard)}</div>
+                {todayEvents.length > 0 && (
+                  <>
+                    <p style={sectionLabel}>{t('dashboard.todaySection')}</p>
+                    <div style={{ marginBottom:32 }}>{todayEvents.map(renderEventCard)}</div>
+                  </>
+                )}
+                {isMobile && attentionBlock}
+                {upcomingBlock}
               </>
             )}
-            {isMobile && attentionBlock}
-            {upcomingBlock}
           </div>
 
           {/* Colonna laterale (computer): strumenti e avvisi. Su telefono gli

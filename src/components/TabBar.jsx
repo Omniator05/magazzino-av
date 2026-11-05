@@ -231,7 +231,7 @@ export default function TabBar() {
       position:'fixed', zIndex:100,
       // Telefono: compatta (poco spazio fra le icone), centrata, e comunque
       // sempre dentro i margini dell'area visibile (left/right + maxWidth).
-      ...(wide ? { width: m.width, left:'50%', transform:'translateX(-50%)' } : { left:24, right:24, margin:'0 auto', maxWidth: n * m.slot + 2 * m.padX }),
+      ...(wide ? { width: `min(${m.width}px, calc(100vw - var(--rc-col-w, 0px) - 32px))`, left:'calc((100vw - var(--rc-col-w, 0px)) / 2)', transform:'translateX(-50%)', transition:'opacity 0.2s ease' } : { left:24, right:24, margin:'0 auto', maxWidth: n * m.slot + 2 * m.padX }),
       bottom: `calc(env(safe-area-inset-bottom) + ${m.bottom}px)`,
       '--ftab-icon': `${m.icon}px`,
     }}>

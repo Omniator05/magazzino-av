@@ -7,6 +7,33 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-18',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Tema scuro meno scuro: le card si staccano dallo sfondo, i testi secondari si leggono meglio e i bordi sono più marcati',
+        'Eventi su computer: cliccando un evento si apre a destra una colonna con tutta la lista di carico (entra e esce da destra, la barra delle schede si sposta di lato). Un pulsante apre l\'evento a pagina intera; dopo "Carica" e indietro si riapre la colonna',
+        'Calendario su computer: quando apri un evento, nella griglia resta a colori e gli altri diventano grigi',
+        'Nuovo interruttore "Montato" (solo admin) nell\'intestazione dell\'evento: la spunta compare in Eventi, Dashboard e Calendario',
+        'Stati del calendario corretti: una lista segnata come caricata non resta più ferma su "Pronto"; Calendario, Eventi e Dashboard mostrano lo stesso stato',
+        'Dashboard, Eventi e Magazzino mostrano scheletri di caricamento invece di una pagina vuota',
+        'Scheda oggetto su computer: nome più grande e posizione in magazzino in una riga sotto il titolo',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Less dark dark mode: cards stand out from the background, secondary text is easier to read and borders are stronger',
+        'Events on computer: clicking an event opens a column on the right with the whole load list (it slides in and out from the right, the tab bar moves aside). A button opens the event full page; after "Load" and back the column reopens',
+        'Calendar on computer: when you open an event, it stays in colour on the grid and the others turn grey',
+        'New "Set up" switch (admins only) in the event header: the check mark shows in Events, Dashboard and Calendar',
+        'Calendar statuses fixed: a list marked as loaded no longer stays stuck on "Ready"; Calendar, Events and Dashboard show the same status',
+        'Dashboard, Events and Inventory show loading skeletons instead of an empty page',
+        'Item card on computer: bigger name and warehouse position on a single line under the title',
+      ],
+    },
+  },
+  {
     version: '2026-11-17',
     it: {
       title: 'Novità di oggi',

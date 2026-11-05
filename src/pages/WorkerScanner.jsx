@@ -1508,7 +1508,7 @@ export default function WorkerScanner() {
               invece di tornare a quella già esistente — il tasto indietro
               del browser finiva per fare da avanti/indietro in loop tra
               questa pagina e quella da cui si era arrivati. */}
-          <button onClick={() => { stopScanner(); navigate(backPath, { replace: true }) }}
+          <button onClick={() => { stopScanner(); navigate(backPath !== '/' && profile?.role === 'admin' && !isMobile ? `/events?e=${id}` : backPath, { replace: true }) }}
             style={{ background:'var(--card2)', border:'1px solid var(--border)', color:'var(--text2)', borderRadius:10, padding:'8px 14px', fontSize:14, fontWeight:600 }}>
             ← {t('common.back')}
           </button>

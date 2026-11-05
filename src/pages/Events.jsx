@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { formatDate } from '../utils/formatDate'
 import DeleteButton from '../components/DeleteButton'
 import EditButton from '../components/EditButton'
-import { Pin, Dot } from '../components/Icon'
+import { Pin, Dot, Check } from '../components/Icon'
 import { EventListSkeleton } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
@@ -22,6 +22,8 @@ import { isModuleEnabled } from '../utils/modules'
 import { deleteEventWithInventoryCheck, closeInstallationEvent, rentReadyToClose } from '../utils/kitInventory'
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import CreateEventFlow from '../components/CreateEventFlow'
+import { listProgress } from '../utils/listProgress'
+const EventDetail = lazy(() => import('./EventDetail'))
 import { useIsMobile } from '../hooks/useIsMobile'
 
 const EVENT_CAP = 5
@@ -68,7 +70,7 @@ function phaseKeysToday(ev, today) {
 // 'phase' = oggi c'è solo un montaggio/smontaggio di un evento di un altro
 // giorno — la card mostra OGGI nell'icona (blu/arancione come la fase) e
 // la fase nella riga di stato.
-function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDelete, loadListsOn, todayKind }) {
+function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDelete, loadListsOn, todayKind, selectedId }) {
   const isPhaseOnly = todayKind === 'phase'
   const phaseKeys = isPhaseOnly ? phaseKeysToday(event, today) : []
   const phaseColor = isPhaseOnly && phaseKeys[0] ? PHASE_TODAY_COLORS[phaseKeys[0]] : null
@@ -78,10 +80,11 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   // titolo non va mostrata: azzerare qui invece che nel JSX fa sì che anche
   // i colori/bordo derivati (iconGradient, cardBorder) tornino da soli ai
   // rami "non caricato" senza doverli duplicare.
-  const prepared = loadListsOn ? items.filter(i => i.pronto).length : 0
-  const loaded   = loadListsOn ? items.filter(i => i.loaded).length : 0
-  const returned = loadListsOn ? items.filter(i => i.returned).length : 0
-  const total    = loadListsOn ? items.length : 0
+  const prog     = listProgress(loadListsOn ? items : [])
+  const prepared = prog.ready
+  const loaded   = prog.loaded
+  const returned = prog.returned
+  const total    = prog.total
   const isToday  = event.date === today || !!todayKind
   const evEnd    = event.dateEnd && event.dateEnd >= event.date ? event.dateEnd : event.date
   const isMultiDay = !isPhaseOnly && evEnd !== event.date
@@ -119,7 +122,7 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
   return (
     <div onClick={() => navigate(`/events/${event.id}`)}
       className="event-card"
-      style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)' }}
+      style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow: selectedId === event.id ? '0 0 0 2px var(--accent)' : '0 2px 8px rgba(0,0,0,0.05)' }}
     >
       {/* Icona gradiente con data — se dura più giorni mostra l'intervallo
           (es. "14-18") invece del solo primo giorno, che da solo lasciava
@@ -185,6 +188,11 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
               : (isToday && !isPhaseOnly) ? t('events.todayStatus', { status: statusText.toLowerCase() }) : statusText}
           </p>
         )}
+        {event.assembled && (
+          <p style={{ fontSize:12, fontWeight:700, color:'var(--c-green)', display:'flex', alignItems:'center', gap:4, marginTop:1 }}>
+            <Check size={12} /> {t('eventDetail.assembled')}
+          </p>
+        )}
         {(event.location || (event.phases && phaseConfig.some(p => event.phases[p.key]))) && (
           <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, flexWrap:'wrap' }}>
             {event.location && <span style={{ fontSize:11, color:'var(--dash-muted)', display:'inline-flex', alignItems:'center', gap:4 }}><Pin size={12} /> {event.location}</span>}
@@ -213,7 +221,7 @@ function EventCard({ event, today, t, i18n, navigate, phaseConfig, onEdit, onDel
 // il che la faceva sembrare un pezzo di un'altra app. Violetto e tag "Rent/
 // Install" restano — sono loro a dire "questo è diverso da un evento",
 // non tutto il resto della card.
-function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDelete, onClose, loadListsOn }) {
+function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDelete, onClose, loadListsOn, selectedId }) {
   const items     = inst.items || []
   const loaded    = items.filter(i => i.loaded).length
   const total     = items.length
@@ -238,7 +246,7 @@ function InstallationCard({ event: inst, today, t, i18n, navigate, onEdit, onDel
   return (
     <div onClick={() => navigate(`/events/${inst.id}`)}
       className="event-card"
-      style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow:'0 2px 8px rgba(0,0,0,0.05)' }}
+      style={{ cursor:'pointer', margin:'0 16px 10px', background:'var(--dash-card)', border:`1.5px solid ${cardBorder}`, borderRadius:20, display:'flex', alignItems:'center', padding:'10px 12px 10px 10px', gap:12, boxShadow: selectedId === inst.id ? '0 0 0 2px var(--accent)' : '0 2px 8px rgba(0,0,0,0.05)' }}
     >
       {/* Icona — stesso blocco data 52px delle card normali: violetto di
           norma (identità "rent/install"), rosso se comincia oggi — sempre
@@ -331,6 +339,34 @@ export default function Events() {
   const navigate = useNavigate()
   const { state: navState } = useLocation()
   const isMobile = useIsMobile()
+  // Desktop: toccando un evento si apre la colonna con la sua lista di carico (EventDetail incorporato) invece di
+  // cambiare pagina. L'evento aperto sta nell'indirizzo (?e=<id>): ricaricando o tornando indietro lo si ritrova.
+  // Su telefono resta la pagina intera, come prima.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selId = !isMobile ? searchParams.get('e') : null
+  // Colonna con uscita animata: l'evento resta montato per la durata dell'animazione di chiusura.
+  const [panelId, setPanelId] = useState(null)
+  useEffect(() => {
+    if (selId) { setPanelId(selId); return }
+    if (!panelId) return
+    const tm = setTimeout(() => setPanelId(null), 300)
+    return () => clearTimeout(tm)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selId])
+  const shownId = selId || panelId
+  // Larghezza della colonna come variabile animata su <html> (vedi index.css, --rc-col-w): la colonna, la lista e la tab
+  // bar (TabBar.jsx, che si centra nell'area a sinistra) leggono tutti lo stesso valore, quindi entrano e escono insieme.
+  useEffect(() => {
+    const root = document.documentElement
+    if (isMobile || !shownId) root.removeAttribute('data-col')
+    else root.setAttribute('data-col', selId ? 'open' : 'close')
+  }, [selId, shownId, isMobile])
+  useEffect(() => () => document.documentElement.removeAttribute('data-col'), [])
+  const goEvent = (path, opts) => {
+    const m = typeof path === 'string' && path.match(/^\/events\/([^/]+)$/)
+    if (m && !isMobile) setSearchParams({ e: m[1] })
+    else navigate(path, opts)
+  }
   // Su computer un evento nuovo si crea dal Calendario (colonna laterale), non
   // più da questo modal: stesso flusso, un solo posto. Su telefono resta il modal,
   // lo stesso che usa il calendario mobile.
@@ -541,12 +577,13 @@ export default function Events() {
     }
   }
 
-  const cardProps = { today, t, i18n, navigate, phaseConfig: PHASE_CONFIG, onEdit: openEdit, onDelete: deleteEvent, loadListsOn }
+  const cardProps = { today, t, i18n, navigate: goEvent, selectedId: selId, phaseConfig: PHASE_CONFIG, onEdit: openEdit, onDelete: deleteEvent, loadListsOn }
 
-  const instCardProps = { today, t, i18n, navigate, onEdit: openEdit, onDelete: deleteEvent, onClose: setClosingInstallation, loadListsOn }
+  const instCardProps = { today, t, i18n, navigate: goEvent, selectedId: selId, onEdit: openEdit, onDelete: deleteEvent, onClose: setClosingInstallation, loadListsOn }
 
   return (
-    <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
+    <div style={{ background:'var(--surface)', minHeight:'100dvh', display: shownId ? 'flex' : 'block', alignItems:'flex-start' }}>
+    <div style={{ flex:1, minWidth:0, width:'100%', paddingBottom:140 }}>
       <div className="page-header rc-page-header">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
@@ -559,7 +596,8 @@ export default function Events() {
         </div>
       </div>
 
-      <FabButton onClick={startNewEvent} ariaLabel={t('events.newEventButton')} tourId="add-event" />
+      {/* Su computer gli eventi si creano dal Calendario (vedi startNewEvent): niente "+" qui, solo su telefono. */}
+      {isMobile && <FabButton onClick={startNewEvent} ariaLabel={t('events.newEventButton')} tourId="add-event" />}
 
       {/* Barra di ricerca SEMPRE visibile — stessa del Magazzino (fondo grigio,
           appiccicata in alto), con un po' d'aria sotto l'intestazione. */}
@@ -747,12 +785,26 @@ export default function Events() {
            sopra a una card che ha già una sua ombra propria risultava sporco.
            Tolta solo l'ombra, non l'intero hover (colore/scala restano). */
         .event-card button:not(:disabled):hover { box-shadow: none; }
+
         /* Tag "Rent/Install" — via su telefono, dove icona+titolo+3 bottoni
            azione non lasciano spazio per leggere il titolo (vedi sopra). */
         @media (max-width: 480px) {
           .install-tag { display: none; }
         }
       `}</style>
+    </div>
+    {shownId && !isMobile && (
+      /* Il transform serve apposta: fa da riferimento ai fogli "fixed" aperti lì dentro, che così coprono solo la colonna.
+          La larghezza segue --rc-col-w (anima da 0 alla larghezza piena); il contenuto ha già la larghezza finale, ancorato
+          a destra, così non si ridisegna mentre entra e sembra scivolare da destra. */
+      <aside className="rc-col" style={{ position:'sticky', top:0, alignSelf:'flex-start', width:'var(--rc-col-w, 0px)', flexShrink:0, height:'100dvh', overflow:'hidden', transform:'translateZ(0)' }}>
+        <div style={{ position:'absolute', top:0, right:0, bottom:0, width:'var(--rc-col-target, 600px)', overflowY:'auto', background:'var(--c-surface)', borderLeft:'1px solid var(--c-line)' }}>
+          <Suspense fallback={null}>
+            <EventDetail key={shownId} embeddedId={shownId} onClose={() => setSearchParams({})} onOpenFull={() => navigate(`/events/${shownId}`)} />
+          </Suspense>
+        </div>
+      </aside>
+    )}
     </div>
   )
 }

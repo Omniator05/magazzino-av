@@ -59,9 +59,13 @@ function slugifyName(s) {
   return noDiacritics.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file'
 }
 
-export default function EventDetail() {
+// Con `embeddedId` (desktop, colonna di Eventi) la pagina vive dentro una colonna a destra della lista: stesso
+// contenuto, ma con "✕ / Pagina intera" al posto di "Indietro" e il "+" ancorato alla colonna invece che allo schermo.
+export default function EventDetail({ embeddedId = null, onClose = null, onOpenFull = null } = {}) {
   const { t, i18n } = useTranslation()
-  const { id } = useParams()
+  const params = useParams()
+  const embedded = !!embeddedId
+  const id = embeddedId || params.id
   // Alias esplicito per la cronologia: dentro saveItemEdit "id" viene
   // destrutturato dall'oggetto (l'id della RIGA), che nasconde questo "id"
   // dell'evento per tutto il corpo della funzione — usare sempre "eventId"
@@ -73,7 +77,8 @@ export default function EventDetail() {
   const loadListsOn = isModuleEnabled(team, 'loadLists')
   const confirm = useConfirm()
   const navigate = useNavigate()
-  const isMobile = useIsMobile()
+  // Nella colonna di Eventi (embedded) la pagina si comporta come su telefono: barra di selezione con "⋯", Assegna in foglio.
+  const isMobile = useIsMobile() || embedded
   const [event, setEvent] = useState(null)
   const today = new Date().toISOString().split('T')[0]
   const [allItems, setAllItems] = useState([])
@@ -371,9 +376,10 @@ export default function EventDetail() {
   // bar vive fuori da questa pagina (App.jsx), quindi passa da una classe
   // sul body invece che da uno stato React condiviso (vedi index.css).
   useEffect(() => {
-    document.body.classList.toggle('select-mode', selectMode)
+    // Nella colonna la tab bar sta accanto (non sotto), quindi non serve farla sfumare.
+    document.body.classList.toggle('select-mode', selectMode && !embedded)
     return () => document.body.classList.remove('select-mode')
-  }, [selectMode])
+  }, [selectMode, embedded])
   // Se si deseleziona tutto, i pannelli delle azioni (furgone, sposta, stato) si richiudono: le azioni sono spente.
   useEffect(() => {
     if (bulkSelectedIds.size === 0) { setBulkAction(null); setMobileMoreOpen(false) }
@@ -1770,7 +1776,7 @@ export default function EventDetail() {
   }
 
   return (
-    <div className="page">
+    <div className="page" style={embedded ? { minHeight: 0, paddingBottom: 96, animation: 'none' } : undefined}>
       {saveError && (
         <div role="alert" style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:999, background:'rgba(40,16,20,0.97)', border:'1.5px solid var(--red)', borderRadius:14, padding:'12px 18px', maxWidth:'90vw', boxShadow:'0 8px 32px rgba(0,0,0,0.35)', display:'flex', alignItems:'center', gap:10 }}>
           <Warn size={16} />
@@ -1778,9 +1784,18 @@ export default function EventDetail() {
           <button onClick={() => setSaveError('')} aria-label={t('common.close')} style={{ background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:16, fontWeight:700, flexShrink:0, padding:'0 2px' }}>✕</button>
         </div>
       )}
-      <div className="rc-page-header" style={{ padding:'52px 20px 16px' }}>
+      <div className="rc-page-header" style={{ padding: embedded ? '18px 24px 16px' : '52px 20px 16px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-          <button onClick={() => navigate(-1)} className="rc-pill-btn" style={{ padding:'9px 14px', fontSize:13 }}>← {t('common.back')}</button>
+          {embedded ? (
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={onClose} className="rc-pill-btn" aria-label={t('common.close')} style={{ padding:'9px 14px', fontSize:13 }}>✕</button>
+              <button onClick={onOpenFull} className="rc-pill-btn" aria-label={t('eventDetail.fullPage')} title={t('eventDetail.fullPage')} style={{ padding:'9px 14px', fontSize:13 }}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => navigate(-1)} className="rc-pill-btn" style={{ padding:'9px 14px', fontSize:13 }}>← {t('common.back')}</button>
+          )}
           {loadListsOn && (
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={exportPDF} className="rc-pill-btn"
@@ -1889,6 +1904,19 @@ export default function EventDetail() {
               >
                 {t('eventDetail.assign')}
               </button>
+              {/* Interruttore "Montato" (solo admin): l'evento è stato allestito in sede. Sta qui, non tra Pronto/Caricato/
+                  Rientrato, perché non fa parte del lavoro in magazzino né dell'inventario. */}
+              {profile?.role === 'admin' && (
+                <button type="button" aria-pressed={!!event.assembled} title={t('eventDetail.assembledHint')}
+                  onClick={async () => {
+                    try { await updateDoc(eventRef, { assembled: !event.assembled, assembledAt: event.assembled ? null : serverTimestamp() }) }
+                    catch (e) { console.error('[assembled]', e); setSaveError(t('eventDetail.saveErrorMessage')) }
+                  }}
+                  className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background: event.assembled ? 'var(--c-t-green)' : 'var(--c-fill)', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color: event.assembled ? 'var(--c-green)' : 'var(--c-ink2)' }}>
+                  {event.assembled && <Check size={13} />}
+                  {t('eventDetail.assembled')}
+                </button>
+              )}
             </div>
           </div>
           {event.notes && (
@@ -1976,7 +2004,7 @@ export default function EventDetail() {
 
       <CloseInstallationModal
         open={showCloseInstallModal}
-        onClose={() => { setShowCloseInstallModal(false); navigate('/events') }}
+        onClose={() => { setShowCloseInstallModal(false); if (embedded) onClose?.(); else navigate('/events') }}
         message={t('eventDetail.confirmCloseInstallationMessage')}
         onConfirm={async () => { await closeInstallationEvent(id, eventItems); return true }}
       />
@@ -2210,13 +2238,13 @@ export default function EventDetail() {
                 delle altre azioni o il pannello di quella scelta — con
                 dietro un velo scuro (tocca per richiudere), stacca meglio
                 le pillole flottanti dalla lista sotto. */}
-            {selectMode && isMobile && createPortal(
+            {selectMode && isMobile && (embedded ? (x) => x : (x) => createPortal(x, document.body))(
               <>
                 {(mobileMoreOpen || bulkAction) && (
                   <div onClick={() => { setMobileMoreOpen(false); setBulkAction(null) }}
                     style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(17,17,32,0.28)' }} />
                 )}
-                <div className="rc-bulk-bar" style={{ position:'fixed', left:16, right:16, bottom:'calc(env(safe-area-inset-bottom) + 112px)', zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
+                <div className="rc-bulk-bar" style={{ position:'fixed', left:16, right:16, bottom:`calc(env(safe-area-inset-bottom) + ${embedded ? 24 : 112}px)`, zIndex:101, display:'flex', flexDirection:'column', gap:8 }}>
                   {mobileMoreOpen && (
                     <div className="menu-pop" style={{ display:'flex', justifyContent:'flex-end', transformOrigin:'bottom right' }}>{mobileMoreMenu}</div>
                   )}
@@ -2232,8 +2260,7 @@ export default function EventDetail() {
                     </div>
                   </div>
                 </div>
-              </>,
-              document.body
+              </>
             )}
           </div>
             {/* Desktop: barra azioni sotto la ricerca; scorrendo la lista resta incollata
@@ -2275,11 +2302,12 @@ export default function EventDetail() {
       {/* FAB aggiungi articoli — sfuma via durante la selezione multipla,
           stesso trattamento della tab bar (niente da aggiungere mentre si
           stanno modificando oggetti già in lista). */}
+      <div style={embedded ? { position:'sticky', bottom:'calc(env(safe-area-inset-bottom) + 24px)', height:0, zIndex:50 } : undefined}>
       <button
         onClick={openAddModal}
         aria-label={t('eventDetail.addItemsAriaLabel')}
         style={{
-          position:'fixed', bottom:'calc(env(safe-area-inset-bottom) + 144px)', right:20, zIndex:50,
+          position: embedded ? 'absolute' : 'fixed', bottom: embedded ? 0 : 'calc(env(safe-area-inset-bottom) + 144px)', right: embedded ? 24 : 20, zIndex:50,
           width:56, height:56, borderRadius:'50%',
           background:'var(--accent)', color:'white',
           display:'flex', alignItems:'center', justifyContent:'center',
@@ -2291,6 +2319,7 @@ export default function EventDetail() {
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
+      </div>
       </>}
 
       {/* Conferma: chiusura con articoli selezionati non aggiunti */}
@@ -2437,7 +2466,6 @@ export default function EventDetail() {
                       >{listLabel(l)}</button>
                     ))}
                     <button
-                      className="btn-no-anim"
                       onClick={() => setListModal({ mode:'new', name:'' })}
                       className="btn-no-anim" style={{ display:'inline-flex', alignItems:'center', gap:5, background:'var(--c-fill)', border:'none', borderRadius:20, padding:'6px 13px', fontSize:12, fontWeight:700, color:'var(--c-ink2)' }}
                     >

@@ -20,6 +20,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import ItemHistoryPanel from '../components/ItemHistoryPanel'
 import { useCenteredModal } from '../hooks/useCenteredModal'
+import { InventoryListSkeleton } from '../components/Skeleton'
 import { Pin, Cart, Box, Kit, Save, Wrench, Warn, Filter, Truck, Edit, Download, Plus, ChevronRight } from '../components/Icon'
 import FabButton from '../components/FabButton'
 import SaveButton from '../components/SaveButton'
@@ -110,6 +111,7 @@ export default function Inventory() {
   const navigate = useNavigate()
   const { state: navState, search: locationSearch } = useLocation()
   const [items, setItems] = useState([])
+  const [itemsReady, setItemsReady] = useState(false)   // primo caricamento: scheletro al posto del "magazzino vuoto"
   const [search, setSearch] = useState('')
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [filterMenuMounted, setFilterMenuMounted] = useState(false)
@@ -237,7 +239,7 @@ export default function Inventory() {
   useEffect(() => {
     if (!teamId) return
     const q = query(collection(db, 'items'), where('teamId', '==', teamId), orderBy('name'))
-    return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+    return onSnapshot(q, snap => { setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setItemsReady(true) })
   }, [teamId])
 
   // Arrivo dallo Scanner con un codice già identificato → apri direttamente il modal dettaglio
@@ -1006,7 +1008,8 @@ export default function Inventory() {
         </div>
       </div>
 
-      {(advancedFiltersActive ? sortedFlat.length === 0 : filtered.length === 0)
+      {!itemsReady ? <InventoryListSkeleton />
+        : (advancedFiltersActive ? sortedFlat.length === 0 : filtered.length === 0)
         ? <div className="rc-inv-card" style={{ background:'var(--c-surface)', border:'1px solid var(--c-line)', borderRadius:16, margin:'12px 16px 0', overflow:'hidden' }}>
             <div className="empty-state">
               <p style={{ color:'var(--text3)', marginBottom:4 }}><Box size={42} /></p><h3>{t('inventory.emptyTitle')}</h3><p>{t('inventory.emptyDesc')}</p>
@@ -1237,6 +1240,12 @@ export default function Inventory() {
                   <h2 style={{ margin:0, fontSize:19 }}>{showDetail.name}</h2>
                   {/* Computer: la categoria sotto il nome (sul telefono c'è l'icona accanto) */}
                   <p className="rc-sub-desktop">{showDetail.category}{showDetail.isBundle ? ' · Kit' : ''}</p>
+                  {/* Posizione in magazzino: una riga semplice sotto il nome (è quello che si cerca più spesso). */}
+                  {showDetail.location && (
+                    <p className="rc-loc-line" title={t('inventory.warehousePosition')}>
+                      <Pin size={13} /> <span>{showDetail.location}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div></div>
@@ -1248,12 +1257,6 @@ export default function Inventory() {
                 <div style={row(r++)}>
                   <span style={rowLabel}>{t('inventory.brandModelLabel')}</span>
                   <span style={rowValue}>{[showDetail.brand, showDetail.model].filter(Boolean).join(' ')}</span>
-                </div>
-              )}
-              {showDetail.location && (
-                <div style={row(r++)}>
-                  <span style={rowLabel}>{t('inventory.warehousePosition')}</span>
-                  <span style={rowValue}>{showDetail.location}</span>
                 </div>
               )}
               {showDetail.weightKg != null && (

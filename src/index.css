@@ -807,23 +807,26 @@ button.rc-action-btn:not(:disabled):active {
    Prima --c-ink3 (#9a9a9a) aveva 2,1–2,8:1 su card e sfondo, e --c-ink2 scendeva a 3,9:1 sull'alone rosso. Ora, su card
    bianca, fondo e alone al suo punto più forte: secondario >= 6,2:1, terziario >= 4,5:1. Solo dentro .dash-ink. */
 [data-theme="light"] .dash-ink { --c-ink: #211b1b; --c-ink2: #5a504e; --c-ink3: #6a605e; --text2: #5a504e; --text3: #6a605e; }
-[data-theme="dark"] .dash-ink { --c-ink3: #938f87; --text3: #938f87; }
+[data-theme="dark"] .dash-ink { --c-ink3: #a4a095; --text3: #a4a095; }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg:      #121211;
-  --bg2:     #1a1a18;
-  --bg3:     #232321;
-  --card:    #1c1c1a;
-  --card2:   #262624;
-  --card3:   #2f2f2c;
+  /* Superfici un gradino più chiare di prima (sfondo #121211 / card #1c1c1a si distinguevano appena, 1,10:1): ora
+     card su sfondo 1,21:1 e ogni livello successivo (card2, card3) un altro gradino visibile. Testi: primario >= 13:1,
+     secondario >= 7,7:1, terziario >= 5,5:1 sulla card (prima 6,9 e 3,9) e >= 4,6 su card2 e pillole. Bordi più marcati per staccare le card. */
+  --bg:      #1b1a18;
+  --bg2:     #232220;
+  --bg3:     #2c2b28;
+  --card:    #2b2a27;
+  --card2:   #363530;
+  --card3:   #41403a;
 
-  --text:    #f2f0ea;
-  --text2:   #a8a59d;
-  --text3:   #7b7870;
+  --text:    #f6f4ee;
+  --text2:   #c2beb3;
+  --text3:   #a4a095;
 
-  --border:  rgba(255,255,255,0.09);
-  --border2: rgba(255,255,255,0.14);
+  --border:  rgba(255,255,255,0.13);
+  --border2: rgba(255,255,255,0.20);
 
   --glow-accent: rgba(230,57,70,0.20);
   --glow-blue:   rgba(90,169,230,0.16);
@@ -840,23 +843,23 @@ button.rc-action-btn:not(:disabled):active {
   --shadow:    0 4px 20px rgba(0,0,0,0.55);
   --shadow-lg: 0 12px 48px rgba(0,0,0,0.65);
 
-  --surface:           #121211;
-  --dash-title:        #f2f0ea;
-  --dash-muted:        #a8a59d;
-  --dash-card:         #1c1c1a;
-  --dash-card-border:  #33322e;
-  --dash-pill-bg:      #262624;
-  --dash-pill-border:  #33322e;
+  --surface:           #1b1a18;
+  --dash-title:        #f6f4ee;
+  --dash-muted:        #c2beb3;
+  --dash-card:         #2b2a27;
+  --dash-card-border:  #46443e;
+  --dash-pill-bg:      #363530;
+  --dash-pill-border:  #46443e;
 
-  --c-surface: #1c1c1a;  --c-line: #34332f;   --c-fill: #2a2927;   --c-fill2: #33322e; --c-fill-hover: #3b3a36;
-  --c-ink: #f2f0ea;      --c-ink2: #a8a59d;   --c-ink3: #7b7870;
-  --c-sheet: #171715;    --c-alt: #181816;    --c-dash: #44423d;
+  --c-surface: #2b2a27;  --c-line: #46443e;   --c-fill: #37362f;   --c-fill2: #423f39; --c-fill-hover: #4c4943;
+  --c-ink: #f6f4ee;      --c-ink2: #c2beb3;   --c-ink3: #a4a095;
+  --c-sheet: #242321;    --c-alt: #1f1e1c;    --c-dash: #5a5750;
   --c-green: #4ade80;    --c-amber: #fbbf24;  --c-danger: #f87171;  --c-orange-ink: #fdba74;
   --c-violet-bg: rgba(124,111,205,0.24); --c-blue-bg: rgba(37,99,235,0.26); --c-orange-bg: rgba(234,88,12,0.24);
   --c-t-red: rgba(230,57,70,0.18);  --c-t-blue: rgba(37,99,235,0.20); --c-t-amber: rgba(245,166,35,0.17); --c-t-green: rgba(62,207,142,0.15);
   --tab-shadow: rgba(0,0,0,0.55);
   --rc-wash: rgba(230,57,70,0.24);
-  --ov-1: #32191c; --ov-2: #5b2a30; --ov-3: #1a2740; --ov-4: #28446c;
+  --ov-1: #3a1f23; --ov-2: #63323a; --ov-3: #1f2e49; --ov-4: #2e4d78;
 }
 
 [data-theme] body,
@@ -1407,6 +1410,34 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
   [data-theme] .modal.rc-drawer.modal-jiggle, [data-theme] .modal.rc-sheet.rc-drawer.modal-jiggle, .modal.rc-drawer.modal-jiggle { animation: drawerIn 0.32s cubic-bezier(0.32,0.72,0,1), modal-jiggle 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 }
 @media (prefers-reduced-motion: reduce) { .modal.rc-drawer, .modal.rc-drawer.closing { animation-duration: 0.01s !important; } }
+/* Colonna dettagli di Eventi (desktop): i fogli e le finestre aperti dentro (es. "+" aggiungi oggetti) coprono solo la
+   colonna — la colonna ha un transform, che fa da riferimento ai suoi elementi "fixed" — e la colonna laterale a destra
+   riempie tutta la larghezza della colonna invece dei due terzi dello schermo. */
+@media (min-width: 900px) and (pointer: fine) {
+  [data-theme] .rc-col .modal.rc-drawer, [data-theme] .rc-col .modal.rc-sheet.rc-drawer {
+    width: 100%; min-width: 0; max-width: 100%; height: 100% !important; max-height: 100% !important;
+  }
+}
+/* I fogli dentro la colonna non toccano i bordi: un po' di aria tutto intorno, angoli tondi e un'ombra, così sembrano
+   appoggiati sulla colonna e non incollati a pagina e colonna. */
+[data-theme] .rc-col .modal-overlay { padding: 12px; box-sizing: border-box; }
+[data-theme] .rc-col .modal { border-radius: 20px !important; border: 1px solid var(--c-line) !important; box-shadow: 0 14px 44px rgba(0,0,0,0.20); max-height: 100%; }
+
+/* Larghezza della colonna dettagli di Eventi (desktop). --rc-col-w è la larghezza attuale e anima da 0 (colonna chiusa) a
+   --rc-col-target; la colonna e la tab bar la leggono, così entrano ed escono insieme. Entrata e uscita sono uguali:
+   stessa durata e stessa curva (veloce all'inizio, poi si assesta), una verso l'apertura e una verso la chiusura. */
+:root { --rc-col-target: 600px; }
+@media (min-width: 1500px) { :root { --rc-col-target: 660px; } }
+@property --rc-col-w { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@keyframes rc-col-w-in  { from { --rc-col-w: 0px; } to { --rc-col-w: var(--rc-col-target); } }
+@keyframes rc-col-w-out { from { --rc-col-w: var(--rc-col-target); } to { --rc-col-w: 0px; } }
+html[data-col="open"]  { --rc-col-w: var(--rc-col-target); animation: rc-col-w-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+html[data-col="close"] { animation: rc-col-w-out 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) { html[data-col] { animation-duration: 0.01s; } }
+
+/* Posizione in magazzino: una riga semplice sotto il nome dell'oggetto (scheda oggetto). */
+.rc-loc-line { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 14px; font-weight: 700; color: var(--c-ink); overflow-wrap: anywhere; }
+.rc-loc-line svg { flex-shrink: 0; color: var(--c-ink3); }
 
 /* Scheda oggetto nella colonna (computer): titolo piccolo con la categoria sotto, poi le informazioni come righe
    separate da fili, senza il riquadro grigio. Sul telefono resta com'era. */
@@ -1414,7 +1445,9 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
 @media (min-width: 900px) and (pointer: fine) {
   .rc-drawer .rc-emoji-phone { display: none; }
   .rc-drawer .rc-sub-desktop { display: block; margin: 6px 0 0; font-size: 12.5px; font-weight: 600; color: var(--c-ink3); }
-  .rc-drawer .rc-drawer-titlebar .rc-drawer-titleblock h2 { font-size: 15px !important; }
+  .rc-drawer .rc-drawer-titlebar .rc-drawer-titleblock h2 { font-size: 22px !important; font-weight: 800; letter-spacing: -0.4px; line-height: 1.2; color: var(--c-ink); overflow-wrap: anywhere; }
+  .rc-drawer .rc-drawer-titlebar .rc-drawer-titleblock { align-items: flex-start !important; }
+  .rc-drawer .rc-sub-desktop { font-size: 13.5px; }
   .rc-drawer .rc-detail-card { background: transparent !important; border: none !important; border-radius: 0 !important; overflow: visible !important; margin: 0 0 18px !important; border-bottom: 1px solid var(--c-line) !important; }
   .rc-drawer .rc-detail-card > * { border-top: 1px solid var(--c-line) !important; padding-left: 0 !important; padding-right: 0 !important; background: transparent; }
   .rc-drawer .rc-detail-card > button:hover { background: var(--c-alt); }

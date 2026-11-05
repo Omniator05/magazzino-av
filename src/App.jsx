@@ -66,6 +66,7 @@ import WhatsNewModal from './components/WhatsNewModal'
 import AbsenceNotifications from './components/AbsenceNotifications'
 import JoinRequestNotifications from './components/JoinRequestNotifications'
 import GuidedTour from './components/GuidedTour'
+import { RouteSkeleton } from './components/Skeleton'
 import AbsenceEditedNotification from './components/AbsenceEditedNotification'
 import ActiveShiftBadge from './components/ActiveShiftBadge'
 import OfflineIndicator from './components/OfflineIndicator'
@@ -74,6 +75,10 @@ import { maybeAutoEnablePush } from './utils/pushNotifications'
 // Riusato sia mentre si aspettano i dati di login sia come fallback di
 // Suspense per il caricamento lazy di una pagina — stesso spinner ovunque.
 function RouteLoadingFallback() {
+  // Dashboard, Eventi e Magazzino mostrano la loro forma (intestazione, ricerca, righe) invece di una pagina vuota con lo spinner.
+  const path = window.location.pathname.replace(/\/$/, '') || '/'
+  const kind = path === '/' ? 'dashboard' : path === '/events' ? 'events' : path === '/inventory' ? 'inventory' : null
+  if (kind) return <RouteSkeleton kind={kind} />
   return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100dvh', flexDirection:'column', gap:16, background:'var(--bg)' }}>
       <div style={{ width:40, height:40, border:'3px solid rgba(230,57,70,0.3)', borderTop:'3px solid var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />

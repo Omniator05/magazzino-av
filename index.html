@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#f5f5f3" />
-    <style>html { background: #f5f5f3; } html[data-theme="dark"] { background: #121211; }</style>
+    <style>html { background: #f5f5f3; } html[data-theme="dark"] { background: #1b1a18; }</style>
     <script>
       // Tema scelto dall'utente (src/utils/theme.js): applicato prima del primo paint.
       (function () {
@@ -20,7 +20,7 @@
           var t = dark ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', t);
           document.documentElement.style.colorScheme = t;
-          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#121211' : '#f5f5f3');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#1b1a18' : '#f5f5f3');
         } catch (e) {}
       })();
     </script>
