@@ -7,8 +7,8 @@
 // spostarlo costringerebbe a rifare quella configurazione lì.
 import { requireTeamAdmin, getAdmin } from './_authAdmin.js'
 import { signState, decrypt } from './_crypto.js'
+import { getGoogleClientId } from './_googleAuth.js'
 
-const GOOGLE_CLIENT_ID = '1074850505571-dhuar70q8ce3hgr8ovgijibdlm8tephs.apps.googleusercontent.com'
 // Solo calendar.events: l'ambito userinfo.email era usato solo per mostrare
 // "collegato come x@gmail.com" in Impostazioni (vedi getGoogleUserEmail in
 // _googleAuth.js) — non è mai stato aggiunto alla consent screen su Google
@@ -29,7 +29,7 @@ async function start(req, res, teamId) {
   const state = signState({ teamId })
 
   const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
+    client_id: getGoogleClientId(),
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: SCOPE,

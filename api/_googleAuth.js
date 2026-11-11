@@ -10,13 +10,18 @@
 // gestire scadenze/cache condivisa fra invocazioni diverse.
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 
-// Stesso ID pubblico usato lato client in src/config/googleCalendar.js — non
-// è un segreto (può stare nel bundle frontend), quindi non serve un'env var
-// dedicata: un solo posto da tenere aggiornato se mai cambiasse.
-const GOOGLE_CLIENT_ID = '1074850505571-dhuar70q8ce3hgr8ovgijibdlm8tephs.apps.googleusercontent.com'
+// ID client OAuth (pubblico, non è un segreto). Si legge da GOOGLE_CLIENT_ID su Vercel: deve essere dello STESSO client
+// di GOOGLE_CLIENT_SECRET, altrimenti Google risponde "client secret is invalid". Senza la variabile resta il client
+// originale. Lo usano sia l'avvio del consenso (google-oauth.js) sia lo scambio del codice e il rinnovo qui sotto.
+const DEFAULT_GOOGLE_CLIENT_ID = '1074850505571-dhuar70q8ce3hgr8ovgijibdlm8tephs.apps.googleusercontent.com'
+export function getGoogleClientId() {
+  return (process.env.GOOGLE_CLIENT_ID || '').trim().replace(/^["']+|["']+$/g, '') || DEFAULT_GOOGLE_CLIENT_ID
+}
 
 function requireEnv(name) {
-  const v = process.env[name]
+  // Spazi, a capo o virgolette incollati per sbaglio insieme al valore su Vercel (capita spesso con i segreti) farebbero
+  // risultare "non valida" una chiave giusta: si tolgono prima di usarla.
+  const v = (process.env[name] || '').trim().replace(/^["']+|["']+$/g, '')
   if (!v) throw new Error(`${name} non configurata`)
   return v
 }
@@ -32,7 +37,7 @@ export async function exchangeCodeForTokens(code, redirectUri) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
-      client_id: GOOGLE_CLIENT_ID,
+      client_id: getGoogleClientId(),
       client_secret: requireEnv('GOOGLE_CLIENT_SECRET'),
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
@@ -50,7 +55,7 @@ export async function refreshAccessToken(refreshToken) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       refresh_token: refreshToken,
-      client_id: GOOGLE_CLIENT_ID,
+      client_id: getGoogleClientId(),
       client_secret: requireEnv('GOOGLE_CLIENT_SECRET'),
       grant_type: 'refresh_token',
     }),
