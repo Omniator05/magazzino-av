@@ -138,7 +138,7 @@ export async function syncTeam(db, admin, teamId, team) {
     if (!existing) {
       await db.collection('events').add({
         ...mapped,
-        teamId, googleEventId: gEv.id,
+        teamId, googleEventId: gEv.id, importedFromGoogle: true,
         type: 'event', items: [], recurrence: 'never', seriesId: null, phases: {},
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

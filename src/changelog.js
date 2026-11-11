@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-21',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Google Calendar: nelle Integrazioni c\'è "Rimuovi gli eventi importati da Google". Toglie da Roadcase solo le copie degli eventi arrivati da Google (su Google non viene toccato niente) e lascia quelli con una lista di carico o con personale assegnato',
+        'Calendario: gli eventi su più giorni non risultano più tagliati quando nella cella accanto parte un\'altra barra',
+        'Calendario su computer: tolta la piccola barra di scorrimento a lato (si scorre comunque con rotella e trackpad); gli eventi non selezionati diventano un grigio pieno, senza trasparenza',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Google Calendar: Integrations now has "Remove events imported from Google". It only removes from Roadcase the copies of events that came from Google (nothing on Google is touched) and keeps those with a load list or assigned staff',
+        'Calendar: multi-day events are no longer cut off when another bar starts in the next cell',
+        'Calendar on computer: the small scrollbar on the side is gone (you can still scroll with the wheel and trackpad); unselected events turn a solid grey, without transparency',
+      ],
+    },
+  },
+  {
     version: '2026-11-20',
     it: {
       title: 'Novità di oggi',

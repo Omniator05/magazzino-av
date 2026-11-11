@@ -74,6 +74,31 @@ async function disconnect(req, res, teamId, db) {
   }
 }
 
+// Rimuove da Roadcase gli eventi IMPORTATI da Google (quelli creati dalla sincronizzazione, non da qualcuno in app).
+// Cancella solo le copie in Roadcase, direttamente da qui: passando dall'app la cancellazione partirebbe anche verso
+// Google. Un evento è "importato" se ha googleEventId e non ha createdBy (tutti i percorsi di creazione in app lo
+// scrivono) oppure porta il segno importedFromGoogle. Restano al loro posto, e vengono contati a parte, quelli a cui
+// qualcuno ha già lavorato: con una lista di carico o con personale assegnato. dryRun:true conta e basta.
+export async function removeImportedEvents(db, teamId, { dryRun = false } = {}) {
+  const snap = await db.collection('events').where('teamId', '==', teamId).get()
+  const imported = snap.docs.filter(d => {
+    const e = d.data()
+    return e.googleEventId && !e.isDeadlineReminder && (e.importedFromGoogle === true || !e.createdBy)
+  })
+  const removable = imported.filter(d => {
+    const e = d.data()
+    return !(e.items || []).length && !(e.assignedWorkers || []).length
+  })
+  const kept = imported.length - removable.length
+  if (dryRun) return { ok: true, removable: removable.length, kept }
+  for (let i = 0; i < removable.length; i += 400) {
+    const batch = db.batch()
+    removable.slice(i, i + 400).forEach(d => batch.delete(d.ref))
+    await batch.commit()
+  }
+  return { ok: true, removed: removable.length, kept }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non permesso' })
 
@@ -86,5 +111,9 @@ export default async function handler(req, res) {
 
   const action = req.body?.action
   if (action === 'disconnect') return disconnect(req, res, teamId, db)
+  if (action === 'removeImported') {
+    try { return res.status(200).json(await removeImportedEvents(db, teamId, { dryRun: !!req.body?.dryRun })) }
+    catch (e) { console.error('google-oauth removeImported', e); return res.status(500).json({ error: 'Rimozione fallita' }) }
+  }
   return start(req, res, teamId)
 }

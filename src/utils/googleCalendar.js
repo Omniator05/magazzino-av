@@ -48,6 +48,14 @@ export function deleteEventFromGoogle(googleEventId) {
   authedPost('/api/push-event-to-google', { action: 'delete', googleEventId }).catch(() => {})
 }
 
+// Rimuove da Roadcase gli eventi importati da Google (le copie in app, non quelli su Google) — vedi
+// removeImportedEvents in api/google-oauth.js. dryRun:true restituisce solo { removable, kept }.
+export async function removeImportedGoogleEvents({ dryRun = false } = {}) {
+  const data = await authedPost('/api/google-oauth', { action: 'removeImported', dryRun })
+  if (!data?.ok) throw new Error('google-remove-imported-failed')
+  return data // { removable, kept } con dryRun, altrimenti { removed, kept }
+}
+
 // Scollega: revoca il refresh token presso Google e ripulisce lo stato
 // server-side (teamSecrets + i campi sul team) — vedi api/google-oauth.js.
 export async function disconnectGoogleCalendar() {

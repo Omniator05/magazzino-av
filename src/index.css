@@ -1074,6 +1074,10 @@ button.rc-action-btn:not(:disabled):active {
 .bb8-slider:checked + .bb8-switch .bb8-star.bb8-star-4 { top: 45px; }
 .bb8-slider:checked + .bb8-switch .bb8-star.bb8-star-5 { top: 53px; }
 
+/* Contenitore che scorre senza mostrare la barra (resta scorrevole con rotella e trackpad): calendario su computer. */
+.rc-noscrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.rc-noscrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
 /* Nasconde scrollbar orizzontale sui filtri chip */
 .filter-scroll::-webkit-scrollbar { display: none; }
 

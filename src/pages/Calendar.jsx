@@ -183,7 +183,9 @@ export default function Calendar() {
   const mark = (ev) => (!readOnly && ev.assembled ? '✓ ' : '')
   const focusStyle = (evId) => {
     if (!focusEventId || evId === focusEventId) return null
-    return { filter: 'grayscale(1)', opacity: 0.5 }
+    // Grigio pieno, NON trasparente: una barra su più giorni attraversa più celle, e con l'opacità lasciava intravedere
+    // bordi e testi delle celle sotto, sembrando "dietro" e sfocata. Così resta un blocco unico, solo spento.
+    return { filter: 'grayscale(1) brightness(1.45)' }
   }
 
   // Gestione assenze admin
@@ -743,7 +745,7 @@ export default function Calendar() {
       {/* Su computer la pagina non scorre (vedi useModalScrollLock sopra): scorre solo
           questa colonna, alta quanto lo schermo sotto l'header e con spazio in fondo
           per la barra delle schede, così l'ultima settimana del mese si vede intera. */}
-      <div style={{ flex: isMobile ? undefined : 1, minWidth: 0, ...(isMobile ? null : { maxHeight:'calc(100vh - 76px)', overflowY:'auto', overscrollBehavior:'contain', paddingBottom:124 }) }}>
+      <div className={isMobile ? undefined : 'rc-noscrollbar'} style={{ flex: isMobile ? undefined : 1, minWidth: 0, ...(isMobile ? null : { maxHeight:'calc(100vh - 76px)', overflowY:'auto', overscrollBehavior:'contain', paddingBottom:124 }) }}>
         {/* Navigazione mese — dentro la colonna griglia (non più una riga a
             parte sopra tutta la pagina): così la colonna laterale bianca
             parte subito sotto l'header, senza il grigio dello sfondo pagina
@@ -888,7 +890,11 @@ export default function Calendar() {
                   // le barre degli eventi su più giorni escono dalla cella: sopra quelle accanto
                   overflow:'visible',
                   minWidth: 0,
-                  zIndex: startsBar ? 3 : undefined,
+                  // Le barre su più giorni escono dalla cella in cui sono disegnate: la cella con la barra sta SOPRA quelle
+                  // alla sua destra. Con lo stesso z-index per tutte (3) la cella successiva, anch'essa "di partenza" di
+                  // un'altra barra e più avanti nel documento, copriva la coda della barra precedente: sembrava tagliata,
+                  // e si vedeva intera solo quando la cella dopo era quella selezionata (sfondo semitrasparente).
+                  zIndex: startsBar ? 10 + (6 - col) : undefined,
                   cursor:'pointer',
                   transition:'background 0.1s ease, box-shadow 0.1s ease',
                 }}

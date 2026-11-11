@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { startGoogleCalendarConnect, disconnectGoogleCalendar, syncGoogleCalendarNow } from '../utils/googleCalendar'
+import { startGoogleCalendarConnect, disconnectGoogleCalendar, syncGoogleCalendarNow, removeImportedGoogleEvents } from '../utils/googleCalendar'
+import { useConfirm } from '../context/ConfirmProvider'
 import { Check } from '../components/Icon'
 import PageHeader from '../components/PageHeader'
 
@@ -25,6 +26,8 @@ export default function SettingsIntegrations() {
   const [gCalId, setGCalId] = useState('')
   const [gCalSaving, setGCalSaving] = useState(false)
   const [gSyncing, setGSyncing] = useState(false)
+  const [gCleaning, setGCleaning] = useState(false)
+  const confirm = useConfirm()
   const [toast, setToast] = useState('')
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
@@ -78,6 +81,27 @@ export default function SettingsIntegrations() {
     } finally { setGSyncing(false) }
   }
 
+  // Toglie da Roadcase gli eventi arrivati da Google (prima conta e chiede conferma). Cancella solo le copie qui: su
+  // Google non viene toccato niente. Restano gli eventi a cui si è già lavorato (lista di carico o personale assegnato).
+  const removeImported = async () => {
+    setGCleaning(true); setGError('')
+    try {
+      const { removable, kept } = await removeImportedGoogleEvents({ dryRun: true })
+      if (removable === 0) { showToast(t('adminUsers.googleCalendarRemoveImportedNone', { kept })); return }
+      const ok = await confirm({
+        title: t('adminUsers.googleCalendarRemoveImportedTitle'),
+        message: t('adminUsers.googleCalendarRemoveImportedMessage', { count: removable, kept }),
+        confirmLabel: t('adminUsers.googleCalendarRemoveImportedLabel'),
+        danger: true,
+      })
+      if (!ok) return
+      const { removed } = await removeImportedGoogleEvents()
+      showToast(t('adminUsers.googleCalendarRemoveImportedDone', { count: removed }))
+    } catch {
+      setGError(t('adminUsers.googleCalendarRemoveImportedFailed'))
+    } finally { setGCleaning(false) }
+  }
+
   const saveCalendarId = async () => {
     const id = gCalId.trim() || 'primary'
     setGCalSaving(true)
@@ -129,6 +153,10 @@ export default function SettingsIntegrations() {
                 {gLoading ? t('common.saving') : t('adminUsers.googleCalendarDisconnect')}
               </button>
             </div>
+            <button onClick={removeImported} disabled={gCleaning} className="btn btn-secondary btn-full" style={{ marginTop:8 }}>
+              {gCleaning ? t('common.saving') : t('adminUsers.googleCalendarRemoveImported')}
+            </button>
+            <p style={{ color:'var(--text2)', fontSize:11.5, marginTop:6, lineHeight:1.45 }}>{t('adminUsers.googleCalendarRemoveImportedHint')}</p>
           </>
         ) : (
           <button onClick={connectGoogle} className="btn btn-primary btn-full" disabled={gLoading}>
