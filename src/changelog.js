@@ -7,6 +7,21 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-20',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Google Calendar: dopo aver dato il consenso su Google si torna alle Integrazioni con il calendario collegato, senza più la "pagina inesistente"',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Google Calendar: after giving consent on Google you now land back on Integrations with the calendar connected, instead of a "page not found"',
+      ],
+    },
+  },
+  {
     version: '2026-11-19',
     it: {
       title: 'Novità di oggi',

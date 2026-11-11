@@ -68,6 +68,10 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        // Le navigazioni verso /api/ non devono mai ricevere index.html dal service worker: il ritorno da Google dopo il
+        // consenso (/api/google-oauth-callback?code=…) è una navigazione del browser, e col fallback di default l'app
+        // mostrava "pagina inesistente" senza che la funzione sul server girasse mai (il calendario non si collegava).
+        navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
