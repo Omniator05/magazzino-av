@@ -38,10 +38,22 @@ async function restoreInventoryForDeletedEvent(db, event) {
   }
 }
 
+// Inizio di oggi (UTC): la prima sincronizzazione completa porta solo gli eventi di oggi in poi — compresi quelli già
+// iniziati che finiscono oggi o dopo — e non i mesi passati del calendario. Google ricorda questo limite nel syncToken:
+// i giri successivi (incrementali) non possono ripeterlo, ma lo ereditano da soli.
+function startOfTodayIso() {
+  const d = new Date()
+  d.setUTCHours(0, 0, 0, 0)
+  return d.toISOString()
+}
+
 async function fetchGoogleEventsPage(calendarId, accessToken, { syncToken, pageToken }) {
   const params = new URLSearchParams({ maxResults: '250', showDeleted: 'true' })
   if (syncToken) params.set('syncToken', syncToken)
-  else params.set('singleEvents', 'true') // prima sync completa: espandi già le occorrenze ricorrenti
+  else {
+    params.set('singleEvents', 'true') // prima sync completa: espandi già le occorrenze ricorrenti
+    params.set('timeMin', startOfTodayIso())
+  }
   if (pageToken) params.set('pageToken', pageToken)
   const res = await fetch(`${EVENTS_API}/${encodeURIComponent(calendarId)}/events?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -66,7 +78,9 @@ export async function syncTeam(db, admin, teamId, team) {
     return { teamId, skipped: 'reconnect_required' }
   }
 
-  let syncToken = team.googleSyncToken || null
+  // Il syncToken vale solo per il calendario con cui è stato ottenuto: se l'admin ha cambiato calendario di destinazione
+  // (o il token è di prima che registrassimo da quale calendario veniva) si riparte da una sincronizzazione completa.
+  let syncToken = team.googleSyncCalendarId === team.googleCalendarId ? (team.googleSyncToken || null) : null
   let pageToken = null
   let nextSyncToken = null
   const googleEvents = []
@@ -149,7 +163,7 @@ export async function syncTeam(db, admin, teamId, team) {
     }
   }
 
-  if (nextSyncToken) await db.collection('teams').doc(teamId).update({ googleSyncToken: nextSyncToken })
+  if (nextSyncToken) await db.collection('teams').doc(teamId).update({ googleSyncToken: nextSyncToken, googleSyncCalendarId: team.googleCalendarId })
 
   return { teamId, created, updated, deleted }
 }

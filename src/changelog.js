@@ -7,6 +7,23 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-19',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Google Calendar: la sincronizzazione porta in Roadcase solo gli eventi di oggi in poi, non più i mesi passati del calendario',
+        'Google Calendar: se cambi il calendario di destinazione (per esempio quello aziendale al posto del principale) la sincronizzazione riparte pulita dal nuovo calendario',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Google Calendar: syncing brings only events from today onwards into Roadcase, no longer the past months of the calendar',
+        'Google Calendar: if you change the destination calendar (for example your work one instead of the main one) syncing restarts cleanly from the new calendar',
+      ],
+    },
+  },
+  {
     version: '2026-11-18',
     it: {
       title: 'Novità di oggi',
