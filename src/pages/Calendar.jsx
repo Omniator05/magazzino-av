@@ -16,7 +16,8 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import DateRangeField from '../components/DateRangeField'
 import TimeField from '../components/TimeField'
-import EventFormFields from '../components/EventFormFields'
+import EventFormFields, { canChangeType } from '../components/EventFormFields'
+import { pushEventToGoogle } from '../utils/googleCalendar'
 import StaffTimeline from '../components/StaffTimeline'
 import EventSummaryModal from '../components/EventSummaryModal'
 import TaskSummaryModal from '../components/TaskSummaryModal'
@@ -333,8 +334,11 @@ export default function Calendar() {
         dateEnd: editForm.dateEnd || null,
         ...(perDay ? {} : { allDay: editForm.allDay, timeStart: editForm.allDay ? null : (editForm.timeStart || null), timeEnd: editForm.allDay ? null : (editForm.timeEnd || null) }),
         location: editForm.location.trim(), notes: editForm.notes.trim(),
+        // Evento ↔ rent/install: solo un'etichetta che sposta la lista di carico di sezione (vedi Events.jsx), non tocca articoli né stato del carico.
+        type: editForm.type || 'event',
         phases: editForm.phases || {},
         quoteRef: (editForm.quoteRef || '').trim(),
+        updatedAt: serverTimestamp(),
         eventManager: {
           name: (editForm.managerName || '').trim(), phone: (editForm.managerPhone || '').trim(), email: (editForm.managerEmail || '').trim(),
         },
@@ -355,6 +359,7 @@ export default function Calendar() {
         }
       }
       await awaitIfOnline(updateDoc(doc(db, 'events', editingEvent.id), updated), isOnline)
+      pushEventToGoogle(editingEvent.id)
       if (updated.eventManager.name) rememberEventManager(teamId, user.uid, updated.eventManager).catch(() => {})
       if (perDay) {
         if (dayChange) notifyEventTimeChangedIfNeeded(editingEvent.id, { name: updated.name, timeStart: dayChange.old[0], timeEnd: dayChange.old[1] }, { name: updated.name, timeStart: dayChange.next[0], timeEnd: dayChange.next[1] })
@@ -399,7 +404,7 @@ export default function Calendar() {
     const dayAllDay = dayS === DEFAULT_START && dayE === DEFAULT_END
     setEditForm({
       dayDate, applyAll: false, dayAllDay, dayTimeStart: dayAllDay ? '' : dayS, dayTimeEnd: dayAllDay ? '' : dayE,
-      name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'',
+      name:ev.name||'', date:ev.date||'', dateEnd:ev.dateEnd||'', type: ev.type||'event',
       allDay: ev.allDay !== false, timeStart: ev.timeStart||'', timeEnd: ev.timeEnd||'',
       location:ev.location||'', notes:ev.notes||'', phases:ev.phases||{},
       quoteRef: ev.quoteRef||'', managerName: ev.eventManager?.name||'', managerPhone: ev.eventManager?.phone||'', managerEmail: ev.eventManager?.email||'',
@@ -1467,7 +1472,7 @@ export default function Calendar() {
             <h2>{t('calendar.editEventTitle')}</h2>
             {/* Stessi campi della colonna desktop (EventFormFields). */}
             <div className="rc-ev-form" style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={todayStr} useRange />
+              <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={todayStr} useRange showType={canChangeType(editingEvent)} />
             </div>
             <button onClick={saveEdit} className="btn btn-primary btn-full" style={{ marginTop:20 }}
               disabled={saving || !editForm.name?.trim() || !editForm.date}>

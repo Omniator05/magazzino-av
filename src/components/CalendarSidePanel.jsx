@@ -15,7 +15,7 @@ import { rememberEventManager } from '../utils/eventManagers'
 import { Warn, Phone, Mail, Check, ChevronRight } from './Icon'
 import TimeField from './TimeField'
 import DateField from './DateField'
-import EventFormFields, { Switch, fieldLabel } from './EventFormFields'
+import EventFormFields, { Switch, fieldLabel, canChangeType } from './EventFormFields'
 import DateRangeField from './DateRangeField'
 import Picker from './Picker'
 import { TaskSummaryBody } from './TaskSummaryModal'
@@ -225,9 +225,9 @@ export default function CalendarSidePanel({
 
   // Modifica rapida di un evento esistente (tap su una card nella colonna
   // dettagli) — stessi campi del vecchio modal "Modifica evento", ora dentro
-  // la colonna invece che in un popup: niente più modal per il Calendario,
-  // vedi il commento su CreateEventFlow per perché qui non c'è il toggle
-  // tipo/ricorrenza (resta solo nel flusso di creazione).
+  // la colonna invece che in un popup: niente più modal per il Calendario.
+  // Il toggle evento/rent c'è anche qui (gli eventi nati su Google Calendar
+  // arrivano sempre come "evento"); la ricorrenza resta solo in creazione.
   if (editingEvent) {
     return (
       <div key="edit-event" className="rc-sidebar-swap rc-ev-form" style={{ width: 460, flexShrink: 0, background: 'var(--c-surface)', borderLeft: '1px solid var(--c-line)', display: 'flex', flexDirection: 'column', height: SIDEBAR_MAX_HEIGHT }}>
@@ -237,7 +237,7 @@ export default function CalendarSidePanel({
             style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 28px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={today} />
+          <EventFormFields form={editForm} setForm={setEditForm} idp="cal-edit" teamId={teamId} today={today} showType={canChangeType(editingEvent)} />
         </div>
         <div className="rc-side-footer" style={{ display: 'flex', gap: 8 }}>
           <DeleteButton onClick={onDeleteEvent} size={44} ariaLabel={t('events.deleteEventAria')} />

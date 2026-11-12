@@ -19,6 +19,13 @@ export function toGoogleEvent(event) {
   }
 }
 
+// Gli eventi creati su Google arrivano sempre come "evento": se il titolo contiene la parola "rent" o
+// "noleggio" (parola intera, qualunque maiuscola: "RENT Mario", "Noleggio luci", non "Parent") li importiamo
+// come rent/install. Vale solo alla creazione: dopo, il tipo lo decide l'app (Modifica evento → Evento/Rent).
+export function looksLikeRent(title) {
+  return /(^|[^\p{L}\p{N}])(rent|noleggio)(?![\p{L}\p{N}])/iu.test(title || '')
+}
+
 // Torna null se l'evento Google non ha una data valida (non dovrebbe capitare).
 export function fromGoogleEvent(gEvent) {
   let date, dateEnd = null

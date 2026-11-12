@@ -15,7 +15,7 @@
 import { getAdmin } from './_authAdmin.js'
 import { decrypt } from './_crypto.js'
 import { refreshAccessToken } from './_googleAuth.js'
-import { fromGoogleEvent } from './_googleCalendarSync.js'
+import { fromGoogleEvent, looksLikeRent } from './_googleCalendarSync.js'
 
 const EVENTS_API = 'https://www.googleapis.com/calendar/v3/calendars'
 
@@ -139,7 +139,7 @@ export async function syncTeam(db, admin, teamId, team) {
       await db.collection('events').add({
         ...mapped,
         teamId, googleEventId: gEv.id, importedFromGoogle: true,
-        type: 'event', items: [], recurrence: 'never', seriesId: null, phases: {},
+        type: looksLikeRent(mapped.name) ? 'installation' : 'event', items: [], recurrence: 'never', seriesId: null, phases: {},
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       })

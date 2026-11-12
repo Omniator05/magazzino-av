@@ -19,6 +19,10 @@ const PHASE_CONFIG = [
   { key: 'smontaggio', labelKey: 'calendar.legendDisassembly', color: '#ea580c', bg: 'var(--c-orange-bg)' },
 ]
 
+// Il tipo (evento ↔ rent/install) di un evento esistente si può cambiare, tranne per le occorrenze
+// di una serie ricorrente (ricorrenza e rent sono mutuamente esclusive) e per le scadenze automatiche.
+export const canChangeType = ev => !!ev && !ev.seriesId && !ev.isDeadlineReminder
+
 export const fieldLabel = { display: 'block', fontSize: 11, fontWeight: 800, letterSpacing: '0.4px', color: 'var(--c-ink2)', textTransform: 'uppercase', marginBottom: 6 }
 
 export function Switch({ on, onChange, label }) {

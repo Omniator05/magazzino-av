@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-22',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Calendario: nella modifica di un evento (telefono e computer) si può cambiare il tipo tra Evento e Rent, utile per gli eventi creati su Google Calendar',
+        'Calendario: le modifiche a un evento (nome, date, luogo, note) ora arrivano anche su Google Calendar, come già succedeva da Eventi',
+        'Google Calendar: gli eventi che hanno "rent" o "noleggio" nel titolo vengono importati direttamente come Rent',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Calendar: when editing an event (phone and computer) you can now switch its type between Event and Rent, handy for events created on Google Calendar',
+        'Calendar: changes to an event (name, dates, location, notes) now also reach Google Calendar, as they already did from Events',
+        'Google Calendar: events with "rent" or "noleggio" in the title are imported straight as Rent',
+      ],
+    },
+  },
+  {
     version: '2026-11-21',
     it: {
       title: 'Novità di oggi',
