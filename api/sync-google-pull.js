@@ -15,9 +15,14 @@
 import { getAdmin } from './_authAdmin.js'
 import { decrypt } from './_crypto.js'
 import { refreshAccessToken } from './_googleAuth.js'
-import { fromGoogleEvent, looksLikeRent } from './_googleCalendarSync.js'
+import { fromGoogleEvent, looksLikeRent, APP_TIME_ZONE } from './_googleCalendarSync.js'
 
 const EVENTS_API = 'https://www.googleapis.com/calendar/v3/calendars'
+
+// Versione della sincronizzazione: se cambia cosa si legge da Google (2 = orari degli eventi, prima solo le date), al
+// primo giro di ogni squadra si riparte da una sincronizzazione completa e gli eventi già importati senza orario lo
+// recuperano (vedi `migrate` in syncTeam). Alzarla di nuovo quando si aggiungono altri campi.
+const SYNC_SCHEMA = 2
 
 // Stesso ripristino giacenza di closeInstallationEvent/deleteEventWithInventoryCheck
 // (src/utils/kitInventory.js) — duplicato qui perché le funzioni /api sono
@@ -48,7 +53,8 @@ function startOfTodayIso() {
 }
 
 async function fetchGoogleEventsPage(calendarId, accessToken, { syncToken, pageToken }) {
-  const params = new URLSearchParams({ maxResults: '250', showDeleted: 'true' })
+  // timeZone: gli orari degli eventi tornano già nel fuso dell'app (vedi APP_TIME_ZONE), qualunque sia quello del calendario Google
+  const params = new URLSearchParams({ maxResults: '250', showDeleted: 'true', timeZone: APP_TIME_ZONE })
   if (syncToken) params.set('syncToken', syncToken)
   else {
     params.set('singleEvents', 'true') // prima sync completa: espandi già le occorrenze ricorrenti
@@ -80,7 +86,8 @@ export async function syncTeam(db, admin, teamId, team) {
 
   // Il syncToken vale solo per il calendario con cui è stato ottenuto: se l'admin ha cambiato calendario di destinazione
   // (o il token è di prima che registrassimo da quale calendario veniva) si riparte da una sincronizzazione completa.
-  let syncToken = team.googleSyncCalendarId === team.googleCalendarId ? (team.googleSyncToken || null) : null
+  const migrate = team.googleSyncSchema !== SYNC_SCHEMA
+  let syncToken = !migrate && team.googleSyncCalendarId === team.googleCalendarId ? (team.googleSyncToken || null) : null
   let pageToken = null
   let nextSyncToken = null
   const googleEvents = []
@@ -145,7 +152,21 @@ export async function syncTeam(db, admin, teamId, team) {
       })
       created++
     } else {
-      const changed = ['name', 'date', 'dateEnd', 'location', 'notes'].some(k => (existing[k] || null) !== (mapped[k] || null))
+      const timesDiffer = (existing.allDay !== false) !== mapped.allDay
+        || (existing.timeStart || null) !== (mapped.timeStart || null) || (existing.timeEnd || null) !== (mapped.timeEnd || null)
+      // Migrazione (primo giro dopo l'introduzione degli orari): un evento importato prima non aveva l'orario, e la sua
+      // data di aggiornamento in Roadcase è più recente di quella su Google, quindi la regola "vince l'ultima modifica"
+      // sotto non lo aggiornerebbe mai. Per i soli eventi importati con un orario su Google si sistemano solo gli
+      // orari (e la data di fine, che dipende da loro), senza toccare nome, luogo e note.
+      if (migrate && timesDiffer && !mapped.allDay && (existing.importedFromGoogle === true || !existing.createdBy)) {
+        await db.collection('events').doc(existing.id).update({
+          allDay: mapped.allDay, timeStart: mapped.timeStart, timeEnd: mapped.timeEnd, dateEnd: mapped.dateEnd,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        })
+        updated++
+        continue
+      }
+      const changed = timesDiffer || ['name', 'date', 'dateEnd', 'location', 'notes'].some(k => (existing[k] || null) !== (mapped[k] || null))
       // Ultima modifica per orario vince: se l'evento è stato toccato su
       // Roadcase (updatedAt) DOPO l'ultima modifica registrata da Google
       // (gEv.updated), un giro di pull nel mezzo non deve cancellare
@@ -163,7 +184,7 @@ export async function syncTeam(db, admin, teamId, team) {
     }
   }
 
-  if (nextSyncToken) await db.collection('teams').doc(teamId).update({ googleSyncToken: nextSyncToken, googleSyncCalendarId: team.googleCalendarId })
+  if (nextSyncToken) await db.collection('teams').doc(teamId).update({ googleSyncToken: nextSyncToken, googleSyncCalendarId: team.googleCalendarId, googleSyncSchema: SYNC_SCHEMA })
 
   return { teamId, created, updated, deleted }
 }

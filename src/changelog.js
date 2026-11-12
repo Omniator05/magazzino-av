@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-23',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Google Calendar: gli eventi con un orario preciso (es. 21:00–23:30) ora arrivano in app con quell\'orario, non più come "tutto il giorno"',
+        'Google Calendar: se modifichi in app un evento con orario, l\'orario resta anche su Google (prima veniva trasformato in "tutto il giorno")',
+        'Gli eventi già importati senza orario lo recuperano alla prossima sincronizzazione (premi "Sincronizza ora" nelle Integrazioni)',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Google Calendar: events with a specific time (e.g. 21:00–23:30) now come into the app with that time, no longer as "all day"',
+        'Google Calendar: if you edit a timed event in the app, the time stays on Google too (it used to be turned into "all day")',
+        'Events already imported without a time get it at the next sync (press "Sync now" in Integrations)',
+      ],
+    },
+  },
+  {
     version: '2026-11-22',
     it: {
       title: 'Novità di oggi',
