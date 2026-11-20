@@ -18,6 +18,7 @@ import DateRangeField from '../components/DateRangeField'
 import TimeField from '../components/TimeField'
 import EventFormFields, { canChangeType } from '../components/EventFormFields'
 import { pushEventToGoogle } from '../utils/googleCalendar'
+import { useColumnShift } from '../utils/columnShift'
 import StaffTimeline from '../components/StaffTimeline'
 import EventSummaryModal from '../components/EventSummaryModal'
 import TaskSummaryModal from '../components/TaskSummaryModal'
@@ -118,6 +119,8 @@ export default function Calendar() {
   })
   const isMobile = useIsMobile()
   useEffect(() => { if (isMobile && mode === 'assign') setMode('grid') }, [isMobile, mode])
+  // Su computer la griglia ha sempre la colonna laterale a destra: la tab bar si sposta a sinistra quanto basta (utils/columnShift.js)
+  useColumnShift(!isMobile && mode === 'grid')
   useEffect(() => { if (mode !== 'grid' || isMobile) { setSidebarCreating(false); setEditingEvent(null) } }, [mode, isMobile])
   useEffect(() => { try { sessionStorage.setItem('calendar_mode', mode) } catch {} }, [mode])
 
@@ -990,13 +993,28 @@ export default function Calendar() {
                   // Le corsie delle barre stanno in alto; le righe normali occupano quelle che restano.
                   const lanes = segsHere.length ? Math.max(...segsHere.map(sg => sg.lane)) + 1 : 0
                   const room = Math.max(0, maxRows - lanes)
+                  // Una corsia in cui NESSUNA barra passa da questa cella (es. l'evento su più giorni che sta lì è finito il giorno
+                  // prima) non resta vuota: ci va la prima riga normale del giorno, che altrimenti finirebbe sotto o in "+N".
+                  const freeLanes = Array.from({ length: lanes }, (_, l) => l).filter(l => !segsHere.some(s => s.lane === l)).length
+                  const slots = freeLanes + room
+                  const shownRows = titleRows.slice(0, slots)
+                  let nextRow = 0
                   const rowStyle = { display:'block', fontSize:9.5, fontWeight:700, lineHeight:1.3, padding:'1.5px 4px', borderRadius:4, maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }
                   const padX = isMobile ? 3 : 6   // stessa imbottitura laterale della cella (vedi sopra)
+                  const renderRow = row => (
+                    <span key={row.key} style={{
+                      ...rowStyle,
+                      ...focusStyle(row.evId),
+                      background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.split ? `linear-gradient(90deg, ${row.split[0]} 50%, ${row.split[1]} 50%)` : row.color,
+                      color: row.isReminder ? 'var(--text3)' : '#fff',
+                    }}>{row.name}</span>
+                  )
                   return (
                     <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:2 }}>
                       {Array.from({ length: lanes }, (_, lane) => {
                         const sg = segsHere.find(s => s.lane === lane)
                         // Corsia vuota o barra già iniziata in una cella prima: resta lo spazio, la barra la disegna la prima cella
+                        if (!sg && nextRow < shownRows.length) return renderRow(shownRows[nextRow++])
                         if (!sg || sg.anchorCol !== col) return <span key={`ln${lane}`} aria-hidden="true" style={{ ...rowStyle, visibility:'hidden' }}>&nbsp;</span>
                         const n = sg.endCol - sg.startCol + 1
                         const extraL = sg.contL ? padX : 0, extraR = sg.contR ? padX : 0
@@ -1015,16 +1033,9 @@ export default function Calendar() {
                           }}>{sg.contL ? '‹ ' : ''}{mark(sg.ev)}{sg.ev.name}{sg.contR ? ' ›' : ''}</span>
                         )
                       })}
-                      {titleRows.slice(0, room).map(row => (
-                        <span key={row.key} style={{
-                          ...rowStyle,
-                          ...focusStyle(row.evId),
-                          background: row.isReminder ? 'var(--card2)' : isPast ? 'var(--text2)' : row.split ? `linear-gradient(90deg, ${row.split[0]} 50%, ${row.split[1]} 50%)` : row.color,
-                          color: row.isReminder ? 'var(--text3)' : '#fff',
-                        }}>{row.name}</span>
-                      ))}
-                      {titleRows.length > room && (
-                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - room}</span>
+                      {shownRows.slice(nextRow).map(renderRow)}
+                      {titleRows.length > shownRows.length && (
+                        <span style={{ fontSize:9, fontWeight:700, color:'var(--text3)' }}>+{titleRows.length - shownRows.length}</span>
                       )}
                     </div>
                   )
@@ -1136,7 +1147,8 @@ export default function Calendar() {
                   const isAssigned = isWorker && (event.assignedWorkers || []).includes(user?.uid)
                   return { ev: event, phasesOnDay: phases, coincides: false, rank: isAssigned ? 0 : 1, dotColor: phases[0].color, borderColor: phases[0].color + '44' }
                 }),
-                ...selectedTasks.map(b => ({ task: b, rank: 2, dotColor: 'var(--blue)', borderColor: 'var(--border)' })),
+                // Le mie attività (non ancora completate) stanno in alto, insieme agli eventi a cui sono assegnato
+                ...selectedTasks.map(b => ({ task: b, rank: isWorker && !(b.assigned || []).some(x => x.done) && (b.assigned || []).some(x => x.workerId === user?.uid) ? 0 : 2, dotColor: 'var(--blue)', borderColor: 'var(--border)' })),
               ].sort((a, b) => a.rank - b.rank).map(({ ev, task, phasesOnDay, coincides, dotColor, borderColor }) => {
                 // Il giorno selezionato è uno solo per tutta questa lista: se
                 // è passato, il colore identificativo (puntino, bordo, badge
@@ -1154,10 +1166,11 @@ export default function Calendar() {
                   const taskAssignedNames = (task.assigned || [])
                     .map(b => b.workerId ? workers.find(w => w.id === b.workerId)?.name : b.externalWorkerName)
                     .filter(Boolean)
+                  const taskMine = isWorker && !(task.assigned || []).some(b => b.done) && (task.assigned || []).some(b => b.workerId === user?.uid)
                   return (
                     <div key={`tk${task.id}`}
                       onClick={() => setSummaryTask(task)}
-                      style={{ background:'var(--c-surface)', border:`1px solid ${borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
+                      style={{ background: taskMine ? 'rgba(230,57,70,0.05)' : 'var(--c-surface)', border:`1px solid ${taskMine ? 'rgba(230,57,70,0.3)' : borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, padding:'13px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer' }}
                     >
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, background: dotColor }} />
                       <div style={{ flex:1, minWidth:0 }}>
@@ -1194,10 +1207,11 @@ export default function Calendar() {
                     </div>
                   )
                 }
+                const evMine = isWorker && (ev.assignedWorkers || []).includes(user?.uid)
                 return (
                   <div key={ev.id}
                     onClick={() => setSummaryEvent(ev)}
-                    style={{ background:'var(--c-surface)', border:`1px solid ${borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
+                    style={{ background: evMine ? 'rgba(230,57,70,0.05)' : 'var(--c-surface)', border:`1px solid ${evMine ? 'rgba(230,57,70,0.3)' : borderColor === 'var(--border)' ? 'var(--c-line)' : borderColor}`, borderRadius:14, marginBottom:8, cursor:'pointer' }}
                   >
                     <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'13px 14px' }}>
                       <span style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:5, background: dotColor }} />

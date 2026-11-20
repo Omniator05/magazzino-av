@@ -171,7 +171,6 @@
     "pickADay": "Tocca un giorno",
     "dayEmpty": "Nessun evento",
     "noLocation": "Nessun luogo",
-    "notAssignedHint": "Non sei assegnato",
     "prevMonthAria": "Mese precedente",
     "nextMonthAria": "Mese successivo",
     "tapFirstDay": "Tocca il primo giorno della tua assenza",
@@ -2213,6 +2212,7 @@
   "activities": {
     "todayTitle": "Attività di oggi",
     "doneTag": "Completata",
+    "pushDoneTitle": "Attività completata",
     "doneBy": "Completata da {{name}}",
     "complete": "Completa",
     "reopen": "Riapri",

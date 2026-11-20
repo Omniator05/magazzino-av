@@ -23,7 +23,7 @@ import { deleteEventWithInventoryCheck, closeInstallationEvent, rentReadyToClose
 import CloseInstallationModal from '../components/CloseInstallationModal'
 import CreateEventFlow from '../components/CreateEventFlow'
 import { listProgress } from '../utils/listProgress'
-const EventDetail = lazy(() => import('./EventDetail'))
+import { EventDetailPage as EventDetail } from '../utils/lazyPages'
 import { useIsMobile } from '../hooks/useIsMobile'
 
 const EVENT_CAP = 5
@@ -354,13 +354,27 @@ export default function Events() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selId])
   const shownId = selId || panelId
+  // "A pagina intera": prima la colonna si allarga fino a coprire la pagina (animazione in index.css), poi si apre la pagina vera.
+  const [expanding, setExpanding] = useState(false)
+  const expandTimer = useRef(null)
+  useEffect(() => () => clearTimeout(expandTimer.current), [])
+  const expandToFull = () => {
+    if (expanding || !shownId) return
+    const target = `/events/${shownId}`
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { navigate(target, { state: { noPageFade: true } }); return }
+    setExpanding(true)
+    expandTimer.current = setTimeout(() => navigate(target, { state: { noPageFade: true } }), 340)
+  }
   // Larghezza della colonna come variabile animata su <html> (vedi index.css, --rc-col-w): la colonna, la lista e la tab
   // bar (TabBar.jsx, che si centra nell'area a sinistra) leggono tutti lo stesso valore, quindi entrano e escono insieme.
   useEffect(() => {
     const root = document.documentElement
+    // La larghezza della colonna di Eventi è quella standard di index.css: se un'altra pagina (Calendario) ha lasciato
+    // una sua larghezza su <html>, qui non deve valere.
+    root.style.removeProperty('--rc-col-target')
     if (isMobile || !shownId) root.removeAttribute('data-col')
-    else root.setAttribute('data-col', selId ? 'open' : 'close')
-  }, [selId, shownId, isMobile])
+    else root.setAttribute('data-col', expanding ? 'expand' : selId ? 'open' : 'close')
+  }, [selId, shownId, isMobile, expanding])
   useEffect(() => () => document.documentElement.removeAttribute('data-col'), [])
   const goEvent = (path, opts) => {
     const m = typeof path === 'string' && path.match(/^\/events\/([^/]+)$/)
@@ -797,10 +811,10 @@ export default function Events() {
       /* Il transform serve apposta: fa da riferimento ai fogli "fixed" aperti lì dentro, che così coprono solo la colonna.
           La larghezza segue --rc-col-w (anima da 0 alla larghezza piena); il contenuto ha già la larghezza finale, ancorato
           a destra, così non si ridisegna mentre entra e sembra scivolare da destra. */
-      <aside className="rc-col" style={{ position:'sticky', top:0, alignSelf:'flex-start', width:'var(--rc-col-w, 0px)', flexShrink:0, height:'100dvh', overflow:'hidden', transform:'translateZ(0)' }}>
-        <div style={{ position:'absolute', top:0, right:0, bottom:0, width:'var(--rc-col-target, 600px)', overflowY:'auto', background:'var(--c-surface)', borderLeft:'1px solid var(--c-line)' }}>
+      <aside className="rc-col" style={{ position:'sticky', top:0, alignSelf:'flex-start', width:'calc(var(--rc-col-w, 0px) + var(--rc-col-grow, 0px))', maxWidth:'100%', flexShrink:0, height:'100dvh', overflow:'hidden', transform:'translateZ(0)', pointerEvents: expanding ? 'none' : undefined }}>
+        <div style={{ position:'absolute', top:0, right:0, bottom:0, width:'max(var(--rc-col-target, 600px), calc(var(--rc-col-w, 0px) + var(--rc-col-grow, 0px)))', overflowY:'auto', background:'var(--c-surface)', borderLeft:'1px solid var(--c-line)' }}>
           <Suspense fallback={null}>
-            <EventDetail key={shownId} embeddedId={shownId} onClose={() => setSearchParams({})} onOpenFull={() => navigate(`/events/${shownId}`)} />
+            <EventDetail key={shownId} embeddedId={shownId} expanding={expanding} onClose={() => setSearchParams({})} onOpenFull={expandToFull} />
           </Suspense>
         </div>
       </aside>

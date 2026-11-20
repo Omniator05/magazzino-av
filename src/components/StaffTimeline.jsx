@@ -13,6 +13,7 @@ import GuestInvitePrompt from './GuestInvitePrompt'
 import { isInvitePromptMuted, muteInvitePrompt } from '../utils/guestLinks'
 import StaffAssignPanel from './StaffAssignPanel'
 import ArchiveEventDetail from './ArchiveEventDetail'
+import { useColumnShift } from '../utils/columnShift'
 import { TaskSummaryBody } from './TaskSummaryModal'
 import { toMin, eventTimeForDay, phaseTimeFor } from '../utils/assignmentTimes'
 import { Plus, Wrench, Search } from './Icon'
@@ -457,6 +458,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         const sm = toMin(startTime), em = toMin(endTime)
         const anchor = { overnight, startMin: sm }
         const base = { key: `tk${gid}`, type: 'task', block: group[0], group, taskGroupId: gid, date, startTime, endTime, overnight, rank: 2, assigned,
+          done: group.some(b => b.done),
           linkedEventId: group.find(b => b.linkedEventId)?.linkedEventId || null, linkedListId: group.find(b => b.linkedListId)?.linkedListId || null }
         // La finestra delle persone arriva fino a fine attività (anche dopo la mezzanotte): la pillola è una sola
         return finishItem(base, overnight
@@ -553,6 +555,9 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   // della settimana (non salvata): se la card sparisce (cancellata, o si
   // cambia settimana) la colonna si nasconde da sola.
   const panelItem = panel ? ((itemsByDay[panel.date] || []).find(it => it.key === panel.key) || null) : null
+
+  // Con la colonna di dettaglio aperta (magazziniere o admin) la tab bar si sposta quanto basta a sinistra (utils/columnShift.js)
+  useColumnShift(!!panelItem)
 
   // Orario su misura di un giorno di un evento multi-giorno (vedi
   // eventTimeForDay sopra) — campo annidato (dayTimes.<data>) così si scrive
@@ -1114,7 +1119,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                       const isTask = item.type === 'task'
                       const title = isTask ? (item.block.label || t('staffTimeline.untitledTask')) : item.type === 'phase' ? `${PHASE_META[item.phaseKey].label} · ${item.event.name}` : item.event.name
                       const typeColor = isTask ? '#0066cc' : item.type === 'phase' ? PHASE_META[item.phaseKey].color : (item.event.type === 'installation' ? '#7c6fcd' : '#e63946')
-                      const stripe = isPast ? '#c9c6bf' : typeColor
+                      // Attività completata da un magazziniere: stessa resa grigia dei giorni passati, in più titolo barrato e fondo spento
+                      const isDone = isTask && !!item.done
+                      const muted = isPast || isDone
+                      const stripe = muted ? '#c9c6bf' : typeColor
                       const isDragOver = dragOverKey === item.key
                       // item.date è sempre il giorno VERO dell'attività (anche
                       // sul pezzo "continua" del giorno dopo): è quello che
@@ -1145,7 +1153,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                             left: `${item.geoLeft * 100}%`, zIndex: spansNext ? 3 : undefined,
                             // +1px = la linea che separa i due giorni, che la pillola attraversa
                             width: spansNext ? `calc(${(1 - item.geoLeft + spanRight) * 100}% + 1px)` : `${item.geoWidth * 100}%`,
-                            background: 'var(--c-surface)', color: isPast ? 'var(--c-ink3)' : 'var(--c-ink)', borderRadius: 10, padding: `${CARD_PAD}px 12px ${CARD_PAD}px 10px`,
+                            background: isDone ? 'var(--c-fill)' : 'var(--c-surface)', color: muted ? 'var(--c-ink3)' : 'var(--c-ink)', borderRadius: 10, padding: `${CARD_PAD}px 12px ${CARD_PAD}px 10px`,
                             display: 'flex', flexDirection: 'column', gap: ROW_GAP,
                             overflow: 'hidden', cursor: 'pointer',
                             boxShadow: isDragOver ? '0 0 0 2px var(--c-ink), 6px 3px 16px rgba(0,0,0,0.18)'
@@ -1158,7 +1166,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                           <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: 4, background: stripe }} />
                           <span
                             style={{ fontSize: 11, fontWeight: 700, height: TITLE_ROW_H, lineHeight: `${TITLE_ROW_H}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                            {item.type === 'event' && item.event.type === 'installation' && <Wrench size={11} />}{title}
+                            {item.type === 'event' && item.event.type === 'installation' && <Wrench size={11} />}<span style={isDone ? { textDecoration: 'line-through', textDecorationThickness: '1.5px', overflow: 'hidden', textOverflow: 'ellipsis' } : { overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
                           </span>
                           <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--c-ink3)', height: SUBTITLE_ROW_H, lineHeight: `${SUBTITLE_ROW_H}px`, flexShrink: 0, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                             {timeLabel}
@@ -1184,7 +1192,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                                     const differs = left > 0.005 || width < 0.995
                                     return (
                                       <PersonDot key={a.id} person={{ key: a.id, id: personId, name, hours: `${a.startTime}–${a.endTime}` }} size={AVATAR_SIZE}
-                                        style={{ marginLeft: i === 0 ? 0 : -6, background: isPast ? '#9a9a9a' : personColor(personId), fontSize: 9, boxShadow: '0 0 0 2px var(--c-surface)', zIndex: shownBars.length - i }}>
+                                        style={{ marginLeft: i === 0 ? 0 : -6, background: muted ? '#9a9a9a' : personColor(personId), fontSize: 9, boxShadow: '0 0 0 2px var(--c-surface)', zIndex: shownBars.length - i }}>
                                         {differs && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#ea580c', boxShadow: '0 0 0 1.5px var(--c-surface)' }} />}
                                       </PersonDot>
                                     )
@@ -1259,7 +1267,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 20px' }}>
             {panelItem.type === 'task'
               ? <TaskSummaryBody block={{ ...panelItem.block, startTime: panelItem.startTime, endTime: panelItem.endTime, assigned: panelItem.assigned }} workers={workers} />
-              : <ArchiveEventDetail event={panelItem.event} workers={workers} blocks={blocks.filter(b => b.eventId === panelItem.event.id)} vehicles={[]} loadListsOn />}
+              : <ArchiveEventDetail event={panelItem.event} workers={workers} blocks={blocks.filter(b => b.eventId === panelItem.event.id)} vehicles={[]} />}
           </div>
           {panelItem.type !== 'task' && (
             <div className="rc-side-footer">

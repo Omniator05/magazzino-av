@@ -203,7 +203,6 @@
     "pickADay": "اضغط على يوم",
     "dayEmpty": "لا توجد فعاليات",
     "noLocation": "بدون موقع",
-    "notAssignedHint": "أنت غير معيّن",
     "prevMonthAria": "الشهر السابق",
     "nextMonthAria": "الشهر التالي",
     "tapFirstDay": "اضغط على أول يوم من غيابك",
@@ -2473,6 +2472,7 @@
   "activities": {
     "todayTitle": "مهام اليوم",
     "doneTag": "منجزة",
+    "pushDoneTitle": "تم إنجاز مهمة",
     "doneBy": "أنجزها {{name}}",
     "complete": "تحديد كمنجزة",
     "reopen": "إعادة فتح",

@@ -7,6 +7,31 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-24',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Attività: quando un magazziniere segna la sua attività come completata, gli admin ricevono una notifica; nella timeline di Assegna personale la card diventa grigia con il titolo barrato e nel pannello compare "Completata da…"',
+        'Home magazzinieri: un\'attività completata si rimpicciolisce a una riga (titolo barrato, tag "Completata" e ora); un tocco la riapre per vedere i dettagli',
+        'Calendario magazzinieri: le attività e gli eventi a cui sei assegnato hanno un rosso tenue, le altre restano neutre; tolto l\'avviso "Non sei assegnato". Nella timeline la colonna di un evento non mostra più la lista di carico, c\'è il pulsante per aprirla',
+        'La barra delle schede, quando a destra c\'è una colonna, si sposta a sinistra solo quanto serve per non toccarla',
+        'Calendario: un evento di un solo giorno ora occupa lo spazio libero accanto a una barra su più giorni, invece di finire nel "+1"',
+        'Eventi su computer: "A pagina intera" fa allargare la colonna fino a riempire la pagina, senza il lampo bianco di prima',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Tasks: when a warehouse worker marks their task as done, admins get a notification; in the Assign staff timeline the card turns grey with a struck-through title and the panel shows "Completed by…"',
+        'Warehouse home: a completed task shrinks to one line (struck-through title, "Done" tag and time); tap it to reopen the details',
+        'Warehouse calendar: the tasks and events you are assigned to have a soft red tint, the others stay neutral; the "You\'re not assigned" notice is gone. In the timeline an event\'s column no longer shows the load list, there is the button to open it',
+        'The tab bar, when there is a column on the right, moves left only as much as needed to stay clear of it',
+        'Calendar: a single-day event now takes the free space next to a multi-day bar, instead of ending up in the "+1"',
+        'Events on computer: "Full page" widens the column until it fills the page, without the white flash',
+      ],
+    },
+  },
+  {
     version: '2026-11-23',
     it: {
       title: 'Novità di oggi',

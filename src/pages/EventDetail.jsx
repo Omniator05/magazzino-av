@@ -61,7 +61,11 @@ function slugifyName(s) {
 
 // Con `embeddedId` (desktop, colonna di Eventi) la pagina vive dentro una colonna a destra della lista: stesso
 // contenuto, ma con "✕ / Pagina intera" al posto di "Indietro" e il "+" ancorato alla colonna invece che allo schermo.
-export default function EventDetail({ embeddedId = null, onClose = null, onOpenFull = null } = {}) {
+// Ultimo documento letto di ogni evento: chi apre lo stesso evento in un'altra schermata (colonna di Eventi → pagina intera)
+// parte già con i dati, senza il "Caricamento…" in mezzo. Serve solo come punto di partenza: lo snapshot lo aggiorna subito.
+const eventCache = new Map()
+
+export default function EventDetail({ embeddedId = null, onClose = null, onOpenFull = null, expanding = false } = {}) {
   const { t, i18n } = useTranslation()
   const params = useParams()
   const embedded = !!embeddedId
@@ -79,7 +83,7 @@ export default function EventDetail({ embeddedId = null, onClose = null, onOpenF
   const navigate = useNavigate()
   // Nella colonna di Eventi (embedded) la pagina si comporta come su telefono: barra di selezione con "⋯", Assegna in foglio.
   const isMobile = useIsMobile() || embedded
-  const [event, setEvent] = useState(null)
+  const [event, setEvent] = useState(() => eventCache.get(id) || null)
   const today = new Date().toISOString().split('T')[0]
   const [allItems, setAllItems] = useState([])
   const [brasserieWeek, setBrasserieWeek] = useState(null)
@@ -397,7 +401,11 @@ export default function EventDetail({ embeddedId = null, onClose = null, onOpenF
 
   useEffect(() => {
     return onSnapshot(eventRef, snap => {
-      if (snap.exists()) setEvent({ id: snap.id, ...snap.data() })
+      if (!snap.exists()) return
+      const next = { id: snap.id, ...snap.data() }
+      eventCache.delete(snap.id); eventCache.set(snap.id, next)
+      if (eventCache.size > 30) eventCache.delete(eventCache.keys().next().value)
+      setEvent(next)
     })
   }, [id])
 
@@ -1787,9 +1795,13 @@ export default function EventDetail({ embeddedId = null, onClose = null, onOpenF
       <div className="rc-page-header" style={{ padding: embedded ? '18px 24px 16px' : '52px 20px 16px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
           {embedded ? (
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={onClose} className="rc-pill-btn" aria-label={t('common.close')} style={{ padding:'9px 14px', fontSize:13 }}>✕</button>
-              <button onClick={onOpenFull} className="rc-pill-btn" aria-label={t('eventDetail.fullPage')} title={t('eventDetail.fullPage')} style={{ padding:'9px 14px', fontSize:13 }}>
+            <div style={{ display:'flex', gap:expanding ? 0 : 8 }}>
+              {/* Mentre la colonna si allarga a pagina intera, il ✕ diventa il "← Indietro" della pagina intera e l'icona espandi sparisce */}
+              <button onClick={expanding ? undefined : onClose} className="rc-pill-btn" aria-label={expanding ? t('common.back') : t('common.close')} style={{ padding:'9px 14px', fontSize:13 }}>
+                <span key={expanding ? 'b' : 'x'} className={expanding ? 'tk-fade' : undefined}>{expanding ? `← ${t('common.back')}` : '✕'}</span>
+              </button>
+              <button onClick={onOpenFull} className="rc-pill-btn" aria-label={t('eventDetail.fullPage')} title={t('eventDetail.fullPage')} tabIndex={expanding ? -1 : undefined}
+                style={{ padding: expanding ? '9px 0' : '9px 14px', fontSize:13, overflow:'hidden', opacity: expanding ? 0 : 1, maxWidth: expanding ? 0 : 60, borderWidth: expanding ? 0 : undefined, transition:'opacity 0.18s ease, max-width 0.3s cubic-bezier(0.16,1,0.3,1), padding 0.3s cubic-bezier(0.16,1,0.3,1)' }}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
               </button>
             </div>

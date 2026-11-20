@@ -171,7 +171,6 @@
     "pickADay": "Tippe auf einen Tag",
     "dayEmpty": "Keine Events",
     "noLocation": "Kein Ort",
-    "notAssignedHint": "Du bist nicht eingeteilt",
     "prevMonthAria": "Vorheriger Monat",
     "nextMonthAria": "Nächster Monat",
     "tapFirstDay": "Tippe auf den ersten Tag deiner Abwesenheit",
@@ -2213,6 +2212,7 @@
   "activities": {
     "todayTitle": "Heutige Aufgaben",
     "doneTag": "Erledigt",
+    "pushDoneTitle": "Aufgabe erledigt",
     "doneBy": "Erledigt von {{name}}",
     "complete": "Als erledigt markieren",
     "reopen": "Wieder öffnen",

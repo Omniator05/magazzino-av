@@ -730,6 +730,8 @@ button.rc-action-btn:not(:disabled):active {
 .page-transition {
   animation: pageEnter 0.2s ease;
 }
+/* Senza dissolvenza (vedi AnimatedPage, location.state.noPageFade): né quella della route né quella di .page */
+.no-page-fade, .no-page-fade .page { animation: none !important; }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.5; }
@@ -1340,10 +1342,9 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
 [data-theme] .rc-ev-form input:not([type="checkbox"]):focus,
 [data-theme] .rc-ev-form textarea:focus { border-color: #e63946; box-shadow: 0 0 0 3px rgba(230,57,70,0.12); }
 .rc-ev-form .df-trigger, .rc-ev-form .tf-trigger { background: var(--c-surface) !important; }
-/* Pulsanti fissi in fondo alla colonna. Sotto ~1520px di larghezza la tab bar
-   fluttuante (600px al centro) arriva fino alla colonna: più spazio sotto. */
-.rc-side-footer { flex-shrink: 0; padding: 14px 28px 22px; border-top: 1px solid var(--c-line); background: var(--c-surface); }
-@media (max-width: 1520px) { .rc-side-footer { padding-bottom: 104px; } }
+/* Pulsanti fissi in fondo alla colonna, all'altezza della tab bar fluttuante: la tab bar si sposta a sinistra quando
+   c'è una colonna (utils/columnShift.js), quindi non serve più lasciarle spazio sotto. */
+.rc-side-footer { flex-shrink: 0; padding: 14px 28px 33px; border-top: 1px solid var(--c-line); background: var(--c-surface); }
 
 
 /* Bottone "+" che richiama l'attenzione (arrivando da un passo di "Per iniziare"): un piccolo
@@ -1437,7 +1438,14 @@ button.rc-pill-btn:hover, button.rc-pill-btn:not(:disabled):active { filter: non
 @keyframes rc-col-w-out { from { --rc-col-w: var(--rc-col-target); } to { --rc-col-w: 0px; } }
 html[data-col="open"]  { --rc-col-w: var(--rc-col-target); animation: rc-col-w-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
 html[data-col="close"] { animation: rc-col-w-out 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* "A pagina intera": la colonna si allarga fino a coprire tutta la pagina (--rc-col-grow si somma a --rc-col-w, che scende a
+   0 e riporta la tab bar al centro), poi Events apre la pagina vera. Stessa curva dell'apertura. */
+@property --rc-col-grow { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@keyframes rc-col-expand { from { --rc-col-w: var(--rc-col-target); --rc-col-grow: 0px; } to { --rc-col-w: 0px; --rc-col-grow: 100vw; } }
+html[data-col="expand"] { animation: rc-col-expand 0.34s cubic-bezier(0.16, 1, 0.3, 1) both; }
 @media (prefers-reduced-motion: reduce) { html[data-col] { animation-duration: 0.01s; } }
+/* Card attività che si rimpicciolisce a completamento (ActivityCard.jsx) */
+@media (prefers-reduced-motion: reduce) { .tk-collapse, .tk-collapse > div, .tk-card { transition-duration: 0.01s !important; } }
 
 /* Posizione in magazzino: una riga semplice sotto il nome dell'oggetto (scheda oggetto). */
 .rc-loc-line { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 14px; font-weight: 700; color: var(--c-ink); overflow-wrap: anywhere; }

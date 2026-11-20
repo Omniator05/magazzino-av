@@ -17,7 +17,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Inventory = lazy(() => import('./pages/Inventory'))
 const InventoryItemHistory = lazy(() => import('./pages/InventoryItemHistory'))
 const Events = lazy(() => import('./pages/Events'))
-const EventDetail = lazy(() => import('./pages/EventDetail'))
+import { EventDetailPage as EventDetail } from './utils/lazyPages'
 const Scanner = lazy(() => import('./pages/Scanner'))
 const Settings = lazy(() => import('./pages/Settings'))
 const SettingsProfile = lazy(() => import('./pages/SettingsProfile'))
@@ -134,7 +134,10 @@ const scrollByKey = new Map()
 
 /* Wrapper che riattiva l'animazione ad ogni cambio di route */
 function AnimatedPage({ children }) {
-  const { pathname } = useLocation()
+  const { pathname, state } = useLocation()
+  // Navigazioni che devono sembrare la continuazione della schermata di prima (es. colonna di Eventi → pagina intera):
+  // niente dissolvenza da zero e niente rimontaggio, altrimenti per un attimo si vede una pagina vuota.
+  const noFade = !!state?.noPageFade
   const [key, setKey] = useState(pathname)
   const prev = useRef(pathname)
 
@@ -169,14 +172,14 @@ function AnimatedPage({ children }) {
   useEffect(() => {
     // Ignora cambio da/verso /login (gestito dall'overlay PageTransition)
     const isLoginChange = prev.current === '/login' || pathname === '/login'
-    if (!isLoginChange && prev.current !== pathname) {
+    if (!isLoginChange && prev.current !== pathname && !noFade) {
       setKey(pathname)
     }
     prev.current = pathname
   }, [pathname])
 
   return (
-    <div key={key} className="page-transition">
+    <div key={key} className={noFade ? 'page-transition no-page-fade' : 'page-transition'}>
       {children}
     </div>
   )

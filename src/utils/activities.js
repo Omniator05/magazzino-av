@@ -1,5 +1,7 @@
 import { writeBatch, doc, serverTimestamp, deleteField } from 'firebase/firestore'
 import { db } from '../firebase'
+import i18n from '../i18n'
+import { notifyTeamPush } from './pushNotifications'
 
 // Le "attività" sono i blocchi della timeline "Assegna personale" senza evento (assignmentBlocks con
 // eventId vuoto). Più persone legate alla stessa attività condividono un taskGroupId e sono UNA voce.
@@ -52,6 +54,16 @@ export async function setActivityDone(act, done, who) {
       : { done: deleteField(), doneAt: deleteField(), doneBy: deleteField(), doneByName: deleteField() })
   })
   await batch.commit()
+  // Solo al completamento (non alla riapertura) e solo dopo che la scrittura è andata a buon fine: gli admin
+  // ricevono una push con il nome dell'attività e di chi l'ha fatta. Chi la completa non la riceve (escluso dal server).
+  if (done) {
+    notifyTeamPush({
+      title: i18n.t('activities.pushDoneTitle'),
+      body: `${act.label || i18n.t('staffTimeline.untitledTask')} · ${who.name || i18n.t('common.unknown')}`,
+      url: '/calendar',
+      audience: { type: 'admins' },
+    })
+  }
 }
 
 export const isAssignedTo = (act, uid) => !!uid && act.people.some(p => p.uid === uid)

@@ -270,7 +270,7 @@ export default function WorkerHome() {
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 20px 12px' }}>
               <p style={{ color:'#9a9a9a', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.5px', margin:0 }}>{t('workerHome.todoToday')}</p>
             </div>
-            {todayTasks.map(act => <ActivityCard key={`${act.id}-${act.cont ? 'c' : 'o'}`} act={act} meId={user?.uid} onToggle={toggleActivity}
+            {todayTasks.map(act => <ActivityCard key={`${act.id}-${act.cont ? 'c' : 'o'}`} act={act} meId={user?.uid} onToggle={toggleActivity} collapseDone held={act.id in actHold}
               linkedEventName={act.linkedEventId ? events.find(e => e.id === act.linkedEventId)?.name : ''}
               onOpenList={a => navigate(`/events/${a.linkedEventId}${a.linkedListId ? `?list=${a.linkedListId}` : ''}`)} />)}
             {todayList.map(ev => <EventCard key={ev.id} ev={ev} today={today} navigate={navigate} uid={user?.uid} forceState={happeningToday(ev) ? 'today' : 'phaseToday'} loadListsOn={loadListsOn} />)}

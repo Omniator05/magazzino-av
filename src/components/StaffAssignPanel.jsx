@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
-import { formatDate, capitalize } from '../utils/formatDate'
+import { formatDate, capitalize, localeFor } from '../utils/formatDate'
 import { personColor } from '../utils/assignmentBlocks'
 import TimeField from './TimeField'
 import DeleteButton from './DeleteButton'
@@ -202,6 +202,16 @@ export default function StaffAssignPanel({
         {dateLabel}
         {phaseTag && <span style={{ marginLeft: 8, color: phaseTag.color, background: `${phaseTag.color}18`, borderRadius: 6, padding: '2px 7px', fontSize: 11, fontWeight: 800 }}>{phaseTag.label}</span>}
       </p>
+
+      {isTask && item.done && (() => {
+        const d = (item.group || []).find(b => b.done)
+        const at = d?.doneAt?.toDate ? d.doneAt.toDate().toLocaleTimeString(localeFor(i18n.language), { hour: '2-digit', minute: '2-digit' }) : ''
+        return (
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'var(--c-green)' }}>
+            ✓ {t('activities.doneBy', { name: d?.doneByName || t('common.unknown') })}{at ? ` · ${at}` : ''}
+          </p>
+        )
+      })()}
 
       {isTask ? (
         <>

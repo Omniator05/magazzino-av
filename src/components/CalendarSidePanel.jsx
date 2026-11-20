@@ -12,7 +12,7 @@ import { pushEventToGoogle } from '../utils/googleCalendar'
 import { notifyTeamPush } from '../utils/pushNotifications'
 import { generateDates } from '../utils/recurrence'
 import { rememberEventManager } from '../utils/eventManagers'
-import { Warn, Phone, Mail, Check, ChevronRight } from './Icon'
+import { Phone, Mail, Check, ChevronRight } from './Icon'
 import TimeField from './TimeField'
 import DateField from './DateField'
 import EventFormFields, { Switch, fieldLabel, canChangeType } from './EventFormFields'
@@ -377,8 +377,9 @@ export default function CalendarSidePanel({
               else if (stage === 'loaded') status = { label: `${t('calendar.statusLoaded')} ${loadedN}/${total}`, bg: 'var(--c-t-amber)', color: 'var(--c-amber)' }
               else status = { label: `${t('calendar.statusReady')} ${prontoN}/${total}`, bg: 'var(--c-fill)', color: 'var(--c-ink2)' }
 
+              // Al magazziniere le card degli eventi a cui è assegnato risaltano (stesso rosso tenue del calendario su telefono); le altre restano neutre
               return (
-                <div key={ev.id} className="rc-cal-card" style={{ position: 'relative', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
+                <div key={ev.id} className="rc-cal-card" style={{ position: 'relative', border: `1px solid ${isWorker && isAssigned ? 'rgba(230,57,70,0.3)' : 'var(--c-line)'}`, borderRadius: 12, padding: 12, background: isWorker && isAssigned ? 'rgba(230,57,70,0.05)' : 'var(--card)' }}>
                   {/* Tutta la card apre la lista di carico (è quello che si fa più spesso).
                       Sotto al contenuto vero (z-index 1 contro 2), che ha pointerEvents:none
                       tranne sui controlli specifici (telefono/email/avatar/"Modifica"), così
@@ -423,12 +424,6 @@ export default function CalendarSidePanel({
                       </div>
                     )}
 
-                    {isWorker && !isAssigned && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, color: 'var(--c-ink3)', fontSize: 10.5 }}>
-                        <Warn size={11} /> {t('calendar.notAssignedHint')}
-                      </div>
-                    )}
-
                     {/* Avatar assegnati e "apri evento" sulla stessa riga —
                         gli avatar mostrano nome+orario al passaggio del
                         mouse (l'orario è quello dell'evento: l'assegnazione
@@ -469,11 +464,15 @@ export default function CalendarSidePanel({
                 )}
               </Link>
             ))}
-            {selectedDayTasks.map(tk => (
+            {selectedDayTasks.map(tk => {
+              const doneBlock = (tk.assigned || []).find(b => b.done)
+              // Al magazziniere le attività a cui è assegnato risaltano, come le card degli eventi; una già completata resta grigia
+              const mine = isWorker && !doneBlock && (tk.assigned || []).some(b => b.workerId === user?.uid)
+              return (
               <div key={tk.id} role="button" tabIndex={0} onClick={() => onOpenTask(tk)} onKeyDown={e => { if (e.key === 'Enter') onOpenTask(tk) }} className="rc-cal-card"
-                style={{ textAlign: 'left', cursor: 'pointer', border: '1px solid var(--c-line)', borderRadius: 12, padding: 12, background: 'var(--card)' }}>
+                style={{ textAlign: 'left', cursor: 'pointer', border: `1px solid ${mine ? 'rgba(230,57,70,0.3)' : 'var(--c-line)'}`, borderRadius: 12, padding: 12, background: doneBlock ? 'var(--c-fill)' : mine ? 'rgba(230,57,70,0.05)' : 'var(--card)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--c-ink)' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: doneBlock ? 'var(--c-ink3)' : 'var(--c-ink)', textDecoration: doneBlock ? 'line-through' : 'none' }}>{tk.label || t('staffTimeline.untitledTask')}</span>
                   {!readOnly && onEditTask && (
                     <button type="button" className="btn-no-anim" onClick={e => { e.stopPropagation(); onEditTask(tk) }} aria-label={`${t('common.edit')} · ${tk.label || t('staffTimeline.untitledTask')}`}
                       style={{ flexShrink: 0, background: 'var(--c-fill)', color: 'var(--c-ink2)', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 800 }}>{t('common.edit')}</button>
@@ -481,6 +480,7 @@ export default function CalendarSidePanel({
                 </div>
                 <div style={{ marginTop: 4 }}>
                   <span style={{ fontSize: 11, color: 'var(--c-ink2)' }}>{tk.startTime}–{tk.endTime}</span>
+                  {doneBlock && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 800, color: 'var(--c-green)' }}>✓ {t('activities.doneBy', { name: doneBlock.doneByName || t('common.unknown') })}</span>}
                 </div>
                 {/* Chi è assegnato all'attività: stessi pallini delle card degli eventi. */}
                 {(() => {
@@ -498,7 +498,8 @@ export default function CalendarSidePanel({
                   )
                 })()}
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

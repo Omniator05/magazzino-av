@@ -171,7 +171,6 @@
     "pickADay": "Tap a day",
     "dayEmpty": "No events",
     "noLocation": "No location",
-    "notAssignedHint": "You're not assigned",
     "prevMonthAria": "Previous month",
     "nextMonthAria": "Next month",
     "tapFirstDay": "Tap the first day of your absence",
@@ -2213,6 +2212,7 @@
   "activities": {
     "todayTitle": "Today's tasks",
     "doneTag": "Done",
+    "pushDoneTitle": "Task completed",
     "doneBy": "Completed by {{name}}",
     "complete": "Mark as done",
     "reopen": "Reopen",

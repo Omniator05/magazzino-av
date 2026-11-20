@@ -171,7 +171,6 @@
     "pickADay": "Toque num dia",
     "dayEmpty": "Sem eventos",
     "noLocation": "Sem local",
-    "notAssignedHint": "Não está atribuído",
     "prevMonthAria": "Mês anterior",
     "nextMonthAria": "Mês seguinte",
     "tapFirstDay": "Toque no primeiro dia da sua ausência",
@@ -2213,6 +2212,7 @@
   "activities": {
     "todayTitle": "Tarefas de hoje",
     "doneTag": "Concluída",
+    "pushDoneTitle": "Tarefa concluída",
     "doneBy": "Concluída por {{name}}",
     "complete": "Marcar como feita",
     "reopen": "Reabrir",
