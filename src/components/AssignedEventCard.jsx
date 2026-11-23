@@ -4,11 +4,12 @@ import { formatDate, capitalize } from '../utils/formatDate'
 import { downloadIcs, googleCalendarUrl } from '../utils/calendarExport'
 import { fetchCalendarFeedUrl } from '../utils/freelance'
 
-// Card di un evento assegnato a una persona esterna (utente temporaneo con link, o Freelance con account): titolo,
-// date e luogo, note e — a tendina — la lista di carico in sola lettura. Condivisa da GuestView e FreelanceHome.
+// Card di un evento assegnato a una persona esterna (Freelance con account): titolo,
+// date e luogo, note e — a tendina — la lista di carico in sola lettura. Usata da FreelanceHome e FreelanceDesktop.
 // `shifts` (facoltativo): i turni di quel giorno (orario + fase), mostrati in testa alla card.
 // `calendarButtons` (solo Freelance): "Aggiungi al calendario" (abbonamento che apre l'app Calendario e si aggiorna da solo),
 // Google Calendar e, a parte, il file .ics del solo evento.
+// `listOpen`: la lista di carico parte aperta (colonna di destra della versione desktop).
 // `onRespond` (solo Freelance): mostra "Accetto / Non posso" (o lo stato già scelto, con la possibilità di cambiarlo);
 // `response` = 'accepted' | 'declined' | null; `canRespond` false per gli eventi già passati.
 const PHASE_COLOR = { montaggio: '#2563eb', smontaggio: '#ea580c' }
@@ -17,7 +18,7 @@ export const RESPONSE_COLOR = { pending: '#d97706', accepted: '#16a34a', decline
 const label = { margin: 0, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--c-ink3)' }
 const card = { background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 16, overflow: 'hidden' }
 
-export default function AssignedEventCard({ ev, shifts = [], response = null, onRespond = null, canRespond = true, busy = false, calendarButtons = false }) {
+export default function AssignedEventCard({ ev, shifts = [], response = null, onRespond = null, canRespond = true, busy = false, calendarButtons = false, listOpen = false }) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
   const fmt = (d, o) => capitalize(formatDate(`${d}T12:00:00`, o, lang))
@@ -115,7 +116,7 @@ export default function AssignedEventCard({ ev, shifts = [], response = null, on
           </p>
         </div>
       )}
-      <details style={{ borderTop: '1px solid var(--c-line)' }}>
+      <details open={listOpen || undefined} style={{ borderTop: '1px solid var(--c-line)' }}>
         <summary style={{ cursor: 'pointer', padding: '12px 14px', fontSize: 13.5, fontWeight: 800, listStyle: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{t('guest.loadList')}</span>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-ink2)' }}>{t('guest.itemsCount', { count: rows.length })}</span>

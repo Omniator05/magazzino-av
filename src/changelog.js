@@ -7,6 +7,27 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-28',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Freelance su computer: la home diventa un\'agenda a tre colonne. A sinistra il mese, al centro la settimana con gli eventi sulle ore (colorati per stato), a destra il dettaglio con Accetto / Non posso, note e lista di carico già aperta',
+        'Con il piano Pro un esterno è sempre un Freelance con il suo accesso: non esistono più gli utenti temporanei e i link ospite. In Impostazioni → Utenti i Freelance (anche quelli in attesa dell\'email) hanno una sezione tutta loro, separata dai magazzinieri',
+        'In Assegna personale, con il piano Pro, "esterno" diventa "Freelance" nei pulsanti e nei tag',
+        'Accesso: premendo "Entra" il bottone mostra solo un loader, e la schermata col logo parte soltanto se nome utente e password sono giusti',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Freelance on desktop: the home becomes a three-column agenda. Month on the left, the week with events on the hours in the middle (coloured by status), and on the right the details with Accept / Can\'t make it, notes and the load list already open',
+        'With the Pro plan an external is always a Freelance with their own login: temporary users and guest links are gone. In Settings → Users, Freelancers (including those waiting for an email) have their own section, separate from warehouse staff',
+        'In Assign staff, with the Pro plan, "external" becomes "Freelance" on buttons and tags',
+        'Login: pressing "Sign in" turns the button into a loader only, and the logo screen starts only if username and password are correct',
+      ],
+    },
+  },
+  {
     version: '2026-11-27',
     it: {
       title: 'Novità di oggi',

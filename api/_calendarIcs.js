@@ -2,7 +2,7 @@
 // lo usano sia l'app (pulsante "Aggiungi al calendario", src/utils/calendarExport.js) sia il server (abbonamento al calendario
 // del Freelance, api/_freelance.js). Gli orari sono "flottanti" (senza fuso): il calendario del telefono li mostra con lo stesso
 // orario scritto in Roadcase, come per chi li ha assegnati.
-// `ev` ha la forma pubblica di api/_guest.js (name, date, dateEnd, allDay, timeStart, timeEnd, location, notes, blocks).
+// `ev` ha la forma pubblica di api/_publicEvent.js (name, date, dateEnd, allDay, timeStart, timeEnd, location, notes, blocks).
 export const compact = d => String(d).replaceAll('-', '')
 export const hhmm = t => `${String(t).replace(':', '')}00`
 const addDay = dateStr => {

@@ -2,7 +2,7 @@
 // un'email finta (nome utente → "nome@theservice.internal") all'email VERA, così l'utente può
 // anche reimpostare la password da solo ("Password dimenticata?").
 //
-// Come _badge.js e _guest.js vive qui e non in un endpoint a sé (limite di 12 funzioni del piano
+// Come _badge.js e _station.js vive qui e non in un endpoint a sé (limite di 12 funzioni del piano
 // Hobby di Vercel): viene chiamato da push.js DOPO la verifica del token Firebase.
 import { getAdmin } from './_authAdmin.js'
 import { sendEmail, loginChangedEmailHtml } from './_resend.js'

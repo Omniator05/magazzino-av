@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import LogoutButton from '../components/LogoutButton'
 import AssignedEventCard, { RESPONSE_COLOR } from '../components/AssignedEventCard'
+import FreelanceDesktop from '../components/FreelanceDesktop'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { fetchFreelanceView, respondToEvent } from '../utils/freelance'
 import { formatDate, capitalize, monthNames, weekdayInitials } from '../utils/formatDate'
 
 // Home di un account Freelance (personale esterno con login): un calendario del mese, vuoto tranne i giorni in cui è
 // assegnato. Toccando un giorno si vedono gli eventi di quel giorno con orari, note e — a tendina — la lista di carico
-// (sola lettura). I dati arrivano dal server (api/_freelance.js): il Freelance non ha accesso diretto al database.
+// (sola lettura). Su schermi larghi (≥1180px) la stessa home è un'agenda a tre colonne: vedi FreelanceDesktop. I dati arrivano dal server (api/_freelance.js): il Freelance non ha accesso diretto al database.
 const dateStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const rangeDates = (from, to) => {
   const out = []
@@ -39,6 +41,8 @@ export default function FreelanceHome() {
   const { t, i18n } = useTranslation()
   const { profile } = useAuth()
   const lang = i18n.language
+  // Schermi larghi: agenda a tre colonne (FreelanceDesktop); telefono e tablet stretto: la pagina a una colonna qui sotto
+  const compact = useIsMobile(1179)
   const [state, setState] = useState({ loading: true })
   const now = new Date()
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() })
@@ -101,6 +105,8 @@ export default function FreelanceHome() {
       </div>
     )
   }
+
+  if (!compact) return <FreelanceDesktop data={state.data} byDay={byDay} respond={respond} busyId={busyId} respondError={respondError} />
 
   const { me, team, today } = state.data
   const names = monthNames(lang)

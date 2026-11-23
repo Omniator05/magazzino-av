@@ -157,6 +157,15 @@ export default function AuthBackground({ children }) {
         }
         .auth-btn:active:not(:disabled) { transform:translateY(0); }
         .auth-btn:disabled { opacity:0.6; cursor:not-allowed; }
+        /* Accesso in corso: il testo del bottone lascia il posto a un loader, a piena opacità (non "spento") */
+        .auth-btn[aria-busy="true"]:disabled { opacity:1; cursor:progress; }
+        @keyframes authBtnSpin { to { transform:rotate(360deg); } }
+        .auth-btn-spin {
+          display:block; width:17px; height:17px; margin:0 auto;
+          border:2.5px solid rgba(255,255,255,0.35); border-top-color:#fff; border-radius:50%; box-sizing:border-box;
+          animation:authBtnSpin 0.7s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) { .auth-btn-spin { animation-duration:1.8s; } }
         /* Piccolo "scossone" ogni 5 secondi per attirare l'occhio sul bottone principale (es. "Crea una
            nuova squadra"). Usa le proprietà singole translate/rotate così non confligge con
            il transform dell'hover; si ferma al passaggio del mouse/focus. */

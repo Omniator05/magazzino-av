@@ -3,7 +3,7 @@
 // "RCB-…" che mostra sul proprio telefono come QR; alla postazione lo scansiona e da
 // lì in poi le azioni (carico, rientro, rotto…) portano il suo nome.
 //
-// Come i link ospite (vedi _guest.js) vive qui e non in un endpoint a sé: il piano
+// Come _station.js e _freelance.js vive qui e non in un endpoint a sé: il piano
 // Hobby di Vercel ammette 12 Serverless Functions e il progetto è già a 12. Viene
 // chiamato da push.js DOPO la verifica del token Firebase di chi chiama.
 //

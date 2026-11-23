@@ -1,6 +1,11 @@
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocs, doc, increment, serverTimestamp, writeBatch, arrayUnion } from 'firebase/firestore'
 import { db } from '../firebase'
 import { todayStr } from './workHours'
+import { isProPlan } from './planLimits'
+
+// Un esterno è sempre un Freelance in attesa di account quando la squadra è Pro, anche se è stato
+// inserito prima che esistesse il Freelance (non ha il flag). Senza Pro resta solo un nome nella timeline.
+export const isFreelanceExternal = (w, team) => !!w?.freelance || isProPlan(team)
 
 // Persone esterne (non registrate nell'app, es. personale a chiamata) che
 // possono comparire nella timeline settimanale — stesso schema di

@@ -46,6 +46,8 @@ export function AuthProvider({ children }) {
   // bottone "Esci" non porterebbe mai da nessuna parte.
   const hasExitedGhostRef = useRef(false)
   const coldStartHandled = useRef(false)
+  // Accesso manuale in corso (vedi login): l'animazione col logo parte solo quando Firebase conferma le credenziali
+  const manualLoginRef = useRef(false)
 
   useEffect(() => {
     let unsubProfile = null
@@ -59,6 +61,8 @@ export function AuthProvider({ children }) {
 
       if (firebaseUser) {
         setUser(firebaseUser)
+        // Credenziali giuste: l'overlay copre subito la pagina, insieme al cambio di utente (niente flash della Dashboard)
+        if (manualLoginRef.current) setShowOverlay(true)
         if (isColdStart) {
           setLoginName(firebaseUser.displayName?.split(' ')[0] || '')
           setShowOverlay(true)
@@ -164,11 +168,10 @@ export function AuthProvider({ children }) {
     const input = usernameOrEmail.trim()
     let result
 
-    // Overlay su PRIMA del sign-in: così copre la pagina di login col suo
-    // fade-in, e quando l'auth va a buon fine la Dashboard monta già nascosta
-    // dietro l'overlay opaco (niente flash della Dashboard). Se il login
-    // fallisce lo togliamo nel catch.
-    setShowOverlay(true)
+    // L'overlay col logo NON parte qui: finché Firebase non conferma le credenziali resta la pagina di login,
+    // con il loader sul bottone. Appena l'utente risulta collegato lo accende onAuthStateChanged (stesso istante
+    // del cambio di utente, quindi la Dashboard monta già nascosta dietro l'overlay opaco).
+    manualLoginRef.current = true
     try {
       if (input.includes('@')) {
         // Input è un'email — può essere l'email reale (admin) o l'internalEmail
@@ -226,8 +229,11 @@ export function AuthProvider({ children }) {
       // Ricava il nome da mostrare nell'overlay (prima parte del display name o username)
       const displayName = result.user.displayName || input.split('@')[0]
       setLoginName(displayName.split(' ')[0])
+      setShowOverlay(true)
+      manualLoginRef.current = false
       return result
     } catch (e) {
+      manualLoginRef.current = false
       setShowOverlay(false)
       throw e
     }

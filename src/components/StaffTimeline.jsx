@@ -12,7 +12,8 @@ import { PersonDot } from './AssigneeAvatars'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock, personColor } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
 import GuestInvitePrompt from './GuestInvitePrompt'
-import { isInvitePromptMuted, muteInvitePrompt } from '../utils/guestLinks'
+import { isInvitePromptMuted, muteInvitePrompt } from '../utils/freelanceInvitePrompt'
+import { isFreelanceExternal } from '../utils/externalWorkers'
 import StaffAssignPanel from './StaffAssignPanel'
 import ArchiveEventDetail from './ArchiveEventDetail'
 import { useColumnShift } from '../utils/columnShift'
@@ -357,7 +358,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     ...externalWorkers
       // Con una ricerca in corso compaiono TUTTI gli esterni che corrispondono, non solo quelli già in uso questa settimana
       .filter(w => weekBlockExternalIds.has(w.id) || shownExternalIds.includes(w.id) || (peopleQ && (w.name || '').toLowerCase().includes(peopleQ)))
-      .map(w => ({ id: w.id, name: w.name, kind: 'external', freelance: !!w.freelance })),
+      .map(w => ({ id: w.id, name: w.name, kind: 'external', freelance: isFreelanceExternal(w, team) })),
   ]
 
   // Con tanto personale una fila di chip con avatar non regge: si cerca per
@@ -779,7 +780,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     setSelectedPerson(null)
   }
 
-  // ✕ sul chip di un utente temporaneo: lo elimina dall'anagrafica (con conferma).
+  // ✕ sul chip di un esterno senza account: lo elimina dall'anagrafica (con conferma).
   // Le assegnazioni già fatte restano nel calendario con il suo nome; il suo link
   // ospite smette di funzionare (il server controlla che la persona esista ancora).
   const deleteExternal = async (p) => {
@@ -852,20 +853,18 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     }
     setPanel(p => (p ? { ...p, isNew: false } : p))
 
-    // Esterni appena salvati senza ancora un link ospite: chiede se invitarli
-    // (una volta per persona a sessione, salvo "non mostrare più").
-    if (!isInvitePromptMuted()) {
+    // Squadre Pro: esterni Freelance appena salvati, senza ancora l'account: chiede se aggiungere l'email
+    // (una volta per persona a sessione, salvo "non mostrare più"). Senza Pro l'esterno è solo un nome: niente domanda.
+    if (newExternalIsFreelance && !isInvitePromptMuted()) {
       const toAsk = []
       // Esterno appena scritto nella card "?": non è ancora nell'elenco locale
       ;(payload.newExternals || []).forEach(w => {
-        // Appena creato come Freelance (piano Pro) oppure già in anagrafica: il flag sta sull'esterno
-        const known = externalWorkers.find(x => x.id === w.id)
-        if (w.id && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name, freelance: known ? !!known.freelance : newExternalIsFreelance })
+        if (w.id && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name })
       })
       payload.rows.forEach(r => {
         const b = blocks.find(x => x.id === r.blockId)
         const w = b?.externalWorkerId && externalWorkers.find(x => x.id === b.externalWorkerId)
-        if (w && (w.freelance || !w.guestLinkActive) && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name, freelance: !!w.freelance })
+        if (w && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name })
       })
       if (toAsk.length > 0) {
         toAsk.forEach(w => promptedExternalIds.current.add(w.id))
@@ -966,7 +965,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
               onDragStart={e => {
                 e.dataTransfer.setData('text/plain', 'x')
                 setDraggedPerson(QUICK_EXTERNAL)
-                setChipDragImage(e, { label: t('staffTimeline.externalQuickChip'), dashed: true })
+                setChipDragImage(e, { label: t(newExternalIsFreelance ? 'staffTimeline.freelanceQuickChip' : 'staffTimeline.externalQuickChip'), dashed: true })
               }}
               onDragEnd={() => { setDraggedPerson(null); setDragOverKey(null) }}
               onClick={() => setSelectedPerson(sel => (sel?.kind === 'quick-external') ? null : QUICK_EXTERNAL)}
@@ -980,7 +979,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                 cursor: 'grab', whiteSpace: 'nowrap',
               }}
             >
-              <Plus size={12} /> {t('staffTimeline.externalQuickChip')}
+              <Plus size={12} /> {t(newExternalIsFreelance ? 'staffTimeline.freelanceQuickChip' : 'staffTimeline.externalQuickChip')}
             </button>
           )
         })()}
@@ -1329,7 +1328,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         />
       )}
       {invitePrompt && (
-        <GuestInvitePrompt count={invitePrompt.length} freelance={invitePrompt.every(p => p.freelance)}
+        <GuestInvitePrompt count={invitePrompt.length}
           onGo={dontShow => { if (dontShow) muteInvitePrompt(); const ids = invitePrompt.map(p => p.id); setInvitePrompt(null); navigate('/admin/settings/users', { state: { highlightExternalIds: ids } }) }}
           onClose={dontShow => { if (dontShow) muteInvitePrompt(); setInvitePrompt(null) }} />
       )}

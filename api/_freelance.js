@@ -5,16 +5,16 @@
 // Sicurezza: il Freelance NON legge Firestore dal client (le regole gli negano ogni accesso ai dati della squadra, vedi
 // isApprovedMember in firestore.rules): qui, con l'Admin SDK, si legge e si restituisce solo ciò che lo riguarda — gli
 // eventi a cui è assegnato, senza contatti, costi o note interne (stessa forma pubblica del link ospite, vedi
-// publicEvent in _guest.js).
+// publicEvent in _publicEvent.js).
 //
 // Vive qui e non in un endpoint a sé: il piano Hobby di Vercel ammette 12 funzioni e il progetto è già al limite, quindi
-// push.js lo chiama dopo aver verificato il token (come _guest.js, _badge.js, _station.js). Il prefisso "_" lo esclude
+// push.js lo chiama dopo aver verificato il token (come _badge.js, _station.js). Il prefisso "_" lo esclude
 // dal conteggio.
 import crypto from 'node:crypto'
 import { getAdmin } from './_authAdmin.js'
 import { buildCalendar } from './_calendarIcs.js'
 import { todayStr } from './_date.js'
-import { publicEvent } from './_guest.js'
+import { publicEvent } from './_publicEvent.js'
 import { sendEmail, freelanceAssignedEmailHtml } from './_resend.js'
 
 const PAST_DAYS = 62                    // quanto indietro il calendario del Freelance mostra i suoi eventi

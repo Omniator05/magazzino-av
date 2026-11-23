@@ -16,10 +16,9 @@ import { Check, Save, Trash, Edit, User, Warn, Box, Mail } from '../components/I
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
 import PageHeader from '../components/PageHeader'
-import GuestInviteModal from '../components/GuestInviteModal'
 import StationLinkModal from '../components/StationLinkModal'
 import { isOwnerProfile } from '../utils/teamOwner'
-import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker, convertExternalToAccount } from '../utils/externalWorkers'
+import { watchExternalWorkers, upcomingExternalBlocks, deleteExternalWorker, convertExternalToAccount, isFreelanceExternal } from '../utils/externalWorkers'
 import { emailFreelanceAssigned } from '../utils/pushNotifications'
 import { deleteUserAccount, reclaimOrphanEmail } from '../utils/userAccounts'
 import FabButton from '../components/FabButton'
@@ -136,18 +135,16 @@ export default function SettingsUsers() {
   const { user, teamId, team, isOwner, patchTeam } = useAuth()
   const confirm = useConfirm()
   const navigate = useNavigate()
-  // Arrivando dal popup "Utente esterno inserito" l'utente temporaneo va portato
-  // al centro e messo in evidenza per un momento.
+  // Arrivando dal popup "Freelance inserito" l'esterno va portato al centro e messo in evidenza per un momento.
   const { state: navState } = useLocation()
   const [highlightIds, setHighlightIds] = useState([])
-  // Modifica di un utente temporaneo (rinomina / elimina): { id, name } | null
+  // Modifica di un esterno in attesa (rinomina / elimina / aggiungi email): { id, name } | null
   const [tempEdit, setTempEdit] = useState(null)
   const [tempError, setTempError] = useState('')
   const tempDrag = useModalDrag(() => setTempEdit(null))
   const [users, setUsers]             = useState([])
-  // Utenti temporanei (personale esterno senza account): elenco, nuovo e link ospite
+  // Esterni senza account (nati da Assegna personale): con il piano Pro sono Freelance in attesa dell'email, senza Pro solo un nome
   const [externalWorkers, setExternalWorkers] = useState([])
-  const [inviteForId, setInviteForId]   = useState(null)
   // Freelance inserito dalla timeline (esterno senza ancora l'account): { id, name } mentre se ne completa l'account
   const [convertFrom, setConvertFrom]   = useState(null)
   const autoOpenedFor = useRef(null)
@@ -158,7 +155,7 @@ export default function SettingsUsers() {
     window.history.replaceState({}, '')
     const first = externalWorkers.find(w => ids.includes(w.id))
     // Un solo Freelance appena inserito dalla timeline: si apre subito "Nuovo utente" già compilato, resta solo l'email.
-    const pendingFreelance = externalWorkers.filter(w => ids.includes(w.id) && w.freelance)
+    const pendingFreelance = externalWorkers.filter(w => ids.includes(w.id) && isFreelanceExternal(w, team))
     if (pendingFreelance.length === 1 && ids.length === 1 && autoOpenedFor.current !== navState) {
       autoOpenedFor.current = navState
       openConvert(pendingFreelance[0])
@@ -248,7 +245,7 @@ export default function SettingsUsers() {
   // Ritorna true solo se l'account è stato davvero creato — SaveButton
   // mostra la spunta e chiude solo in quel caso, mai sui rami di validazione/
   // limite piano gratuito che si fermano prima.
-  // Rinomina un utente temporaneo: aggiorna l'anagrafica e anche il nome già
+  // Rinomina un esterno: aggiorna l'anagrafica e anche il nome già
   // scritto sulle sue assegnazioni, così il calendario resta coerente.
   const saveTempName = async () => {
     const name = (tempEdit?.name || '').trim()
@@ -274,19 +271,6 @@ export default function SettingsUsers() {
     if (!ok) return
     await deleteExternalWorker(teamId, w.id, upcoming)
     tempDrag.close()
-  }
-
-  // Utente temporaneo (personale esterno, senza account): si crea solo con il
-  // nome e subito si propone il link ospite. Stesso elenco degli "Esterni" di
-  // Assegna personale (collection externalWorkers).
-  const createTemp = async () => {
-    const name = form.name.trim()
-    if (!name) { setError(t('adminUsers.errorFillAllFields')); return false }
-    const id = await getOrCreateExternalWorker(teamId, name, user.uid, externalWorkers)
-    if (!id) return false
-    setForm(f => ({ ...f, name: '', role: 'worker' }))
-    setInviteForId(id)
-    return true
   }
 
   // Completa l'account di un Freelance inserito dalla timeline: "Nuovo utente" già compilato con il nome
@@ -674,7 +658,11 @@ export default function SettingsUsers() {
   }
 
   const pending   = users.filter(u => u.approved === false)
-  const workers   = users.filter(u => (u.role === 'worker' || u.role === 'freelance') && u.approved !== false)
+  const workers   = users.filter(u => u.role === 'worker' && u.approved !== false)
+  // Freelance: chi ha già l'account e, a parte, gli esterni ancora senza (in attesa dell'email); senza piano Pro gli esterni sono solo nomi
+  const freelanceAccounts = users.filter(u => u.role === 'freelance' && u.approved !== false)
+  const waitingFreelance  = externalWorkers.filter(w => isFreelanceExternal(w, team))
+  const plainExternals    = externalWorkers.filter(w => !isFreelanceExternal(w, team))
   const admins    = users.filter(u => u.role === 'admin' && u.approved !== false)
   // Chi entra ancora con il nome utente: con un'email vera nel profilo si può passare subito
   // all'accesso con email; senza, l'admin deve prima aggiungerla dalla scheda.
@@ -752,9 +740,8 @@ export default function SettingsUsers() {
     )
   }
 
-  // Utente temporaneo nell'elenco: al posto di "Attivo" ha il tag "Temp." (corto, per
-  // le card strette del telefono). Il link ospite si crea toccando la card: la finestra
-  // ha "Invita" (o "Link" se ne ha già uno), oltre a rinomina ed elimina.
+  // Esterno senza account nell'elenco: con il piano Pro è un Freelance in attesa dell'email (tag "Freelance"),
+  // senza Pro è solo un nome (nessun tag). Toccando la card: rinomina, aggiungi email (Pro) ed elimina.
   const TempRow = ({ w }) => (
     <div id={`temp-row-${w.id}`} className="item-row" onClick={() => { setTempEdit({ id: w.id, name: w.name || '' }); setTempError('') }}
       style={{ cursor:'pointer', transition:'background 0.4s ease', background: highlightIds.includes(w.id) ? 'rgba(230,57,70,0.10)' : undefined, boxShadow: highlightIds.includes(w.id) ? 'inset 3px 0 0 #e63946' : 'none' }}>
@@ -763,12 +750,10 @@ export default function SettingsUsers() {
       </div>
       <div style={{ flex:1, minWidth:0 }}>
         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:13 }}>{w.freelance ? t('guest.freelanceNoEmail') : w.guestLinkActive ? t('guest.tempLinkActive') : t('guest.tempNoAccount')}</p>
+        <p style={{ color:'var(--text2)', fontSize:13 }}>{isFreelanceExternal(w, team) ? t('guest.freelanceNoEmail') : t('guest.tempNoAccount')}</p>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-        {w.freelance
-          ? <span className="badge" style={{ background:'rgba(217,119,6,0.14)', color:'#d97706', whiteSpace:'nowrap' }}>{t('adminUsers.roleFreelanceBadge')}</span>
-          : <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', whiteSpace:'nowrap' }}>{t('guest.tempBadgeShort')}</span>}
+        {isFreelanceExternal(w, team) && <span className="badge" style={{ background:'rgba(217,119,6,0.14)', color:'#d97706', whiteSpace:'nowrap' }}>{t('adminUsers.roleFreelanceBadge')}</span>}
         <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
       </div>
     </div>
@@ -833,18 +818,34 @@ export default function SettingsUsers() {
           <p style={{ color:'var(--text2)', fontSize:13, lineHeight:1.6 }}>{t('adminUsers.howLoginWorksDesc')}</p>
         </div>
         <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
-          {workers.length === 0 && externalWorkers.length === 0
+          {workers.length === 0
             ? <div className="empty-state" style={{ padding:'30px' }}>
                 <p style={{ color:'var(--text3)', marginBottom:4 }}><User size={34} /></p>
                 <h3>{t('adminUsers.noWorkersTitle')}</h3>
                 <p>{t('adminUsers.noWorkersDesc')}</p>
               </div>
-            : <>
-                {workers.map(u => <UserRow key={u.id} u={u} />)}
-                {externalWorkers.map(w => <TempRow key={`ext-${w.id}`} w={w} />)}
-              </>
+            : workers.map(u => <UserRow key={u.id} u={u} />)
           }
         </div>
+
+        {(freelanceAccounts.length > 0 || waitingFreelance.length > 0) && (
+          <>
+            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.freelanceSection')}</p>
+            <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
+              {freelanceAccounts.map(u => <UserRow key={u.id} u={u} />)}
+              {waitingFreelance.map(w => <TempRow key={`ext-${w.id}`} w={w} />)}
+            </div>
+          </>
+        )}
+
+        {plainExternals.length > 0 && (
+          <>
+            <p style={{ padding:'0 16px 10px', color:'var(--text2)', fontSize:12, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{t('adminUsers.externalSection')}</p>
+            <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:'var(--radius)', margin:'0 16px 16px', overflow:'hidden' }}>
+              {plainExternals.map(w => <TempRow key={`ext-${w.id}`} w={w} />)}
+            </div>
+          </>
+        )}
 
         {organizers.length > 0 && (
           <>
@@ -856,14 +857,14 @@ export default function SettingsUsers() {
         )}
       </div>
 
-      {/* ── Modal utente temporaneo: rinomina / elimina / link ─── */}
+      {/* ── Modal esterno: rinomina / aggiungi email / elimina ─── */}
       {tempEdit && (
         <div className={`modal-overlay${tempDrag.closing ? ' closing' : ''}`} onClick={tempDrag.onOverlayClick}>
           <div className={`modal admin-user-modal${tempDrag.jiggling ? ' modal-jiggle' : ''}${tempDrag.closing ? ' closing' : ''}`} style={{ position:'relative' }} {...tempDrag.props}>
             <button className="close-btn" onClick={tempDrag.close}>✕</button>
             <h2 style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
               {t('guest.tempEditTitle')}
-              <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', fontSize:12 }}>{t('guest.tempBadge')}</span>
+              {isFreelanceExternal(externalWorkers.find(x => x.id === tempEdit.id), team) && <span className="badge" style={{ background:'rgba(217,119,6,0.14)', color:'#d97706', fontSize:12 }}>{t('adminUsers.roleFreelanceBadge')}</span>}
             </h2>
             {tempError && (
               <div style={{ background:'rgba(255,82,82,0.1)', border:'1px solid rgba(255,82,82,0.3)', color:'var(--red)', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13 }}>{tempError}</div>
@@ -875,16 +876,12 @@ export default function SettingsUsers() {
             <SaveButton onSave={saveTempName} onDone={tempDrag.close} onError={tempDrag.triggerJiggle} className="btn btn-secondary btn-full">
               <Check size={16} /> {t('guest.tempSaveName')}
             </SaveButton>
-            {externalWorkers.find(x => x.id === tempEdit.id)?.freelance && (
+            {isFreelanceExternal(externalWorkers.find(x => x.id === tempEdit.id), team) && (
               <button type="button" className="btn btn-primary btn-full" style={{ marginTop:10, minHeight:52, fontSize:15 }}
                 onClick={() => { const w = externalWorkers.find(x => x.id === tempEdit.id); tempDrag.close(); if (w) openConvert(w) }}>
                 {t('guest.freelanceAddEmail')}
               </button>
             )}
-            <button type="button" className={`btn btn-full ${externalWorkers.find(x => x.id === tempEdit.id)?.freelance ? 'btn-secondary' : 'btn-primary'}`} style={{ marginTop:10, minHeight:52, fontSize:15 }}
-              onClick={() => { const id = tempEdit.id; tempDrag.close(); setInviteForId(id) }}>
-              {externalWorkers.find(x => x.id === tempEdit.id)?.guestLinkActive ? t('guest.tempManage') : t('guest.promptInvite')}
-            </button>
             <button type="button" className="btn btn-red btn-full" style={{ marginTop:10 }} onClick={deleteTemp}>
               <Trash size={16} /> {t('guest.tempDeleteButton')}
             </button>
@@ -893,11 +890,6 @@ export default function SettingsUsers() {
       )}
 
       {stationOpen && <StationLinkModal onClose={() => setStationOpen(false)} />}
-
-      {inviteForId && (() => {
-        const w = externalWorkers.find(x => x.id === inviteForId)
-        return w ? <GuestInviteModal person={{ id: w.id, name: w.name, guestActive: !!w.guestLinkActive }} onClose={() => setInviteForId(null)} /> : null
-      })()}
 
       {/* ── Modal crea account ─────────────────────────────── */}
       {showCreate && (
@@ -919,7 +911,6 @@ export default function SettingsUsers() {
               <label>{t('adminUsers.fullNameLabel')}</label>
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder={t('adminUsers.fullNamePlaceholder')} />
             </div>
-            {form.role !== 'temporaneo' && (<>
             {emailMode ? (
               <div className="form-group">
                 <label>{t('adminUsers.loginEmailLabel')}</label>
@@ -968,7 +959,6 @@ export default function SettingsUsers() {
                 </button>
               </div>
             </>)}
-            </>)}
             <div className="form-group">
               <label>{t('adminUsers.roleLabel')}</label>
               {/* "Organizzatore evento" (generico) tolto dalle opzioni per i
@@ -985,7 +975,6 @@ export default function SettingsUsers() {
                 options={[
                   { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
                   ...(isOwner ? [{ value:'admin', label:t('adminUsers.roleAdminOption'), icon:<User size={17} /> }] : []),
-                  { value:'temporaneo', label:t('guest.tempRoleOption'), icon:<User size={17} /> },
                   { value:'freelance', label:t('adminUsers.roleFreelanceOption'), icon:<User size={17} /> },
                 ]}
               />
@@ -1023,22 +1012,16 @@ export default function SettingsUsers() {
               </button>
             )}
 
-            {form.role === 'temporaneo' && (
-              <p style={{ margin:'0 0 22px', fontSize:13, lineHeight:1.5, color:'var(--text2)' }}>{t('guest.tempRoleHint')}</p>
-            )}
-
-            {form.role !== 'temporaneo' && (
             <div className="form-group" style={{ marginBottom:22 }}>
               <label>{t('adminUsers.passwordLabel')} <span style={{ color:'var(--text2)', fontWeight:400, fontSize:12 }}>{t('adminUsers.passwordHint')}</span></label>
               <input type="password" value={form.password} onChange={e => setForm({...form, password:e.target.value})} placeholder="••••••••" />
             </div>
-            )}
 
             </div>
 
             <div className="rc-drawer-foot rc-dc">
-            <SaveButton onSave={form.role === 'temporaneo' ? createTemp : createAccount} onDone={() => { createGuard.skip(); createDrag.close() }} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
-              <Check size={16} /> {form.role === 'temporaneo' ? t('guest.tempCreateInvite') : t('adminUsers.createAccount')}
+            <SaveButton onSave={createAccount} onDone={() => { createGuard.skip(); createDrag.close() }} onError={createDrag.triggerJiggle} className="btn btn-primary btn-full">
+              <Check size={16} /> {t('adminUsers.createAccount')}
             </SaveButton>
             </div>
           </div>

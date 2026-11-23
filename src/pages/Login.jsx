@@ -148,8 +148,8 @@ export default function LoginForm({ onSwitch }) {
             </div>
           </div>
 
-          <button className="auth-btn" type="submit" disabled={loading}>
-            {loading ? t('login.signingIn') : t('login.signIn')}
+          <button className="auth-btn" type="submit" disabled={loading} aria-busy={loading} aria-label={loading ? t('login.signingIn') : undefined}>
+            {loading ? <span className="auth-btn-spin" aria-hidden="true" /> : t('login.signIn')}
           </button>
         </div>
       </form>

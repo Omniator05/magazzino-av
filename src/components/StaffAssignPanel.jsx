@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../context/AuthContext'
+import { isProPlan } from '../utils/planLimits'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { formatDate, capitalize, localeFor } from '../utils/formatDate'
 import { personColor } from '../utils/assignmentBlocks'
@@ -33,6 +35,9 @@ export default function StaffAssignPanel({
   onClose, onAddPerson, onRemoveBlock, onSave, onDeleteTask, onResetDayHours, onOpenEvent, onDirtyChange,
 }) {
   const { t, i18n } = useTranslation()
+  // Piano Pro: un esterno nuovo è un Freelance (account da completare con l'email), quindi i testi dicono "Freelance"
+  const { team } = useAuth()
+  const freelanceNew = isProPlan(team)
   const isTask = item.type === 'task'
   const event = item.event
   const isMultiDayEvent = item.type === 'event' && event.dateEnd && event.dateEnd !== event.date
@@ -343,7 +348,7 @@ export default function StaffAssignPanel({
           {q && !exactMatch && (
             <button type="button" className="btn-no-anim" onClick={() => add({ id: null, kind: 'external', name: q })}
               style={{ display: 'block', marginTop: 8, fontSize: 12, fontWeight: 700, color: '#0066cc' }}>
-              {t('staffTimeline.assignAddNew', { name: q })}
+              {t(freelanceNew ? 'staffTimeline.assignAddFreelance' : 'staffTimeline.assignAddNew', { name: q })}
             </button>
           )}
         </div>
@@ -361,9 +366,9 @@ export default function StaffAssignPanel({
                       if (e.key === 'Enter') { e.preventDefault(); if (draftReady) submit() }
                       if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
                     }}
-                    placeholder={t('staffTimeline.draftExternalPlaceholder')} aria-label={t('staffTimeline.draftExternalPlaceholder')}
+                    placeholder={t(freelanceNew ? 'staffTimeline.draftFreelancePlaceholder' : 'staffTimeline.draftExternalPlaceholder')} aria-label={t(freelanceNew ? 'staffTimeline.draftFreelancePlaceholder' : 'staffTimeline.draftExternalPlaceholder')}
                     style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, padding: '6px 10px' }} />
-                  <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t(freelanceNew ? 'adminUsers.roleFreelanceBadge' : 'staffTimeline.externalTag')}</span>
                   <button type="button" className="btn-no-anim" onClick={() => setDraft(null)} aria-label={t('staffTimeline.draftCancelAria')}
                     style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
                 </div>
@@ -412,7 +417,9 @@ export default function StaffAssignPanel({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: personColor(pid), color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(name)}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--c-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                    {!isWorker && <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>}
+                    {!isWorker && (freelanceNew
+                      ? <span style={{ fontSize: 9.5, fontWeight: 800, color: '#d97706', background: 'rgba(217,119,6,0.14)', borderRadius: 5, padding: '1px 5px' }}>{t('adminUsers.roleFreelanceBadge')}</span>
+                      : <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>)}
                     {isFreelance && (
                       <span style={{ fontSize: 9.5, fontWeight: 800, color: frColor, background: `${frColor}1f`, borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>
                         {t('adminUsers.roleFreelanceBadge')}{fr ? ` · ${t(`staffTimeline.freelance_${fr}`)}` : ''}
