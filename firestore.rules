@@ -13,10 +13,15 @@ service cloud.firestore {
       // dell'introduzione del flusso di approvazione il campo non esiste, e
       // leggere un campo assente con .data.x genera un errore di valutazione
       // (non null) che farebbe fallire la regola per tutti gli account storici.
+      //
+      // Un account Freelance (ruolo 'freelance', personale esterno) NON è mai un membro in questo senso: non legge né
+      // scrive nessun dato della squadra dal client. Vede solo i propri eventi, che gli restituisce il server (api/_freelance.js,
+      // Admin SDK, che ignora queste regole). Il proprio profilo e la squadra restano leggibili (vedi più sotto).
       return request.auth != null
         && myProfile().data.teamId == teamId
         && myProfile().data.get('approved', true) != false
-        && myProfile().data.get('active', true) != false;
+        && myProfile().data.get('active', true) != false
+        && myProfile().data.get('role', '') != 'freelance';
     }
     function isTeamAdmin(teamId) {
       return isApprovedMember(teamId) && myProfile().data.role == 'admin';

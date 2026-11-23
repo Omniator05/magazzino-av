@@ -271,6 +271,7 @@ export function AuthProvider({ children }) {
       isOwner:  isTeamOwner(team, profile, user?.uid),   // creatore della squadra: abbonamento e admin
       patchTeam: data => setTeam(prev => prev ? { ...prev, ...data } : prev),   // solo in locale (per dati scritti dal server)
       isWorker: profile?.role === 'worker',
+      isFreelance: profile?.role === 'freelance',
       isBrasserieOrganizer: profile?.role === 'organizzatore-brasserie',
       showOverlay, setShowOverlay, loginName,
     }}>

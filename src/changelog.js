@@ -7,6 +7,25 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-25',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Eliminati: quando elimini un evento finisce in Archivio → "Eliminati" e ci resta 15 giorni; da lì puoi ripristinarlo (con assegnazioni e magazzino) o eliminarlo subito per sempre. Gli eventi eliminati non compaiono più nelle ricerche',
+        'Account Freelance (piano Pro): in Impostazioni → Utenti puoi creare collaboratori esterni con la loro email; ricevono un invito e, entrando, vedono solo un calendario con gli eventi e le attività che assegni loro (orari, luogo, note e lista di carico)',
+        'Ogni volta che assegni un evento a un Freelance riceve una notifica e un\'email con data, orario e luogo. Nella timeline di Assegna personale ha il tag "Freelance"',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Deleted: when you delete an event it goes to Archive → "Deleted" and stays there for 15 days; from there you can restore it (with assignments and inventory) or delete it for good right away. Deleted events no longer show up in searches',
+        'Freelance accounts (Pro plan): in Settings → Users you can create external collaborators with their email; they get an invitation and, once signed in, only see a calendar with the events and tasks you assign them (times, place, notes and load list)',
+        'Whenever you assign an event to a Freelance they get a notification and an email with date, time and place. In the Assign staff timeline they have the "Freelance" tag',
+      ],
+    },
+  },
+  {
     version: '2026-11-24',
     it: {
       title: 'Novità di oggi',

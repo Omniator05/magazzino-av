@@ -263,7 +263,7 @@
     "createEvent": "إنشاء فعالية",
     "saveChanges": "حفظ التغييرات",
     "confirmDeleteEventTitle": "حذف الفعالية",
-    "confirmDeleteEventMessage": "هل تريد حذف \"{{name}}\"؟ لا يمكن التراجع عن ذلك.",
+    "confirmDeleteEventMessage": "هل تريد حذف \"{{name}}\"؟ تبقى في الأرشيف ضمن المحذوفة 15 يومًا ثم تُحذف نهائيًا.",
     "confirmDeleteEventLabel": "حذف",
     "confirmUnavailableTitle": "العامل غير متاح",
     "confirmUnavailableMessage": "{{name}} مسجّل كغائب في هذا التاريخ. هل تريد تعيينه في \"{{event}}\" على أي حال؟",
@@ -1378,7 +1378,11 @@
     "totalAccounts_zero": "{{count}} حسابات في المجموع",
     "totalAccounts_two": "{{count}} حسابات في المجموع",
     "totalAccounts_few": "{{count}} حسابات في المجموع",
-    "totalAccounts_many": "{{count}} حسابات في المجموع"
+    "totalAccounts_many": "{{count}} حسابات في المجموع",
+    "roleFreelanceOption": "فريلانسر (متعاون خارجي)",
+    "roleFreelanceBadge": "فريلانسر",
+    "freelanceHint": "حساب للمتعاونين الخارجيين: يدخل ببريده الإلكتروني ويرى فقط تقويمًا بالفعاليات التي تسندها إليه (المواعيد والملاحظات وقائمة التحميل) ويتلقى إشعارات ورسائل بريد. تصله دعوة ببيانات الدخول.",
+    "freelanceProError": "حسابات الفريلانسر ميزة في الباقات الاحترافية."
   },
   "events": {
     "recurrenceNever": "أبداً",
@@ -1449,7 +1453,7 @@
     "createFromTemplateAndGo": "إنشاء الفعالية والانتقال إلى قائمة التحميل",
     "createMultiple": "إنشاء {{count}} فعاليات",
     "confirmDeleteSeriesMessage": "حذف هذه الفعالية فقط من السلسلة؟",
-    "confirmDeleteMessage": "حذف هذه الفعالية؟",
+    "confirmDeleteMessage": "حذف هذه الفعالية؟ تبقى في الأرشيف ضمن المحذوفة 15 يومًا.",
     "daScaricareCount": "{{count}} للإرجاع",
     "installationEnded": "انتهى التأجير — أغلقه",
     "todayStatus": "اليوم · {{status}}",
@@ -1876,7 +1880,7 @@
     "loadMore": "تحميل المزيد من الفعاليات",
     "loadingMore": "⏳ جارٍ التحميل...",
     "confirmDeleteTitle": "حذف من الأرشيف",
-    "confirmDeleteMessage": "هل تريد حذف \"{{name}}\" من الأرشيف؟\nلا يمكن التراجع عن هذا الإجراء.",
+    "confirmDeleteMessage": "هل تريد حذف \"{{name}}\" من الأرشيف؟\nتبقى ضمن المحذوفة 15 يومًا ثم تُحذف نهائيًا.",
     "confirmDeleteLabel": "حذف",
     "noItems": "لا توجد أصناف في القائمة",
     "notReturned": "لم يُرجَع",
@@ -1903,7 +1907,33 @@
     "resultsCount_zero": "{{count}} نتائج",
     "resultsCount_two": "{{count}} نتائج",
     "resultsCount_few": "{{count}} نتائج",
-    "resultsCount_many": "{{count}} نتائج"
+    "resultsCount_many": "{{count}} نتائج",
+    "tabArchived": "المؤرشفة",
+    "tabDeleted": "المحذوفة",
+    "deletedHint": "تبقى الفعاليات المحذوفة هنا 15 يومًا ثم تُحذف نهائيًا.",
+    "deletedEmptyTitle": "لا توجد فعاليات محذوفة",
+    "deletedEmptyDesc": "عند حذف فعالية ستجدها هنا لمدة 15 يومًا.",
+    "deletedOn": "حُذفت في {{date}}",
+    "deletedLastDay": "تُحذف اليوم",
+    "restore": "استعادة",
+    "restored": "عادت \"{{name}}\" إلى الفعاليات",
+    "restoreFailed": "تعذّرت استعادة الفعالية. حاول مرة أخرى.",
+    "deleteForever": "حذف نهائي",
+    "confirmPurgeTitle": "حذف نهائي",
+    "confirmPurgeMessage": "هل تريد حذف \"{{name}}\" نهائيًا؟ لن يمكن استرجاعها.",
+    "confirmPurgeLabel": "حذف نهائي",
+    "deletedSubtitle_one": "فعالية محذوفة واحدة",
+    "deletedSubtitle_other": "{{count}} فعاليات محذوفة",
+    "deletedSubtitle_zero": "{{count}} فعاليات محذوفة",
+    "deletedSubtitle_two": "{{count}} فعاليات محذوفة",
+    "deletedSubtitle_few": "{{count}} فعاليات محذوفة",
+    "deletedSubtitle_many": "{{count}} فعاليات محذوفة",
+    "deletedLeft_one": "يتبقى يوم واحد",
+    "deletedLeft_other": "يتبقى {{count}} أيام",
+    "deletedLeft_zero": "يتبقى {{count}} أيام",
+    "deletedLeft_two": "يتبقى {{count}} أيام",
+    "deletedLeft_few": "يتبقى {{count}} أيام",
+    "deletedLeft_many": "يتبقى {{count}} أيام"
   },
   "scanner": {
     "title": "ماسح QR/الباركود",
@@ -2856,5 +2886,16 @@
         "text": "لديك مستخدم وشعار وصنف وفعالية. من هنا الأمر لك: نتمنى لك عملًا ممتعًا مع Roadcase."
       }
     }
+  },
+  "freelance": {
+    "error_plan_title": "الدخول غير مفعّل",
+    "error_plan_text": "دخول الفريلانسر غير متاح مع الباقة الحالية لهذا الفريق. تواصل مع من دعاك.",
+    "error_error_title": "تعذّر تحميل فعالياتك",
+    "error_error_text": "تحقق من الاتصال وحاول مرة أخرى.",
+    "retry": "حاول مرة أخرى",
+    "prevMonth": "الشهر السابق",
+    "nextMonth": "الشهر التالي",
+    "dayEmpty": "لا شيء مجدول في هذا اليوم.",
+    "nothingYet": "ليس لديك فعاليات مسندة بعد. عند إسناد فعالية إليك ستظهر هنا وتصلك إشعار."
   }
 }

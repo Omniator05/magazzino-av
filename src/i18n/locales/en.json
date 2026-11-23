@@ -231,7 +231,7 @@
     "createEvent": "Create event",
     "saveChanges": "Save changes",
     "confirmDeleteEventTitle": "Delete event",
-    "confirmDeleteEventMessage": "Delete \"{{name}}\"? This cannot be undone.",
+    "confirmDeleteEventMessage": "Delete \"{{name}}\"? It stays in the Archive under Deleted for 15 days, then it is gone for good.",
     "confirmDeleteEventLabel": "Delete",
     "confirmUnavailableTitle": "Staff not available",
     "confirmUnavailableMessage": "{{name}} is marked absent on this date. Assign them to \"{{event}}\" anyway?",
@@ -1246,7 +1246,11 @@
     "loginSwitchError": "Couldn't change the sign-in. Try again.",
     "loginChangeHint": "If the email is wrong (or made up), enter the real one: from now on they sign in with it and receive emails there, including password resets.",
     "loginChangeButton": "Change email",
-    "loginEmailBadge": "Signs in with email"
+    "loginEmailBadge": "Signs in with email",
+    "roleFreelanceOption": "Freelance (external collaborator)",
+    "roleFreelanceBadge": "Freelance",
+    "freelanceHint": "Account for external collaborators: they sign in with their email, see only a calendar with the events you assign them (times, notes, load list) and get notifications and emails. They receive an invitation with their login details.",
+    "freelanceProError": "Freelance accounts are a Pro plan feature."
   },
   "events": {
     "recurrenceNever": "Never",
@@ -1317,7 +1321,7 @@
     "createFromTemplateAndGo": "Create event and go to loading list",
     "createMultiple": "Create {{count}} events",
     "confirmDeleteSeriesMessage": "Delete ONLY this event in the series?",
-    "confirmDeleteMessage": "Delete this event?",
+    "confirmDeleteMessage": "Delete this event? It stays in the Archive under Deleted for 15 days.",
     "daScaricareCount": "{{count}} to return",
     "installationEnded": "Rental ended — close it",
     "todayStatus": "TODAY · {{status}}",
@@ -1672,7 +1676,7 @@
     "loadMore": "Load more events",
     "loadingMore": "⏳ Loading...",
     "confirmDeleteTitle": "Delete from archive",
-    "confirmDeleteMessage": "Delete \"{{name}}\" from the archive?\nThis action cannot be undone.",
+    "confirmDeleteMessage": "Delete \"{{name}}\" from the archive?\nIt stays in Deleted for 15 days, then it is gone for good.",
     "confirmDeleteLabel": "Delete",
     "noItems": "No items in the list",
     "notReturned": "not returned",
@@ -1687,7 +1691,25 @@
     "resultsCount_other": "{{count}} results",
     "wholeArchive": "across the whole archive",
     "shortSearchHint": "type at least 3 letters to search the whole archive",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "tabArchived": "Archived",
+    "tabDeleted": "Deleted",
+    "deletedHint": "Deleted events stay here for 15 days, then they are gone for good.",
+    "deletedEmptyTitle": "No deleted events",
+    "deletedEmptyDesc": "When you delete an event you can find it here for 15 days.",
+    "deletedOn": "Deleted on {{date}}",
+    "deletedLastDay": "Gone today",
+    "restore": "Restore",
+    "restored": "\"{{name}}\" is back among your events",
+    "restoreFailed": "Couldn't restore the event. Try again.",
+    "deleteForever": "Delete forever",
+    "confirmPurgeTitle": "Delete forever",
+    "confirmPurgeMessage": "Permanently delete \"{{name}}\"? It can no longer be recovered.",
+    "confirmPurgeLabel": "Delete forever",
+    "deletedSubtitle_one": "{{count}} deleted event",
+    "deletedSubtitle_other": "{{count}} deleted events",
+    "deletedLeft_one": "{{count}} day left",
+    "deletedLeft_other": "{{count}} days left"
   },
   "scanner": {
     "title": "QR/Barcode Scanner",
@@ -2580,5 +2602,16 @@
         "text": "You have a user, a logo, an item and an event. From here on it's all yours: enjoy Roadcase."
       }
     }
+  },
+  "freelance": {
+    "error_plan_title": "Access not active",
+    "error_plan_text": "Freelance access isn't available with this team's current plan. Contact whoever invited you.",
+    "error_error_title": "Can't load your events",
+    "error_error_text": "Check your connection and try again.",
+    "retry": "Try again",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "dayEmpty": "Nothing planned for this day.",
+    "nothingYet": "You don't have any events yet. When one is assigned to you it shows up here and you get a notification."
   }
 }

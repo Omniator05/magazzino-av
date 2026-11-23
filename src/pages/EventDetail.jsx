@@ -458,7 +458,7 @@ export default function EventDetail({ embeddedId = null, onClose = null, onOpenF
     if (!teamId) return
     const q = query(collection(db, 'profiles'), where('teamId', '==', teamId), orderBy('name'))
     return onSnapshot(q, snap => {
-      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => (p.role === 'worker' || p.role === 'admin') && !p.isStation))
+      setWorkers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => (p.role === 'worker' || p.role === 'admin' || p.role === 'freelance') && !p.isStation))
     })
   }, [teamId])
 

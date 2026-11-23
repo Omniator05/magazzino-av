@@ -44,7 +44,7 @@ function esc(s) {
 // assoluto (le email non possono caricare risorse relative né data: URI
 // affidabilmente) — i chiamanti lo derivano dall'origin della richiesta.
 // (logoUrl non si usa più: l'immagine accanto a "ROADCASE" in molti client email non si caricava e restava l'icona rotta)
-function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl }) {
+function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl, promo = false }) {
   return `
   <div style="background:#f5f5f3;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
     <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;">
@@ -61,29 +61,65 @@ function emailShell({ title, bodyHtml, ctaLabel, ctaUrl, logoUrl }) {
           <a href="${ctaUrl}" style="display:inline-block;background:${BRAND_RED};color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 24px;border-radius:12px;">${ctaLabel}</a>
         </div>` : ''}
       </div>
+      ${promo ? `
+      <div style="padding:18px 28px 22px;background:#fafaf8;border-top:1px solid #eeeeea;">
+        <p style="margin:0 0 4px;color:#1a1a1a;font-size:13px;font-weight:700;">Anche tu organizzi eventi?</p>
+        <p style="margin:0;color:#6b7280;font-size:12.5px;line-height:1.55;">Roadcase è l'app per gestire magazzino, liste di carico, eventi e personale, in un posto solo. <a href="https://roadcase.it" style="color:${BRAND_RED};text-decoration:none;font-weight:700;">Scopri come funziona su roadcase.it</a></p>
+      </div>` : ''}
     </div>
   </div>`
 }
 
-export function inviteEmailHtml({ workerName, teamName, username, password, loginUrl, asAdmin = false }) {
+export function inviteEmailHtml({ workerName, teamName, username, password, loginUrl, asAdmin = false, asFreelance = false }) {
   return emailShell({
+    promo: asFreelance,
     logoUrl: `${new URL(loginUrl).origin}/logo-mark-white.png`,
     title: `Ciao ${esc(workerName)},`,
     bodyHtml: `
       <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
         ${asAdmin
           ? `Sei stato aggiunto come <strong>amministratore</strong> della squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi. Potrai gestire eventi, magazzino e utenti; l'abbonamento resta al creatore della squadra.`
-          : `Sei stato aggiunto alla squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi.`}
+          : asFreelance
+            ? `<strong>${esc(teamName)}</strong> ti ha aggiunto come <strong>collaboratore Freelance</strong> su Roadcase. Dentro trovi un calendario con gli eventi che ti vengono assegnati: orari, cosa c'è da fare e cosa caricare. Quando ti assegnano un evento ricevi un avviso, così puoi controllare tutto dal telefono.`
+            : `Sei stato aggiunto alla squadra <strong>${esc(teamName)}</strong> su Roadcase, il gestionale per il magazzino e gli eventi.`}
       </p>
       <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
         <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Le tue credenziali</p>
-        <p style="margin:0;color:#1a1a1a;font-size:14px;font-family:monospace;">Utente: ${esc(username)}</p>
+        <p style="margin:0;color:#1a1a1a;font-size:14px;font-family:monospace;">${asFreelance ? 'Email' : 'Utente'}: ${esc(username)}</p>
         <p style="margin:2px 0 0;color:#1a1a1a;font-size:14px;font-family:monospace;">Password: ${esc(password)}</p>
       </div>
       <p style="margin:10px 0 0;color:#9ca3af;font-size:12.5px;">Ti consigliamo di cambiare la password al primo accesso.</p>
     `,
     ctaLabel: 'Accedi ora',
     ctaUrl: loginUrl,
+  })
+}
+
+// Avviso al Freelance: gli è stato assegnato un evento. Data, orario e luogo bastano per decidere a colpo d'occhio;
+// il resto (note, lista di carico) lo trova nell'app.
+export function freelanceAssignedEmailHtml({ name, teamName, event, appUrl }) {
+  const fmt = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1)
+  const when = event.dateEnd && event.dateEnd > event.date ? `${cap(fmt(event.date))} → ${cap(fmt(event.dateEnd))}` : cap(fmt(event.date))
+  const time = event.allDay === false && event.timeStart ? `${event.timeStart}${event.timeEnd ? '–' + event.timeEnd : ''}` : ''
+  const notes = String(event.notes || '').trim()
+  return emailShell({
+    promo: true,
+    logoUrl: `${appUrl}/logo-mark-white.png`,
+    title: `Ciao ${esc(name)}, nuovo evento per te`,
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#4b5563;font-size:14.5px;line-height:1.6;">
+        <strong>${esc(teamName)}</strong> ti ha assegnato un evento. Apri Roadcase per vedere gli orari, cosa c'è da fare e cosa caricare.
+      </p>
+      <div style="background:#f5f5f3;border-radius:12px;padding:14px 16px;margin:0 0 6px;">
+        <p style="margin:0 0 6px;color:#1a1a1a;font-size:16px;font-weight:800;">${esc(event.name)}</p>
+        <p style="margin:0;color:#4b5563;font-size:14px;">${esc(when)}${time ? ` · ${esc(time)}` : ''}</p>
+        ${event.location ? `<p style="margin:4px 0 0;color:#4b5563;font-size:14px;">${esc(event.location)}</p>` : ''}
+        ${notes ? `<p style="margin:10px 0 0;color:#6b7280;font-size:13px;line-height:1.5;white-space:pre-wrap;">${esc(notes.length > 280 ? notes.slice(0, 280) + '…' : notes)}</p>` : ''}
+      </div>
+    `,
+    ctaLabel: 'Apri Roadcase',
+    ctaUrl: appUrl,
   })
 }
 

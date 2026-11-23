@@ -348,7 +348,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
   const activeWorkers = workers.filter(w => w.active !== false)
   const peopleQ = peopleQuery.trim().toLowerCase()
   const people = [
-    ...activeWorkers.map(w => ({ id: w.id, name: w.name || t('common.noName'), kind: 'worker' })),
+    ...activeWorkers.map(w => ({ id: w.id, name: w.name || t('common.noName'), kind: 'worker', freelance: w.role === 'freelance' })),
     ...externalWorkers
       // Con una ricerca in corso compaiono TUTTI gli esterni che corrispondono, non solo quelli già in uso questa settimana
       .filter(w => weekBlockExternalIds.has(w.id) || shownExternalIds.includes(w.id) || (peopleQ && (w.name || '').toLowerCase().includes(peopleQ)))
@@ -1012,6 +1012,11 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
               >
                 <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, background: personColor(p.id), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(p.name)}</span>
                 {p.name}
+                {p.freelance && (
+                  <span style={{ fontSize: 9.5, fontWeight: 800, color: '#d97706', background: 'rgba(217,119,6,0.14)', borderRadius: 5, padding: '1px 5px', marginLeft: 1 }}>
+                    {t('adminUsers.roleFreelanceBadge')}
+                  </span>
+                )}
                 {p.kind === 'external' && (
                   <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px', marginLeft: 1 }}>
                     {t('staffTimeline.externalTag')}

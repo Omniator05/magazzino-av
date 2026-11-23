@@ -47,6 +47,7 @@ const Brasserie = lazy(() => import('./pages/Brasserie'))
 const EventOrganizerHome = lazy(() => import('./pages/EventOrganizerHome'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Novita = lazy(() => import('./pages/Novita'))
+const FreelanceHome = lazy(() => import('./pages/FreelanceHome'))
 const WorkHours = lazy(() => import('./pages/WorkHours'))
 const SettingsWorkHours = lazy(() => import('./pages/SettingsWorkHours'))
 const SettingsWorkHoursWorker = lazy(() => import('./pages/SettingsWorkHoursWorker'))
@@ -263,7 +264,7 @@ function PrivateRoutes({ toggleTheme, theme }) {
   if (profile.approved === false) return <PendingApproval reason="pending" />
   if (profile.active === false)   return <PendingApproval reason="inactive" />
 
-  const KNOWN_ROLES = ['admin', 'worker', 'organizzatore-brasserie', 'organizzatore-evento']
+  const KNOWN_ROLES = ['admin', 'worker', 'organizzatore-brasserie', 'organizzatore-evento', 'freelance']
   if (!KNOWN_ROLES.includes(profile.role)) return <PendingApproval reason="unknown" />
 
   // Pagamento fallito (era abbonato, la carta non è passata) → blocca TUTTA
@@ -274,6 +275,20 @@ function PrivateRoutes({ toggleTheme, theme }) {
   // (limiti applicati punto per punto, vedi src/utils/planLimits.js) invece
   // di restare fuori dall'app del tutto.
   if (!profile.superAdmin && team?.billingStatus === 'past_due') return <BillingGate />
+
+  // Freelance (personale esterno con account, funzione Pro): solo il calendario dei propri eventi, nessuna tab bar.
+  // I dati glieli dà il server (api/_freelance.js); le regole Firestore gli negano l'accesso diretto.
+  if (profile?.role === 'freelance') {
+    return (
+      <AnimatedPage>
+        <Routes>
+          <Route path="/" element={<FreelanceHome />} />
+          {/* le notifiche puntano a /events/…: per un Freelance l'unica pagina è la home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AnimatedPage>
+    )
+  }
 
   // Worker view
   if (profile?.role === 'worker') {

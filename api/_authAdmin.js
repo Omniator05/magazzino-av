@@ -54,8 +54,10 @@ export async function requireTeamOwner(req) {
 
 // Come requireTeamAdmin ma per endpoint che qualunque membro approvato della
 // squadra può chiamare (es. un worker che segnala un'assenza) — non solo
-// l'admin. Stessa verifica del token, ruolo non filtrato.
-export async function requireTeamMember(req) {
+// l'admin. Stessa verifica del token. I Freelance (account esterni, ruolo 'freelance') sono ESCLUSI di default:
+// possono chiamare solo le azioni che lo dichiarano con { allowFreelance: true } (vedi push.js), così non possono
+// mandare push alla squadra, inviare email o altro riservato a chi lavora nella squadra.
+export async function requireTeamMember(req, { allowFreelance = false } = {}) {
   const idToken = (req.headers.authorization || '').replace(/^Bearer /, '')
   if (!idToken) { const e = new Error('Token mancante'); e.status = 401; throw e }
 
@@ -72,6 +74,9 @@ export async function requireTeamMember(req) {
   const profile = profileSnap.data()
   if (!profile || profile.approved === false || profile.active === false) {
     const e = new Error('Accesso non consentito'); e.status = 403; throw e
+  }
+  if (profile.role === 'freelance' && !allowFreelance) {
+    const e = new Error('Azione non disponibile per gli account Freelance'); e.status = 403; throw e
   }
 
   const teamRef = db.collection('teams').doc(profile.teamId)

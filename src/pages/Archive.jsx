@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { db } from '../firebase'
-import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, serverTimestamp, where } from 'firebase/firestore'
+import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, serverTimestamp, where, onSnapshot } from 'firebase/firestore'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmProvider'
 import PendingButton from '../components/PendingButton'
 import DeleteButton from '../components/DeleteButton'
+import DeletedEventsList from '../components/DeletedEventsList'
+import Toast from '../components/Toast'
 import ArchiveEventDetail from '../components/ArchiveEventDetail'
 import { Pin, ChevronRight } from '../components/Icon'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -15,7 +17,7 @@ import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { isModuleEnabled } from '../utils/modules'
 import { freshRowsFromEvent } from '../utils/eventLists'
 import { formatDate } from '../utils/formatDate'
-import { deleteEventWithInventoryCheck } from '../utils/kitInventory'
+import { deleteEventWithInventoryCheck, restoreDeletedEvent, purgeDeletedEvent } from '../utils/kitInventory'
 
 const PAGE_SIZE = 30
 
@@ -48,6 +50,17 @@ export default function Archive() {
   const hasMoreRef = useRef(true)
   const loadingAllRef = useRef(false)
   const [searchingAll, setSearchingAll] = useState(false)
+  // "Eliminati": gli eventi eliminati negli ultimi 15 giorni (collezione deletedEvents), recuperabili da qui.
+  const [view, setView] = useState('archive')          // 'archive' | 'deleted'
+  const [deleted, setDeleted] = useState([])
+  const [toast, setToast] = useState('')
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(''), 4000) }
+  useEffect(() => {
+    if (!teamId) return undefined
+    return onSnapshot(query(collection(db, 'deletedEvents'), where('teamId', '==', teamId)),
+      snap => setDeleted(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.deletedAt?.toMillis?.() || Date.now()) - (a.deletedAt?.toMillis?.() || Date.now()))),
+      () => setDeleted([]))
+  }, [teamId])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -160,6 +173,15 @@ export default function Archive() {
         return terms.every(t => hay.includes(t))
       })
     : events
+
+  const restoreDeleted = async entry => {
+    try { await restoreDeletedEvent(entry); showToast(t('archive.restored', { name: entry.name })) }
+    catch (e) { console.error('restoreDeletedEvent', e); showToast(t('archive.restoreFailed')) }
+  }
+  const purgeDeleted = async entry => {
+    if (!(await confirm({ title: t('archive.confirmPurgeTitle'), message: t('archive.confirmPurgeMessage', { name: entry.name }), confirmLabel: t('archive.confirmPurgeLabel'), danger: true }))) return
+    try { await purgeDeletedEvent(entry.id) } catch (e) { console.error('purgeDeletedEvent', e); showToast(t('archive.restoreFailed')) }
+  }
 
   const useAsTemplate = async (event) => {
     setCopying(event.id)
@@ -302,6 +324,10 @@ export default function Archive() {
     )
   }
 
+  // Eliminati: stessa ricerca (nome o luogo, senza maiuscole né accenti) applicata alla loro lista
+  const deletedShown = terms.length ? deleted.filter(e => { const hay = norm(`${e.name || ''} ${e.location || ''}`); return terms.every(t => hay.includes(t)) }) : deleted
+  const deletedColumn = <DeletedEventsList items={deletedShown} searching={terms.length > 0} onRestore={restoreDeleted} onPurge={purgeDeleted} />
+
   const listColumn = (
     <div style={{ padding:'12px 0 0' }}>
       {loading ? (
@@ -353,9 +379,20 @@ export default function Archive() {
           </button>
           <div style={{ textAlign:'right', minWidth:0 }}>
             <h1 style={{ fontSize:24 }}>{t('archive.title')}</h1>
-            <p style={{ fontSize:13, marginTop:2 }}>{t('archive.subtitle', { count: events.length })}</p>
+            <p style={{ fontSize:13, marginTop:2 }}>{view === 'deleted' ? t('archive.deletedSubtitle', { count: deleted.length }) : t('archive.subtitle', { count: events.length })}</p>
           </div>
         </div>
+      </div>
+
+      {/* Archiviati / Eliminati */}
+      <div role="tablist" style={{ display:'flex', gap:6, background:'var(--c-fill)', borderRadius:12, padding:4, margin:'14px 16px 0' }}>
+        {[['archive', t('archive.tabArchived'), null], ['deleted', t('archive.tabDeleted'), deleted.length]].map(([key, label, n]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} className="btn-no-anim"
+            onClick={() => { setView(key); setSelectedId(null) }}
+            style={{ flex:1, padding:'8px 10px', borderRadius:9, fontWeight:700, fontSize:13, border:'none', background: view === key ? 'var(--c-surface)' : 'transparent', color: view === key ? 'var(--c-ink)' : 'var(--c-ink2)' }}>
+            {label}{n > 0 ? ` · ${n}` : ''}
+          </button>
+        ))}
       </div>
 
       <div className="search-bar rc-inv-search" style={{ marginTop:14 }}>
@@ -375,7 +412,8 @@ export default function Archive() {
     return (
       <div style={{ background:'var(--surface)', minHeight:'100dvh', paddingBottom:140 }}>
         {pageHead}
-        {listColumn}
+        {view === 'deleted' ? deletedColumn : listColumn}
+        <Toast message={toast} />
         {selected && (
           <ArchiveSheet event={selected} onClose={() => setSelectedId(null)} footer={actionBar(selected)}>
             <ArchiveEventDetail {...detailProps(selected)} />
@@ -389,8 +427,9 @@ export default function Archive() {
     <div style={{ background:'var(--surface)', minHeight:'100dvh', display:'flex', alignItems:'flex-start' }}>
       <div style={{ flex:1, minWidth:0, paddingBottom:140 }}>
         {pageHead}
-        {listColumn}
+        {view === 'deleted' ? deletedColumn : listColumn}
       </div>
+      <Toast message={toast} />
       {/* Colonna laterale: non c'è finché non si sceglie un evento, poi entra
           scivolando da destra e occupa tutta l'altezza dello schermo (dal bordo
           alto, accanto all'header) — così titolo, dettagli e i due pulsanti

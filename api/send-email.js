@@ -41,6 +41,7 @@ async function sendInvite(req, res) {
 
   const { toEmail, workerName, username, password, role } = req.body || {}
   const asAdmin = role === 'admin'
+  const asFreelance = role === 'freelance'
   if (!toEmail || !workerName || !username || !password) {
     return res.status(400).json({ error: 'Dati mancanti' })
   }
@@ -49,8 +50,9 @@ async function sendInvite(req, res) {
   try {
     await sendEmail({
       to: toEmail,
-      subject: asAdmin ? `Sei stato aggiunto come admin su Roadcase — ${ctx.team.name}` : `Sei stato invitato su Roadcase — ${ctx.team.name}`,
-      html: inviteEmailHtml({ workerName, teamName: ctx.team.name, username, password, loginUrl: `${origin}/login`, asAdmin }),
+      subject: asAdmin ? `Sei stato aggiunto come admin su Roadcase — ${ctx.team.name}` : asFreelance ? `${ctx.team.name} ti ha invitato su Roadcase` : `Sei stato invitato su Roadcase — ${ctx.team.name}`,
+      html: inviteEmailHtml({ workerName, teamName: ctx.team.name, username, password, loginUrl: `${origin}/login`, asAdmin, asFreelance }),
+      ...(asFreelance ? { replyTo: process.env.RESEND_REPLY_TO || 'info@roadcase.it' } : {}),
     })
     res.status(200).json({ sent: true })
   } catch (e) {

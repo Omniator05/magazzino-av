@@ -231,7 +231,7 @@
     "createEvent": "Crea evento",
     "saveChanges": "Salva modifiche",
     "confirmDeleteEventTitle": "Elimina evento",
-    "confirmDeleteEventMessage": "Eliminare \"{{name}}\"? L'operazione non può essere annullata.",
+    "confirmDeleteEventMessage": "Eliminare \"{{name}}\"? Resta tra gli eliminati dell'Archivio per 15 giorni, poi sparisce per sempre.",
     "confirmDeleteEventLabel": "Elimina",
     "confirmUnavailableTitle": "Worker non disponibile",
     "confirmUnavailableMessage": "{{name}} risulta assente in questa data. Assegnarlo comunque a \"{{event}}\"?",
@@ -1246,7 +1246,11 @@
     "loginSwitchError": "Non sono riuscito a cambiare l'accesso. Riprova.",
     "loginChangeHint": "Se l'email non è quella giusta (o è inventata) scrivi quella vera: da subito entra con questa e riceve su questa le email, anche per reimpostare la password.",
     "loginChangeButton": "Cambia email",
-    "loginEmailBadge": "Entra con l'email"
+    "loginEmailBadge": "Entra con l'email",
+    "roleFreelanceOption": "Freelance (collaboratore esterno)",
+    "roleFreelanceBadge": "Freelance",
+    "freelanceHint": "Account per collaboratori esterni: entra con la sua email, vede solo un calendario con gli eventi che gli assegni (orari, note, lista di carico) e riceve notifiche ed email. Gli arriva un invito con le credenziali.",
+    "freelanceProError": "Gli account Freelance sono una funzione dei piani Pro."
   },
   "events": {
     "recurrenceNever": "Mai",
@@ -1317,7 +1321,7 @@
     "createFromTemplateAndGo": "Crea evento e vai alla lista carico",
     "createMultiple": "Crea {{count}} eventi",
     "confirmDeleteSeriesMessage": "Elimina SOLO questo evento della serie?",
-    "confirmDeleteMessage": "Eliminare questo evento?",
+    "confirmDeleteMessage": "Eliminare questo evento? Resta tra gli eliminati dell'Archivio per 15 giorni.",
     "daScaricareCount": "{{count}} da rientrare",
     "installationEnded": "Noleggio terminato — da chiudere",
     "todayStatus": "OGGI · {{status}}",
@@ -1672,7 +1676,7 @@
     "loadMore": "Carica altri eventi",
     "loadingMore": "⏳ Caricamento...",
     "confirmDeleteTitle": "Elimina dall'archivio",
-    "confirmDeleteMessage": "Eliminare \"{{name}}\" dall'archivio?\nQuesta azione è irreversibile.",
+    "confirmDeleteMessage": "Eliminare \"{{name}}\" dall'archivio?\nResta tra gli eliminati per 15 giorni, poi sparisce per sempre.",
     "confirmDeleteLabel": "Elimina",
     "noItems": "Nessun oggetto in lista",
     "notReturned": "non rientrato",
@@ -1687,7 +1691,25 @@
     "resultsCount_other": "{{count}} risultati",
     "wholeArchive": "su tutto l'archivio",
     "shortSearchHint": "scrivi almeno 3 lettere per cercare in tutto l'archivio",
-    "clearSearch": "Cancella la ricerca"
+    "clearSearch": "Cancella la ricerca",
+    "tabArchived": "Archiviati",
+    "tabDeleted": "Eliminati",
+    "deletedHint": "Gli eventi eliminati restano qui 15 giorni, poi spariscono per sempre.",
+    "deletedEmptyTitle": "Nessun evento eliminato",
+    "deletedEmptyDesc": "Quando elimini un evento lo ritrovi qui per 15 giorni.",
+    "deletedOn": "Eliminato {{date}}",
+    "deletedLastDay": "Sparisce oggi",
+    "restore": "Ripristina",
+    "restored": "\"{{name}}\" è tornato tra gli eventi",
+    "restoreFailed": "Non sono riuscito a ripristinare l'evento. Riprova.",
+    "deleteForever": "Elimina per sempre",
+    "confirmPurgeTitle": "Elimina per sempre",
+    "confirmPurgeMessage": "Eliminare definitivamente \"{{name}}\"? Non si potrà più recuperare.",
+    "confirmPurgeLabel": "Elimina per sempre",
+    "deletedSubtitle_one": "{{count}} evento eliminato",
+    "deletedSubtitle_other": "{{count}} eventi eliminati",
+    "deletedLeft_one": "{{count}} giorno rimasto",
+    "deletedLeft_other": "{{count}} giorni rimasti"
   },
   "scanner": {
     "title": "Scanner QR/Barcode",
@@ -2580,5 +2602,16 @@
         "text": "Hai un utente, il logo, un oggetto e un evento. Da qui in poi è tutto tuo: buon lavoro con Roadcase."
       }
     }
+  },
+  "freelance": {
+    "error_plan_title": "Accesso non attivo",
+    "error_plan_text": "L'accesso Freelance non è disponibile con il piano attuale di questa squadra. Contatta chi ti ha invitato.",
+    "error_error_title": "Non riesco a caricare i tuoi eventi",
+    "error_error_text": "Controlla la connessione e riprova.",
+    "retry": "Riprova",
+    "prevMonth": "Mese precedente",
+    "nextMonth": "Mese successivo",
+    "dayEmpty": "Niente in programma per questo giorno.",
+    "nothingYet": "Non hai ancora eventi assegnati. Quando te ne assegnano uno lo vedi qui e ricevi un avviso."
   }
 }

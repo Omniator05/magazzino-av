@@ -80,7 +80,7 @@ async function revokeLink(req, res) {
 
 // Solo i campi che servono all'ospite: niente contatti, costi, note interne
 // dell'admin o altri membri della squadra.
-function publicEvent(ev, blocks) {
+export function publicEvent(ev, blocks) {
   const lists = [{ id: 'main', name: ev.mainListName || '' }, ...((ev.lists || []).map(l => ({ id: l.id, name: l.name || '' })))]
   return {
     id: ev.id,

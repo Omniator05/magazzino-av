@@ -12,6 +12,7 @@ import { handleGuestAction } from './_guest.js'
 import { handleBadgeAction } from './_badge.js'
 import { handleUserAction } from './_users.js'
 import { handleStationAction } from './_station.js'
+import { handleFreelanceAction } from './_freelance.js'
 
 const DEAD_TOKEN_CODES = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']
 
@@ -200,7 +201,35 @@ async function runDailyReminders(res) {
     }
   }
 
-  res.status(200).json({ teams: results.length, results })
+  // Eventi eliminati da più di 15 giorni: spariscono per sempre (vedi purgeDeletedEvents)
+  let purged = 0
+  try { purged = await purgeDeletedEvents(db, admin) } catch (e) { console.error('push daily: purgeDeletedEvents', e) }
+
+  res.status(200).json({ teams: results.length, results, purgedEvents: purged })
+}
+
+// Giorni in cui un evento eliminato resta recuperabile nell'Archivio, sezione "Eliminati" (stesso numero di
+// DELETED_EVENT_DAYS in src/utils/kitInventory.js, che lo mostra all'utente).
+const DELETED_EVENT_DAYS = 15
+
+// Toglie per sempre dagli "Eliminati" gli eventi eliminati da più di DELETED_EVENT_DAYS giorni, insieme ai loro
+// residui: le assegnazioni del personale (assignmentBlocks con quell'eventId) e i contenuti dell'organizzatore.
+// Esportata per i test; a un giro ne tratta al massimo 200 (il resto al giorno dopo).
+export async function purgeDeletedEvents(db, admin, now = Date.now()) {
+  const cutoff = admin.firestore.Timestamp.fromMillis(now - DELETED_EVENT_DAYS * 86400000)
+  const snap = await db.collection('deletedEvents').where('deletedAt', '<=', cutoff).limit(200).get()
+  let purged = 0
+  for (const d of snap.docs) {
+    const teamId = d.data().teamId
+    const blocks = await db.collection('assignmentBlocks').where('eventId', '==', d.id).get()
+    await Promise.all(blocks.docs.filter(b => b.data().teamId === teamId).map(b => b.ref.delete()))
+    const contentRef = db.collection('eventOrganizerContent').doc(d.id)
+    const content = await contentRef.get()
+    if (content.exists && content.data().teamId === teamId) await contentRef.delete()
+    await d.ref.delete()
+    purged++
+  }
+  return purged
 }
 
 // Push agli admin di una squadra, chiamabile da un'altra API: serve quando chi innesca l'avviso non è ancora
@@ -231,12 +260,19 @@ export default async function handler(req, res) {
 
   let db, teamId, uid, profile
   try {
-    ;({ db, teamId, uid, profile } = await requireTeamMember(req))
+    ;({ db, teamId, uid, profile } = await requireTeamMember(req, { allowFreelance: true }))
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message })
   }
 
   const { action } = req.body || {}
+  // Un Freelance (account esterno) può solo registrare le notifiche del proprio dispositivo e leggere i propri eventi:
+  // tutto il resto (inviare push alla squadra, badge, utenti…) è riservato a chi lavora nella squadra.
+  if (profile?.role === 'freelance' && !['register', 'unregister'].includes(action) && !String(action || '').startsWith('freelance-')) {
+    return res.status(403).json({ error: 'Azione non disponibile per gli account Freelance' })
+  }
+  // Account Freelance (vedi _freelance.js): vista dei propri eventi, email di assegnazione
+  if (String(action || '').startsWith('freelance-') && await handleFreelanceAction(req, res, { db, teamId, uid, profile })) return
   // Badge personale per la Postazione magazzino (vedi _badge.js): servono utente verificato e squadra
   if (String(action || '').startsWith('badge-') && await handleBadgeAction(req, res, { db, teamId, uid, profile })) return
   // Email di accesso degli utenti (vedi _users.js): solo admin

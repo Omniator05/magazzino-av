@@ -231,7 +231,7 @@
     "createEvent": "Event erstellen",
     "saveChanges": "Änderungen speichern",
     "confirmDeleteEventTitle": "Event löschen",
-    "confirmDeleteEventMessage": "„{{name}}“ löschen? Das lässt sich nicht rückgängig machen.",
+    "confirmDeleteEventMessage": "„{{name}}“ löschen? Es bleibt 15 Tage im Archiv unter Gelöscht und verschwindet dann endgültig.",
     "confirmDeleteEventLabel": "Löschen",
     "confirmUnavailableTitle": "Personal nicht verfügbar",
     "confirmUnavailableMessage": "{{name}} ist an diesem Datum als abwesend markiert. Trotzdem zu „{{event}}“ einteilen?",
@@ -1246,7 +1246,11 @@
     "loginSwitchError": "Die Anmeldung konnte nicht geändert werden. Versuche es noch einmal.",
     "loginChangeHint": "Wenn die E-Mail-Adresse falsch (oder erfunden) ist, gib die echte ein: Ab jetzt melden sie sich damit an und erhalten dort E-Mails, auch zum Zurücksetzen des Passworts.",
     "loginChangeButton": "E-Mail ändern",
-    "loginEmailBadge": "Meldet sich per E-Mail an"
+    "loginEmailBadge": "Meldet sich per E-Mail an",
+    "roleFreelanceOption": "Freelancer (externer Mitarbeiter)",
+    "roleFreelanceBadge": "Freelancer",
+    "freelanceHint": "Konto für externe Mitarbeiter: Anmeldung mit der eigenen E-Mail, sieht nur einen Kalender mit den Events, die du zuweist (Zeiten, Notizen, Ladeliste) und bekommt Benachrichtigungen und E-Mails. Er erhält eine Einladung mit den Zugangsdaten.",
+    "freelanceProError": "Freelancer-Konten sind eine Funktion der Pro-Tarife."
   },
   "events": {
     "recurrenceNever": "Nie",
@@ -1317,7 +1321,7 @@
     "createFromTemplateAndGo": "Event erstellen und zur Ladeliste gehen",
     "createMultiple": "{{count}} Events erstellen",
     "confirmDeleteSeriesMessage": "NUR dieses Event der Serie löschen?",
-    "confirmDeleteMessage": "Dieses Event löschen?",
+    "confirmDeleteMessage": "Dieses Event löschen? Es bleibt 15 Tage im Archiv unter Gelöscht.",
     "daScaricareCount": "{{count}} zurückzubringen",
     "installationEnded": "Miete beendet – abschließen",
     "todayStatus": "HEUTE · {{status}}",
@@ -1672,7 +1676,7 @@
     "loadMore": "Weitere Events laden",
     "loadingMore": "⏳ Wird geladen …",
     "confirmDeleteTitle": "Aus dem Archiv löschen",
-    "confirmDeleteMessage": "„{{name}}“ aus dem Archiv löschen?\nDiese Aktion kann nicht rückgängig gemacht werden.",
+    "confirmDeleteMessage": "„{{name}}“ aus dem Archiv löschen?\nEs bleibt 15 Tage unter Gelöscht und verschwindet dann endgültig.",
     "confirmDeleteLabel": "Löschen",
     "noItems": "Keine Artikel in der Liste",
     "notReturned": "nicht zurückgebracht",
@@ -1687,7 +1691,25 @@
     "resultsCount_other": "{{count}} Ergebnisse",
     "wholeArchive": "im gesamten Archiv",
     "shortSearchHint": "gib mindestens 3 Buchstaben ein, um das gesamte Archiv zu durchsuchen",
-    "clearSearch": "Suche leeren"
+    "clearSearch": "Suche leeren",
+    "tabArchived": "Archiviert",
+    "tabDeleted": "Gelöscht",
+    "deletedHint": "Gelöschte Events bleiben 15 Tage hier und verschwinden dann endgültig.",
+    "deletedEmptyTitle": "Keine gelöschten Events",
+    "deletedEmptyDesc": "Wenn du ein Event löschst, findest du es hier 15 Tage lang.",
+    "deletedOn": "Gelöscht am {{date}}",
+    "deletedLastDay": "Wird heute gelöscht",
+    "restore": "Wiederherstellen",
+    "restored": "„{{name}}“ ist wieder bei den Events",
+    "restoreFailed": "Das Event konnte nicht wiederhergestellt werden. Versuche es erneut.",
+    "deleteForever": "Endgültig löschen",
+    "confirmPurgeTitle": "Endgültig löschen",
+    "confirmPurgeMessage": "„{{name}}“ endgültig löschen? Es lässt sich nicht mehr wiederherstellen.",
+    "confirmPurgeLabel": "Endgültig löschen",
+    "deletedSubtitle_one": "{{count}} gelöschtes Event",
+    "deletedSubtitle_other": "{{count}} gelöschte Events",
+    "deletedLeft_one": "noch {{count}} Tag",
+    "deletedLeft_other": "noch {{count}} Tage"
   },
   "scanner": {
     "title": "QR-/Barcode-Scanner",
@@ -2580,5 +2602,16 @@
         "text": "Du hast einen Nutzer, ein Logo, einen Artikel und ein Event. Ab hier gehört alles dir: viel Freude mit Roadcase."
       }
     }
+  },
+  "freelance": {
+    "error_plan_title": "Zugang nicht aktiv",
+    "error_plan_text": "Der Freelancer-Zugang ist mit dem aktuellen Tarif dieses Teams nicht verfügbar. Wende dich an die Person, die dich eingeladen hat.",
+    "error_error_title": "Deine Events konnten nicht geladen werden",
+    "error_error_text": "Prüfe die Verbindung und versuche es erneut.",
+    "retry": "Erneut versuchen",
+    "prevMonth": "Voriger Monat",
+    "nextMonth": "Nächster Monat",
+    "dayEmpty": "Für diesen Tag ist nichts geplant.",
+    "nothingYet": "Du hast noch keine Events zugewiesen. Sobald dir eines zugewiesen wird, erscheint es hier und du wirst benachrichtigt."
   }
 }

@@ -1,6 +1,6 @@
-import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore'
-import { db } from '../firebase'
-import { deleteEventFromGoogle } from './googleCalendar'
+import { doc, getDoc, updateDoc, deleteDoc, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { db, auth } from '../firebase'
+import { deleteEventFromGoogle, pushEventToGoogle } from './googleCalendar'
 import { todayStr } from './workHours'
 
 // Aggiorna la giacenza (availableQty) al cambio di stato carico/rientro di
@@ -161,6 +161,10 @@ export const restoreEventInventory = async (event) => {
   })))
 }
 
+// Quanti giorni un evento eliminato resta recuperabile nell'Archivio ("Eliminati"), poi lo toglie il cron giornaliero
+// (api/push.js, purgeDeletedEvents — tenere uguale il numero lì).
+export const DELETED_EVENT_DAYS = 15
+
 // Unico punto da cui eliminare un evento (Calendar/Archive/Events): se ci
 // sono ancora righe fuori non rientrate, chiede PRIMA come trattarne la
 // giacenza — altrimenti l'eliminazione da sola lascerebbe quella giacenza
@@ -168,8 +172,14 @@ export const restoreEventInventory = async (event) => {
 // "sei sicuro di voler eliminare l'evento?" resta a carico del chiamante
 // (testo diverso da pagina a pagina): questa funzione presume che sia già
 // stato confermato.
+//
+// L'evento non sparisce subito: si SPOSTA nella collezione `deletedEvents` (stesso id, stessi dati + deletedAt) e
+// torna recuperabile per DELETED_EVENT_DAYS giorni dalla sezione "Eliminati" dell'Archivio. Spostarlo (invece di
+// marcarlo e basta) significa che Calendario, Eventi, ricerca, scanner e tutto il resto non lo vedono più, senza
+// dover filtrare nulla altrove. I promemoria scadenza (generati dalle schede furgone/oggetto) si cancellano subito.
 export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
   const unreturned = getUnreturnedLoadedItems(event)
+  let inventoryRestored = false
   if (unreturned.length > 0) {
     const reset = await confirm({
       title: t('common.unreturnedItemsTitle'),
@@ -177,9 +187,23 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
       cancelLabel: t('common.markAsMissingLabel'),
       confirmLabel: t('common.resetStockLabel'),
     })
-    if (reset) await restoreEventInventory(event)
+    if (reset) { await restoreEventInventory(event); inventoryRestored = true }
   }
-  await deleteDoc(doc(db, 'events', event.id))
+  if (event.isDeadlineReminder) {
+    await deleteDoc(doc(db, 'events', event.id))
+  } else {
+    // Si copia il documento com'è adesso su Firestore (non l'oggetto in memoria della pagina, che può essere indietro)
+    const eventRef = doc(db, 'events', event.id)
+    const snap = await getDoc(eventRef)
+    if (snap.exists()) {
+      const batch = writeBatch(db)
+      batch.set(doc(db, 'deletedEvents', event.id), {
+        ...snap.data(), deletedAt: serverTimestamp(), deletedBy: auth.currentUser?.uid || null, inventoryRestored,
+      })
+      batch.delete(eventRef)
+      await batch.commit()
+    }
+  }
   // Pulisce anche la copia su Google Calendar, se l'evento era stato
   // sincronizzato — prima succedeva solo cancellando da Events.jsx, non da
   // qui (usata anche da Calendar.jsx e Archive.jsx): un evento cancellato
@@ -187,6 +211,27 @@ export const deleteEventWithInventoryCheck = async ({ event, confirm, t }) => {
   // evento, così la pulizia vale ovunque senza doverla ripetere.
   deleteEventFromGoogle(event.googleEventId)
 }
+
+// Riporta tra gli eventi un evento eliminato (stesso id, quindi le assegnazioni del personale tornano collegate). Se al
+// momento dell'eliminazione l'admin aveva scelto di restituire la giacenza delle righe ancora fuori, adesso la si
+// toglie di nuovo: l'evento torna com'era, con quelle righe di nuovo "fuori".
+export const restoreDeletedEvent = async (entry) => {
+  const { id, deletedAt, deletedBy, inventoryRestored, ...data } = entry
+  const batch = writeBatch(db)
+  batch.set(doc(db, 'events', id), { ...data, updatedAt: serverTimestamp() })
+  batch.delete(doc(db, 'deletedEvents', id))
+  await batch.commit()
+  if (inventoryRestored) {
+    await Promise.all(getUnreturnedLoadedItems(data).map(i => syncKitAwareInventory({
+      catalogItemId: i.itemRef || i.id, isBundle: i.isBundle, category: i.category, qty: i.qty, sign: -1,
+    })))
+  }
+  // Su Google Calendar la copia era stata tolta all'eliminazione: se il calendario è collegato la si ricrea
+  pushEventToGoogle(id)
+}
+
+// Elimina per sempre un evento dagli "Eliminati" (stesso gesto del cron dopo 15 giorni, ma subito).
+export const purgeDeletedEvent = (id) => deleteDoc(doc(db, 'deletedEvents', id))
 
 // Chiude un rent/install: restituisce la giacenza di tutto ciò che risulta
 // ancora caricato e non rientrato, poi archivia l'evento — stessa identica

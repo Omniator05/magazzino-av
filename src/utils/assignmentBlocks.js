@@ -1,7 +1,7 @@
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { toggleWorkerAssignment } from './workerAssignment'
-import { notifyTeamPush } from './pushNotifications'
+import { notifyTeamPush, emailFreelanceAssigned } from './pushNotifications'
 import i18n from '../i18n'
 import { formatDate } from './formatDate'
 
@@ -38,6 +38,8 @@ async function syncEventAssignment(eventsById, allBlocksAfter, workerId, eventId
       url: `/events/${eventId}`,
       audience: { type: 'user', userId: workerId },
     })
+    // Se è un Freelance con email riceve anche una email (il server decide, vedi emailFreelanceAssigned)
+    emailFreelanceAssigned(workerId, eventId)
   }
 }
 

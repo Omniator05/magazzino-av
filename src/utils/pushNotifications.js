@@ -176,6 +176,13 @@ export function notifyTeamPush({ title, body, url, audience }) {
   authedPost('/api/push', { action: 'send', title, body, url, audience }).catch(() => {})
 }
 
+// Email "ti hanno assegnato un evento" per un account Freelance (api/_freelance.js). Fire-and-forget come il resto:
+// il server controlla da sé se la persona è un Freelance con email (e se la squadra è su un piano Pro), per chiunque
+// altro risponde "saltato" senza fare nulla, quindi si può chiamare per qualunque persona appena assegnata.
+export function emailFreelanceAssigned(workerId, eventId) {
+  authedPost('/api/push', { action: 'freelance-email-assigned', workerId, eventId }).catch(() => {})
+}
+
 // Usato da Events.jsx e Calendar.jsx (due modali di modifica evento
 // indipendenti) dopo un salvataggio: avvisa admin + assegnati solo se
 // l'orario è DAVVERO cambiato rispetto a prima, non ad ogni salvataggio

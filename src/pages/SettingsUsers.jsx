@@ -172,7 +172,8 @@ export default function SettingsUsers() {
   const [form, setForm]               = useState({ name:'', username:'', password:'', email:'', role:'worker', canManageInventory:false })
   // Per default un nuovo utente entra con la sua email vera; chi non ne ha una usa il vecchio accesso con nome utente.
   const [noEmail, setNoEmail]           = useState(false)
-  const emailMode = !noEmail
+  // Il Freelance entra sempre con la sua email vera (gli arriva l'invito e può reimpostare la password da solo)
+  const emailMode = !noEmail || form.role === 'freelance'
   const [newPw, setNewPw]             = useState('')
   const [maxHours, setMaxHours]       = useState('') // limite ore mensili (modulo Ore di lavoro)
   const [vacationDays, setVacationDays] = useState('') // giorni di ferie annuali
@@ -292,6 +293,8 @@ export default function SettingsUsers() {
       : users.some(u => u.username === username)) {
       setError(emailMode ? t('adminUsers.errorEmailInUse') : t('adminUsers.errorUsernameTaken')); return false
     }
+    // Freelance (personale esterno con account): funzione Pro, nessun tetto di numero.
+    if (form.role === 'freelance' && !isProPlan(team)) { setError(t('adminUsers.freelanceProError')); return false }
     // Tetto admin e magazzinieri: sempre controllati, non solo sul piano
     // gratuito — sono due delle leve che distinguono Team da Business, vedi
     // adminLimit/workerLimit in utils/planLimits.js. Chi crea account qui è
@@ -355,7 +358,7 @@ export default function SettingsUsers() {
           await fetch('/api/send-email', {
             method: 'POST',
             headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'invite', toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password, role: form.role === 'admin' ? 'admin' : 'worker' }),
+            body: JSON.stringify({ type: 'invite', toEmail: inviteEmail, workerName: form.name.trim(), username, password: form.password, role: form.role === 'admin' ? 'admin' : form.role === 'freelance' ? 'freelance' : 'worker' }),
           })
         } catch {}
       }
@@ -415,12 +418,12 @@ export default function SettingsUsers() {
   }
 
   // ── Cambia ruolo (Admin / Magazziniere / Organizzatore) ──
-  const ROLE_LABELS = { admin: t('profile.roleAdmin'), worker: t('adminUsers.roleMagazziniere'), 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieOption'), 'organizzatore-evento': t('adminUsers.roleOrgEventOption') }
+  const ROLE_LABELS = { admin: t('profile.roleAdmin'), worker: t('adminUsers.roleMagazziniere'), 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieOption'), 'organizzatore-evento': t('adminUsers.roleOrgEventOption'), freelance: t('adminUsers.roleFreelanceOption') }
   // Versione corta SOLO per il badge compatto nella riga utente: "Organizzatore
   // Brasserie/evento" per intero non ci sta su una riga su mobile e finisce
   // per andare a capo/coprire l'email sotto. Altrove (conferme, dettaglio)
   // resta l'etichetta piena di ROLE_LABELS.
-  const ROLE_BADGE_LABELS = { ...ROLE_LABELS, 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieBadge'), 'organizzatore-evento': t('adminUsers.roleOrgEventBadge') }
+  const ROLE_BADGE_LABELS = { ...ROLE_LABELS, 'organizzatore-brasserie': t('adminUsers.roleOrgBrasserieBadge'), 'organizzatore-evento': t('adminUsers.roleOrgEventBadge'), freelance: t('adminUsers.roleFreelanceBadge') }
   const changeRole = async (newRole) => {
     if (newRole === showDetail.role) return
     // Solo il creatore della squadra fa o toglie gli admin (anche se il menu già lo nasconde agli altri).
@@ -626,7 +629,7 @@ export default function SettingsUsers() {
   }
 
   const pending   = users.filter(u => u.approved === false)
-  const workers   = users.filter(u => u.role === 'worker' && u.approved !== false)
+  const workers   = users.filter(u => (u.role === 'worker' || u.role === 'freelance') && u.approved !== false)
   const admins    = users.filter(u => u.role === 'admin' && u.approved !== false)
   // Chi entra ancora con il nome utente: con un'email vera nel profilo si può passare subito
   // all'accesso con email; senza, l'admin deve prima aggiungerla dalla scheda.
@@ -655,6 +658,7 @@ export default function SettingsUsers() {
     admin: { bg:'rgba(233,69,96,0.15)', color:'var(--accent)' },
     'organizzatore-brasserie': { bg:'rgba(155,89,224,0.15)', color:'#9b59e0' },
     'organizzatore-evento': { bg:'rgba(22,160,133,0.15)', color:'#16a085' },
+    freelance: { bg:'rgba(217,119,6,0.15)', color:'#d97706' },
   }
 
   const UserRow = ({ u }) => {
@@ -874,10 +878,12 @@ export default function SettingsUsers() {
                   autoCapitalize="none" autoCorrect="off"
                 />
                 <p style={{ color:'var(--text2)', fontSize:12, marginTop:5 }}>{t('adminUsers.loginEmailHint')}</p>
-                <button type="button" onClick={() => setNoEmail(true)} className="btn-no-anim"
-                  style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
-                  {t('adminUsers.noEmailToggle')}
-                </button>
+                {form.role !== 'freelance' && (
+                  <button type="button" onClick={() => setNoEmail(true)} className="btn-no-anim"
+                    style={{ background:'transparent', color:'var(--text2)', fontSize:12, fontWeight:700, padding:'6px 0 0', textDecoration:'underline' }}>
+                    {t('adminUsers.noEmailToggle')}
+                  </button>
+                )}
               </div>
             ) : (<>
               <div className="form-group">
@@ -927,8 +933,14 @@ export default function SettingsUsers() {
                   { value:'worker', label:t('adminUsers.roleWorkerOption'), icon:<User size={17} /> },
                   ...(isOwner ? [{ value:'admin', label:t('adminUsers.roleAdminOption'), icon:<User size={17} /> }] : []),
                   { value:'temporaneo', label:t('guest.tempRoleOption'), icon:<User size={17} /> },
+                  { value:'freelance', label:t('adminUsers.roleFreelanceOption'), icon:<User size={17} /> },
                 ]}
               />
+              {form.role === 'freelance' && (
+                <p style={{ color:'var(--text2)', fontSize:12.5, lineHeight:1.5, marginTop:8 }}>
+                  {isProPlan(team) ? t('adminUsers.freelanceHint') : t('adminUsers.freelanceProError')}
+                </p>
+              )}
             </div>
 
             {form.role === 'organizzatore-evento' && (
