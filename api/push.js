@@ -12,7 +12,7 @@ import { handleGuestAction } from './_guest.js'
 import { handleBadgeAction } from './_badge.js'
 import { handleUserAction } from './_users.js'
 import { handleStationAction } from './_station.js'
-import { handleFreelanceAction } from './_freelance.js'
+import { handleFreelanceAction, serveFreelanceFeed } from './_freelance.js'
 
 const DEAD_TOKEN_CODES = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']
 
@@ -246,6 +246,9 @@ export default async function handler(req, res) {
   if (req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`) {
     return runDailyReminders(res)
   }
+
+  // Abbonamento al calendario del Freelance (vedi _freelance.js): GET pubblico con una chiave firmata nell'indirizzo
+  if (req.method === 'GET' && req.query?.feed) return serveFreelanceFeed(req, res)
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non permesso' })
 

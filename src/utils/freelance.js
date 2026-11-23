@@ -38,3 +38,22 @@ export async function respondToEvent(eventId, response) {
     return false
   }
 }
+
+// Indirizzo personale per abbonare il proprio calendario (Apple Calendario, Outlook…) agli eventi assegnati: si aggiorna da solo.
+// Ritorna l'indirizzo https (il chiamante lo apre come webcal://) oppure null.
+export async function fetchCalendarFeedUrl() {
+  try {
+    const user = auth.currentUser
+    if (!user) return null
+    const idToken = await user.getIdToken()
+    const res = await fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action: 'freelance-feed-url' }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok ? data.url || null : null
+  } catch {
+    return null
+  }
+}

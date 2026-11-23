@@ -96,6 +96,9 @@ export async function createAssignmentBlock(data, { eventsById, allBlocks }) {
   // Evento vero: ci pensa syncEventAssignment (solo alla prima volta). Task e
   // fasi: sempre, ad ogni nuova persona assegnata.
   if (!data.eventId || data.phase) notifyPersonAssigned(created, eventsById)
+  // Un turno di fase (montaggio/smontaggio) non passa dall'avviso "Evento assegnato": un Freelance deve comunque ricevere
+  // l'email con i dettagli (il server ignora chi non è Freelance e non manda due email per lo stesso evento ravvicinate)
+  if (data.workerId && data.eventId && data.phase) emailFreelanceAssigned(data.workerId, data.eventId)
   return ref.id
 }
 

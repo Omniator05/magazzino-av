@@ -2643,7 +2643,10 @@
     "toConfirm_other": "{{count}} Events zu bestätigen",
     "toConfirmGo": "Ansehen",
     "addToCalendar": "Zum Kalender hinzufügen",
-    "addToGoogle": "Google Kalender"
+    "addToGoogle": "Google Kalender",
+    "calendarHint": "Aktualisiert sich selbst, wenn sich Tage oder Zeiten ändern.",
+    "calendarError": "Der Kalender konnte nicht vorbereitet werden. Versuche es erneut.",
+    "calendarOnlyThis": "Nur dieses Event (Datei)"
   },
   "freelanceResponse": {
     "title_one": "Antwort eines Freelancers",

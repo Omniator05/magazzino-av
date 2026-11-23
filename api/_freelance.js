@@ -10,13 +10,15 @@
 // Vive qui e non in un endpoint a sé: il piano Hobby di Vercel ammette 12 funzioni e il progetto è già al limite, quindi
 // push.js lo chiama dopo aver verificato il token (come _guest.js, _badge.js, _station.js). Il prefisso "_" lo esclude
 // dal conteggio.
+import crypto from 'node:crypto'
 import { getAdmin } from './_authAdmin.js'
+import { buildCalendar } from './_calendarIcs.js'
 import { todayStr } from './_date.js'
 import { publicEvent } from './_guest.js'
 import { sendEmail, freelanceAssignedEmailHtml } from './_resend.js'
 
 const PAST_DAYS = 62                    // quanto indietro il calendario del Freelance mostra i suoi eventi
-const EMAIL_AGAIN_MS = 10 * 60 * 1000   // un'altra email per lo stesso evento non prima di 10 minuti
+const EMAIL_AGAIN_MS = 90 * 1000        // più turni creati di seguito per lo stesso evento: una sola email (non una per turno)
 const RESPONSE_KEEP_DAYS = 30           // per quanto restano le risposte (accettato/rifiutato) per il popup degli admin
 
 const addDays = (dateStr, n) => {
@@ -39,13 +41,8 @@ export function teamIsPro(team) {
   return false
 }
 
-async function view(req, res, { db, teamId, uid, profile }) {
-  if (profile.role !== 'freelance') return res.status(403).json({ error: 'Solo per account Freelance' })
-  const team = (await db.collection('teams').doc(teamId).get()).data() || {}
-  // Se la squadra non è (più) su un piano Pro l'account resta, ma non vede nulla finché non torna attivo.
-  if (!teamIsPro(team)) return res.status(402).json({ error: 'Funzione non disponibile per questo piano', code: 'plan' })
-
-  const from = addDays(todayStr(), -PAST_DAYS)
+// Eventi (forma pubblica) e attività assegnati a `uid` da `from` in poi. Usata dalla vista del Freelance e dall'abbonamento al calendario.
+async function gather(db, teamId, uid, from) {
   // Singoli campi + filtro squadra in JS: evita un indice composito (uguaglianza + array-contains) da creare a mano.
   const [blocksSnap, assignedSnap] = await Promise.all([
     db.collection('assignmentBlocks').where('teamId', '==', teamId).where('workerId', '==', uid).get(),
@@ -73,8 +70,64 @@ async function view(req, res, { db, teamId, uid, profile }) {
     id: b.id, label: b.label || '', date: b.date, startTime: b.startTime || null, endTime: b.endTime || null,
   })).sort((a, b) => a.date.localeCompare(b.date))
 
+  return { events, tasks }
+}
+
+async function view(req, res, { db, teamId, uid, profile }) {
+  if (profile.role !== 'freelance') return res.status(403).json({ error: 'Solo per account Freelance' })
+  const team = (await db.collection('teams').doc(teamId).get()).data() || {}
+  // Se la squadra non è (più) su un piano Pro l'account resta, ma non vede nulla finché non torna attivo.
+  if (!teamIsPro(team)) return res.status(402).json({ error: 'Funzione non disponibile per questo piano', code: 'plan' })
+
+  const { events, tasks } = await gather(db, teamId, uid, addDays(todayStr(), -PAST_DAYS))
+
   res.setHeader('Cache-Control', 'no-store')
   return res.status(200).json({ me: { name: profile.name || '' }, team: { name: team.name || '' }, today: todayStr(), events, tasks })
+}
+
+// ── Abbonamento al calendario ────────────────────────────────────────────────────────────────────────────────────────
+// Il Freelance può abbonare il proprio calendario (Apple Calendario, Outlook…) a un indirizzo personale che restituisce i suoi
+// eventi come file .ics e si aggiorna da solo quando l'admin cambia giorni/orari. Il calendario non può mandare il token di
+// accesso, quindi l'indirizzo porta una chiave FIRMATA (HMAC) dal server: nessun segreto da salvare in Firestore (né regole da
+// cambiare) e non si può costruire a mano. Smette di funzionare se l'account viene disattivato/eliminato o il piano scade.
+const feedSecret = () => crypto.createHash('sha256').update(`freelance-feed:${JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT).private_key}`).digest()
+const feedSignature = uid => crypto.createHmac('sha256', feedSecret()).update(uid).digest('base64url')
+const feedToken = uid => `${uid}.${feedSignature(uid)}`
+function uidFromFeedToken(token) {
+  const i = String(token || '').lastIndexOf('.')
+  if (i < 1) return null
+  const uid = token.slice(0, i), sig = token.slice(i + 1)
+  const want = Buffer.from(feedSignature(uid)), got = Buffer.from(sig)
+  return want.length === got.length && crypto.timingSafeEqual(want, got) ? uid : null
+}
+const PHASE_NAME = { montaggio: 'Montaggio', smontaggio: 'Smontaggio' }
+
+async function feedUrl(req, res, { uid, profile }) {
+  if (profile.role !== 'freelance') return res.status(403).json({ error: 'Solo per account Freelance' })
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  return res.status(200).json({ url: `https://${host}/api/push?feed=${encodeURIComponent(feedToken(uid))}` })
+}
+
+// GET /api/push?feed=<token> — pubblico (la chiave firmata è la credenziale), restituisce il calendario .ics.
+export async function serveFreelanceFeed(req, res) {
+  const uid = uidFromFeedToken(req.query?.feed)
+  if (!uid) return res.status(404).send('Calendario non trovato')
+  const db = getAdmin().firestore()
+  const profile = (await db.collection('profiles').doc(uid).get()).data()
+  if (!profile || profile.role !== 'freelance' || profile.active === false || profile.approved === false) return res.status(404).send('Calendario non trovato')
+  const team = (await db.collection('teams').doc(profile.teamId).get()).data() || {}
+  if (!teamIsPro(team)) return res.status(402).send('Funzione non disponibile per questo piano')
+
+  const { events, tasks } = await gather(db, profile.teamId, uid, addDays(todayStr(), -7))
+  const items = [
+    // Gli eventi rifiutati non vanno nel calendario
+    ...events.filter(ev => ev.response !== 'declined'),
+    ...tasks.map(tk => ({ id: tk.id, name: tk.label || 'Attività', date: tk.date, blocks: [{ id: tk.id, date: tk.date, startTime: tk.startTime, endTime: tk.endTime }] })),
+  ]
+  const ics = buildCalendar(items, ph => PHASE_NAME[ph] || '', { name: `Roadcase · ${team.name || ''}`.trim(), subscribe: true })
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
+  res.setHeader('Cache-Control', 'private, max-age=300')
+  return res.status(200).send(ics)
 }
 
 // Il Freelance accetta o rifiuta un evento a cui è assegnato. La risposta vale per l'evento intero e sta sull'evento
@@ -142,12 +195,13 @@ async function emailAssigned(req, res, { db, teamId, profile }) {
   const [workerSnap, eventSnap, teamSnap] = await Promise.all([workerRef.get(), db.collection('events').doc(eventId).get(), db.collection('teams').doc(teamId).get()])
   const worker = workerSnap.data()
   const event = eventSnap.data()
-  if (!worker || worker.teamId !== teamId || worker.role !== 'freelance' || worker.active === false || !worker.email) return res.status(200).json({ skipped: 'not_freelance' })
-  if (!event || event.teamId !== teamId) return res.status(200).json({ skipped: 'no_event' })
-  if (!teamIsPro(teamSnap.data())) return res.status(200).json({ skipped: 'plan' })
+  const skip = reason => { console.warn(`[freelance-email-assigned] non inviata: ${reason}`); return res.status(200).json({ skipped: reason }) }
+  if (!worker || worker.teamId !== teamId || worker.role !== 'freelance' || worker.active === false || !worker.email) return skip(!worker?.email ? 'manca_email' : 'non_freelance')
+  if (!event || event.teamId !== teamId) return skip('no_event')
+  if (!teamIsPro(teamSnap.data())) return skip('piano')
 
   const last = Number(worker.assignEmailAt?.[eventId] || 0)
-  if (Date.now() - last < EMAIL_AGAIN_MS) return res.status(200).json({ skipped: 'recent' })
+  if (Date.now() - last < EMAIL_AGAIN_MS) return skip('gia_inviata_da_poco')
   await workerRef.update({ [`assignEmailAt.${eventId}`]: Date.now() })
 
   const origin = req.headers.origin || `https://${req.headers.host}`
@@ -159,8 +213,8 @@ async function emailAssigned(req, res, { db, teamId, profile }) {
       replyTo: process.env.RESEND_REPLY_TO || 'info@roadcase.it',
     })
   } catch (e) {
-    console.error('freelance-email-assigned', e)
-    return res.status(200).json({ skipped: 'send_failed' })
+    console.error('[freelance-email-assigned] invio fallito:', e.message)
+    return res.status(200).json({ skipped: 'invio_fallito' })
   }
   return res.status(200).json({ sent: true })
 }
@@ -169,6 +223,7 @@ async function emailAssigned(req, res, { db, teamId, profile }) {
 export async function handleFreelanceAction(req, res, ctx) {
   const action = req.body?.action
   if (action === 'freelance-view') { await view(req, res, ctx); return true }
+  if (action === 'freelance-feed-url') { await feedUrl(req, res, ctx); return true }
   if (action === 'freelance-respond') { await respond(req, res, ctx); return true }
   if (action === 'freelance-email-assigned') { await emailAssigned(req, res, ctx); return true }
   return false

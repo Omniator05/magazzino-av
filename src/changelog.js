@@ -7,6 +7,23 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-27',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Freelance: "Aggiungi al calendario" ora apre direttamente l\'app Calendario (anche da iPhone) e si aggiorna da solo se cambiano giorni o orari; il file del singolo evento resta come link a parte',
+        'Freelance: l\'email "sei stato assegnato a un evento" parte anche quando l\'assegnazione è un turno di montaggio o smontaggio',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Freelance: "Add to calendar" now opens the Calendar app directly (iPhone too) and keeps itself up to date when days or times change; the single-event file stays as a separate link',
+        'Freelance: the "you have been assigned to an event" email is now also sent when the assignment is an assembly or disassembly shift',
+      ],
+    },
+  },
+  {
     version: '2026-11-26',
     it: {
       title: 'Novità di oggi',

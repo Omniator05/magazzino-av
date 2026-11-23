@@ -1,11 +1,14 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { downloadIcs, googleCalendarUrl } from '../utils/calendarExport'
+import { fetchCalendarFeedUrl } from '../utils/freelance'
 
 // Card di un evento assegnato a una persona esterna (utente temporaneo con link, o Freelance con account): titolo,
 // date e luogo, note e — a tendina — la lista di carico in sola lettura. Condivisa da GuestView e FreelanceHome.
 // `shifts` (facoltativo): i turni di quel giorno (orario + fase), mostrati in testa alla card.
-// `calendarButtons` (solo Freelance): "Aggiungi al calendario" (file .ics per Apple/Outlook) e Google Calendar.
+// `calendarButtons` (solo Freelance): "Aggiungi al calendario" (abbonamento che apre l'app Calendario e si aggiorna da solo),
+// Google Calendar e, a parte, il file .ics del solo evento.
 // `onRespond` (solo Freelance): mostra "Accetto / Non posso" (o lo stato già scelto, con la possibilità di cambiarlo);
 // `response` = 'accepted' | 'declined' | null; `canRespond` false per gli eventi già passati.
 const PHASE_COLOR = { montaggio: '#2563eb', smontaggio: '#ea580c' }
@@ -24,6 +27,16 @@ export default function AssignedEventCard({ ev, shifts = [], response = null, on
   const range = ev.dateEnd && ev.dateEnd > ev.date
     ? `${fmt(ev.date, { day: 'numeric', month: 'long' })} → ${fmt(ev.dateEnd, { day: 'numeric', month: 'long' })}`
     : fmt(ev.date, { weekday: 'long', day: 'numeric', month: 'long' })
+  const [calBusy, setCalBusy] = useState(false)
+  const [calError, setCalError] = useState(false)
+  // Abbonamento: webcal:// apre direttamente l'app Calendario (iPhone, Mac, Outlook); da lì in poi gli eventi si aggiornano da soli
+  const subscribeCalendar = async () => {
+    setCalBusy(true); setCalError(false)
+    const url = await fetchCalendarFeedUrl()
+    setCalBusy(false)
+    if (!url) { setCalError(true); return }
+    window.location.href = url.replace(/^https?:/, 'webcal:')
+  }
   const phaseName = ph => (PHASE_KEY[ph] ? t(PHASE_KEY[ph]) : '')
   const state = response || 'pending'
   const color = RESPONSE_COLOR[state]
@@ -81,15 +94,25 @@ export default function AssignedEventCard({ ev, shifts = [], response = null, on
         </div>
       )}
       {calendarButtons && state !== 'declined' && canRespond && (
-        <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--c-line)' }}>
-          <button type="button" className="btn-no-anim" onClick={() => downloadIcs(ev, phaseName)}
-            style={{ flex: 1, minHeight: 44, borderRadius: 12, background: 'var(--c-fill)', color: 'var(--c-ink)', fontSize: 13.5, fontWeight: 800 }}>
-            {t('freelance.addToCalendar')}
-          </button>
-          <a href={googleCalendarUrl(ev, phaseName)} target="_blank" rel="noopener noreferrer"
-            style={{ flex: 1, minHeight: 44, borderRadius: 12, background: 'var(--c-fill)', color: 'var(--c-ink)', fontSize: 13.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
-            {t('freelance.addToGoogle')}
-          </a>
+        <div style={{ padding: '10px 14px 8px', borderTop: '1px solid var(--c-line)' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" disabled={calBusy} className="btn-no-anim" onClick={subscribeCalendar}
+              style={{ flex: 1, minHeight: 44, borderRadius: 12, background: 'var(--c-fill)', color: 'var(--c-ink)', fontSize: 13.5, fontWeight: 800, opacity: calBusy ? 0.6 : 1 }}>
+              {t('freelance.addToCalendar')}
+            </button>
+            <a href={googleCalendarUrl(ev, phaseName)} target="_blank" rel="noopener noreferrer"
+              style={{ flex: 1, minHeight: 44, borderRadius: 12, background: 'var(--c-fill)', color: 'var(--c-ink)', fontSize: 13.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+              {t('freelance.addToGoogle')}
+            </a>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: 1.45, color: calError ? RESPONSE_COLOR.declined : 'var(--c-ink3)' }}>
+            {calError ? t('freelance.calendarError') : t('freelance.calendarHint')}
+            {' '}
+            <button type="button" className="btn-no-anim" onClick={() => downloadIcs(ev, phaseName)}
+              style={{ background: 'transparent', color: 'var(--c-ink2)', fontSize: 12, fontWeight: 700, textDecoration: 'underline', padding: 0 }}>
+              {t('freelance.calendarOnlyThis')}
+            </button>
+          </p>
         </div>
       )}
       <details style={{ borderTop: '1px solid var(--c-line)' }}>

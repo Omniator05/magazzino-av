@@ -2927,7 +2927,10 @@
     "toConfirm_other": "لديك {{count}} فعاليات بانتظار التأكيد",
     "toConfirmGo": "عرض",
     "addToCalendar": "أضف إلى التقويم",
-    "addToGoogle": "تقويم Google"
+    "addToGoogle": "تقويم Google",
+    "calendarHint": "يتحدّث تلقائيًا إذا تغيّرت الأيام أو المواعيد.",
+    "calendarError": "تعذّر تجهيز التقويم. حاول مرة أخرى.",
+    "calendarOnlyThis": "هذه الفعالية فقط (ملف)"
   },
   "freelanceResponse": {
     "title_one": "ردّ من فريلانسر",
