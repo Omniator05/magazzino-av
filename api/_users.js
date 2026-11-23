@@ -9,6 +9,26 @@ import { sendEmail, loginChangedEmailHtml } from './_resend.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// Un account di accesso "orfano" è un record di Firebase Auth senza più un profilo (utente eliminato dalla
+// vecchia versione dell'app, che toglieva solo il profilo, o squadra eliminata): occupa l'email per sempre
+// ("email già in uso") senza essere di nessuno. Non si tocca mai un account con profilo, né uno creato da meno
+// di un'ora (potrebbe essere una registrazione in corso, a cui manca ancora il profilo).
+const ORPHAN_MIN_AGE_MS = 60 * 60 * 1000
+// 'none' = nessun account con quell'email · 'removed' = era orfano e l'ho tolto · 'in-use' = è di qualcuno
+async function removeOrphanAuthAccount(db, email) {
+  const auth = getAdmin().auth()
+  let rec
+  try { rec = await auth.getUserByEmail(email) } catch (e) {
+    if (e.code === 'auth/user-not-found') return 'none'
+    throw e
+  }
+  if ((await db.collection('profiles').doc(rec.uid).get()).exists) return 'in-use'
+  const created = Date.parse(rec.metadata?.creationTime || '') || Date.now()
+  if (Date.now() - created < ORPHAN_MIN_AGE_MS) return 'in-use'
+  await auth.deleteUser(rec.uid)
+  return 'removed'
+}
+
 async function setLoginEmail(req, res, { db, teamId, uid, profile }) {
   if (profile?.role !== 'admin') return res.status(403).json({ error: 'Solo un admin può cambiare l\'email di accesso' })
   const email = String(req.body?.email || '').trim().toLowerCase()
@@ -29,7 +49,13 @@ async function setLoginEmail(req, res, { db, teamId, uid, profile }) {
   }
 
   try {
-    await getAdmin().auth().updateUser(targetUid, { email })
+    try {
+      await getAdmin().auth().updateUser(targetUid, { email })
+    } catch (e) {
+      // Email tenuta da un account senza più profilo (utente eliminato in passato): lo libero e riprovo una volta
+      if (e.code !== 'auth/email-already-exists' || await removeOrphanAuthAccount(db, email) !== 'removed') throw e
+      await getAdmin().auth().updateUser(targetUid, { email })
+    }
   } catch (e) {
     if (e.code === 'auth/email-already-exists') return res.status(409).json({ error: 'Questa email è già usata da un altro account', code: 'email-in-use' })
     if (e.code === 'auth/user-not-found') return res.status(404).json({ error: 'Questo utente non ha un account di accesso', code: 'no-account' })
@@ -53,6 +79,59 @@ async function setLoginEmail(req, res, { db, teamId, uid, profile }) {
   } catch (e) { console.warn('[user-set-login-email] avviso non inviato:', e.message) }
 
   return res.status(200).json({ ok: true })
+}
+
+// Elimina un utente per intero (admin della squadra): account di accesso (Firebase Auth) + profilo + dati che
+// dipendono da lui (badge della postazione, token delle notifiche). Così l'email e il nome utente tornano liberi
+// e si possono riusare per un nuovo account. Le assegnazioni già fatte restano nel calendario (storico).
+async function deleteUserAccount(req, res, { db, teamId, uid, profile }) {
+  if (profile?.role !== 'admin') return res.status(403).json({ error: 'Solo un admin può eliminare un utente' })
+  const targetUid = String(req.body?.targetUid || '')
+  if (!targetUid) return res.status(400).json({ error: 'Utente mancante' })
+  if (targetUid === uid) return res.status(400).json({ error: 'Non puoi eliminare il tuo stesso account', code: 'self' })
+
+  const ref = db.collection('profiles').doc(targetUid)
+  const target = (await ref.get()).data()
+  if (!target || target.teamId !== teamId) return res.status(404).json({ error: 'Utente non trovato' })
+  if (target.superAdmin) return res.status(403).json({ error: 'Questo account non si può eliminare', code: 'protected' })
+  const team = (await db.collection('teams').doc(teamId).get()).data() || {}
+  // Il creatore della squadra non si elimina; un altro admin lo toglie solo il creatore (come per la modifica)
+  if (targetUid === team.createdByUid) return res.status(403).json({ error: 'Il creatore della squadra non si può eliminare', code: 'owner' })
+  if (target.role === 'admin' && !profile?.superAdmin && team.createdByUid && team.createdByUid !== uid && !(team.ownerIds || []).includes(uid)) {
+    return res.status(403).json({ error: 'Solo il creatore della squadra può eliminare un admin' })
+  }
+
+  try {
+    await getAdmin().auth().deleteUser(targetUid)
+  } catch (e) {
+    if (e.code !== 'auth/user-not-found') {
+      console.error('[user-delete] auth', e.message)
+      return res.status(502).json({ error: e.message })
+    }
+  }
+  // Ripulisce prima i dati collegati, il profilo per ultimo: se qualcosa si ferma a metà, l'utente resta in elenco e si riprova.
+  const tokens = await db.collection('pushTokens').where('userId', '==', targetUid).get()
+  const batch = db.batch()
+  tokens.docs.forEach(d => batch.delete(d.ref))
+  batch.delete(db.collection('operatorBadges').doc(targetUid))
+  batch.delete(ref)
+  await batch.commit()
+  return res.status(200).json({ ok: true })
+}
+
+// Prima di creare un account con questa email (o nome utente → email interna): se è tenuta da un account
+// "orfano" (senza profilo) lo libera. Risponde `{ freed: true }` quando il tentativo si può ripetere.
+async function reclaimEmail(req, res, { db, profile }) {
+  if (profile?.role !== 'admin') return res.status(403).json({ error: 'Solo un admin' })
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Email non valida', code: 'invalid-email' })
+  try {
+    const result = await removeOrphanAuthAccount(db, email)
+    return res.status(200).json({ freed: result === 'removed' || result === 'none', inUse: result === 'in-use' })
+  } catch (e) {
+    console.error('[user-reclaim-email]', e.message)
+    return res.status(502).json({ error: e.message })
+  }
 }
 
 // Squadre create prima che esistesse il "creatore" (campo `createdByUid`, vedi src/utils/teamOwner.js): la prima
@@ -110,5 +189,7 @@ export async function handleUserAction(req, res, ctx) {
   if (req.body?.action === 'user-set-owner') { await setOwner(req, res, ctx); return true }
   if (req.body?.action === 'user-ensure-owner') { await ensureOwner(req, res, ctx); return true }
   if (req.body?.action === 'user-set-login-email') { await setLoginEmail(req, res, ctx); return true }
+  if (req.body?.action === 'user-delete') { await deleteUserAccount(req, res, ctx); return true }
+  if (req.body?.action === 'user-reclaim-email') { await reclaimEmail(req, res, ctx); return true }
   return false
 }

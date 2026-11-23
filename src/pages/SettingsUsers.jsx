@@ -11,7 +11,7 @@ import { useModalDrag } from '../hooks/useModalDrag'
 import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { db, secondaryAuth } from '../firebase'
-import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, where } from 'firebase/firestore'
+import { collection, onSnapshot, getDocs, doc, setDoc, updateDoc, query, orderBy, where } from 'firebase/firestore'
 import { Check, Save, Trash, Edit, User, Warn, Box, Mail } from '../components/Icon'
 import Toast from '../components/Toast'
 import SaveButton from '../components/SaveButton'
@@ -19,7 +19,9 @@ import PageHeader from '../components/PageHeader'
 import GuestInviteModal from '../components/GuestInviteModal'
 import StationLinkModal from '../components/StationLinkModal'
 import { isOwnerProfile } from '../utils/teamOwner'
-import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker } from '../utils/externalWorkers'
+import { watchExternalWorkers, getOrCreateExternalWorker, upcomingExternalBlocks, deleteExternalWorker, convertExternalToAccount } from '../utils/externalWorkers'
+import { emailFreelanceAssigned } from '../utils/pushNotifications'
+import { deleteUserAccount, reclaimOrphanEmail } from '../utils/userAccounts'
 import FabButton from '../components/FabButton'
 import Picker from '../components/Picker'
 import {
@@ -146,12 +148,22 @@ export default function SettingsUsers() {
   // Utenti temporanei (personale esterno senza account): elenco, nuovo e link ospite
   const [externalWorkers, setExternalWorkers] = useState([])
   const [inviteForId, setInviteForId]   = useState(null)
+  // Freelance inserito dalla timeline (esterno senza ancora l'account): { id, name } mentre se ne completa l'account
+  const [convertFrom, setConvertFrom]   = useState(null)
+  const autoOpenedFor = useRef(null)
   useEffect(() => {
     const ids = navState?.highlightExternalIds
     if (!ids?.length || externalWorkers.length === 0 || !externalWorkers.some(w => ids.includes(w.id))) return
     setHighlightIds(ids)
     window.history.replaceState({}, '')
     const first = externalWorkers.find(w => ids.includes(w.id))
+    // Un solo Freelance appena inserito dalla timeline: si apre subito "Nuovo utente" già compilato, resta solo l'email.
+    const pendingFreelance = externalWorkers.filter(w => ids.includes(w.id) && w.freelance)
+    if (pendingFreelance.length === 1 && ids.length === 1 && autoOpenedFor.current !== navState) {
+      autoOpenedFor.current = navState
+      openConvert(pendingFreelance[0])
+      return
+    }
     setTimeout(() => document.getElementById(`temp-row-${first.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80)
     const off = setTimeout(() => setHighlightIds([]), 3500)
     return () => clearTimeout(off)
@@ -163,7 +175,7 @@ export default function SettingsUsers() {
   // Colonna "Nuovo utente": col clic fuori chiude solo se non hai scritto niente, altrimenti chiede se salvare
   const createBase = useRef('')
   const createGuard = useUnsavedGuard(() => showCreate && JSON.stringify([form, noEmail, orgConfig, assignedEventId]) !== createBase.current)
-  const createDrag = useModalDrag(() => setShowCreate(false), createGuard.guard)
+  const createDrag = useModalDrag(() => { setShowCreate(false); setConvertFrom(null) }, createGuard.guard)
   createGuard.attach(createDrag)
   useEffect(() => { if (showCreate) createBase.current = JSON.stringify([form, noEmail, orgConfig, assignedEventId]) }, [showCreate])   // eslint-disable-line react-hooks/exhaustive-deps
   const detailDrag  = useModalDrag(() => setShowDetail(null))
@@ -277,6 +289,19 @@ export default function SettingsUsers() {
     return true
   }
 
+  // Completa l'account di un Freelance inserito dalla timeline: "Nuovo utente" già compilato con il nome
+  // e il ruolo Freelance; all'invio le sue assegnazioni passano al nuovo account (vedi createAccount).
+  function openConvert(w) {
+    setConvertFrom({ id: w.id, name: w.name || '' })
+    setForm({ name: w.name || '', username: '', password: '', email: '', role: 'freelance', canManageInventory: false })
+    setNoEmail(false)
+    setError('')
+    setOrgConfig(EMPTY_ORG_CONFIG)
+    setNewCustomDate('')
+    setAssignedEventId('')
+    setShowCreate(true)
+  }
+
   const createAccount = async () => {
     const loginEmail = form.email.trim().toLowerCase()
     if (!form.name.trim() || form.password.length < 6 || (emailMode ? !loginEmail : !form.username.trim())) {
@@ -325,7 +350,13 @@ export default function SettingsUsers() {
       // Crea il nuovo utente su un'app Firebase secondaria: non tocca la
       // sessione admin corrente (createUserWithEmailAndPassword su `auth`
       // switcherebbe l'admin al nuovo utente appena creato).
-      cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
+      try {
+        cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
+      } catch (e) {
+        // Email (o nome utente) rimasta a un account eliminato in passato, senza più profilo: la libero e riprovo una volta
+        if (e.code !== 'auth/email-already-in-use' || !(await reclaimOrphanEmail(internalEmail))) throw e
+        cred = await createUserWithEmailAndPassword(secondaryAuth, internalEmail, form.password)
+      }
 
       // Salva il profilo
       await setDoc(doc(db, 'profiles', cred.user.uid), {
@@ -348,6 +379,16 @@ export default function SettingsUsers() {
       })
 
       await signOut(secondaryAuth)
+
+      // Era un Freelance in attesa (esterno dalla timeline): le sue assegnazioni passano all'account.
+      // Se questo passo fallisce l'account esiste comunque: l'admin può riassegnare dalla timeline.
+      if (convertFrom) {
+        try {
+          const upcomingEvents = await convertExternalToAccount(teamId, convertFrom.id, cred.user.uid)
+          if (form.role === 'freelance') upcomingEvents.forEach(eventId => emailFreelanceAssigned(cred.user.uid, eventId))
+        } catch (e) { console.warn('[freelance] passaggio delle assegnazioni non riuscito:', e.message) }
+        setConvertFrom(null)
+      }
 
       // Email di invito best-effort: solo se è stata data un'email vera, e
       // non deve mai far sembrare fallita una creazione account già riuscita.
@@ -621,9 +662,13 @@ export default function SettingsUsers() {
       danger: true,
     }))) return
     const name = showDetail.name
-    await deleteDoc(doc(db, 'profiles', showDetail.id))
-    // Il record Firebase Auth rimane ma senza profilo l'utente non accede all'app.
-    // Per rimuoverlo del tutto serve Firebase Console → Authentication → elimina utente.
+    // Il server toglie account di accesso, profilo e dati collegati: l'email e il nome utente si possono riusare.
+    try {
+      await deleteUserAccount(showDetail.id)
+    } catch (e) {
+      showToast(t('adminUsers.deleteAccountFailed'))
+      return
+    }
     setShowDetail(null)
     showToast(t('adminUsers.accountDeletedToast', { name }))
   }
@@ -718,10 +763,12 @@ export default function SettingsUsers() {
       </div>
       <div style={{ flex:1, minWidth:0 }}>
         <p style={{ fontWeight:700, fontSize:15, color:'var(--text)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.name}</p>
-        <p style={{ color:'var(--text2)', fontSize:13 }}>{w.guestLinkActive ? t('guest.tempLinkActive') : t('guest.tempNoAccount')}</p>
+        <p style={{ color:'var(--text2)', fontSize:13 }}>{w.freelance ? t('guest.freelanceNoEmail') : w.guestLinkActive ? t('guest.tempLinkActive') : t('guest.tempNoAccount')}</p>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-        <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', whiteSpace:'nowrap' }}>{t('guest.tempBadgeShort')}</span>
+        {w.freelance
+          ? <span className="badge" style={{ background:'rgba(217,119,6,0.14)', color:'#d97706', whiteSpace:'nowrap' }}>{t('adminUsers.roleFreelanceBadge')}</span>
+          : <span className="badge" style={{ background:'rgba(245,166,35,0.15)', color:'var(--accent2)', whiteSpace:'nowrap' }}>{t('guest.tempBadgeShort')}</span>}
         <span style={{ color:'var(--text2)', fontSize:18 }}>›</span>
       </div>
     </div>
@@ -828,7 +875,13 @@ export default function SettingsUsers() {
             <SaveButton onSave={saveTempName} onDone={tempDrag.close} onError={tempDrag.triggerJiggle} className="btn btn-secondary btn-full">
               <Check size={16} /> {t('guest.tempSaveName')}
             </SaveButton>
-            <button type="button" className="btn btn-primary btn-full" style={{ marginTop:10, minHeight:52, fontSize:15 }}
+            {externalWorkers.find(x => x.id === tempEdit.id)?.freelance && (
+              <button type="button" className="btn btn-primary btn-full" style={{ marginTop:10, minHeight:52, fontSize:15 }}
+                onClick={() => { const w = externalWorkers.find(x => x.id === tempEdit.id); tempDrag.close(); if (w) openConvert(w) }}>
+                {t('guest.freelanceAddEmail')}
+              </button>
+            )}
+            <button type="button" className={`btn btn-full ${externalWorkers.find(x => x.id === tempEdit.id)?.freelance ? 'btn-secondary' : 'btn-primary'}`} style={{ marginTop:10, minHeight:52, fontSize:15 }}
               onClick={() => { const id = tempEdit.id; tempDrag.close(); setInviteForId(id) }}>
               {externalWorkers.find(x => x.id === tempEdit.id)?.guestLinkActive ? t('guest.tempManage') : t('guest.promptInvite')}
             </button>

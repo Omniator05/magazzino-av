@@ -10,12 +10,14 @@
 // Vive qui e non in un endpoint a sé: il piano Hobby di Vercel ammette 12 funzioni e il progetto è già al limite, quindi
 // push.js lo chiama dopo aver verificato il token (come _guest.js, _badge.js, _station.js). Il prefisso "_" lo esclude
 // dal conteggio.
+import { getAdmin } from './_authAdmin.js'
 import { todayStr } from './_date.js'
 import { publicEvent } from './_guest.js'
 import { sendEmail, freelanceAssignedEmailHtml } from './_resend.js'
 
 const PAST_DAYS = 62                    // quanto indietro il calendario del Freelance mostra i suoi eventi
 const EMAIL_AGAIN_MS = 10 * 60 * 1000   // un'altra email per lo stesso evento non prima di 10 minuti
+const RESPONSE_KEEP_DAYS = 30           // per quanto restano le risposte (accettato/rifiutato) per il popup degli admin
 
 const addDays = (dateStr, n) => {
   const d = new Date(`${dateStr}T12:00:00`)
@@ -64,6 +66,8 @@ async function view(req, res, { db, teamId, uid, profile }) {
       ...publicEvent(ev, blocks.filter(b => b.eventId === ev.id).sort((a, b) => a.date.localeCompare(b.date))),
       // L'evento di cui è stato solo "aggiunto alla lista" (nessun turno con orario): il calendario usa le date dell'evento
       noShifts: !blocks.some(b => b.eventId === ev.id),
+      // La sua risposta all'assegnazione: 'accepted' | 'declined' | null (ancora da confermare)
+      response: ev.freelanceResponses?.[uid]?.status || null,
     }))
   const tasks = blocks.filter(b => !b.eventId).map(b => ({
     id: b.id, label: b.label || '', date: b.date, startTime: b.startTime || null, endTime: b.endTime || null,
@@ -71,6 +75,59 @@ async function view(req, res, { db, teamId, uid, profile }) {
 
   res.setHeader('Cache-Control', 'no-store')
   return res.status(200).json({ me: { name: profile.name || '' }, team: { name: team.name || '' }, today: todayStr(), events, tasks })
+}
+
+// Il Freelance accetta o rifiuta un evento a cui è assegnato. La risposta vale per l'evento intero e sta sull'evento
+// (`freelanceResponses.<uid>`), così la timeline degli admin la legge senza altre query; torna "da confermare" quando l'admin
+// ne cambia giorno/orario o lo toglie e lo riassegna (vedi assignmentBlocks.js e pushNotifications.js). Gli admin ricevono
+// una push e un popup nella Home (documento in `freelanceResponses`, scritto solo da qui).
+async function respond(req, res, { db, teamId, uid, profile, pushToAdmins }) {
+  if (profile.role !== 'freelance') return res.status(403).json({ error: 'Solo per account Freelance' })
+  const eventId = String(req.body?.eventId || '')
+  const status = req.body?.response
+  if (!eventId || !['accepted', 'declined'].includes(status)) return res.status(400).json({ error: 'Dati mancanti' })
+
+  const team = (await db.collection('teams').doc(teamId).get()).data() || {}
+  if (!teamIsPro(team)) return res.status(402).json({ error: 'Funzione non disponibile per questo piano', code: 'plan' })
+
+  const eventRef = db.collection('events').doc(eventId)
+  const event = (await eventRef.get()).data()
+  if (!event || event.teamId !== teamId) return res.status(404).json({ error: 'Evento non trovato' })
+  // Solo un evento a cui è davvero assegnato (nella lista dell'evento o con un turno)
+  let assigned = (event.assignedWorkers || []).includes(uid)
+  if (!assigned) {
+    const own = await db.collection('assignmentBlocks').where('teamId', '==', teamId).where('workerId', '==', uid).where('eventId', '==', eventId).limit(1).get()
+    assigned = !own.empty
+  }
+  if (!assigned) return res.status(403).json({ error: 'Non sei assegnato a questo evento' })
+
+  if (event.freelanceResponses?.[uid]?.status === status) return res.status(200).json({ ok: true, unchanged: true })
+
+  const admin = getAdmin()
+  const now = Date.now()
+  await eventRef.update({ [`freelanceResponses.${uid}`]: { status, at: now } })
+  await db.collection('freelanceResponses').add({
+    teamId, workerId: uid, workerName: profile.name || '', eventId, eventName: event.name || '', eventDate: event.date || null,
+    status, createdAt: admin.firestore.FieldValue.serverTimestamp(), dismissedBy: [],
+  })
+
+  // Pulizia delle risposte vecchie (il popup mostra solo le recenti)
+  try {
+    const old = await db.collection('freelanceResponses').where('teamId', '==', teamId).get()
+    const cutoff = now - RESPONSE_KEEP_DAYS * 86400000
+    await Promise.all(old.docs.filter(d => (d.data().createdAt?.toMillis?.() || now) < cutoff).map(d => d.ref.delete()))
+  } catch (e) { console.warn('[freelance-respond] pulizia:', e.message) }
+
+  // Push agli admin (best-effort: la risposta è già salvata)
+  try {
+    const who = profile.name || 'Un Freelance'
+    await pushToAdmins?.({
+      title: status === 'accepted' ? `${who} ha accettato` : `${who} ha rifiutato`,
+      body: event.name || '',
+      url: `/events/${eventId}`,
+    })
+  } catch (e) { console.warn('[freelance-respond] push:', e.message) }
+  return res.status(200).json({ ok: true })
 }
 
 // Email "ti hanno assegnato un evento" al Freelance (se ha un'email). La chiama, subito dopo l'assegnazione, l'admin che la
@@ -112,6 +169,7 @@ async function emailAssigned(req, res, { db, teamId, profile }) {
 export async function handleFreelanceAction(req, res, ctx) {
   const action = req.body?.action
   if (action === 'freelance-view') { await view(req, res, ctx); return true }
+  if (action === 'freelance-respond') { await respond(req, res, ctx); return true }
   if (action === 'freelance-email-assigned') { await emailAssigned(req, res, ctx); return true }
   return false
 }

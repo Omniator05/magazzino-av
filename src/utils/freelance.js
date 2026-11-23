@@ -21,3 +21,20 @@ export async function fetchFreelanceView() {
     return { error: 'error' }
   }
 }
+
+// Accetta o rifiuta un evento assegnato (`response`: 'accepted' | 'declined'). Ritorna true se il server l'ha salvata.
+export async function respondToEvent(eventId, response) {
+  try {
+    const user = auth.currentUser
+    if (!user) return false
+    const idToken = await user.getIdToken()
+    const res = await fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action: 'freelance-respond', eventId, response }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}

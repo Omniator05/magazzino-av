@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useConfirm } from '../context/ConfirmProvider'
+import { useAuth } from '../context/AuthContext'
+import { isProPlan } from '../utils/planLimits'
 import { formatDate, capitalize } from '../utils/formatDate'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { PersonDot } from './AssigneeAvatars'
@@ -223,6 +225,9 @@ const PHASE_COLORS = { montaggio: '#2563eb', smontaggio: '#ea580c' }
 export default function StaffTimeline({ teamId, events, workers, unavailability, user, focusAssign, onFocusAssignConsumed, readOnly = false }) {
   const { t, i18n } = useTranslation()
   const confirm = useConfirm()
+  // Piano Pro: un esterno nuovo nasce come Freelance (account da completare con l'email in Impostazioni › Utenti)
+  const { team } = useAuth()
+  const newExternalIsFreelance = isProPlan(team)
   // Settimana e filtri ricordati tra una visita e l'altra (sessionStorage,
   // si perde solo chiudendo la scheda) — altrimenti ogni volta che si passa
   // di qui (es. per aprire la lista di carico di un evento e tornare
@@ -352,7 +357,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     ...externalWorkers
       // Con una ricerca in corso compaiono TUTTI gli esterni che corrispondono, non solo quelli già in uso questa settimana
       .filter(w => weekBlockExternalIds.has(w.id) || shownExternalIds.includes(w.id) || (peopleQ && (w.name || '').toLowerCase().includes(peopleQ)))
-      .map(w => ({ id: w.id, name: w.name, kind: 'external' })),
+      .map(w => ({ id: w.id, name: w.name, kind: 'external', freelance: !!w.freelance })),
   ]
 
   // Con tanto personale una fila di chip con avatar non regge: si cerca per
@@ -805,7 +810,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
     if (!panelItem) return null
     let resolved = person
     if (person.kind === 'external' && !person.id) {
-      const id = await getOrCreateExternalWorker(teamId, person.name, user.uid, externalWorkers)
+      const id = await getOrCreateExternalWorker(teamId, person.name, user.uid, externalWorkers, { freelance: newExternalIsFreelance })
       if (!id) return null
       setShownExternalIds(ids => (ids.includes(id) ? ids : [...ids, id]))
       resolved = { ...person, id }
@@ -853,12 +858,14 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
       const toAsk = []
       // Esterno appena scritto nella card "?": non è ancora nell'elenco locale
       ;(payload.newExternals || []).forEach(w => {
-        if (w.id && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name })
+        // Appena creato come Freelance (piano Pro) oppure già in anagrafica: il flag sta sull'esterno
+        const known = externalWorkers.find(x => x.id === w.id)
+        if (w.id && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name, freelance: known ? !!known.freelance : newExternalIsFreelance })
       })
       payload.rows.forEach(r => {
         const b = blocks.find(x => x.id === r.blockId)
         const w = b?.externalWorkerId && externalWorkers.find(x => x.id === b.externalWorkerId)
-        if (w && !w.guestLinkActive && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name })
+        if (w && (w.freelance || !w.guestLinkActive) && !promptedExternalIds.current.has(w.id) && !toAsk.some(x => x.id === w.id)) toAsk.push({ id: w.id, name: w.name, freelance: !!w.freelance })
       })
       if (toAsk.length > 0) {
         toAsk.forEach(w => promptedExternalIds.current.add(w.id))
@@ -1017,7 +1024,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                     {t('adminUsers.roleFreelanceBadge')}
                   </span>
                 )}
-                {p.kind === 'external' && (
+                {p.kind === 'external' && !p.freelance && (
                   <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px', marginLeft: 1 }}>
                     {t('staffTimeline.externalTag')}
                   </span>
@@ -1167,6 +1174,10 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                             transition: 'box-shadow 0.12s ease',
                           }}
                         >
+                          {/* Un Freelance assegnato ha rifiutato l'evento: striscia rossa in alto sulla card */}
+                          {item.event && item.bars.some(({ a }) => a.workerId && item.event.freelanceResponses?.[a.workerId]?.status === 'declined') && (
+                            <span aria-hidden="true" title={t('staffTimeline.freelanceDeclinedTip')} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#dc2626', zIndex: 2 }} />
+                          )}
                           {/* Riga sul lato destro, del colore dell'evento */}
                           <span aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: 4, background: stripe }} />
                           <span
@@ -1195,10 +1206,19 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
                                     const name = nameOf(a)
                                     const personId = a.workerId || a.externalWorkerId
                                     const differs = left > 0.005 || width < 0.995
+                                    // Risposta di un Freelance all'evento: ✓ accettato, ✕ rifiutato, punto ambra = ancora da confermare
+                                    const isFreelanceA = !!a.workerId && !!item.event && !!people.find(p => p.id === a.workerId)?.freelance
+                                    const resp = isFreelanceA ? (item.event.freelanceResponses?.[a.workerId]?.status || 'pending') : null
+                                    const respColor = resp === 'declined' ? '#dc2626' : resp === 'accepted' ? '#16a34a' : '#d97706'
                                     return (
                                       <PersonDot key={a.id} person={{ key: a.id, id: personId, name, hours: `${a.startTime}–${a.endTime}` }} size={AVATAR_SIZE}
                                         style={{ marginLeft: i === 0 ? 0 : -6, background: muted ? '#9a9a9a' : personColor(personId), fontSize: 9, boxShadow: '0 0 0 2px var(--c-surface)', zIndex: shownBars.length - i }}>
                                         {differs && <span aria-hidden="true" style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#ea580c', boxShadow: '0 0 0 1.5px var(--c-surface)' }} />}
+                                        {resp && (
+                                          <span aria-hidden="true" style={{ position: 'absolute', bottom: -3, right: -3, width: 11, height: 11, borderRadius: '50%', background: respColor, color: '#fff', fontSize: 7.5, fontWeight: 900, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 1.5px var(--c-surface)' }}>
+                                            {resp === 'declined' ? '✕' : resp === 'accepted' ? '✓' : ''}
+                                          </span>
+                                        )}
                                       </PersonDot>
                                     )
                                   })}
@@ -1309,7 +1329,7 @@ export default function StaffTimeline({ teamId, events, workers, unavailability,
         />
       )}
       {invitePrompt && (
-        <GuestInvitePrompt count={invitePrompt.length}
+        <GuestInvitePrompt count={invitePrompt.length} freelance={invitePrompt.every(p => p.freelance)}
           onGo={dontShow => { if (dontShow) muteInvitePrompt(); const ids = invitePrompt.map(p => p.id); setInvitePrompt(null); navigate('/admin/settings/users', { state: { highlightExternalIds: ids } }) }}
           onClose={dontShow => { if (dontShow) muteInvitePrompt(); setInvitePrompt(null) }} />
       )}

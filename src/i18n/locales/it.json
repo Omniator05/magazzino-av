@@ -340,7 +340,11 @@
     "draftConfirmAria": "Aggiungi la persona esterna",
     "draftCancelAria": "Annulla",
     "willBeRemoved": "Verrà rimosso",
-    "restorePerson": "Ripristina"
+    "restorePerson": "Ripristina",
+    "freelanceDeclinedTip": "Un Freelance ha rifiutato questo evento",
+    "freelance_pending": "in attesa",
+    "freelance_accepted": "ha accettato",
+    "freelance_declined": "ha rifiutato"
   },
   "inventory": {
     "title": "Magazzino",
@@ -1209,6 +1213,7 @@
     "confirmDeleteAccountMessage": "Eliminare definitivamente l'account di {{name}}?\nQuesta azione non può essere annullata.",
     "confirmDeleteAccountLabel": "Elimina",
     "accountDeletedToast": "Account di {{name}} eliminato.",
+    "deleteAccountFailed": "Non sono riuscito a eliminare l'account. Riprova.",
     "billingRowCta": "Scegli il piano",
     "billingMostChosen": "Il più scelto dalle squadre",
     "profilePreviewTitle": "Anteprima",
@@ -2051,6 +2056,14 @@
     "promptText_one": "Vuoi invitarlo? Riceve un link con i suoi turni, gli orari e la lista di carico, senza bisogno di un account.",
     "promptText_other": "Vuoi invitarli? Ricevono un link con i loro turni, gli orari e la lista di carico, senza bisogno di un account.",
     "promptInvite": "Invita",
+    "freelancePromptTitle_one": "Freelance inserito",
+    "freelancePromptTitle_other": "Freelance inseriti",
+    "freelancePromptText_one": "Per invitarlo aggiungi la sua email: gli arriva l'invito con l'accesso e vede solo gli eventi che gli assegni.",
+    "freelancePromptText_other": "Per invitarli aggiungi la loro email: arriva l'invito con l'accesso e vedono solo gli eventi che assegni loro.",
+    "freelancePromptGo_one": "Aggiungi l'email",
+    "freelancePromptGo_other": "Aggiungi le email",
+    "freelanceNoEmail": "Manca l'email: tocca per aggiungerla",
+    "freelanceAddEmail": "Aggiungi email e crea account",
     "promptDontShow": "Non mostrare più questo messaggio",
     "tempLinkActive": "Link attivo",
     "tempNoLink": "Nessun link",
@@ -2612,6 +2625,31 @@
     "prevMonth": "Mese precedente",
     "nextMonth": "Mese successivo",
     "dayEmpty": "Niente in programma per questo giorno.",
-    "nothingYet": "Non hai ancora eventi assegnati. Quando te ne assegnano uno lo vedi qui e ricevi un avviso."
+    "nothingYet": "Non hai ancora eventi assegnati. Quando te ne assegnano uno lo vedi qui e ricevi un avviso.",
+    "respondQuestion": "Confermi la tua presenza?",
+    "accept": "Accetto",
+    "decline": "Non posso",
+    "noAnswer": "Non hai risposto",
+    "youAccepted": "Hai accettato",
+    "youDeclined": "Hai rifiutato",
+    "changeToDecline": "Non posso più",
+    "changeToAccept": "Ho cambiato idea: accetto",
+    "respondError": "Non sono riuscito a salvare la risposta. Riprova.",
+    "legendPending": "Da confermare",
+    "legendAccepted": "Accettato",
+    "legendDeclined": "Rifiutato",
+    "legendTask": "Attività",
+    "toConfirm_one": "Hai {{count}} evento da confermare",
+    "toConfirm_other": "Hai {{count}} eventi da confermare",
+    "toConfirmGo": "Vedi",
+    "addToCalendar": "Aggiungi al calendario",
+    "addToGoogle": "Google Calendar"
+  },
+  "freelanceResponse": {
+    "title_one": "Risposta di un Freelance",
+    "title_other": "Risposte dei Freelance",
+    "accepted": "ha accettato",
+    "declined": "ha rifiutato",
+    "ok": "Ok"
   }
 }

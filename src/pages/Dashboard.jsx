@@ -15,6 +15,7 @@ import GettingStartedWidget from '../components/GettingStartedWidget'
 import TodayReminderModal from '../components/TodayReminderModal'
 import DeadlineReminderModal from '../components/DeadlineReminderModal'
 import RentalEndedReminderModal from '../components/RentalEndedReminderModal'
+import FreelanceResponseModal from '../components/FreelanceResponseModal'
 import ProUpsell from '../components/ProUpsell'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -595,6 +596,7 @@ export default function Dashboard({ toggleTheme, theme }) {
           <TodayReminderModal events={events} today={today} navigate={navigate} />
           <DeadlineReminderModal vehicles={vehicles} items={items} today={today} />
           <RentalEndedReminderModal events={events} today={today} navigate={navigate} />
+          <FreelanceResponseModal navigate={navigate} />
         </>
       )}
 

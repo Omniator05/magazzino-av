@@ -7,6 +7,31 @@
 // piccolo avviso di riserva quando non c'è nessuna voce nuova da mostrare).
 export const CHANGELOG = [
   {
+    version: '2026-11-26',
+    it: {
+      title: 'Novità di oggi',
+      items: [
+        'Freelance: calendario più grande, con i giorni assegnati colorati per stato (da confermare, accettato, rifiutato) e un avviso "Hai N eventi da confermare" che porta subito al primo',
+        'Freelance: su ogni evento ci sono i pulsanti "Accetto" e "Non posso"; la scelta si può cambiare finché l\'evento non è passato. Se cambi giorno o orario, torna da confermare',
+        'Freelance: "Aggiungi al calendario" (file per Apple, Outlook e altri) e "Google Calendar" su ogni evento',
+        'Admin: quando un Freelance accetta o rifiuta ricevi una notifica e un popup nella Home. Nella timeline la card ha una striscia rossa se un Freelance ha rifiutato, e il suo avatar mostra ✓, ✕ o un puntino se deve ancora rispondere',
+        'Un esterno nuovo creato da Assegna personale nasce come Freelance (piano Pro): dopo "Salva" ti porta in Impostazioni → Utenti, dove aggiungi l\'email e si crea l\'account con tutte le sue assegnazioni già dentro',
+        'Utenti: eliminare un utente toglie davvero anche l\'account di accesso, quindi la sua email e il suo nome utente si possono riusare. Le email rimaste bloccate da vecchie eliminazioni si liberano da sole quando crei il nuovo account',
+      ],
+    },
+    en: {
+      title: "Today's updates",
+      items: [
+        'Freelance: bigger calendar, with assigned days coloured by status (to confirm, accepted, declined) and a "You have N events to confirm" banner that jumps straight to the first one',
+        'Freelance: every event has "Accept" and "Can\'t make it" buttons; the answer can be changed until the event has passed. If you change the day or time, it goes back to "to confirm"',
+        'Freelance: "Add to calendar" (file for Apple, Outlook and others) and "Google Calendar" on every event',
+        'Admin: when a Freelance accepts or declines you get a notification and a popup on Home. In the timeline the card has a red stripe if a Freelance declined, and their avatar shows ✓, ✕ or a dot while they still have to answer',
+        'A new external created from Assign staff is born as a Freelance (Pro plan): after "Save" it takes you to Settings → Users, where you add the email and the account is created with all their assignments already in',
+        'Users: deleting a user now really removes the sign-in account too, so their email and username can be reused. Emails left blocked by old deletions free themselves when you create the new account',
+      ],
+    },
+  },
+  {
     version: '2026-11-25',
     it: {
       title: 'Novità di oggi',

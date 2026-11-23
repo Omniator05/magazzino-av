@@ -1,5 +1,6 @@
 import { getMessaging, getToken, deleteToken, isSupported, onMessage } from 'firebase/messaging'
-import app, { auth } from '../firebase'
+import app, { auth, db } from '../firebase'
+import { doc, updateDoc, deleteField } from 'firebase/firestore'
 import i18n from '../i18n'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY
@@ -187,8 +188,17 @@ export function emailFreelanceAssigned(workerId, eventId) {
 // indipendenti) dopo un salvataggio: avvisa admin + assegnati solo se
 // l'orario è DAVVERO cambiato rispetto a prima, non ad ogni salvataggio
 // (la maggior parte dei salvataggi tocca altri campi, es. note/location).
+//
+// Se cambia il giorno o l'orario, le risposte dei Freelance (accettato/rifiutato) tornano "da confermare": avevano
+// accettato un'altra data. Chi ha già risposto riceve comunque l'avviso di cambio, come gli altri assegnati.
 export function notifyEventTimeChangedIfNeeded(eventId, oldEvent, newFields) {
-  const changed = (newFields.timeStart || null) !== (oldEvent.timeStart || null) || (newFields.timeEnd || null) !== (oldEvent.timeEnd || null)
+  const timeChanged = (newFields.timeStart || null) !== (oldEvent.timeStart || null) || (newFields.timeEnd || null) !== (oldEvent.timeEnd || null)
+  const dateChanged = newFields.date !== undefined && (newFields.date !== oldEvent.date || (newFields.dateEnd || null) !== (oldEvent.dateEnd || null))
+  const hadResponses = Object.keys(oldEvent.freelanceResponses || {}).length > 0
+  if ((timeChanged || dateChanged) && hadResponses) {
+    updateDoc(doc(db, 'events', eventId), { freelanceResponses: deleteField() }).catch(() => {})
+  }
+  const changed = timeChanged || (dateChanged && hadResponses)
   if (!changed) return
   notifyTeamPush({
     title: i18n.t('staffTimeline.pushTimeChangedTitle'),

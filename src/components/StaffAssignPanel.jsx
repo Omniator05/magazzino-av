@@ -390,6 +390,10 @@ export default function StaffAssignPanel({
               const pid = b.workerId || b.externalWorkerId || b.id
               const name = (isWorker ? (activeWorkers.find(w => w.id === b.workerId)?.name) : b.externalWorkerName) || t('common.noName')
               const unavailable = isWorker && isWorkerUnavailable(b.workerId, { date, dateEnd: date }, unavailability)
+              // Freelance: la sua risposta all'evento (accettato / rifiutato / ancora da confermare), con una striscia in alto
+              const isFreelance = isWorker && activeWorkers.find(w => w.id === b.workerId)?.role === 'freelance'
+              const fr = isFreelance && item.event ? (item.event.freelanceResponses?.[b.workerId]?.status || 'pending') : null
+              const frColor = fr === 'declined' ? '#dc2626' : fr === 'accepted' ? '#16a34a' : '#d97706'
               if (removedIds.has(r.blockId)) {
                 // In attesa di Salva: la persona resta visibile, sbiadita, con "Ripristina".
                 return (
@@ -403,11 +407,17 @@ export default function StaffAssignPanel({
                 )
               }
               return (
-                <div key={r.blockId} style={{ padding: '10px 12px', borderTop: i > 0 || draft !== null ? '1px solid var(--c-line)' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div key={r.blockId} style={{ position: 'relative', padding: '10px 12px', borderTop: i > 0 || draft !== null ? '1px solid var(--c-line)' : 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {fr && <span aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: frColor }} />}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, background: personColor(pid), color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(name)}</span>
                     <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--c-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                     {!isWorker && <span style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--c-ink3)', background: 'var(--c-fill)', borderRadius: 5, padding: '1px 5px' }}>{t('staffTimeline.externalTag')}</span>}
+                    {isFreelance && (
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: frColor, background: `${frColor}1f`, borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+                        {t('adminUsers.roleFreelanceBadge')}{fr ? ` · ${t(`staffTimeline.freelance_${fr}`)}` : ''}
+                      </span>
+                    )}
                     <button type="button" className="btn-no-anim" onClick={() => toggleRemoved(r.blockId)} aria-label={t('staffTimeline.removePersonAria', { name })}
                       style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--c-fill)', color: 'var(--c-ink2)', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
                   </div>

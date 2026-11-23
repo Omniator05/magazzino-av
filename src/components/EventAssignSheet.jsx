@@ -5,6 +5,8 @@ import { db } from '../firebase'
 import { useModalDrag } from '../hooks/useModalDrag'
 import { useModalScrollLock } from '../hooks/useModalScrollLock'
 import { useConfirm } from '../context/ConfirmProvider'
+import { useAuth } from '../context/AuthContext'
+import { isProPlan } from '../utils/planLimits'
 import { isWorkerUnavailable } from '../utils/workerAssignment'
 import { createAssignmentBlock, updateAssignmentBlock, deleteAssignmentBlock } from '../utils/assignmentBlocks'
 import { watchExternalWorkers, getOrCreateExternalWorker } from '../utils/externalWorkers'
@@ -27,6 +29,7 @@ const toStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 export default function EventAssignSheet({ event, blocks, workers, unavailability, teamId, user, onClose }) {
   const { t, i18n } = useTranslation()
   const confirm = useConfirm()
+  const { team } = useAuth()
   const drag = useModalDrag(onClose, undefined, undefined, true)
   useModalScrollLock(true)
   const [externalWorkers, setExternalWorkers] = useState([])
@@ -97,7 +100,7 @@ export default function EventAssignSheet({ event, blocks, workers, unavailabilit
   const addPerson = async (person, times) => {
     let p = person
     if (p.kind === 'external' && !p.id) {
-      const id = await getOrCreateExternalWorker(teamId, p.name, user.uid, externalWorkers)
+      const id = await getOrCreateExternalWorker(teamId, p.name, user.uid, externalWorkers, { freelance: isProPlan(team) })
       if (!id) return
       p = { ...p, id }
     }

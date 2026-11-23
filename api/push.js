@@ -272,7 +272,14 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Azione non disponibile per gli account Freelance' })
   }
   // Account Freelance (vedi _freelance.js): vista dei propri eventi, email di assegnazione
-  if (String(action || '').startsWith('freelance-') && await handleFreelanceAction(req, res, { db, teamId, uid, profile })) return
+  if (String(action || '').startsWith('freelance-') && await handleFreelanceAction(req, res, {
+    db, teamId, uid, profile,
+    // Push agli admin della squadra (es. un Freelance che accetta/rifiuta un evento)
+    pushToAdmins: async ({ title, body, url }) => {
+      const adminIds = await resolveAudienceUserIds(db, teamId, { type: 'admins' })
+      await sendToTokenDocs(getAdmin(), db, await tokensForTeam(db, teamId, adminIds), { title, body, url })
+    },
+  })) return
   // Badge personale per la Postazione magazzino (vedi _badge.js): servono utente verificato e squadra
   if (String(action || '').startsWith('badge-') && await handleBadgeAction(req, res, { db, teamId, uid, profile })) return
   // Email di accesso degli utenti (vedi _users.js): solo admin

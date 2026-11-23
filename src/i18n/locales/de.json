@@ -340,7 +340,11 @@
     "draftConfirmAria": "Externe Person hinzufügen",
     "draftCancelAria": "Abbrechen",
     "willBeRemoved": "Wird entfernt",
-    "restorePerson": "Wiederherstellen"
+    "restorePerson": "Wiederherstellen",
+    "freelanceDeclinedTip": "Ein Freelancer hat dieses Event abgesagt",
+    "freelance_pending": "offen",
+    "freelance_accepted": "zugesagt",
+    "freelance_declined": "abgesagt"
   },
   "inventory": {
     "title": "Lager",
@@ -1209,6 +1213,7 @@
     "confirmDeleteAccountMessage": "Das Konto von {{name}} dauerhaft löschen?\nDiese Aktion kann nicht rückgängig gemacht werden.",
     "confirmDeleteAccountLabel": "Löschen",
     "accountDeletedToast": "Konto von {{name}} gelöscht.",
+    "deleteAccountFailed": "Das Konto konnte nicht gelöscht werden. Versuche es erneut.",
     "billingRowCta": "Tarif wählen",
     "billingMostChosen": "Am häufigsten von Teams gewählt",
     "profilePreviewTitle": "Vorschau",
@@ -2051,6 +2056,14 @@
     "promptText_one": "Möchtest du die Person einladen? Sie erhält einen Link mit ihren Schichten, Stunden und der Ladeliste, ohne Konto.",
     "promptText_other": "Möchtest du die Personen einladen? Sie erhalten einen Link mit ihren Schichten, Stunden und der Ladeliste, ohne Konto.",
     "promptInvite": "Einladen",
+    "freelancePromptTitle_one": "Freelancer hinzugefügt",
+    "freelancePromptTitle_other": "Freelancer hinzugefügt",
+    "freelancePromptText_one": "Zum Einladen die E-Mail hinzufügen: Die Person erhält die Einladung mit Zugang und sieht nur die Events, die du ihr zuweist.",
+    "freelancePromptText_other": "Zum Einladen die E-Mails hinzufügen: Sie erhalten die Einladung mit Zugang und sehen nur die Events, die du ihnen zuweist.",
+    "freelancePromptGo_one": "E-Mail hinzufügen",
+    "freelancePromptGo_other": "E-Mails hinzufügen",
+    "freelanceNoEmail": "E-Mail fehlt: tippen zum Hinzufügen",
+    "freelanceAddEmail": "E-Mail hinzufügen und Konto erstellen",
     "promptDontShow": "Diese Meldung nicht mehr anzeigen",
     "tempLinkActive": "Link aktiv",
     "tempNoLink": "Kein Link",
@@ -2612,6 +2625,31 @@
     "prevMonth": "Voriger Monat",
     "nextMonth": "Nächster Monat",
     "dayEmpty": "Für diesen Tag ist nichts geplant.",
-    "nothingYet": "Du hast noch keine Events zugewiesen. Sobald dir eines zugewiesen wird, erscheint es hier und du wirst benachrichtigt."
+    "nothingYet": "Du hast noch keine Events zugewiesen. Sobald dir eines zugewiesen wird, erscheint es hier und du wirst benachrichtigt.",
+    "respondQuestion": "Kannst du teilnehmen?",
+    "accept": "Zusagen",
+    "decline": "Kann nicht",
+    "noAnswer": "Keine Antwort gegeben",
+    "youAccepted": "Du hast zugesagt",
+    "youDeclined": "Du hast abgesagt",
+    "changeToDecline": "Ich kann doch nicht",
+    "changeToAccept": "Ich habe es mir anders überlegt: zusagen",
+    "respondError": "Die Antwort konnte nicht gespeichert werden. Versuche es erneut.",
+    "legendPending": "Zu bestätigen",
+    "legendAccepted": "Zugesagt",
+    "legendDeclined": "Abgesagt",
+    "legendTask": "Aufgabe",
+    "toConfirm_one": "{{count}} Event zu bestätigen",
+    "toConfirm_other": "{{count}} Events zu bestätigen",
+    "toConfirmGo": "Ansehen",
+    "addToCalendar": "Zum Kalender hinzufügen",
+    "addToGoogle": "Google Kalender"
+  },
+  "freelanceResponse": {
+    "title_one": "Antwort eines Freelancers",
+    "title_other": "Antworten der Freelancer",
+    "accepted": "hat zugesagt",
+    "declined": "hat abgesagt",
+    "ok": "OK"
   }
 }

@@ -1,4 +1,4 @@
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocs, doc, increment, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocs, doc, increment, serverTimestamp, writeBatch, arrayUnion } from 'firebase/firestore'
 import { db } from '../firebase'
 import { todayStr } from './workHours'
 
@@ -15,7 +15,10 @@ export function watchExternalWorkers(teamId, cb) {
 
 // Trova per nome esatto (case-insensitive) tra quelli già in lista, o ne crea
 // uno nuovo — non duplica la stessa persona se richiamata più volte.
-export async function getOrCreateExternalWorker(teamId, name, userId, existing) {
+// `freelance: true` (squadre Pro): il nuovo esterno nasce come Freelance "in attesa
+// dell'email" — compare con il tag Freelance e l'admin gli crea l'account da
+// Impostazioni › Utenti (vedi convertExternalToAccount). Non cambia chi esiste già.
+export async function getOrCreateExternalWorker(teamId, name, userId, existing, { freelance = false } = {}) {
   const trimmed = name.trim()
   const nameLower = trimmed.toLowerCase()
   const match = existing.find(w => w.nameLower === nameLower)
@@ -27,8 +30,29 @@ export async function getOrCreateExternalWorker(teamId, name, userId, existing) 
     name: trimmed, nameLower, teamId,
     usageCount: 1, lastUsedAt: serverTimestamp(),
     createdAt: serverTimestamp(), createdBy: userId,
+    ...(freelance ? { freelance: true } : {}),
   })
   return ref.id
+}
+
+// Un esterno Freelance in attesa riceve il suo account (workerId = uid del nuovo
+// profilo): tutte le sue assegnazioni passano dal "nome esterno" all'account,
+// gli eventi lo aggiungono ad assignedWorkers (è da lì che il Freelance vede i
+// suoi eventi) e la voce esterna sparisce dall'anagrafica. Ritorna gli id degli
+// eventi da oggi in poi, per mandargli l'email di assegnazione.
+export async function convertExternalToAccount(teamId, externalWorkerId, workerId) {
+  const snap = await getDocs(query(collection(db, 'assignmentBlocks'), where('teamId', '==', teamId), where('externalWorkerId', '==', externalWorkerId)))
+  const blocks = snap.docs.map(d => ({ id: d.id, ref: d.ref, ...d.data() }))
+  for (let i = 0; i < blocks.length; i += 400) {
+    const batch = writeBatch(db)
+    blocks.slice(i, i + 400).forEach(b => batch.update(b.ref, { workerId, externalWorkerId: null, externalWorkerName: null }))
+    await batch.commit()
+  }
+  const eventIds = [...new Set(blocks.map(b => b.eventId).filter(Boolean))]
+  await Promise.all(eventIds.map(id => updateDoc(doc(db, 'events', id), { assignedWorkers: arrayUnion(workerId) }).catch(() => {})))
+  await deleteDoc(doc(db, 'externalWorkers', externalWorkerId))
+  const today = todayStr()
+  return [...new Set(blocks.filter(b => b.eventId && b.date && b.date >= today).map(b => b.eventId))]
 }
 
 // Assegnazioni di una persona esterna da oggi in poi nella timeline "Assegna

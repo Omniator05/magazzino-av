@@ -340,7 +340,11 @@
     "draftConfirmAria": "Adicionar a pessoa externa",
     "draftCancelAria": "Cancelar",
     "willBeRemoved": "Será removido",
-    "restorePerson": "Restaurar"
+    "restorePerson": "Restaurar",
+    "freelanceDeclinedTip": "Um Freelancer recusou este evento",
+    "freelance_pending": "pendente",
+    "freelance_accepted": "aceitou",
+    "freelance_declined": "recusou"
   },
   "inventory": {
     "title": "Armazém",
@@ -1209,6 +1213,7 @@
     "confirmDeleteAccountMessage": "Eliminar definitivamente a conta de {{name}}?\nEsta ação não pode ser anulada.",
     "confirmDeleteAccountLabel": "Eliminar",
     "accountDeletedToast": "Conta de {{name}} eliminada.",
+    "deleteAccountFailed": "Não consegui eliminar a conta. Tente novamente.",
     "billingRowCta": "Escolher um plano",
     "billingMostChosen": "O mais escolhido pelas equipas",
     "profilePreviewTitle": "Pré-visualização",
@@ -2051,6 +2056,14 @@
     "promptText_one": "Quer convidá-lo? Recebe uma ligação com os turnos, as horas e a lista de carga, sem precisar de conta.",
     "promptText_other": "Quer convidá-los? Recebem uma ligação com os turnos, as horas e a lista de carga, sem precisarem de conta.",
     "promptInvite": "Convidar",
+    "freelancePromptTitle_one": "Freelancer adicionado",
+    "freelancePromptTitle_other": "Freelancers adicionados",
+    "freelancePromptText_one": "Para o convidar, adicione o email dele: recebe o convite com o acesso e só vê os eventos que lhe atribuir.",
+    "freelancePromptText_other": "Para os convidar, adicione os emails: recebem o convite com o acesso e só veem os eventos que lhes atribuir.",
+    "freelancePromptGo_one": "Adicionar o email",
+    "freelancePromptGo_other": "Adicionar os emails",
+    "freelanceNoEmail": "Falta o email: toque para adicionar",
+    "freelanceAddEmail": "Adicionar email e criar conta",
     "promptDontShow": "Não mostrar esta mensagem novamente",
     "tempLinkActive": "Ligação ativa",
     "tempNoLink": "Sem ligação",
@@ -2612,6 +2625,31 @@
     "prevMonth": "Mês anterior",
     "nextMonth": "Mês seguinte",
     "dayEmpty": "Nada previsto para este dia.",
-    "nothingYet": "Ainda não tem eventos atribuídos. Quando lhe atribuírem um, aparece aqui e recebe um aviso."
+    "nothingYet": "Ainda não tem eventos atribuídos. Quando lhe atribuírem um, aparece aqui e recebe um aviso.",
+    "respondQuestion": "Confirma a sua presença?",
+    "accept": "Aceito",
+    "decline": "Não posso",
+    "noAnswer": "Sem resposta",
+    "youAccepted": "Aceitou",
+    "youDeclined": "Recusou",
+    "changeToDecline": "Já não posso",
+    "changeToAccept": "Mudei de ideias: aceito",
+    "respondError": "Não consegui guardar a resposta. Tente novamente.",
+    "legendPending": "Por confirmar",
+    "legendAccepted": "Aceite",
+    "legendDeclined": "Recusado",
+    "legendTask": "Tarefa",
+    "toConfirm_one": "Tem {{count}} evento por confirmar",
+    "toConfirm_other": "Tem {{count}} eventos por confirmar",
+    "toConfirmGo": "Ver",
+    "addToCalendar": "Adicionar ao calendário",
+    "addToGoogle": "Google Calendar"
+  },
+  "freelanceResponse": {
+    "title_one": "Resposta de um Freelancer",
+    "title_other": "Respostas dos Freelancers",
+    "accepted": "aceitou",
+    "declined": "recusou",
+    "ok": "Ok"
   }
 }

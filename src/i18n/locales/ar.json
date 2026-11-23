@@ -380,7 +380,11 @@
     "draftConfirmAria": "إضافة الشخص الخارجي",
     "draftCancelAria": "إلغاء",
     "willBeRemoved": "ستتم إزالته",
-    "restorePerson": "استعادة"
+    "restorePerson": "استعادة",
+    "freelanceDeclinedTip": "رفض فريلانسر هذه الفعالية",
+    "freelance_pending": "بالانتظار",
+    "freelance_accepted": "قبل",
+    "freelance_declined": "رفض"
   },
   "inventory": {
     "title": "المستودع",
@@ -1333,6 +1337,7 @@
     "confirmDeleteAccountMessage": "هل تريد حذف حساب {{name}} نهائياً؟\nلا يمكن التراجع عن هذا الإجراء.",
     "confirmDeleteAccountLabel": "حذف",
     "accountDeletedToast": "تم حذف حساب {{name}}.",
+    "deleteAccountFailed": "تعذّر حذف الحساب. حاول مرة أخرى.",
     "billingRowCta": "اختر خطة",
     "billingMostChosen": "الأكثر اختياراً بين الفرق",
     "profilePreviewTitle": "معاينة",
@@ -2299,6 +2304,14 @@
     "promptText_one": "هل تريد دعوته؟ سيصله رابط بورديّاته وساعاته وقائمة التحميل، بلا حاجة إلى حساب.",
     "promptText_other": "هل تريد دعوتهم؟ سيصلهم رابط بورديّاتهم وساعاتهم وقائمة التحميل، بلا حاجة إلى حساب.",
     "promptInvite": "دعوة",
+    "freelancePromptTitle_one": "تمت إضافة فريلانسر",
+    "freelancePromptTitle_other": "تمت إضافة فريلانسر",
+    "freelancePromptText_one": "لدعوته أضف بريده الإلكتروني: يصله بيان الدعوة مع بيانات الدخول ولا يرى إلا الفعاليات التي تسندها إليه.",
+    "freelancePromptText_other": "لدعوتهم أضف بريدهم الإلكتروني: تصلهم الدعوة مع بيانات الدخول ولا يرون إلا الفعاليات التي تسندها إليهم.",
+    "freelancePromptGo_one": "أضف البريد الإلكتروني",
+    "freelancePromptGo_other": "أضف البريد الإلكتروني",
+    "freelanceNoEmail": "البريد الإلكتروني ناقص: اضغط لإضافته",
+    "freelanceAddEmail": "أضف البريد وأنشئ الحساب",
     "promptDontShow": "عدم إظهار هذه الرسالة مرة أخرى",
     "tempLinkActive": "الرابط مفعّل",
     "tempNoLink": "بلا رابط",
@@ -2896,6 +2909,31 @@
     "prevMonth": "الشهر السابق",
     "nextMonth": "الشهر التالي",
     "dayEmpty": "لا شيء مجدول في هذا اليوم.",
-    "nothingYet": "ليس لديك فعاليات مسندة بعد. عند إسناد فعالية إليك ستظهر هنا وتصلك إشعار."
+    "nothingYet": "ليس لديك فعاليات مسندة بعد. عند إسناد فعالية إليك ستظهر هنا وتصلك إشعار.",
+    "respondQuestion": "هل يمكنك الحضور؟",
+    "accept": "أقبل",
+    "decline": "لا أستطيع",
+    "noAnswer": "لم تُرسل ردًا",
+    "youAccepted": "لقد قبلت",
+    "youDeclined": "لقد رفضت",
+    "changeToDecline": "لم أعد أستطيع",
+    "changeToAccept": "غيّرت رأيي: أقبل",
+    "respondError": "تعذّر حفظ ردك. حاول مرة أخرى.",
+    "legendPending": "بانتظار التأكيد",
+    "legendAccepted": "مقبول",
+    "legendDeclined": "مرفوض",
+    "legendTask": "مهمة",
+    "toConfirm_one": "لديك {{count}} فعالية بانتظار التأكيد",
+    "toConfirm_other": "لديك {{count}} فعاليات بانتظار التأكيد",
+    "toConfirmGo": "عرض",
+    "addToCalendar": "أضف إلى التقويم",
+    "addToGoogle": "تقويم Google"
+  },
+  "freelanceResponse": {
+    "title_one": "ردّ من فريلانسر",
+    "title_other": "ردود الفريلانسر",
+    "accepted": "قبل",
+    "declined": "رفض",
+    "ok": "حسنًا"
   }
 }

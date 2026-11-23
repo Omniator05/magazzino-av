@@ -1,4 +1,4 @@
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'firebase/firestore'
 import { db } from '../firebase'
 import { toggleWorkerAssignment } from './workerAssignment'
 import { notifyTeamPush, emailFreelanceAssigned } from './pushNotifications'
@@ -29,6 +29,10 @@ async function syncEventAssignment(eventsById, allBlocksAfter, workerId, eventId
   const alreadyIn = (event.assignedWorkers || []).includes(workerId)
   if (stillLinked === alreadyIn) return
   await toggleWorkerAssignment(doc(db, 'events', eventId), event, workerId)
+  // Tolto dall'evento: se era un Freelance, la sua risposta (accettato/rifiutato) non vale più per una riassegnazione
+  if (!stillLinked && event.freelanceResponses?.[workerId]) {
+    await updateDoc(doc(db, 'events', eventId), { [`freelanceResponses.${workerId}`]: deleteField() }).catch(() => {})
+  }
   // Solo quando è una VERA aggiunta (non una rimozione): il worker appena
   // assegnato riceve una push mirata a lui, mai un broadcast alla squadra.
   if (stillLinked && !alreadyIn && notify) {
@@ -97,6 +101,12 @@ export async function createAssignmentBlock(data, { eventsById, allBlocks }) {
 
 export async function updateAssignmentBlock(id, oldBlock, newData, { eventsById, allBlocks }) {
   await updateDoc(doc(db, 'assignmentBlocks', id), newData)
+  // Un Freelance che aveva accettato/rifiutato: se cambiano giorno o orario del suo turno deve riconfermare
+  const respEvent = oldBlock.workerId && oldBlock.eventId ? eventsById[oldBlock.eventId] : null
+  if (respEvent?.freelanceResponses?.[oldBlock.workerId]
+    && ['date', 'startTime', 'endTime'].some(k => newData[k] !== undefined && newData[k] !== oldBlock[k])) {
+    await updateDoc(doc(db, 'events', oldBlock.eventId), { [`freelanceResponses.${oldBlock.workerId}`]: deleteField() }).catch(() => {})
+  }
   const merged = { ...oldBlock, ...newData, id }
   const after = allBlocks.map(b => (b.id === id ? merged : b))
   // Se cambia worker o evento collegato vanno ricalcolati sia il legame

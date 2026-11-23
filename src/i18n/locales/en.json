@@ -340,7 +340,11 @@
     "draftConfirmAria": "Add the external person",
     "draftCancelAria": "Cancel",
     "willBeRemoved": "Will be removed",
-    "restorePerson": "Restore"
+    "restorePerson": "Restore",
+    "freelanceDeclinedTip": "A Freelancer declined this event",
+    "freelance_pending": "pending",
+    "freelance_accepted": "accepted",
+    "freelance_declined": "declined"
   },
   "inventory": {
     "title": "Warehouse",
@@ -1209,6 +1213,7 @@
     "confirmDeleteAccountMessage": "Permanently delete {{name}}'s account?\nThis action cannot be undone.",
     "confirmDeleteAccountLabel": "Delete",
     "accountDeletedToast": "{{name}}'s account deleted.",
+    "deleteAccountFailed": "Couldn't delete the account. Try again.",
     "billingRowCta": "Choose a plan",
     "billingMostChosen": "Most chosen by teams",
     "profilePreviewTitle": "Preview",
@@ -2051,6 +2056,14 @@
     "promptText_one": "Want to invite them? They get a link with their shifts, hours and loading list, no account needed.",
     "promptText_other": "Want to invite them? They get a link with their shifts, hours and loading list, no account needed.",
     "promptInvite": "Invite",
+    "freelancePromptTitle_one": "Freelancer added",
+    "freelancePromptTitle_other": "Freelancers added",
+    "freelancePromptText_one": "To invite them, add their email: they get an invitation with their login and only see the events you assign them.",
+    "freelancePromptText_other": "To invite them, add their emails: they get an invitation with their login and only see the events you assign them.",
+    "freelancePromptGo_one": "Add the email",
+    "freelancePromptGo_other": "Add the emails",
+    "freelanceNoEmail": "Email missing: tap to add it",
+    "freelanceAddEmail": "Add email and create account",
     "promptDontShow": "Don't show this message again",
     "tempLinkActive": "Link active",
     "tempNoLink": "No link",
@@ -2612,6 +2625,31 @@
     "prevMonth": "Previous month",
     "nextMonth": "Next month",
     "dayEmpty": "Nothing planned for this day.",
-    "nothingYet": "You don't have any events yet. When one is assigned to you it shows up here and you get a notification."
+    "nothingYet": "You don't have any events yet. When one is assigned to you it shows up here and you get a notification.",
+    "respondQuestion": "Can you make it?",
+    "accept": "Accept",
+    "decline": "Can't make it",
+    "noAnswer": "No answer given",
+    "youAccepted": "You accepted",
+    "youDeclined": "You declined",
+    "changeToDecline": "I can't anymore",
+    "changeToAccept": "I changed my mind: accept",
+    "respondError": "Couldn't save your answer. Try again.",
+    "legendPending": "To confirm",
+    "legendAccepted": "Accepted",
+    "legendDeclined": "Declined",
+    "legendTask": "Task",
+    "toConfirm_one": "You have {{count}} event to confirm",
+    "toConfirm_other": "You have {{count}} events to confirm",
+    "toConfirmGo": "View",
+    "addToCalendar": "Add to calendar",
+    "addToGoogle": "Google Calendar"
+  },
+  "freelanceResponse": {
+    "title_one": "A Freelancer replied",
+    "title_other": "Freelancers replied",
+    "accepted": "accepted",
+    "declined": "declined",
+    "ok": "OK"
   }
 }
